@@ -1,0 +1,42 @@
+{
+  "manifest_version": 3,
+  "name": "Hister",
+  "version": "0.1.0",
+  "description": "Web history on steroids",
+  "icons": {
+    "128": "assets/icons/icon128.png"
+  },
+  "action": {
+    "default_icon": {
+      "128": "assets/icons/icon128.png"
+    },
+    "default_popup": "popup.html",
+    "default_title": "Hister"
+  },
+  "content_scripts": [
+    {
+      "js": [
+        "content.js"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "background": {
+  },
+  "options_page": "options.html",
+  "web_accessible_resources": [{
+    "resources": [
+      "assets/*"
+    ],
+    "matches": [],
+    "extension_ids": []
+  }],
+  "permissions": [
+    "tabs",
+    "storage",
+    "webRequest"
+  ],
+  "host_permissions": [
+    "*://*/*"
+  ]
+}
