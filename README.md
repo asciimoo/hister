@@ -4,6 +4,7 @@
 
 Blazing fast lookup of previously visited websites.
 
+![hister screencast](assets/demo.gif)
 
 ## Setup & run
 
