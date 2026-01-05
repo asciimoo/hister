@@ -1,6 +1,6 @@
-window.addEventListener("load", init, false);
+window.addEventListener("load", extractData, false);
 
-async function init() {
+async function extractData() {
     let d = {
         "text": document.body.innerText,
         "title": document.querySelector("title").innerText,
@@ -8,7 +8,7 @@ async function init() {
         "html": document.documentElement.innerHTML,
     };
 	let fu = new URL("/favicon.ico", d.url).href;
-	var link = document.querySelector("link[rel~='icon']");
+	let link = document.querySelector("link[rel~='icon']");
 	if (link && link.getAttribute("href")) {
         fu = new URL(link.getAttribute("href"), d.url).href;
 	}
@@ -24,9 +24,17 @@ function getURL() {
 // Get message from background page
 // TODO check sender
 chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
-    if(request && request.error) {
+    if(!request) {
+        return;
+    }
+    if(request.error) {
         alert(request.error);
         return;
+    }
+    if(request.action == "reindex") {
+        extractData();
+        sendResponse({"action": "reindex", "status": "ok"});
+		return;
     }
     console.log("message received", request)
 });
