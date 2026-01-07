@@ -119,6 +119,7 @@ window.addEventListener("keydown", function(e) {
           results.children[highlightIdx].classList.add("highlight");
     }
     if(e.ctrlKey && e.key == "o") {
+        e.preventDefault();
         openUrl(getSearchUrl(input.value));
     }
 });
