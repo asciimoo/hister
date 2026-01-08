@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/asciimoo/hister/config"
+	"github.com/asciimoo/hister/server/model"
 
 	"github.com/blevesearch/bleve/v2"
 	"github.com/blevesearch/bleve/v2/analysis/analyzer/custom"
@@ -42,9 +43,10 @@ type Document struct {
 }
 
 type Results struct {
-	Total     uint64      `json:"total"`
-	Query     *Query      `json:"query"`
-	Documents []*Document `json:"documents"`
+	Total     uint64            `json:"total"`
+	Query     *Query            `json:"query"`
+	Documents []*Document       `json:"documents"`
+	History   []*model.URLCount `json:"history"`
 }
 
 var i *indexer
@@ -69,7 +71,6 @@ func Add(d *Document) error {
 }
 
 func Search(cfg *config.Config, q *Query) (*Results, error) {
-	q.Text = cfg.Rules.ResolveAliases(q.Text)
 	q.cfg = cfg
 	req := bleve.NewSearchRequest(q.create())
 	req.Fields = append(q.Fields, "favicon")

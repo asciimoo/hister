@@ -9,6 +9,7 @@ import (
 
 	"github.com/asciimoo/hister/config"
 	"github.com/asciimoo/hister/server/indexer"
+	"github.com/asciimoo/hister/server/model"
 	"github.com/asciimoo/hister/server/static"
 	"github.com/asciimoo/hister/server/templates"
 
@@ -20,6 +21,12 @@ var tpls map[string]*template.Template
 var fs http.Handler
 
 type tArgs map[string]any
+
+type historyItem struct {
+	URL   string `json:"url"`
+	Title string `json:"title"`
+	Query string `json:"query"`
+}
 
 var tFns = template.FuncMap{
 	"FormatDate": func(t time.Time) string { return t.Format("2006-01-02") },
@@ -94,6 +101,9 @@ func createRouter(cfg *config.Config) func(w http.ResponseWriter, r *http.Reques
 		case "/help":
 			serveHelp(c)
 			return
+		case "/history":
+			serveHistory(c)
+			return
 		case "/delete_alias":
 			serveDeleteAlias(c)
 			return
@@ -138,9 +148,15 @@ func serveSearch(c *webContext) {
 			log.Error().Err(err).Msg("failed to parse query")
 			continue
 		}
+		query.Text = c.Config.Rules.ResolveAliases(query.Text)
+		// fallback to the indexer
 		res, err := indexer.Search(c.Config, query)
 		if err != nil {
 			log.Error().Err(err).Msg("failed to get indexer results")
+		}
+		hr, err := model.GetURLsByQuery(query.Text)
+		if err == nil {
+			res.History = hr
 		}
 		jr, err := json.Marshal(res)
 		if err != nil {
@@ -204,6 +220,30 @@ func serveAdd(c *webContext) {
 	}
 	c.Render("add", nil)
 	return
+}
+
+func serveHistory(c *webContext) {
+	m := c.Request.Method
+	//if m == http.MethodGet {
+	//	c.Render("history", nil)
+	//	return
+	//}
+	if m != http.MethodPost {
+		serve500(c)
+		return
+	}
+	h := &historyItem{}
+	err := json.NewDecoder(c.Request.Body).Decode(h)
+	if err != nil {
+		serve500(c)
+		return
+	}
+	err = model.UpdateHistory(c.Config.Rules.ResolveAliases(h.Query), h.URL, h.Title)
+	if err != nil {
+		log.Error().Err(err).Msg("failed to update history")
+		serve500(c)
+		return
+	}
 }
 
 func serveRules(c *webContext) {

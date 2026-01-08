@@ -30,11 +30,13 @@ type App struct {
 	Directory string `yaml:"directory"`
 	SearchURL string `yaml:"search_url"`
 	LogLevel  string `yaml:"log_level"`
+	DebugSQL  bool   `yaml:"debug_sql"`
 }
 
 type Server struct {
-	Address string `yaml:"address"`
-	BaseURL string `yaml:"base_url"`
+	Address  string `yaml:"address"`
+	BaseURL  string `yaml:"base_url"`
+	Database string `yaml:"database"`
 }
 
 type Rules struct {
@@ -97,7 +99,8 @@ func CreateDefaultConfig() *Config {
 			LogLevel:  "info",
 		},
 		Server: Server{
-			Address: "127.0.0.1:4433",
+			Address:  "127.0.0.1:4433",
+			Database: "db.sqlite3",
 		},
 	}
 }
@@ -156,6 +159,10 @@ func (c *Config) IndexPath() string {
 
 func (c *Config) RulesPath() string {
 	return c.FullPath("rules.json")
+}
+
+func (c *Config) DatabaseConnection() string {
+	return c.FullPath(c.Server.Database)
 }
 
 func (c *Config) Filename() string {

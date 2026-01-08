@@ -74,18 +74,36 @@ function renderResults(event) {
         return;
     }
     highlightIdx = 0;
-    resultsHeader.querySelector(".results-num").innerText = res.total;
+    resultsHeader.querySelector(".results-num").innerText = res.total || d.length;
     resultsHeader.classList.remove("hidden");
-    if(res.query.text != input.value) {
+    if(res.query && res.query.text != input.value) {
         resultsHeader.querySelector(".expanded-query").innerHTML = `Expanded query: <code>"${res.query.text}"</code>`;
     }
-    for(let i in d) {
-        let r = d[i];
+    if(res.history && res.history.length) {
+        for(let r of res.history) {
+            results.appendChild(createTemplate("result", {
+                "a": (e) => {
+                    e.setAttribute("href", r.url);
+                    e.innerHTML = r.title || "*title*";
+                    // TODO handle middleclick (auxclick handler)
+                    e.addEventListener("click", openResult);
+                    e.classList.add("success");
+                },
+                "span": (e) => { e.textContent = r.url; },
+            }));
+        }
+    }
+    for(let r of d) {
         let n = createTemplate("result", {
-            "a": (e) => { e.setAttribute("href", r.url); e.innerHTML = r.title || "*title*"; },
+            "a": (e) => {
+                e.setAttribute("href", r.url);
+                e.innerHTML = r.title || "*title*";
+                // TODO handle middleclick (auxclick handler)
+                e.addEventListener("click", openResult);
+            },
             "img": (e) => { e.setAttribute("src", r.favicon || emptyImg); },
             "span": (e) => { e.textContent = r.url; },
-            "p": (e) => { e.innerHTML = r.text; },
+            "p": (e) => { e.innerHTML = r.text || ""; },
         });
         results.appendChild(n);
     }
@@ -109,6 +127,22 @@ function init() {
     connect();
 }
 
+function openResult(e) {
+    if(e.preventDefault) {
+        e.preventDefault();
+    }
+    let url = e.target.getAttribute("href");
+    let title = e.target.innerText;
+	fetch("/history", {
+		method: "POST",
+		body: JSON.stringify({"url": url, "title": title, "query": input.value}),
+		headers: {"Content-type": "application/json; charset=UTF-8"},
+	}).then((r) => {
+		openUrl(url);
+	});
+    return false;
+}
+
 let highlightIdx = 0;
 window.addEventListener("keydown", function(e) {
     if(e.key == "/") {
@@ -118,8 +152,8 @@ window.addEventListener("keydown", function(e) {
         }
     }
     if(e.key == "Enter") {
-        let url = document.querySelectorAll(".result a")[highlightIdx].getAttribute("href");
-        openUrl(url);
+        let res = document.querySelectorAll(".result a")[highlightIdx];
+        openResult({'target': res});
     }
     if(e.ctrlKey && (e.key == "j" || e.key == "k")) {
           e.preventDefault();

@@ -11,6 +11,7 @@ import (
 	//	"github.com/asciimoo/hister/gui"
 	"github.com/asciimoo/hister/server"
 	"github.com/asciimoo/hister/server/indexer"
+	"github.com/asciimoo/hister/server/model"
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -31,10 +32,13 @@ var rootCmd = &cobra.Command{
 }
 
 var listenCmd = &cobra.Command{
-	Use:    "listen",
-	Short:  "start server",
-	Long:   ``,
-	PreRun: initIndex,
+	Use:   "listen",
+	Short: "start server",
+	Long:  ``,
+	PreRun: func(_ *cobra.Command, _ []string) {
+		initDB()
+		initIndex()
+	},
 	Run: func(cmd *cobra.Command, _ []string) {
 		setStrArg(cmd, "address", &cfg.Server.Address)
 		server.Listen(cfg)
@@ -150,7 +154,15 @@ func setStrArg(cmd *cobra.Command, arg string, dest *string) {
 	}
 }
 
-func initIndex(_ *cobra.Command, _ []string) {
+func initDB() {
+	err := model.Init(cfg)
+	if err != nil {
+		exit(1, err.Error())
+	}
+	log.Debug().Msg("Database initialization complete")
+}
+
+func initIndex() {
 	err := indexer.Init(cfg.IndexPath())
 	if err != nil {
 		exit(1, err.Error())
