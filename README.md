@@ -2,16 +2,18 @@
 
 **Web history on steroids**
 
-Blazing fast lookup of previously visited websites.
+Hister is a web history management tool that provides blazing fast, content-based search for visited websites. Unlike traditional browser history that only searches URLs and titles, Hister indexes the full content of web pages you visit, enabling deep and meaningful search across your browsing history.
 
 ![hister screencast](assets/demo.gif)
 
+
 ## Features
 
- - Advanced [query language](https://blevesearch.com/docs/Query-String-Query/)
- - Blacklist & priority URL rules
- - Search keyword aliases for faster content retrieval
- - Web extension to automatically index visited websites
+- **Privacy-focused**: Keep your browsing history indexed locally - don't use remote search engines if it isn't necessary
+- **Full-text indexing**: Search through the actual content of web pages you've visited
+- **Advanced search capabilities**: Utilize a powerful [query language](https://blevesearch.com/docs/Query-String-Query/) for precise results
+- **Efficient retrieval**: Use keyword aliases to quickly find content
+- **Flexible content management**: Configure blacklist and priority rules for better control
 
 ## Setup & run
 
