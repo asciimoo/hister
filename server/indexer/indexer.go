@@ -163,6 +163,7 @@ func Add(d *Document) error {
 			return err
 		}
 	}
+	log.Debug().Str("URL", d.URL).Msg("Adding to index")
 	return i.idx.Index(d.URL, d)
 }
 
