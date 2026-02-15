@@ -70,6 +70,8 @@ func (lrw *loggingResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) 
 func (c *csrfExceptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/add" && strings.HasPrefix(r.Header.Get("Origin"), "moz-extension://") {
 		c.origHandler.ServeHTTP(w, r)
+	} else if r.URL.Path == "/add" && strings.HasPrefix(r.Header.Get("Origin"), "safari-web-extension://") {
+		c.origHandler.ServeHTTP(w, r)
 	} else {
 		c.csrfHandler.ServeHTTP(w, r)
 	}
@@ -343,6 +345,21 @@ func serveAdd(c *webContext) {
 		c.Render("add", nil)
 		return
 	}
+	if m == http.MethodOptions {
+		if c.Request.Header.Get("Access-Control-Request-Method") != http.MethodPost {
+			c.Response.WriteHeader(http.StatusForbidden)
+			return
+		}
+		origin := c.Request.Header.Get("Origin")
+		if strings.HasPrefix(origin, "safari-web-extension://") {
+			c.Response.Header().Add("Access-Control-Allow-Origin", origin)
+		}
+		c.Response.Header().Add("Access-Control-Allow-Methods", http.MethodPost)
+		c.Response.Header().Add("Access-Control-Allow-Headers", "Content-Type")
+		c.Response.Header().Add("Access-Control-Max-Age", "86400")
+		c.Response.WriteHeader(http.StatusNoContent)
+		return
+	}
 	if m != http.MethodPost {
 		serve500(c)
 		return
@@ -367,6 +384,7 @@ func serveAdd(c *webContext) {
 		d.Title = f.Get("title")
 		d.Text = f.Get("text")
 	}
+
 	if !c.Config.Rules.IsSkip(d.URL) && !strings.HasPrefix(d.URL, c.Config.BaseURL("/")) {
 		if err := d.Process(); err != nil {
 			log.Error().Err(err).Str("URL", d.URL).Msg("failed to process document")
@@ -378,6 +396,10 @@ func serveAdd(c *webContext) {
 			log.Error().Err(err).Str("URL", d.URL).Msg("failed to create index")
 			serve500(c)
 			return
+		}
+		origin := c.Request.Header.Get("Origin")
+		if strings.HasPrefix(origin, "safari-web-extension://") {
+			c.Response.Header().Add("Access-Control-Allow-Origin", origin)
 		}
 		c.Response.WriteHeader(http.StatusCreated)
 	} else {
