@@ -56,6 +56,7 @@ build_addon() {
     echo "[!] Warning: The default manifest.json is for chrome browsers, overwrite it with manifest_ff.json for firefox"
     cd ext
     npm run build
+    xcrun safari-web-extension-packager ./dist --project-location ./xc-project --app-name Hister
     cd ..
 }
 
