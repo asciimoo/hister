@@ -248,6 +248,7 @@ func init() {
 	rootCmd.AddCommand(searchCmd)
 	rootCmd.AddCommand(reindexCmd)
 	rootCmd.AddCommand(deleteCmd)
+	rootCmd.AddCommand(mcpCmd)
 
 	dcfg := config.CreateDefaultConfig()
 	listenCmd.Flags().StringP("address", "a", dcfg.Server.Address, "Listen address")
