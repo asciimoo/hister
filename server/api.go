@@ -192,5 +192,17 @@ func init() {
 			Handler:      serveAPI,
 			Description:  "API documentation",
 		},
+		&Endpoint{
+			Name:         "API History",
+			Path:         "/api/history",
+			Method:       GET,
+			CSRFRequired: false,
+			Handler:      serveAPIHistory,
+			Description:  "Recent or top-visited history as JSON (?kind=recent|top&limit=N)",
+			Args: []*EndpointArg{
+				{Name: "kind", Type: "string", Required: false, Description: "recent (default) or top"},
+				{Name: "limit", Type: "integer", Required: false, Description: "Number of results (default 10)"},
+			},
+		},
 	}
 }

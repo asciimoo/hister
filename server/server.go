@@ -497,6 +497,46 @@ func serveAPI(c *webContext) {
 	})
 }
 
+func serveAPIHistory(c *webContext) {
+	origin := c.Request.Header.Get("Origin")
+	if origin != "hister://" && !c.Config.IsSameHost(origin) {
+		serve500(c)
+		return
+	}
+	limitStr := c.Request.URL.Query().Get("limit")
+	limit := 10
+	if n, err := fmt.Sscanf(limitStr, "%d", &limit); n != 1 || err != nil || limit <= 0 {
+		limit = 10
+	}
+	kind := c.Request.URL.Query().Get("kind")
+	var result any
+	var err error
+	if kind == "top" {
+		items, e := model.GetURLsByQuery("")
+		if e != nil {
+			err = e
+		} else {
+			if len(items) > limit {
+				items = items[:limit]
+			}
+			result = items
+		}
+	} else {
+		result, err = model.GetLatestHistoryItems(limit)
+	}
+	if err != nil {
+		serve500(c)
+		return
+	}
+	jr, err := json.Marshal(result)
+	if err != nil {
+		serve500(c)
+		return
+	}
+	c.Response.Header().Set("Content-Type", "application/json")
+	c.Response.Write(jr)
+}
+
 func serveOpensearch(c *webContext) {
 	c.Response.Header().Add("Content-Type", "application/xml")
 	c.Render("opensearch", nil)

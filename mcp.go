@@ -2,8 +2,13 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"net/url"
 	"strings"
+	"time"
 
 	"github.com/asciimoo/hister/server/indexer"
 	"github.com/asciimoo/hister/server/model"
@@ -17,19 +22,24 @@ var mcpCmd = &cobra.Command{
 	Short: "Start MCP server (stdio)",
 	Long: `Start a Model Context Protocol server over stdio.
 
-Add to Claude Code with:
-  hister mcp
+The MCP server communicates with a running Hister HTTP server.
+Start the Hister server first:
+  hister listen
+
+Then add to Claude Code with:
+  claude mcp add hister /path/to/hister mcp
 
 Or configure in .claude/settings.json:
   "mcpServers": {
     "hister": { "command": "/path/to/hister", "args": ["mcp"] }
   }`,
-	PreRun: func(_ *cobra.Command, _ []string) {
-		initIndex()
-	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runMCPServer(cmd, args)
 	},
+}
+
+func mcpHTTPClient() *http.Client {
+	return &http.Client{Timeout: 10 * time.Second}
 }
 
 func runMCPServer(_ *cobra.Command, _ []string) error {
@@ -104,22 +114,37 @@ func handleSearch(_ context.Context, req mcpmcp.CallToolRequest) (*mcpmcp.CallTo
 		limit = 10
 	}
 
-	results, err := indexer.Search(cfg, &indexer.Query{
-		Text:  q,
-		Limit: limit,
-	})
+	apiURL := cfg.BaseURL("/search") + "?q=" + url.QueryEscape(q) + fmt.Sprintf("&limit=%d", limit)
+	httpReq, err := http.NewRequest("GET", apiURL, nil)
 	if err != nil {
-		return mcpmcp.NewToolResultErrorFromErr("search failed", err), nil
+		return mcpmcp.NewToolResultErrorFromErr("failed to create request", err), nil
+	}
+	httpReq.Header.Set("Origin", cfg.BaseURL("/"))
+
+	resp, err := mcpHTTPClient().Do(httpReq)
+	if err != nil {
+		return mcpmcp.NewToolResultErrorFromErr("failed to reach Hister server — is it running?", err), nil
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return mcpmcp.NewToolResultErrorFromErr("failed to read response", err), nil
 	}
 
-	if results == nil || len(results.Documents) == 0 {
+	var results indexer.Results
+	if err := json.Unmarshal(body, &results); err != nil {
+		return mcpmcp.NewToolResultErrorFromErr("failed to parse response", err), nil
+	}
+
+	if len(results.Documents) == 0 {
 		return mcpmcp.NewToolResultText("No results found."), nil
 	}
 
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "Found %d result(s) for %q:\n\n", results.Total, q)
 	for i, doc := range results.Documents {
-		fmt.Fprintf(&sb, "[%d] %s\n    %s\n    Score: %.4f\n\n", i+1, doc.Title, doc.URL, doc.Score)
+		fmt.Fprintf(&sb, "[%d] %s\n    %s\n\n", i+1, doc.Title, doc.URL)
 	}
 
 	return mcpmcp.NewToolResultText(sb.String()), nil
@@ -144,8 +169,22 @@ func handleDelete(_ context.Context, req mcpmcp.CallToolRequest) (*mcpmcp.CallTo
 		return mcpmcp.NewToolResultError("url parameter is required"), nil
 	}
 
-	if err := indexer.Delete(u); err != nil {
-		return mcpmcp.NewToolResultErrorFromErr("failed to delete URL", err), nil
+	formData := url.Values{"url": {u}}
+	httpReq, err := http.NewRequest("POST", cfg.BaseURL("/delete"), strings.NewReader(formData.Encode()))
+	if err != nil {
+		return mcpmcp.NewToolResultErrorFromErr("failed to create request", err), nil
+	}
+	httpReq.Header.Set("Origin", "hister://")
+	httpReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := mcpHTTPClient().Do(httpReq)
+	if err != nil {
+		return mcpmcp.NewToolResultErrorFromErr("failed to reach Hister server — is it running?", err), nil
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return mcpmcp.NewToolResultError(fmt.Sprintf("delete failed: status %d", resp.StatusCode)), nil
 	}
 
 	return mcpmcp.NewToolResultText("Deleted: " + u), nil
@@ -157,9 +196,27 @@ func handleListRecent(_ context.Context, req mcpmcp.CallToolRequest) (*mcpmcp.Ca
 		limit = 10
 	}
 
-	items, err := model.GetLatestHistoryItems(limit)
+	apiURL := cfg.BaseURL("/api/history") + fmt.Sprintf("?kind=recent&limit=%d", limit)
+	httpReq, err := http.NewRequest("GET", apiURL, nil)
 	if err != nil {
-		return mcpmcp.NewToolResultErrorFromErr("failed to get recent history", err), nil
+		return mcpmcp.NewToolResultErrorFromErr("failed to create request", err), nil
+	}
+	httpReq.Header.Set("Origin", "hister://")
+
+	resp, err := mcpHTTPClient().Do(httpReq)
+	if err != nil {
+		return mcpmcp.NewToolResultErrorFromErr("failed to reach Hister server — is it running?", err), nil
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return mcpmcp.NewToolResultErrorFromErr("failed to read response", err), nil
+	}
+
+	var items []*model.HistoryItem
+	if err := json.Unmarshal(body, &items); err != nil {
+		return mcpmcp.NewToolResultErrorFromErr("failed to parse response", err), nil
 	}
 
 	if len(items) == 0 {
@@ -189,17 +246,31 @@ func handleTopVisited(_ context.Context, req mcpmcp.CallToolRequest) (*mcpmcp.Ca
 		limit = 10
 	}
 
-	items, err := model.GetURLsByQuery("")
+	apiURL := cfg.BaseURL("/api/history") + fmt.Sprintf("?kind=top&limit=%d", limit)
+	httpReq, err := http.NewRequest("GET", apiURL, nil)
 	if err != nil {
-		return mcpmcp.NewToolResultErrorFromErr("failed to get top visited URLs", err), nil
+		return mcpmcp.NewToolResultErrorFromErr("failed to create request", err), nil
+	}
+	httpReq.Header.Set("Origin", "hister://")
+
+	resp, err := mcpHTTPClient().Do(httpReq)
+	if err != nil {
+		return mcpmcp.NewToolResultErrorFromErr("failed to reach Hister server — is it running?", err), nil
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return mcpmcp.NewToolResultErrorFromErr("failed to read response", err), nil
+	}
+
+	var items []*model.URLCount
+	if err := json.Unmarshal(body, &items); err != nil {
+		return mcpmcp.NewToolResultErrorFromErr("failed to parse response", err), nil
 	}
 
 	if len(items) == 0 {
 		return mcpmcp.NewToolResultText("No visited URLs found."), nil
-	}
-
-	if len(items) > limit {
-		items = items[:limit]
 	}
 
 	var sb strings.Builder
@@ -214,3 +285,4 @@ func handleTopVisited(_ context.Context, req mcpmcp.CallToolRequest) (*mcpmcp.Ca
 
 	return mcpmcp.NewToolResultText(sb.String()), nil
 }
+
