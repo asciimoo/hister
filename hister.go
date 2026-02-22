@@ -519,9 +519,12 @@ func copyToTemp(src string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer tmp.Close()
-
 	if _, err := io.Copy(tmp, in); err != nil {
+		tmp.Close()
+		os.Remove(tmp.Name())
+		return "", err
+	}
+	if err := tmp.Close(); err != nil {
 		os.Remove(tmp.Name())
 		return "", err
 	}
