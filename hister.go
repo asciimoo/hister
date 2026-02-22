@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -433,6 +434,39 @@ func yesNoPrompt(label string, def bool) bool {
 //	}
 //}
 
+var privateIPNets []*net.IPNet
+
+func init() {
+	for _, cidr := range []string{
+		"10.0.0.0/8",
+		"172.16.0.0/12",
+		"192.168.0.0/16",
+		"127.0.0.0/8",
+		"::1/128",
+		"fc00::/7",
+	} {
+		_, ipNet, _ := net.ParseCIDR(cidr)
+		privateIPNets = append(privateIPNets, ipNet)
+	}
+}
+
+func isPrivateHost(host string) bool {
+	// strip port
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return host == "localhost"
+	}
+	for _, ipNet := range privateIPNets {
+		if ipNet.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
 func indexURL(u string) error {
 	client := &http.Client{
 		// Websites can be slow or unreachable, we don't want to wait too long for each of them, especially if we are indexing a lot of URLs during import.
@@ -440,6 +474,18 @@ func indexURL(u string) error {
 	}
 	if u == "" {
 		log.Warn().Msg("URL must not be empty")
+		return nil
+	}
+	parsed, err := url.Parse(u)
+	if err != nil {
+		return errors.New(`failed to parse URL: ` + err.Error())
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		log.Debug().Str("URL", u).Msg("skipping non-http URL")
+		return nil
+	}
+	if isPrivateHost(parsed.Hostname()) {
+		log.Debug().Str("URL", u).Msg("skipping private/local URL")
 		return nil
 	}
 	req, err := http.NewRequest("GET", u, nil)
