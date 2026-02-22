@@ -16,6 +16,7 @@ Hister is a web history management tool that provides blazing fast, content-base
 - **Advanced search capabilities**: Utilize a powerful [query language](https://blevesearch.com/docs/Query-String-Query/) for precise results
 - **Efficient retrieval**: Use keyword aliases to quickly find content
 - **Flexible content management**: Configure blacklist and priority rules for better control
+- **AI assistant integration**: Use Hister as an [MCP server](#mcp-model-context-protocol-integration) for Claude and other AI tools
 
 ## Setup & run
 
@@ -44,6 +45,47 @@ Settings can be configured in `~/.config/hister/config.yml` config file - don't 
 
 Execute `./hister create-config config.yml` to generate a configuration file with the default configuration values.
 
+
+## MCP (Model Context Protocol) Integration
+
+Hister can act as an MCP server, allowing AI assistants like [Claude](https://claude.ai) to search, index, and manage your browser history directly.
+
+```bash
+hister mcp
+```
+
+This starts a stdio MCP server exposing 5 tools:
+
+| Tool | Description |
+|------|-------------|
+| `search` | Full-text search through indexed history |
+| `index` | Download and index a URL |
+| `delete` | Remove a URL from the index |
+| `list_recent` | List recently visited pages |
+| `top_visited` | List most frequently visited pages |
+
+### Claude Code
+
+```bash
+claude mcp add hister /usr/local/bin/hister mcp
+```
+
+### Claude Desktop
+
+Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
+
+```json
+{
+  "mcpServers": {
+    "hister": {
+      "command": "/usr/local/bin/hister",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+See the [MCP documentation](docs/content/documentation/mcp.md) for details.
 
 ## Check out our [Documentation](https://hister.org/documentation/) for more details
 
