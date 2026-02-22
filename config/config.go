@@ -28,6 +28,7 @@ type Config struct {
 	fname                    string
 	App                      App               `yaml:"app"`
 	Server                   Server            `yaml:"server"`
+	Import                   Import            `yaml:"import"`
 	Hotkeys                  Hotkeys           `yaml:"hotkeys"`
 	SensitiveContentPatterns map[string]string `yaml:"sensitive_content_patterns"`
 	Rules                    *Rules            `yaml:"-"`
@@ -40,6 +41,10 @@ type App struct {
 	LogLevel            string `yaml:"log_level"`
 	DebugSQL            bool   `yaml:"debug_sql"`
 	OpenResultsOnNewTab bool   `yaml:"open_results_on_new_tab"`
+}
+
+type Import struct {
+	SkipPrivateURLs bool `yaml:"skip_private_urls"`
 }
 
 type Server struct {
@@ -165,6 +170,9 @@ func CreateDefaultConfig() *Config {
 			Directory:           getDefaultDataDir(),
 			LogLevel:            "info",
 			OpenResultsOnNewTab: false,
+		},
+		Import: Import{
+			SkipPrivateURLs: true,
 		},
 		Server: Server{
 			Address:  "127.0.0.1:4433",

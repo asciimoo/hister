@@ -163,7 +163,7 @@ var indexCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		setStrArg(cmd, "server-url", &cfg.Server.BaseURL)
 		for _, u := range args {
-			if err := indexURL(u); err != nil {
+			if err := indexURL(u, cfg.Import.SkipPrivateURLs); err != nil {
 				exit(1, "Failed to index URL: "+err.Error())
 			}
 		}
@@ -253,6 +253,7 @@ func init() {
 	indexCmd.Flags().StringP("server-url", "u", dcfg.Server.BaseURL, "hister server URL")
 
 	importCmd.Flags().IntP("min-visit", "m", 1, "only import URLs that were opened at least 'min-visit' times")
+	importCmd.Flags().Bool("include-private", false, "include private/local URLs (e.g. localhost, 192.168.x.x) — overrides import.skip_private_urls in config")
 
 	reindexCmd.Flags().BoolP("exclude-sensitive", "x", false, "don't add documents that contain sensitive content matched by config.SensitiveContentPatterns")
 
@@ -467,7 +468,7 @@ func isPrivateHost(host string) bool {
 	return false
 }
 
-func indexURL(u string) error {
+func indexURL(u string, skipPrivate bool) error {
 	client := &http.Client{
 		// Websites can be slow or unreachable, we don't want to wait too long for each of them, especially if we are indexing a lot of URLs during import.
 		Timeout: 5 * time.Second,
@@ -484,7 +485,7 @@ func indexURL(u string) error {
 		log.Debug().Str("URL", u).Msg("skipping non-http URL")
 		return nil
 	}
-	if isPrivateHost(parsed.Hostname()) {
+	if skipPrivate && isPrivateHost(parsed.Hostname()) {
 		log.Debug().Str("URL", u).Msg("skipping private/local URL")
 		return nil
 	}
@@ -547,6 +548,9 @@ func indexURL(u string) error {
 }
 
 func importHistory(cmd *cobra.Command, args []string) {
+	includePrivate, _ := cmd.Flags().GetBool("include-private")
+	skipPrivate := cfg.Import.SkipPrivateURLs && !includePrivate
+
 	browser := args[0]
 	if browser != "firefox" && browser != "chrome" {
 		exit(1, "Invalid browser type it should be 'firefox' or 'chrome'")
@@ -599,7 +603,7 @@ func importHistory(cmd *cobra.Command, args []string) {
 			exit(1, "Failed to retreive URL: "+err.Error())
 		}
 		fmt.Printf("[%d/%d] %s\n", i, count, u)
-		if err := indexURL(u); err != nil {
+		if err := indexURL(u, skipPrivate); err != nil {
 			log.Warn().Err(err).Msg("Failed to index URL")
 		}
 		i += 1
