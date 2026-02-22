@@ -290,6 +290,17 @@ func (d *Document) Process() error {
 	return nil
 }
 
+func Count() (uint64, error) {
+	q := query.NewMatchAllQuery()
+	req := bleve.NewSearchRequest(q)
+	req.Size = 0
+	res, err := i.idx.Search(req)
+	if err != nil {
+		return 0, err
+	}
+	return res.Total, nil
+}
+
 func Iterate(fn func(*Document)) {
 	q := query.NewMatchAllQuery()
 	resultNum := 20

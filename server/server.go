@@ -32,6 +32,7 @@ var (
 	errCSRFMismatch = errors.New("CSRF token mismatch")
 	storeName       = "hister"
 	tokName         = "csrf_token"
+	AppVersion      = "v0.1.0"
 )
 
 type tArgs map[string]any
@@ -586,6 +587,10 @@ func (c *webContext) Render(tpl string, args tArgs) {
 	args["Config"] = c.Config
 	args["Nonce"] = c.nonce
 	args["CSRF"] = c.csrf
+	args["AppVersion"] = AppVersion
+	if count, err := indexer.Count(); err == nil {
+		args["IndexCount"] = count
+	}
 	t, ok := tpls[tpl]
 	if !ok {
 		log.Error().Str("template", tpl).Msg("template not found")

@@ -43,6 +43,9 @@
             <a href="/about">About</a> |
             <a href="/api">API</a> |
             <a href="https://github.com/asciimoo/hister/">GitHub</a>
+            <span class="footer-meta">
+                {{ if .IndexCount }}{{ .IndexCount }} pages indexed | {{ end }}{{ .AppVersion }}
+            </span>
         </footer>
         <script src="/static/js/site.js" nonce="{{ .Nonce }}"></script>
     </body>

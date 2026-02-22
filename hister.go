@@ -251,7 +251,7 @@ func init() {
 	listenCmd.Flags().StringP("address", "a", dcfg.Server.Address, "Listen address")
 	indexCmd.Flags().StringP("server-url", "u", dcfg.Server.BaseURL, "hister server URL")
 
-	importCmd.Flags().IntP("min-visit", "m", 1, "only import URLs that were opened at least 'min-visit' times")
+	importCmd.Flags().IntP("min-visit", "m", 5, "only import URLs that were opened at least 'min-visit' times")
 
 	reindexCmd.Flags().BoolP("exclude-sensitive", "x", false, "don't add documents that contain sensitive content matched by config.SensitiveContentPatterns")
 
