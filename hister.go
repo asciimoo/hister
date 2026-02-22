@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -105,15 +106,26 @@ var listURLsCmd = &cobra.Command{
 }
 
 var importCmd = &cobra.Command{
-	Use:   "import",
+	Use:   "import [BROWSER_TYPE DB_PATH]",
 	Short: "Import browsing history from all supported browsers",
-	Long: `Automatically detects and imports browsing history from all supported browsers:
-Chrome, Brave, Edge, Firefox, Safari.
+	Long: `Automatically detects and imports browsing history from all supported browsers
+on macOS, Linux, and Windows.
+
+Supported browsers: Chrome, Chromium, Brave, Edge, Vivaldi, Opera, Firefox,
+Firefox Developer Edition, Waterfox, Arc (macOS), Safari (macOS).
 
 For Safari on macOS, Full Disk Access must be granted to the terminal in:
 System Settings > Privacy & Security > Full Disk Access
+
+Optionally specify a browser type and database path to import from a custom location.
+This is useful for browser forks with non-standard paths:
+  hister import chrome /path/to/History
+  hister import firefox /path/to/places.sqlite
+
+Chromium-based browsers use SQLite with a 'urls' table.
+Firefox-based browsers use SQLite with a 'moz_places' table.
 `,
-	Args: cobra.MaximumNArgs(0),
+	Args: cobra.RangeArgs(0, 2),
 	Run:  importHistory,
 }
 
@@ -504,8 +516,10 @@ func indexURL(u string) error {
 
 type browserDB struct {
 	name  string
-	path  string
+	paths []string // candidate paths (first existing one is used)
+	globs []string // glob patterns for profile-based paths (e.g. Firefox)
 	query string
+	path  string // resolved path (set by detectBrowserDBs or manual override)
 }
 
 func copyToTemp(src string) (string, error) {
@@ -531,6 +545,241 @@ func copyToTemp(src string) (string, error) {
 	return tmp.Name(), nil
 }
 
+// browserTemplates returns the list of known browser definitions with platform-specific paths.
+// Each entry uses paths (first existing one wins) and/or globs for profile-based discovery.
+func browserTemplates(home string, chromiumQuery, firefoxQuery, safariQuery string) []browserDB {
+	switch runtime.GOOS {
+	case "darwin":
+		return []browserDB{
+			{
+				name: "Chrome",
+				paths: []string{
+					filepath.Join(home, "Library/Application Support/Google/Chrome/Default/History"),
+					filepath.Join(home, "Library/Application Support/Google/Chrome Beta/Default/History"),
+					filepath.Join(home, "Library/Application Support/Google/Chrome Canary/Default/History"),
+				},
+				query: chromiumQuery,
+			},
+			{
+				name: "Chromium",
+				paths: []string{
+					filepath.Join(home, "Library/Application Support/Chromium/Default/History"),
+				},
+				query: chromiumQuery,
+			},
+			{
+				name: "Brave",
+				paths: []string{
+					filepath.Join(home, "Library/Application Support/BraveSoftware/Brave-Browser/Default/History"),
+					filepath.Join(home, "Library/Application Support/BraveSoftware/Brave-Browser-Beta/Default/History"),
+				},
+				query: chromiumQuery,
+			},
+			{
+				name: "Edge",
+				paths: []string{
+					filepath.Join(home, "Library/Application Support/Microsoft Edge/Default/History"),
+					filepath.Join(home, "Library/Application Support/Microsoft Edge Beta/Default/History"),
+				},
+				query: chromiumQuery,
+			},
+			{
+				name: "Vivaldi",
+				paths: []string{
+					filepath.Join(home, "Library/Application Support/Vivaldi/Default/History"),
+				},
+				query: chromiumQuery,
+			},
+			{
+				name: "Opera",
+				paths: []string{
+					filepath.Join(home, "Library/Application Support/com.operasoftware.Opera/Default/History"),
+				},
+				query: chromiumQuery,
+			},
+			{
+				name: "Arc",
+				paths: []string{
+					filepath.Join(home, "Library/Application Support/Arc/User Data/Default/History"),
+				},
+				query: chromiumQuery,
+			},
+			{
+				name: "Comet",
+				paths: []string{
+					filepath.Join(home, "Library/Application Support/Comet/Default/History"),
+				},
+				query: chromiumQuery,
+			},
+			{
+				name: "Safari",
+				paths: []string{
+					filepath.Join(home, "Library/Safari/History.db"),
+				},
+				query: safariQuery,
+			},
+			{
+				name: "Firefox",
+				globs: []string{
+					filepath.Join(home, "Library/Application Support/Firefox/Profiles/*.default*/places.sqlite"),
+					filepath.Join(home, "Library/Application Support/Firefox/Profiles/*.default-release*/places.sqlite"),
+				},
+				query: firefoxQuery,
+			},
+			{
+				name: "Firefox Developer Edition",
+				globs: []string{
+					filepath.Join(home, "Library/Application Support/Firefox/Profiles/*.dev-edition-default*/places.sqlite"),
+				},
+				query: firefoxQuery,
+			},
+			{
+				name: "Waterfox",
+				globs: []string{
+					filepath.Join(home, "Library/Application Support/Waterfox/Profiles/*.default*/places.sqlite"),
+				},
+				query: firefoxQuery,
+			},
+		}
+	case "linux":
+		return []browserDB{
+			{
+				name: "Chrome",
+				paths: []string{
+					filepath.Join(home, ".config/google-chrome/Default/History"),
+					filepath.Join(home, ".config/google-chrome-beta/Default/History"),
+				},
+				query: chromiumQuery,
+			},
+			{
+				name: "Chromium",
+				paths: []string{
+					filepath.Join(home, ".config/chromium/Default/History"),
+					filepath.Join(home, "snap/chromium/common/chromium/Default/History"),
+				},
+				query: chromiumQuery,
+			},
+			{
+				name: "Brave",
+				paths: []string{
+					filepath.Join(home, ".config/BraveSoftware/Brave-Browser/Default/History"),
+				},
+				query: chromiumQuery,
+			},
+			{
+				name: "Edge",
+				paths: []string{
+					filepath.Join(home, ".config/microsoft-edge/Default/History"),
+					filepath.Join(home, ".config/microsoft-edge-beta/Default/History"),
+				},
+				query: chromiumQuery,
+			},
+			{
+				name: "Vivaldi",
+				paths: []string{
+					filepath.Join(home, ".config/vivaldi/Default/History"),
+				},
+				query: chromiumQuery,
+			},
+			{
+				name: "Opera",
+				paths: []string{
+					filepath.Join(home, ".config/opera/Default/History"),
+				},
+				query: chromiumQuery,
+			},
+			{
+				name: "Firefox",
+				globs: []string{
+					filepath.Join(home, ".mozilla/firefox/*.default*/places.sqlite"),
+					filepath.Join(home, ".mozilla/firefox/*.default-release*/places.sqlite"),
+					filepath.Join(home, "snap/firefox/common/.mozilla/firefox/*.default*/places.sqlite"),
+				},
+				query: firefoxQuery,
+			},
+			{
+				name: "Firefox Developer Edition",
+				globs: []string{
+					filepath.Join(home, ".mozilla/firefox/*.dev-edition-default*/places.sqlite"),
+				},
+				query: firefoxQuery,
+			},
+			{
+				name: "Waterfox",
+				globs: []string{
+					filepath.Join(home, ".waterfox/Profiles/*.default*/places.sqlite"),
+				},
+				query: firefoxQuery,
+			},
+		}
+	case "windows":
+		appData := os.Getenv("APPDATA")
+		localAppData := os.Getenv("LOCALAPPDATA")
+		return []browserDB{
+			{
+				name: "Chrome",
+				paths: []string{
+					filepath.Join(localAppData, "Google/Chrome/User Data/Default/History"),
+					filepath.Join(localAppData, "Google/Chrome Beta/User Data/Default/History"),
+				},
+				query: chromiumQuery,
+			},
+			{
+				name: "Chromium",
+				paths: []string{
+					filepath.Join(localAppData, "Chromium/User Data/Default/History"),
+				},
+				query: chromiumQuery,
+			},
+			{
+				name: "Brave",
+				paths: []string{
+					filepath.Join(localAppData, "BraveSoftware/Brave-Browser/User Data/Default/History"),
+				},
+				query: chromiumQuery,
+			},
+			{
+				name: "Edge",
+				paths: []string{
+					filepath.Join(localAppData, "Microsoft/Edge/User Data/Default/History"),
+				},
+				query: chromiumQuery,
+			},
+			{
+				name: "Vivaldi",
+				paths: []string{
+					filepath.Join(localAppData, "Vivaldi/User Data/Default/History"),
+				},
+				query: chromiumQuery,
+			},
+			{
+				name: "Opera",
+				paths: []string{
+					filepath.Join(appData, "Opera Software/Opera Stable/History"),
+				},
+				query: chromiumQuery,
+			},
+			{
+				name: "Firefox",
+				globs: []string{
+					filepath.Join(appData, "Mozilla/Firefox/Profiles/*.default*/places.sqlite"),
+					filepath.Join(appData, "Mozilla/Firefox/Profiles/*.default-release*/places.sqlite"),
+				},
+				query: firefoxQuery,
+			},
+			{
+				name: "Waterfox",
+				globs: []string{
+					filepath.Join(appData, "Waterfox/Profiles/*.default*/places.sqlite"),
+				},
+				query: firefoxQuery,
+			},
+		}
+	default:
+		return nil
+	}
+}
+
 func detectBrowserDBs(minVisit int) []browserDB {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -546,64 +795,68 @@ HAVING COUNT(v.id) >= %d
 ORDER BY COUNT(v.id) DESC`, minVisit)
 	firefoxQuery := fmt.Sprintf("SELECT DISTINCT url FROM moz_places WHERE visit_count >= %d ORDER BY visit_count DESC", minVisit)
 
-	candidates := []browserDB{
-		{
-			name:  "Chrome",
-			path:  filepath.Join(home, "Library/Application Support/Google/Chrome/Default/History"),
-			query: chromiumQuery,
-		},
-		{
-			name:  "Brave",
-			path:  filepath.Join(home, "Library/Application Support/BraveSoftware/Brave-Browser/Default/History"),
-			query: chromiumQuery,
-		},
-		{
-			name:  "Edge",
-			path:  filepath.Join(home, "Library/Application Support/Microsoft Edge/Default/History"),
-			query: chromiumQuery,
-		},
-		{
-			name:  "Comet",
-			path:  filepath.Join(home, "Library/Application Support/Comet/Default/History"),
-			query: chromiumQuery,
-		},
-		{
-			name:  "Safari",
-			path:  filepath.Join(home, "Library/Safari/History.db"),
-			query: safariQuery,
-		},
-	}
-
-	// Firefox: glob for profile directory
-	firefoxGlob := filepath.Join(home, "Library/Application Support/Firefox/Profiles/*.default*/places.sqlite")
-	if matches, err := filepath.Glob(firefoxGlob); err == nil {
-		for _, m := range matches {
-			candidates = append(candidates, browserDB{
-				name:  "Firefox",
-				path:  m,
-				query: firefoxQuery,
-			})
-		}
-	}
+	templates := browserTemplates(home, chromiumQuery, firefoxQuery, safariQuery)
 
 	var found []browserDB
-	for _, b := range candidates {
-		if _, err := os.Stat(b.path); err == nil {
-			found = append(found, b)
+	for _, b := range templates {
+		// Resolve via explicit paths list (first existing wins)
+		for _, p := range b.paths {
+			if _, err := os.Stat(p); err == nil {
+				b.path = p
+				found = append(found, b)
+				break
+			}
+		}
+		// Resolve via glob patterns (each match becomes its own entry)
+		for _, g := range b.globs {
+			matches, err := filepath.Glob(g)
+			if err != nil {
+				continue
+			}
+			for _, m := range matches {
+				entry := b
+				entry.path = m
+				found = append(found, entry)
+			}
 		}
 	}
 	return found
 }
 
-func importHistory(cmd *cobra.Command, _ []string) {
+func importHistory(cmd *cobra.Command, args []string) {
 	minVisit, _ := cmd.Flags().GetInt("min-visit")
 	if minVisit < 1 {
 		minVisit = 1
 	}
 
-	browsers := detectBrowserDBs(minVisit)
-	if len(browsers) == 0 {
-		exit(1, "No supported browser databases found on this system")
+	var browsers []browserDB
+	if len(args) == 2 {
+		// Manual invocation: hister import BROWSER_TYPE DB_PATH
+		browserType := strings.ToLower(args[0])
+		dbPath := args[1]
+		chromiumQuery := fmt.Sprintf("SELECT DISTINCT url FROM urls WHERE visit_count >= %d ORDER BY visit_count DESC", minVisit)
+		safariQuery := fmt.Sprintf(`SELECT DISTINCT h.url
+FROM history_items h
+INNER JOIN history_visits v ON h.id = v.history_item
+GROUP BY h.url
+HAVING COUNT(v.id) >= %d
+ORDER BY COUNT(v.id) DESC`, minVisit)
+		firefoxQuery := fmt.Sprintf("SELECT DISTINCT url FROM moz_places WHERE visit_count >= %d ORDER BY visit_count DESC", minVisit)
+		var q string
+		switch browserType {
+		case "firefox", "waterfox", "librewolf":
+			q = firefoxQuery
+		case "safari":
+			q = safariQuery
+		default: // chrome, chromium, brave, edge, vivaldi, opera, arc, and any chromium-based fork
+			q = chromiumQuery
+		}
+		browsers = []browserDB{{name: browserType, path: dbPath, query: q}}
+	} else {
+		browsers = detectBrowserDBs(minVisit)
+		if len(browsers) == 0 {
+			exit(1, "No supported browser databases found on this system")
+		}
 	}
 
 	type dbEntry struct {
