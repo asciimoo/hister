@@ -66,12 +66,18 @@ func getTokenQuery(t Token) (query.Query, bool) {
 				v = v[1:]
 			}
 			if strings.Contains(v, "*") {
-				q := bleve.NewWildcardQuery(v)
+				q := bleve.NewWildcardQuery(strings.ToLower(v))
 				q.SetField(field)
 				q.SetBoost(weights[field])
 				return q, negated
 			}
-			q := bleve.NewTermQuery(v)
+			if field == "url" || field == "domain" {
+				q := bleve.NewTermQuery(strings.ToLower(v))
+				q.SetField(field)
+				q.SetBoost(weights[field])
+				return q, negated
+			}
+			q := bleve.NewMatchQuery(v)
 			q.SetField(field)
 			q.SetBoost(weights[field])
 			return q, negated
@@ -85,12 +91,12 @@ func getTokenQuery(t Token) (query.Query, bool) {
 		qs := []query.Query{}
 		for _, f := range []string{"title", "text"} {
 			if strings.Contains(t.Value, "*") {
-				q := bleve.NewWildcardQuery(t.Value)
+				q := bleve.NewWildcardQuery(strings.ToLower(t.Value))
 				q.SetField(f)
 				q.SetBoost(weights[f])
 				qs = append(qs, q)
 			} else {
-				q := bleve.NewTermQuery(t.Value)
+				q := bleve.NewMatchQuery(t.Value)
 				q.SetField(f)
 				q.SetBoost(weights[f])
 				qs = append(qs, q)
