@@ -105,13 +105,15 @@ var listURLsCmd = &cobra.Command{
 }
 
 var importCmd = &cobra.Command{
-	Use:   "import BROWSER_TYPE DB_PATH",
-	Short: "Import Chrome or Firefox browsing history",
-	Long: `
-The Firefox URL database file is usually located at /home/[USER]/.mozilla/[PROFILE]/places.sqlite
-The Chrome/Chromium URL database fiel is usually located at /home/[USER]/.config/chromium/Default/History
+	Use:   "import",
+	Short: "Import browsing history from all supported browsers",
+	Long: `Automatically detects and imports browsing history from all supported browsers:
+Chrome, Brave, Edge, Firefox, Safari.
+
+For Safari on macOS, Full Disk Access must be granted to the terminal in:
+System Settings > Privacy & Security > Full Disk Access
 `,
-	Args: cobra.ExactArgs(2),
+	Args: cobra.MaximumNArgs(0),
 	Run:  importHistory,
 }
 
@@ -500,71 +502,205 @@ func indexURL(u string) error {
 	return nil
 }
 
-func importHistory(cmd *cobra.Command, args []string) {
-	browser := args[0]
-	if browser != "firefox" && browser != "chrome" {
-		exit(1, "Invalid browser type it should be 'firefox' or 'chrome'")
-	}
-	dbFile := args[1]
-	table := "urls"
-	if browser == "firefox" {
-		table = "moz_places"
-	}
-	db, err := sql.Open("sqlite3", fmt.Sprintf("file:%s?immutable=1", dbFile))
+type browserDB struct {
+	name  string
+	path  string
+	query string
+}
+
+func copyToTemp(src string) (string, error) {
+	in, err := os.Open(src)
 	if err != nil {
-		exit(1, "Failed to open database: "+err.Error())
+		return "", err
 	}
-	defer db.Close()
-	q := fmt.Sprintf("SELECT DISTINCT url FROM %s WHERE 1=1", table)
-	if i, err := cmd.Flags().GetInt("min-visit"); err == nil && i > 1 {
-		q += fmt.Sprintf(" AND visit_count >= %d", i)
+	defer in.Close()
+
+	tmp, err := os.CreateTemp("", "hister-browser-*.db")
+	if err != nil {
+		return "", err
+	}
+	defer tmp.Close()
+
+	if _, err := io.Copy(tmp, in); err != nil {
+		os.Remove(tmp.Name())
+		return "", err
+	}
+	return tmp.Name(), nil
+}
+
+func detectBrowserDBs(minVisit int) []browserDB {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil
 	}
 
-	cq := strings.Replace(q, "DISTINCT url", "DISTINCT count(url)", 1)
-	row := db.QueryRow(cq)
-	var count int
-	if err := row.Scan(&count); err != nil {
-		log.Debug().Str("query", cq).Msg("count query")
-		exit(1, "Failed to execute database query: "+err.Error())
+	chromiumQuery := fmt.Sprintf("SELECT DISTINCT url FROM urls WHERE visit_count >= %d ORDER BY visit_count DESC", minVisit)
+	safariQuery := fmt.Sprintf(`SELECT DISTINCT h.url
+FROM history_items h
+INNER JOIN history_visits v ON h.id = v.history_item
+GROUP BY h.url
+HAVING COUNT(v.id) >= %d
+ORDER BY COUNT(v.id) DESC`, minVisit)
+	firefoxQuery := fmt.Sprintf("SELECT DISTINCT url FROM moz_places WHERE visit_count >= %d ORDER BY visit_count DESC", minVisit)
+
+	candidates := []browserDB{
+		{
+			name:  "Chrome",
+			path:  filepath.Join(home, "Library/Application Support/Google/Chrome/Default/History"),
+			query: chromiumQuery,
+		},
+		{
+			name:  "Brave",
+			path:  filepath.Join(home, "Library/Application Support/BraveSoftware/Brave-Browser/Default/History"),
+			query: chromiumQuery,
+		},
+		{
+			name:  "Edge",
+			path:  filepath.Join(home, "Library/Application Support/Microsoft Edge/Default/History"),
+			query: chromiumQuery,
+		},
+		{
+			name:  "Comet",
+			path:  filepath.Join(home, "Library/Application Support/Comet/Default/History"),
+			query: chromiumQuery,
+		},
+		{
+			name:  "Safari",
+			path:  filepath.Join(home, "Library/Safari/History.db"),
+			query: safariQuery,
+		},
 	}
 
-	if count < 1 {
-		exit(1, "No URLs found")
+	// Firefox: glob for profile directory
+	firefoxGlob := filepath.Join(home, "Library/Application Support/Firefox/Profiles/*.default*/places.sqlite")
+	if matches, err := filepath.Glob(firefoxGlob); err == nil {
+		for _, m := range matches {
+			candidates = append(candidates, browserDB{
+				name:  "Firefox",
+				path:  m,
+				query: firefoxQuery,
+			})
+		}
 	}
 
-	if !yesNoPrompt(fmt.Sprintf("%d URLs found. Start import", count), true) {
+	var found []browserDB
+	for _, b := range candidates {
+		if _, err := os.Stat(b.path); err == nil {
+			found = append(found, b)
+		}
+	}
+	return found
+}
+
+func importHistory(cmd *cobra.Command, _ []string) {
+	minVisit, _ := cmd.Flags().GetInt("min-visit")
+	if minVisit < 1 {
+		minVisit = 1
+	}
+
+	browsers := detectBrowserDBs(minVisit)
+	if len(browsers) == 0 {
+		exit(1, "No supported browser databases found on this system")
+	}
+
+	type dbEntry struct {
+		browser  browserDB
+		tempPath string
+		db       *sql.DB
+		count    int
+	}
+
+	var entries []dbEntry
+	totalCount := 0
+
+	for _, b := range browsers {
+		tempPath, err := copyToTemp(b.path)
+		if err != nil {
+			log.Warn().Err(err).Str("browser", b.name).Msg("Failed to copy database, skipping")
+			continue
+		}
+
+		db, err := sql.Open("sqlite3", fmt.Sprintf("file:%s?immutable=1", tempPath))
+		if err != nil {
+			log.Warn().Err(err).Str("browser", b.name).Msg("Failed to open database, skipping")
+			os.Remove(tempPath)
+			continue
+		}
+
+		// Build count query from the select query
+		countQuery := strings.Replace(b.query, "SELECT DISTINCT", "SELECT COUNT(DISTINCT", 1)
+		// Wrap the subquery for Safari's GROUP BY / HAVING form
+		if strings.Contains(b.query, "GROUP BY") {
+			countQuery = fmt.Sprintf("SELECT COUNT(*) FROM (%s)", b.query)
+		} else {
+			countQuery = strings.Replace(b.query, "SELECT DISTINCT url", "SELECT COUNT(DISTINCT url)", 1)
+			// strip ORDER BY for count
+			if idx := strings.Index(countQuery, " ORDER BY"); idx >= 0 {
+				countQuery = countQuery[:idx]
+			}
+		}
+
+		var count int
+		row := db.QueryRow(countQuery)
+		if err := row.Scan(&count); err != nil {
+			log.Warn().Err(err).Str("browser", b.name).Str("query", countQuery).Msg("Failed to count URLs, skipping")
+			db.Close()
+			os.Remove(tempPath)
+			continue
+		}
+
+		if count < 1 {
+			log.Warn().Str("browser", b.name).Msg("No URLs found matching criteria, skipping")
+			db.Close()
+			os.Remove(tempPath)
+			continue
+		}
+
+		fmt.Printf("  %s: %s URLs\n", cliBoldStyle.Render(b.name), cliInfoStyle.Render(fmt.Sprintf("%d", count)))
+		entries = append(entries, dbEntry{browser: b, tempPath: tempPath, db: db, count: count})
+		totalCount += count
+	}
+
+	if totalCount < 1 {
+		exit(1, "No URLs found in any browser")
+	}
+
+	if !yesNoPrompt(fmt.Sprintf("%d URLs found across %d browser(s). Start import", totalCount, len(entries)), true) {
+		for _, e := range entries {
+			e.db.Close()
+			os.Remove(e.tempPath)
+		}
 		return
 	}
 
-	q += " ORDER BY visit_count DESC"
-
 	fmt.Println(cliBoldStyle.Render("IMPORTING"))
 
-	rows, err := db.Query(q)
-	if err != nil {
-		exit(1, "Failed to execute database query: "+err.Error())
-	}
-	defer rows.Close()
-	i := 1
-	for rows.Next() {
-		var u string
-		err = rows.Scan(&u)
+	globalIdx := 1
+	for _, e := range entries {
+		fmt.Printf("\n%s\n", cliInfoStyle.Render("=== "+e.browser.name+" ==="))
+		rows, err := e.db.Query(e.browser.query)
 		if err != nil {
-			exit(1, "Failed to retreive URL: "+err.Error())
+			log.Warn().Err(err).Str("browser", e.browser.name).Msg("Failed to query URLs, skipping")
+			e.db.Close()
+			os.Remove(e.tempPath)
+			continue
 		}
-		fmt.Printf("[%d/%d] %s\n", i, count, u)
-		if err := indexURL(u); err != nil {
-			log.Warn().Err(err).Msg("Failed to index URL")
+		for rows.Next() {
+			var u string
+			if err := rows.Scan(&u); err != nil {
+				log.Warn().Err(err).Msg("Failed to retrieve URL")
+				continue
+			}
+			fmt.Printf("[%d/%d] %s\n", globalIdx, totalCount, u)
+			if err := indexURL(u); err != nil {
+				log.Warn().Err(err).Msg("Failed to index URL")
+			}
+			globalIdx++
 		}
-		i += 1
+		rows.Close()
+		e.db.Close()
+		os.Remove(e.tempPath)
 	}
-
-	// TODO optional date filter
-	//vf := "last_visit_time"
-	//if browser == "firefox" {
-	//	vf = "last_visit_date"
-	//}
-	//q += fmt.Sprintf(" AND %s >= datetime('now', 'localtime', '-1 month')", vf)
 }
 
 func main() {
