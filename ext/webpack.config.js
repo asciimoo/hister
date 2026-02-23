@@ -126,6 +126,18 @@ const addon = {
                     to: 'style.css'
                 },
                 {
+                    from: 'assets/icon16.png',
+                    to: 'assets/icons'
+                },
+                {
+                    from: 'assets/icon32.png',
+                    to: 'assets/icons'
+                },
+                {
+                    from: 'assets/icon64.png',
+                    to: 'assets/icons'
+                },
+                {
                     from: 'assets/icon128.png',
                     to: 'assets/icons'
                 },

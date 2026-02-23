@@ -18,12 +18,35 @@ Hister is a web history management tool that provides blazing fast, content-base
 - **Advanced search capabilities**: Utilize a powerful [query language](https://blevesearch.com/docs/Query-String-Query/) for precise results
 - **Efficient retrieval**: Use keyword aliases to quickly find content
 - **Flexible content management**: Configure blacklist and priority rules for better control
+- **Cross-browser support**: Works on Chrome, Firefox, and Safari
 
 ## Setup & run
 
 ### Install the extension
 
 Available for [Chrome](https://chromewebstore.google.com/detail/hister/cciilamhchpmbdnniabclekddabkifhb) and [Firefox](https://addons.mozilla.org/en-US/firefox/addon/hister/)
+
+For Safari you can download it from the [GitHub Releases](https://github.com/asciimoo/hister/releases/tag/extension) - look for `Hister.app`.
+
+### Build Safari Extension
+
+The Safari extension must be built on macOS (You'll need XCode):
+
+```bash
+cd ext
+npm install
+npm run build:safari
+```
+
+This will create `ext/release/safari/Hister.app` - a standalone app containing the Safari extension.
+
+### Side-load Safari Extension
+
+1. Install the app: Run `open ext/release/safari/Hister.app` or double-click `Hister.app` in Finder
+2. Enable in Safari:
+   - Open Safari -> Settings -> Advanced -> Show Features For Developers -> Developer -> Allow unsigned extensions
+   - Find "Hister" in the list and check the box to enable
+3. Configure: Click on the extension to open the popup and connect to your Hister server
 
 ### Download pre-built binary
 

@@ -2,22 +2,25 @@
     "name": "Hister",
     "version": "0.9.0",
     "scripts": {
-        "clean": "rm -r dist/*",
-        "prebuild": "rm -rf dist/*",
-        "build": "NODE_ENV=production webpack --stats-error-details",
-        "dev": "webpack --stats-error-details --watch"
+        "clean": "rm -rf dist release safari-app",
+        "dev": "webpack --stats-error-details --watch",
+        "build:dist": "rm -rf dist && NODE_ENV=production webpack --stats-error-details",
+        "build": "npm run build:dist && web-ext build --source-dir dist --artifacts-dir release/web",
+        "build:chrome": "npm run build:dist && mkdir -p release/chrome && web-ext build --source-dir dist --artifacts-dir release/chrome --filename hister-chrome.zip",
+        "build:firefox": "npm run build:dist && mkdir -p release/firefox && web-ext build --source-dir dist --artifacts-dir release/firefox --filename hister-firefox.xpi",
+        "build:safari": "npm run build:dist && xcrun safari-web-extension-packager dist --project-location ./safari-app --swift --macos-only --no-open --no-prompt --force && xcodebuild -project safari-app/Hister/Hister.xcodeproj -scheme Hister -configuration Release -derivedDataPath safari-app/Hister/build clean build CODE_SIGN_IDENTITY=- && mkdir -p release/safari && cp -R safari-app/Hister/build/Build/Products/Release/Hister.app release/safari/ && cd dist && zip -r ../release/safari/hister-dist.zip * && cd ../release/safari && zip -r Hister.app.zip Hister.app"
     },
     "devDependencies": {
         "@types/chrome": "^0.0.299",
         "clean-webpack-plugin": "^4.0.0",
         "copy-webpack-plugin": "^12.0.2",
         "html-loader": "^5.1.0",
-        "html-webpack-plugin": "^5.6.3",
-        "mini-css-extract-plugin": "^2.9.2",
-        "terser-webpack-plugin": "^5.3.11",
-        "ts-loader": "^9.5.2",
+        "html-webpack-plugin": "^5.6.6",
+        "mini-css-extract-plugin": "^2.10.0",
+        "terser-webpack-plugin": "^5.3.16",
+        "ts-loader": "^9.5.4",
         "web-ext": "^9.3.0",
-        "webpack": "^5.97.1",
+        "webpack": "^5.105.2",
         "webpack-cli": "^6.0.1"
     }
 }

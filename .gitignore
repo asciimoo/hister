@@ -4,6 +4,8 @@ ext/node_modules
 ext/hister_ext_src.zip
 ext/hister_ext_ff.zip
 ext/hister_ext_chrome.zip
+ext/safari-app
+ext/release
 result
 result-*
 node_modules/

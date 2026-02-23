@@ -20,9 +20,14 @@ if(isFirefox) {
         window.addEventListener("load", extract);
     }
 } else {
+	// Chrome and Safari
 	window.addEventListener("load", extract);
 }
-window.addEventListener("navigatesuccess", update)
+try {
+    window.addEventListener("navigatesuccess", update);
+} catch(e) {
+    console.log("navigatesuccess not supported, using load fallback");
+}
 
 function extract(sendResponse) {
     registerResultExtractor(window, r => chrome.runtime.sendMessage({resultData:  r}));

@@ -1,0 +1,132 @@
+name: Extension Release
+
+on:
+  push:
+    branches:
+      - master
+
+permissions:
+  contents: write
+
+jobs:
+  build-chrome:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Install dependencies
+        working-directory: ./ext
+        run: npm ci
+
+      - name: Build Chrome extension
+        working-directory: ./ext
+        run: npm run build:chrome
+
+      - name: Upload Chrome artifact
+        uses: actions/upload-artifact@v6.0.0
+        with:
+          name: chrome
+          path: ext/release/chrome/
+
+  build-firefox:
+    needs: build-chrome
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Install dependencies
+        working-directory: ./ext
+        run: npm ci
+
+      - name: Build Firefox extension
+        working-directory: ./ext
+        run: npm run build:firefox
+
+      - name: Upload Firefox artifact
+        uses: actions/upload-artifact@v6.0.0
+        with:
+          name: firefox
+          path: ext/release/firefox/
+
+  build-safari:
+    needs: build-firefox
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Install dependencies
+        working-directory: ./ext
+        run: npm ci
+
+      - name: Select Xcode version with safari-web-extension-packager
+        run: sudo xcode-select -s /Applications/Xcode_26.0.1.app/Contents/Developer
+
+      - name: Build Safari extension
+        working-directory: ./ext
+        run: npm run build:safari
+
+      - name: Upload Safari artifacts
+        uses: actions/upload-artifact@v6.0.0
+        with:
+          name: safari
+          path: ext/release/safari/
+
+  release:
+    needs: build-safari
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Download Chrome artifact
+        uses: actions/download-artifact@v7.0.0
+        with:
+          name: chrome
+          path: extensions/chrome/
+
+      - name: Download Firefox artifact
+        uses: actions/download-artifact@v7.0.0
+        with:
+          name: firefox
+          path: extensions/firefox/
+
+      - name: Download Safari artifact
+        uses: actions/download-artifact@v7.0.0
+        with:
+          name: safari
+          path: extensions/safari/
+
+      - name: Force Update 'extension' Tag
+        run: |
+          git tag -f extension
+          git push origin extension --force
+
+      - name: Generate release body
+        id: release_body
+        run: |
+          echo "body<<EOF" >> $GITHUB_OUTPUT
+          echo "Automated extension build from master" >> $GITHUB_OUTPUT
+          echo "Commit: ${{ github.sha }}" >> $GITHUB_OUTPUT
+          echo "Built on: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Update Extension Release
+        uses: softprops/action-gh-release@v2.5.0
+        with:
+          tag_name: extension
+          name: "Hister Extensions"
+          body: ${{ steps.release_body.outputs.body }}
+          prerelease: true
+          files: |
+            extensions/safari/hister-dist.zip
+            extensions/safari/Hister.app.zip
+            extensions/chrome/hister-chrome.zip
+            extensions/firefox/hister-firefox.xpi
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
