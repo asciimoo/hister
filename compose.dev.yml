@@ -1,0 +1,15 @@
+services:
+  hister:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: debug # release(non-root) / root(root) / debug(debug-root)
+    container_name: hister
+    ports:
+      - 4433:4433
+    volumes:
+      - ./data/:/hister/data
+    environment:
+      HISTER__APP__LOG_LEVEL: debug
+      HISTER__SERVER__ADDRESS: 0.0.0.0:4433
+      HISTER__SERVER__BASE_URL: http://localhost:4433

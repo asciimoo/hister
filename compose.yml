@@ -1,0 +1,15 @@
+services:
+  hister:
+    image: ghcr.io/asciimoo/hister:latest
+    container_name: hister
+    # Use non-root user by default, can be overridden by setting HISTER_UID and HISTER_GID environment variables
+    # HISTER_UID=$(id -u) HISTER_GID=$(id -g) docker-compose up
+    user: "${HISTER_UID:-65532}:${HISTER_GID:-65532}"
+    ports:
+      - 4433:4433
+    volumes:
+      - ./data/:/hister/data
+    environment:
+      HISTER__APP__LOG_LEVEL: info
+      HISTER__SERVER__ADDRESS: 0.0.0.0:4433
+      HISTER__SERVER__BASE_URL: http://localhost:4433
