@@ -19,8 +19,7 @@ buildGoModule (finalAttrs: {
 
   src = ../.;
 
-  vendorHash = "sha256-KEuZ+jKG3fMYymZr9fvwlTzLFVcYfUAofe8DOIqHUDY=";
-  proxyVendor = true;
+  vendorHash = "sha256-QlUeUc+wXSj7GsF+DV5pSLRju1o3WdKSp/xq+VEC0i8=";
 
   nativeBuildInputs = [ nodejs ];
 
@@ -36,8 +35,10 @@ buildGoModule (finalAttrs: {
     mkdir -p $TMPDIR/npm-cache
     cp -r ${npmDeps}/* $TMPDIR/npm-cache/
     export NPM_CONFIG_CACHE=$TMPDIR/npm-cache
+    export PATH="${nodejs}/bin:$PATH"
     npm ci --offline
-    npm run build
+    find node_modules/.bin -type f -exec patchShebangs {} +
+    ${nodejs}/bin/node node_modules/vite/bin/vite.js build
     cd ../..
 
     export CGO_CFLAGS="-I${sqlite.dev}/include"
@@ -57,6 +58,9 @@ buildGoModule (finalAttrs: {
 
   passthru = {
     inherit npmDeps;
+    overrideModAttrs = finalAttrs: prevAttrs: {
+      preBuild = "";
+    };
   };
 
   meta = {
