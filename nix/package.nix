@@ -38,7 +38,7 @@ buildGoModule (finalAttrs: {
     export NPM_CONFIG_CACHE=$TMPDIR/npm-cache
     npm ci --offline
     npm run build
-    cd ../..
+    cd ../../..
 
     export CGO_CFLAGS="-I${sqlite.dev}/include"
     export CGO_LDFLAGS="-L${sqlite.out}/lib -lsqlite3"
