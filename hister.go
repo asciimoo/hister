@@ -48,8 +48,8 @@ var (
 
 var rootCmd = &cobra.Command{
 	Use:     "hister",
-	Short:   "Web history on steroids",
-	Long:    ui.Banner,
+	Short:   "Your own search engine",
+	Long:    "hister - your own search engine",
 	Version: Version,
 	//Run: func(_ *cobra.Command, _ []string) {
 	//},

@@ -419,9 +419,7 @@ func tuiHighlighter(config map[string]any, cache *registry.Cache) (highlight.Hig
 		return nil, fmt.Errorf("error building fragmenter: %v", err)
 	}
 
-	style := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("205")).
-		Bold(true)
+	style := lipgloss.NewStyle().Bold(true).Underline(true)
 	formatter := newLipglossFormatter(style)
 
 	return simpleHighlighter.NewHighlighter(

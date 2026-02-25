@@ -95,8 +95,8 @@ out:
 		}
 	}
 	d.Text = strings.TrimSpace(text.String())
-	if d.Text == "" && d.Title == "" {
-		return errors.New("no content found")
+	if err := d.extractHTML(); err != nil {
+		return err
 	}
 	return nil
 }

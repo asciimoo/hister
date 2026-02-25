@@ -49,6 +49,8 @@ Execute `./hister` to see all available commands.
 
 Settings can be configured in `~/.config/hister/config.yml` config file - don't forget to restart webapp after updating.
 
+TUI-specific settings are stored in a separate `~/.config/hister/tui.yaml` file that is automatically created when you first run `hister search`.
+
 Execute `./hister create-config config.yml` to generate a configuration file with the default configuration values.
 
 

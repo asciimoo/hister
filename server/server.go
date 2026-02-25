@@ -365,6 +365,20 @@ func doSearch(query *indexer.Query, cfg *config.Config) (*indexer.Results, error
 	if res == nil {
 		res = &indexer.Results{}
 	}
+	// Boost priority-matching documents to the front.
+	if cfg.Rules != nil && len(res.Documents) > 0 {
+		var priority, rest []*indexer.Document
+		for _, d := range res.Documents {
+			if cfg.Rules.IsPriority(d.URL) {
+				priority = append(priority, d)
+			} else {
+				rest = append(rest, d)
+			}
+		}
+		if len(priority) > 0 {
+			res.Documents = append(priority, rest...)
+		}
+	}
 	hr, err := model.GetURLsByQuery(oq)
 	if err == nil && len(hr) > 0 {
 		res.History = hr

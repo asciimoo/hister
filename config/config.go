@@ -30,6 +30,7 @@ type Config struct {
 	App                      App               `yaml:"app" mapstructure:"app"`
 	Server                   Server            `yaml:"server" mapstructure:"server"`
 	Hotkeys                  Hotkeys           `yaml:"hotkeys" mapstructure:"hotkeys"`
+	TUI                      TUI               `yaml:"-" mapstructure:"tui"`
 	SensitiveContentPatterns map[string]string `yaml:"sensitive_content_patterns" mapstructure:"sensitive_content_patterns"`
 	Rules                    *Rules            `yaml:"-" mapstructure:"-"`
 	secretKey                []byte
@@ -41,6 +42,13 @@ type App struct {
 	LogLevel            string `yaml:"log_level" mapstructure:"log_level"`
 	DebugSQL            bool   `yaml:"debug_sql" mapstructure:"debug_sql"`
 	OpenResultsOnNewTab bool   `yaml:"open_results_on_new_tab" mapstructure:"open_results_on_new_tab"`
+}
+
+type TUI struct {
+	DarkTheme   string `yaml:"dark_theme" mapstructure:"dark_theme"`
+	LightTheme  string `yaml:"light_theme" mapstructure:"light_theme"`
+	ColorScheme string `yaml:"color_scheme" mapstructure:"color_scheme"`
+	ThemesDir   string `yaml:"themes_dir" mapstructure:"themes_dir"`
 }
 
 type Server struct {
@@ -67,6 +75,77 @@ type Rule struct {
 
 type Aliases map[string]string
 
+type Action string
+
+const (
+	ActionQuit           Action = "quit"
+	ActionToggleHelp     Action = "toggle_help"
+	ActionToggleFocus    Action = "toggle_focus"
+	ActionScrollUp       Action = "scroll_up"
+	ActionScrollDown     Action = "scroll_down"
+	ActionOpenResult     Action = "open_result"
+	ActionDeleteResult   Action = "delete_result"
+	ActionToggleTheme    Action = "toggle_theme"
+	ActionToggleSettings Action = "toggle_settings"
+	ActionToggleSort     Action = "toggle_sort"
+	ActionTabSearch      Action = "tab_search"
+	ActionTabHistory     Action = "tab_history"
+	ActionTabRules       Action = "tab_rules"
+	ActionTabAdd         Action = "tab_add"
+)
+
+// ValidTUIActions is the set of valid TUI hotkey actions.
+var ValidTUIActions = map[Action]bool{
+	ActionQuit:           true,
+	ActionToggleHelp:     true,
+	ActionToggleFocus:    true,
+	ActionScrollUp:       true,
+	ActionScrollDown:     true,
+	ActionOpenResult:     true,
+	ActionDeleteResult:   true,
+	ActionToggleTheme:    true,
+	ActionToggleSettings: true,
+	ActionToggleSort:     true,
+	ActionTabSearch:      true,
+	ActionTabHistory:     true,
+	ActionTabRules:       true,
+	ActionTabAdd:         true,
+}
+
+var DefaultTUIHotkeys = map[string]string{
+	"ctrl+c": "quit",
+	"f1":     "toggle_help",
+	"tab":    "toggle_focus",
+	"esc":    "toggle_focus",
+	"up":     "scroll_up",
+	"k":      "scroll_up",
+	"down":   "scroll_down",
+	"j":      "scroll_down",
+	"enter":  "open_result",
+	"ctrl+d": "delete_result",
+	"ctrl+t": "toggle_theme",
+	"ctrl+s": "toggle_settings",
+	"ctrl+o": "toggle_sort",
+	"alt+1":  "tab_search",
+	"alt+2":  "tab_history",
+	"alt+3":  "tab_rules",
+	"alt+4":  "tab_add",
+}
+
+var DefaultTUIConfig = TUI{
+	DarkTheme:   "catppuccin-mocha",
+	LightTheme:  "catppuccin-latte",
+	ColorScheme: "auto",
+}
+
+func copyMap(m map[string]string) map[string]string {
+	cp := make(map[string]string, len(m))
+	for k, v := range m {
+		cp[k] = v
+	}
+	return cp
+}
+
 var (
 	secretKeyFilename                = ".secret_key"
 	hotkeyKeyRe       *regexp.Regexp = regexp.MustCompile(`^((ctrl|alt|meta)\+)?([a-z0-9/?]|enter|tab|arrow(up|down|right|left)|f[1-9]|f1[012])$`)
@@ -80,15 +159,6 @@ var (
 		"view_result_popup",
 		"autocomplete",
 		"show_hotkeys",
-	}
-	tuiHotkeyActions = []string{
-		"quit",
-		"toggle_help",
-		"toggle_focus",
-		"scroll_up",
-		"scroll_down",
-		"open_result",
-		"delete_result",
 	}
 )
 
@@ -192,7 +262,6 @@ func Load(filename string) (*Config, error) {
 	return c, c.init()
 }
 
-// CreateDefaultConfig returns a new Config with default values.
 func CreateDefaultConfig() *Config {
 	return &Config{
 		App: App{
@@ -216,19 +285,6 @@ func CreateDefaultConfig() *Config {
 				"alt+v":     "view_result_popup",
 				"tab":       "autocomplete",
 				"?":         "show_hotkeys",
-			},
-			TUI: map[string]string{
-				"ctrl+c": "quit",
-				"q":      "quit",
-				"f1":     "toggle_help",
-				"tab":    "toggle_focus",
-				"up":     "scroll_up",
-				"k":      "scroll_up",
-				"down":   "scroll_down",
-				"j":      "scroll_down",
-				"enter":  "open_result",
-				"d":      "delete_result",
-				"esc":    "toggle_focus", // Safely map esc away from quit
 			},
 		},
 		SensitiveContentPatterns: map[string]string{
@@ -325,7 +381,69 @@ func (c *Config) init() error {
 	} else {
 		c.secretKey = b
 	}
+	c.LoadTUIConfig()
 	return c.LoadRules()
+}
+
+func (c *Config) LoadTUIConfig() {
+	if c.fname == "" {
+		c.TUI = DefaultTUIConfig
+		c.Hotkeys.TUI = copyMap(DefaultTUIHotkeys)
+		c.fname = c.defaultConfigPath()
+		tuiPath := filepath.Join(filepath.Dir(c.fname), "tui.yaml")
+		if _, err := os.Stat(tuiPath); os.IsNotExist(err) {
+			if err := c.SaveTUIConfig(); err != nil {
+				log.Warn().Err(err).Msg("Failed to create tui.yaml")
+			}
+		}
+		return
+	}
+	tuiPath := filepath.Join(filepath.Dir(c.fname), "tui.yaml")
+	b, err := os.ReadFile(tuiPath)
+	if err != nil {
+		c.TUI = DefaultTUIConfig
+		c.Hotkeys.TUI = copyMap(DefaultTUIHotkeys)
+		if os.IsNotExist(err) {
+			if err := c.SaveTUIConfig(); err != nil {
+				log.Warn().Err(err).Str("file", tuiPath).Msg("Failed to create tui.yaml")
+			} else {
+				log.Debug().Str("file", tuiPath).Msg("Created tui.yaml with defaults")
+			}
+		} else {
+			log.Warn().Err(err).Str("file", tuiPath).Msg("Failed to read tui.yaml, using defaults")
+		}
+		return
+	}
+	v := viper.New()
+	v.SetConfigType("yaml")
+	if err := v.ReadConfig(bytes.NewBuffer(b)); err != nil {
+		log.Warn().Err(err).Str("file", tuiPath).Msg("Failed to parse tui.yaml")
+		c.TUI = DefaultTUIConfig
+		c.Hotkeys.TUI = copyMap(DefaultTUIHotkeys)
+		return
+	}
+	c.TUI.DarkTheme = v.GetString("dark_theme")
+	c.TUI.LightTheme = v.GetString("light_theme")
+	c.TUI.ColorScheme = v.GetString("color_scheme")
+	c.TUI.ThemesDir = v.GetString("themes_dir")
+	if c.TUI.DarkTheme == "" {
+		c.TUI.DarkTheme = DefaultTUIConfig.DarkTheme
+	}
+	if c.TUI.LightTheme == "" {
+		c.TUI.LightTheme = DefaultTUIConfig.LightTheme
+	}
+	if c.TUI.ColorScheme == "" {
+		c.TUI.ColorScheme = DefaultTUIConfig.ColorScheme
+	}
+	if v.IsSet("hotkeys") {
+		hotkeys := v.GetStringMapString("hotkeys")
+		if len(hotkeys) > 0 {
+			c.Hotkeys.TUI = hotkeys
+		}
+	} else {
+		c.Hotkeys.TUI = copyMap(DefaultTUIHotkeys)
+	}
+	log.Debug().Str("file", tuiPath).Msg("Loaded TUI config")
 }
 
 func (c *Config) SecretKey() []byte {
@@ -365,7 +483,45 @@ func (c *Config) Filename() string {
 	return c.FullPath(c.fname)
 }
 
+func (c *Config) SaveTUIConfig() error {
+	if c.fname == "" {
+		c.fname = c.defaultConfigPath()
+		os.MkdirAll(filepath.Dir(c.fname), 0o755)
+	}
+	tuiPath := filepath.Join(filepath.Dir(c.fname), "tui.yaml")
+	os.MkdirAll(filepath.Dir(tuiPath), 0o755)
+	v := viper.New()
+	v.SetConfigType("yaml")
+	v.Set("dark_theme", c.TUI.DarkTheme)
+	v.Set("light_theme", c.TUI.LightTheme)
+	v.Set("color_scheme", c.TUI.ColorScheme)
+	if c.TUI.ThemesDir != "" {
+		v.Set("themes_dir", c.TUI.ThemesDir)
+	}
+	if len(c.Hotkeys.TUI) > 0 && c.Hotkeys.TUI != nil {
+		v.Set("hotkeys", c.Hotkeys.TUI)
+	}
+	return v.WriteConfigAs(tuiPath)
+}
+
+func (c *Config) defaultConfigPath() string {
+	switch runtime.GOOS {
+	case "darwin":
+		homeDir, _ := os.UserHomeDir()
+		return filepath.Join(homeDir, ".config/hister/config.yml")
+	default:
+		if xdgConfig := os.Getenv("XDG_CONFIG_HOME"); xdgConfig != "" {
+			return filepath.Join(xdgConfig, "hister/config.yml")
+		}
+		homeDir, _ := os.UserHomeDir()
+		return filepath.Join(homeDir, ".config/hister/config.yml")
+	}
+}
+
 func (c *Config) BaseURL(u string) string {
+	if u == "" {
+		return c.Server.BaseURL
+	}
 	if strings.HasPrefix(u, "/") && strings.HasSuffix(c.Server.BaseURL, "/") {
 		u = u[1:]
 	}
@@ -551,7 +707,7 @@ func (h Hotkeys) Validate() error {
 		}
 	}
 	for _, v := range h.TUI {
-		if !slices.Contains(tuiHotkeyActions, v) {
+		if !ValidTUIActions[Action(v)] {
 			return errors.New("unknown tui hotkey action: " + v)
 		}
 	}
