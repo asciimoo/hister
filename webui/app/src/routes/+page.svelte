@@ -92,7 +92,6 @@
   let statsRowEl: HTMLElement | undefined = $state();
   let kbdEl: HTMLElement | undefined = $state();
   let underlineEl: HTMLElement | undefined = $state();
-  let gridContainerEl: HTMLElement | undefined = $state();
 
   let animationHandles: any[] = [];
 
@@ -402,46 +401,6 @@
           delay: 300
         })
       );
-    }
-
-    if (gridContainerEl) {
-      const hLines = gridContainerEl.querySelectorAll('.grid-h');
-      const vLines = gridContainerEl.querySelectorAll('.grid-v');
-      const allLines = [...hLines, ...vLines];
-
-      if (allLines.length > 0) {
-        animationHandles.push(
-          animate(allLines, {
-            opacity: [0.07, 0.18, 0.07],
-            duration: 6000,
-            ease: 'inOutSine',
-            loop: true,
-            delay: stagger(300)
-          })
-        );
-      }
-
-      function triggerWave() {
-        if (!gridContainerEl) return;
-        const isHorizontal = Math.random() > 0.5;
-        const lines = [...gridContainerEl.querySelectorAll(isHorizontal ? '.grid-h' : '.grid-v')] as HTMLElement[];
-        if (lines.length === 0) return;
-        const startIdx = Math.floor(Math.random() * lines.length);
-        const waveLines = lines.slice(Math.max(0, startIdx - 2), startIdx + 3);
-        animate(waveLines, {
-          opacity: [0.08, 0.35, 0.08],
-          duration: 1200,
-          ease: 'inOutSine',
-          delay: stagger(120)
-        });
-      }
-
-      const waveInterval = setInterval(() => {
-        if (!gridContainerEl) { clearInterval(waveInterval); return; }
-        triggerWave();
-      }, 4000 + Math.random() * 2000);
-
-      animationHandles.push({ revert: () => clearInterval(waveInterval) });
     }
   }
 
@@ -790,20 +749,6 @@
   </div>
 {:else}
   <div class="flex-1 flex flex-col items-center justify-center gap-10 py-12 px-12 overflow-y-auto relative">
-    <div bind:this={gridContainerEl} class="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
-      <svg class="w-full h-full" xmlns="http://www.w3.org/2000/svg">
-        {#each Array(12) as _, i}
-          <line class="grid-h" x1="0" y1="{(i + 1) * 8.33}%" x2="100%" y2="{(i + 1) * 8.33}%"
-            stroke="var(--hister-indigo)" stroke-width="0.5" opacity="0.08" />
-        {/each}
-        {#each Array(16) as _, i}
-          <line class="grid-v" x1="{(i + 1) * 6.25}%" y1="0" x2="{(i + 1) * 6.25}%" y2="100%"
-            stroke="var(--hister-indigo)" stroke-width="0.5" opacity="0.08" />
-        {/each}
-        <line class="grid-h" x1="0" y1="0" x2="100%" y2="100%" stroke="var(--hister-coral)" stroke-width="0.3" opacity="0.04" />
-        <line class="grid-h" x1="100%" y1="0" x2="0" y2="100%" stroke="var(--hister-teal)" stroke-width="0.3" opacity="0.04" />
-      </svg>
-    </div>
 
     <h1
       bind:this={heroTitleEl}
