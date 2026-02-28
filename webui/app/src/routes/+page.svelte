@@ -19,14 +19,14 @@
   } from '$lib/search';
   import { fetchConfig, apiFetch } from '$lib/api';
   import type { SearchResults } from '$lib/search';
-  import { animate, createTimeline, stagger } from 'animejs';
+  import { animate, stagger } from 'animejs';
   import { Input } from '@hister/components/ui/input';
   import { Button } from '@hister/components/ui/button';
   import { Badge } from '@hister/components/ui/badge';
   import { Separator } from '@hister/components/ui/separator';
   import {
     Search, Star, Globe, MoreVertical, Eye, Trash2,
-    Pin, PinOff, Download, ExternalLink,
+    Pin, PinOff, Download, ExternalLink, History, Shield, Link2,
     Keyboard, HelpCircle, X
   } from 'lucide-svelte';
 
@@ -35,6 +35,13 @@
     searchUrl: string;
     openResultsOnNewTab: boolean;
     hotkeys: Record<string, string>;
+  }
+
+  interface HistoryItem {
+    query: string;
+    url: string;
+    title: string;
+    favicon?: string;
   }
 
   let config: Config = $state({
@@ -46,7 +53,7 @@
 
   let wsManager: WebSocketManager | undefined;
   let keyHandler: KeyHandler | undefined;
-  let inputEl: HTMLInputElement | undefined;
+  let inputEl: HTMLInputElement | undefined = $state();
 
   let query = $state('');
   let autocomplete = $state('');
@@ -66,14 +73,40 @@
 
   let showHelp = $state(false);
 
-  let heroTitleEl: HTMLElement | undefined;
-  let searchBoxEl: HTMLElement | undefined;
-  let hintEl: HTMLElement | undefined;
-  let kbdEl: HTMLElement | undefined;
-  let underlineEl: HTMLElement | undefined;
-  let gridContainerEl: HTMLElement | undefined;
+  let contextMenuSearch: string | null = $state(null);
+  let contextMenuPos = $state({ x: 0, y: 0 });
+
+  let recentSearches: string[] = $state([]);
+  let rulesCount = $state(0);
+  let aliasesCount = $state(0);
+  let historyCount = $state(0);
+
+  let displayHistoryCount = $state(0);
+  let displayRulesCount = $state(0);
+  let displayAliasesCount = $state(0);
+
+  let heroTitleEl: HTMLElement | undefined = $state();
+  let searchBoxEl: HTMLElement | undefined = $state();
+  let hintEl: HTMLElement | undefined = $state();
+  let chipsContainerEl: HTMLElement | undefined = $state();
+  let statsRowEl: HTMLElement | undefined = $state();
+  let kbdEl: HTMLElement | undefined = $state();
+  let underlineEl: HTMLElement | undefined = $state();
+  let gridContainerEl: HTMLElement | undefined = $state();
 
   let animationHandles: any[] = [];
+
+  const resultColors = [
+    'hister-indigo', 'hister-teal', 'hister-coral', 'hister-amber',
+    'hister-rose', 'hister-cyan', 'hister-lime'
+  ];
+
+  const chipColors = [
+    { border: 'border-hister-indigo', bg: 'bg-hister-indigo/10', text: 'text-hister-indigo' },
+    { border: 'border-hister-teal', bg: 'bg-hister-teal/10', text: 'text-hister-teal' },
+    { border: 'border-hister-coral', bg: 'bg-hister-coral/10', text: 'text-hister-coral' },
+    { border: 'border-hister-amber', bg: 'bg-hister-amber/10', text: 'text-hister-amber' },
+  ];
 
   const hotkeyActions: Record<string, (e?: KeyboardEvent) => void> = {
     'open_result': openSelectedResult,
@@ -167,7 +200,7 @@
 
   async function openReadable(e: Event, url: string, title: string) {
     e.preventDefault();
-    if(e.stopPropagation) e.stopPropagation();
+    e.stopPropagation();
     try {
       const resp = await apiFetch(`/readable?url=${encodeURIComponent(url)}`);
       if (!resp.ok) {
@@ -211,10 +244,7 @@
 
   function viewResultPopup(e?: KeyboardEvent) {
     if (e) e.preventDefault();
-    if (showPopup) {
-      closePopup();
-      return;
-    }
+    closePopup();
     const readables = document.querySelectorAll('[data-result] [data-readable]');
     if (highlightIdx >= 0 && highlightIdx < readables.length) {
       const el = readables[highlightIdx] as HTMLElement;
@@ -259,15 +289,82 @@
     if (keyHandler?.handle(e)) { e.preventDefault(); return; }
     if (e.key === 'Escape') {
       if (showHelp) { showHelp = false; e.preventDefault(); return; }
+      if (contextMenuSearch) { contextMenuSearch = null; e.preventDefault(); return; }
       if (closePopup()) { e.preventDefault(); return; }
     }
     showActionsForResult = null;
+    contextMenuSearch = null;
+  }
+
+  function getResultColor(idx: number): string {
+    return resultColors[idx % resultColors.length];
+  }
+
+  function clickChip(q: string) {
+    query = q;
+    inputEl?.focus();
+  }
+
+  function deleteRecentSearch(q: string) {
+    recentSearches = recentSearches.filter(s => s !== q);
+    localStorage.setItem('deletedSearches', JSON.stringify(
+      [...JSON.parse(localStorage.getItem('deletedSearches') || '[]'), q]
+    ));
+    contextMenuSearch = null;
+  }
+
+  function deleteAllRecentSearches() {
+    localStorage.setItem('deletedSearches', JSON.stringify(
+      [...JSON.parse(localStorage.getItem('deletedSearches') || '[]'), ...recentSearches]
+    ));
+    recentSearches = [];
+  }
+
+  function showChipContextMenu(e: MouseEvent, q: string) {
+    e.preventDefault();
+    contextMenuSearch = q;
+    contextMenuPos = { x: e.clientX, y: e.clientY };
   }
 
   function getFaviconSrc(favicon: string | undefined, url: string): string | null {
     if (favicon) return favicon;
     return null;
   }
+
+  async function loadHomeStats() {
+    try {
+      const [historyRes, rulesRes] = await Promise.all([
+        apiFetch('/history', { headers: { 'Accept': 'application/json' } }),
+        apiFetch('/rules', { headers: { 'Accept': 'application/json' } })
+      ]);
+
+      if (historyRes.ok) {
+        const items: HistoryItem[] = await historyRes.json();
+        historyCount = items.length;
+        const seen = new Set<string>();
+        for (const item of items) {
+          if (item.query && !seen.has(item.query)) {
+            seen.add(item.query);
+            if (seen.size >= 4) break;
+          }
+        }
+        const deletedSearches: string[] = JSON.parse(localStorage.getItem('deletedSearches') || '[]');
+        recentSearches = [...seen].filter(q => !deletedSearches.includes(q));
+      }
+
+      if (rulesRes.ok) {
+        const rules = await rulesRes.json();
+        rulesCount = (rules.skip?.length || 0) + (rules.priority?.length || 0);
+        aliasesCount = Object.keys(rules.aliases || {}).length;
+      }
+
+      statsLoaded = true;
+    } catch {
+      statsLoaded = true;
+    }
+  }
+
+  let statsLoaded = $state(false);
 
   function startHeroAnimations() {
     cleanupAnimations();
@@ -348,6 +445,24 @@
     }
   }
 
+  function animateCounters() {
+    const counterObj = { h: displayHistoryCount, r: displayRulesCount, a: displayAliasesCount };
+    animationHandles.push(
+      animate(counterObj, {
+        h: historyCount,
+        r: rulesCount,
+        a: aliasesCount,
+        duration: 800,
+        ease: 'outCubic',
+        onRender: () => {
+          displayHistoryCount = Math.round(counterObj.h);
+          displayRulesCount = Math.round(counterObj.r);
+          displayAliasesCount = Math.round(counterObj.a);
+        }
+      })
+    );
+  }
+
   function cleanupAnimations() {
     for (const h of animationHandles) {
       try { h.revert(); } catch {}
@@ -360,6 +475,12 @@
       tick().then(() => startHeroAnimations());
     }
     return () => cleanupAnimations();
+  });
+
+  $effect(() => {
+    if (statsLoaded && !isSearching) {
+      tick().then(() => animateCounters());
+    }
   });
 
   $effect(() => {
@@ -392,6 +513,7 @@
       inputEl?.focus();
       connect();
       keyHandler = new KeyHandler(config.hotkeys, hotkeyActions);
+      loadHomeStats();
     })();
     return () => { wsManager?.close(); cleanupAnimations(); };
   });
@@ -419,7 +541,7 @@
       <div class="border-b-[3px] border-border-brand-muted pb-4 mb-4">
         <h2 class="font-outfit font-bold text-lg text-text-brand pr-6">{popupTitle}</h2>
       </div>
-      <div class="font-inter text-text-brand-secondary prose max-w-none">{@html popupContent}</div>
+      <div class="font-inter text-sm text-text-brand-secondary prose max-w-none">{@html popupContent}</div>
     </div>
   </div>
 {/if}
@@ -447,14 +569,14 @@
       <div class="p-4 space-y-0">
         {#each Object.entries(config.hotkeys) as [key, action]}
           <div class="flex items-center justify-between py-2.5 border-b-[1px] border-border-brand-muted">
-            <span class="font-inter text-text-brand-secondary">{hotkeyDescriptions[action] || action}</span>
+            <span class="font-inter text-sm text-text-brand-secondary">{hotkeyDescriptions[action] || action}</span>
             <kbd class="bg-muted-surface border-[2px] border-border-brand-muted px-2.5 py-0.5 font-fira text-xs font-semibold text-text-brand">{key}</kbd>
           </div>
         {/each}
       </div>
       <div class="px-5 py-3 bg-muted-surface border-t-[2px] border-border-brand-muted">
         <p class="font-inter text-xs text-text-brand-muted">
-          Press <kbd class="bg-card-surface border border-border-brand-muted px-1.5 py-0.5 font-fira text-[10px]">?</kbd> to toggle this dialog
+          Press <kbd class="bg-card-surface border border-border-brand-muted px-1.5 py-0.5 font-fira text-xs">?</kbd> to toggle this dialog
         </p>
       </div>
     </div>
@@ -472,21 +594,21 @@
 
 {#if isSearching}
   <div class="flex-1 flex flex-col min-h-0">
-    <div class="flex items-center gap-3 h-16 px-4 bg-card-surface border-b-[2px] border-border-brand-muted">
+    <div class="flex items-center gap-3 h-11 px-4 bg-card-surface border-b-[2px] border-border-brand-muted">
       <Search class="size-4 text-text-brand-muted shrink-0" />
       <input
         type="text"
         bind:this={inputEl}
         bind:value={query}
         placeholder="Search..."
-        class="flex-1 h-full bg-transparent font-inter text-2xl font-medium text-text-brand placeholder:text-text-brand-muted outline-none border-0"
+        class="flex-1 h-full bg-transparent font-inter text-sm font-medium text-text-brand placeholder:text-text-brand-muted outline-none border-0"
       />
       {#if autocomplete && autocomplete !== query}
-        <span class="font-fira text-sm text-text-brand-muted">
+        <span class="font-fira text-xs text-text-brand-muted">
           Tab: <span class="text-hister-indigo">{autocomplete}</span>
         </span>
       {/if}
-      <div class="w-2 h-2 shrink-0 pulse-dot {connected ? 'bg-hister-teal' : 'bg-hister-rose'}" title={connected ? 'Connected' : 'Disconnected'}></div>
+      <div class="w-2 h-2 shrink-0 pulse-dot {connected ? 'bg-hister-teal' : 'bg-hister-rose'}"></div>
     </div>
 
     <div class="flex-1 overflow-y-auto px-12 py-6 space-y-3 overflow-x-hidden">
@@ -518,7 +640,7 @@
 
         {#if lastResults?.query && lastResults.query.text !== query}
           <p class="font-inter text-sm text-text-brand-muted">
-            Expanded query: <code class="font-fira bg-muted-surface text-primary px-1.5 py-0.5 text-xs">{lastResults.query.text}</code>
+            Expanded query: <code class="font-fira bg-muted-surface px-1.5 py-0.5 text-xs">{lastResults.query.text}</code>
           </p>
         {/if}
 
@@ -547,13 +669,13 @@
                 {/if}
               </div>
               <div class="flex-1 min-w-0 w-0 space-y-0.5">
-                <a data-result-link href={r.url} class="font-outfit text-xl font-semibold text-hister-teal hover:underline block overflow-hidden text-ellipsis whitespace-nowrap w-full" onclick={(e) => { e.preventDefault(); openResult(r.url, r.title || '*title*'); }}>
+                <a data-result-link href={r.url} class="font-outfit text-base font-semibold text-hister-teal hover:underline block overflow-hidden text-ellipsis whitespace-nowrap w-full" onclick={(e) => { e.preventDefault(); openResult(r.url, r.title || '*title*'); }}>
                   {@html r.title || '*title*'}
                 </a>
                 <div class="flex items-center gap-2">
-                  <span class="font-fira text-hister-teal truncate overflow-hidden text-ellipsis whitespace-nowrap">{r.url}</span>
-                  <Badge variant="secondary" class="px-1.5 py-0 h-4 bg-hister-teal/10 text-hister-teal border-0">pinned</Badge>
-                  <button data-readable class="flex items-center gap-0.5 font-inter text-sm font-medium text-hister-indigo hover:underline border-0 bg-transparent cursor-pointer p-0 shrink-0" onclick={(e) => openReadable(e, r.url, r.title || '*title*')}>
+                  <span class="font-fira text-xs text-hister-teal truncate overflow-hidden text-ellipsis whitespace-nowrap">{r.url}</span>
+                  <Badge variant="secondary" class="text-xs px-1.5 py-0 h-4 bg-hister-teal/10 text-hister-teal border-0">pinned</Badge>
+                  <button data-readable class="flex items-center gap-0.5 font-inter text-xs font-medium text-hister-indigo hover:underline border-0 bg-transparent cursor-pointer p-0 shrink-0" onclick={(e) => openReadable(e, r.url, r.title || '*title*')}>
                     <Eye class="size-3" /><span>view</span>
                   </button>
                 </div>
@@ -584,7 +706,7 @@
         {#if lastResults?.documents}
           {#each lastResults.documents as r, i}
             {@const idx = historyLen + i}
-            {@const color = "hister-cyan" }
+            {@const color = getResultColor(i)}
             {@const favSrc = getFaviconSrc(r.favicon, r.url)}
             <div data-result class="flex gap-3 py-3.5 border-b-[2px] border-border-brand-muted w-full overflow-hidden transition-all duration-150"
               style={idx === highlightIdx ? `background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--${color}) 12%, transparent), transparent); border-left: 3px solid var(--${color}); padding-left: 0.75rem;` : ''}>
@@ -597,21 +719,21 @@
                 {/if}
               </div>
               <div class="flex-1 min-w-0 w-0 space-y-0.5">
-                <a data-result-link href={r.url} class="font-outfit text-xl font-semibold hover:underline block overflow-hidden text-ellipsis whitespace-nowrap w-full" style="color: var(--{color});" onclick={(e) => { e.preventDefault(); openResult(r.url, r.title || '*title*'); }}>
+                <a data-result-link href={r.url} class="font-outfit text-base font-semibold hover:underline block overflow-hidden text-ellipsis whitespace-nowrap w-full" style="color: var(--{color});" onclick={(e) => { e.preventDefault(); openResult(r.url, r.title || '*title*'); }}>
                   {@html r.title || '*title*'}
                 </a>
+                {#if r.text}
+                  <p class="font-inter text-sm text-text-brand-secondary leading-[1.4] line-clamp-1 overflow-hidden text-ellipsis whitespace-nowrap">{@html r.text}</p>
+                {/if}
                 <div class="flex items-center gap-2">
-                  <span class="font-fira text-sm text-hister-teal truncate overflow-hidden text-ellipsis whitespace-nowrap">{r.url}</span>
+                  <span class="font-fira text-xs text-hister-teal truncate overflow-hidden text-ellipsis whitespace-nowrap">{r.url}</span>
                   {#if r.added}
-                    <span class="font-inter text-sm text-text-brand-muted" title={formatTimestamp(r.added)}>· {formatRelativeTime(r.added)}</span>
+                    <span class="font-inter text-xs text-text-brand-muted" title={formatTimestamp(r.added)}>· {formatRelativeTime(r.added)}</span>
                   {/if}
-                  <button data-readable class="flex items-center gap-0.5 font-inter text-sm font-medium text-hister-indigo hover:underline border-0 bg-transparent cursor-pointer p-0 shrink-0" onclick={(e) => openReadable(e, r.url, r.title || '*title*')}>
+                  <button data-readable class="flex items-center gap-0.5 font-inter text-xs font-medium text-hister-indigo hover:underline border-0 bg-transparent cursor-pointer p-0 shrink-0" onclick={(e) => openReadable(e, r.url, r.title || '*title*')}>
                     <Eye class="size-3" /><span>view</span>
                   </button>
                 </div>
-                {#if r.text}
-                  <p class="font-inter text-text-brand-secondary leading-[1.4] line-clamp-1 overflow-hidden text-ellipsis whitespace-nowrap">{@html r.text}</p>
-                {/if}
               </div>
               <Button
                 variant="ghost"
@@ -685,7 +807,7 @@
 
     <h1
       bind:this={heroTitleEl}
-      class="font-outfit font-black text-[96px] leading-none tracking-[8px] bg-clip-text text-transparent select-none"
+      class="font-outfit font-black text-8xl leading-none tracking-[8px] bg-clip-text text-transparent select-none"
       style="background-image: linear-gradient(90deg, var(--hister-indigo), var(--hister-coral), var(--hister-teal), var(--hister-indigo)); background-size: 300% 100%; background-position: 0% 50%;"
     >
       HISTER
@@ -700,7 +822,7 @@
       style="background: linear-gradient(90deg, var(--hister-indigo), var(--hister-coral), var(--hister-teal)); transform: scaleX(0); transform-origin: left;"
     ></div>
 
-    <div bind:this={searchBoxEl} class="search-box-gradient w-full max-w-[1200px] p-[3px] shadow-[4px_4px_0px_var(--hister-coral)]">
+    <div bind:this={searchBoxEl} class="search-box-gradient w-full max-w-[680px] p-[3px] shadow-[4px_4px_0px_var(--hister-coral)]">
       <div class="h-14 flex items-center gap-3 pl-4 bg-card-surface">
         <Search class="size-5 text-text-brand-muted shrink-0" />
         <input
@@ -708,7 +830,7 @@
           bind:this={inputEl}
           bind:value={query}
           placeholder="Search ..."
-          class="flex-1 h-full bg-transparent font-inter text-lg text-text-brand placeholder:text-text-brand-muted outline-none border-0"
+          class="flex-1 h-full bg-transparent font-inter text-base text-text-brand placeholder:text-text-brand-muted outline-none border-0"
         />
         <div class="w-2.5 h-2.5 mr-4 shrink-0 pulse-dot {connected ? 'bg-hister-teal' : 'bg-hister-rose'}" title={connected ? 'Connected' : 'Disconnected'}></div>
       </div>
@@ -718,6 +840,73 @@
       <span>Pro tip: Press</span>
       <kbd bind:this={kbdEl} class="inline-block bg-muted-surface border-[2px] border-border-brand-muted px-2 py-0.5 font-fira text-xs font-semibold text-text-brand-secondary">/</kbd>
       <span>to focus search anywhere</span>
+    </div>
+
+    {#if recentSearches.length > 0}
+      <div bind:this={chipsContainerEl} class="flex flex-wrap gap-3 items-center justify-center relative">
+        {#each recentSearches as search, i}
+          {@const chip = chipColors[i % chipColors.length]}
+          <button
+            class="border-[2px] {chip.border} {chip.bg} px-3.5 py-1.5 font-inter text-sm font-semibold {chip.text} cursor-pointer hover:opacity-90 hover:scale-105 hover:-translate-y-0.5 transition-all duration-200 bg-transparent"
+            onclick={() => clickChip(search)}
+            oncontextmenu={(e) => showChipContextMenu(e, search)}
+          >
+            {search}
+          </button>
+        {/each}
+        <button
+          class="border-[2px] border-hister-rose/40 px-2.5 py-1.5 font-inter text-xs font-semibold text-hister-rose/60 cursor-pointer hover:text-hister-rose hover:border-hister-rose hover:bg-hister-rose/10 transition-all duration-200 bg-transparent"
+          onclick={deleteAllRecentSearches}
+          title="Clear all recent searches"
+        >
+          &times; clear
+        </button>
+      </div>
+    {/if}
+
+    {#if contextMenuSearch}
+      <div
+        class="fixed inset-0 z-40"
+        role="presentation"
+        onclick={() => { contextMenuSearch = null; }}
+        oncontextmenu={(e) => { e.preventDefault(); contextMenuSearch = null; }}
+      ></div>
+      <div
+        class="fixed z-50 border-[2px] border-border-brand bg-card-surface shadow-[4px_4px_0px_var(--hister-indigo)] py-1 min-w-[160px]"
+        style="left: {contextMenuPos.x}px; top: {contextMenuPos.y}px;"
+      >
+        <button
+          class="w-full flex items-center gap-2 px-3 py-2 text-left font-inter text-sm text-text-brand hover:bg-muted-surface bg-transparent border-0 cursor-pointer"
+          onclick={() => { clickChip(contextMenuSearch!); contextMenuSearch = null; }}
+        >
+          <Search class="size-3.5" /> Search "{contextMenuSearch}"
+        </button>
+        <div class="h-px bg-border-brand-muted mx-2"></div>
+        <button
+          class="w-full flex items-center gap-2 px-3 py-2 text-left font-inter text-sm text-hister-rose hover:bg-hister-rose/10 bg-transparent border-0 cursor-pointer"
+          onclick={() => deleteRecentSearch(contextMenuSearch!)}
+        >
+          <Trash2 class="size-3.5" /> Remove
+        </button>
+      </div>
+    {/if}
+
+    <div bind:this={statsRowEl} class="flex items-center gap-8">
+      <div class="flex items-center gap-2 text-hister-indigo">
+        <History class="size-[18px]" />
+        <span class="font-outfit text-xl font-extrabold">{displayHistoryCount}</span>
+        <span class="font-inter text-sm">indexed pages</span>
+      </div>
+      <div class="flex items-center gap-2 text-hister-teal">
+        <Shield class="size-[18px]" />
+        <span class="font-outfit text-xl font-extrabold">{displayRulesCount}</span>
+        <span class="font-inter text-sm">active rules</span>
+      </div>
+      <div class="flex items-center gap-2 text-hister-coral">
+        <Link2 class="size-[18px]" />
+        <span class="font-outfit text-xl font-extrabold">{displayAliasesCount}</span>
+        <span class="font-inter text-sm">aliases</span>
+      </div>
     </div>
 
   </div>
