@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { apiFetch } from '$lib/api';
   import { Badge } from '@hister/components/ui/badge';
+  import { Button } from '@hister/components/ui/button';
   import * as Card from '@hister/components/ui/card';
   import * as Table from '@hister/components/ui/table';
 
@@ -23,6 +24,10 @@
 
   let endpoints: APIEndpoint[] = $state([]);
   let loading = $state(true);
+
+  function slugify(name: string, method: string): string {
+    return `${method.toLowerCase()}-${name.toLowerCase().replace(/\s+/g, '-')}`;
+  }
 
   onMount(async () => {
     try {
@@ -47,15 +52,28 @@
       <p class="font-inter text-xs md:text-sm text-text-brand-secondary">Available HTTP endpoints for integrating with Hister</p>
     </div>
 
-    {#if loading}
-      <p class="font-inter text-sm text-text-brand-muted text-center py-8">Loading endpoints...</p>
-    {:else}
-      <div class="space-y-4">
-        {#each endpoints as ep}
-          <Card.Root class="bg-card-surface rounded-none border border-black py-0 gap-0 overflow-hidden shadow-[4px_4px_0_var(--brutal-shadow)]">
-            <Card.Header class="px-4 py-3 gap-1">
-              <div class="flex items-center gap-2.5 flex-wrap">
-                <Card.Title class="font-outfit text-base md:text-xl font-bold text-text-brand">{ep.name}</Card.Title>
+  {#if loading}
+    <p class="font-inter text-sm text-text-brand-muted text-center py-8">Loading endpoints...</p>
+  {:else}
+    <nav class="flex flex-wrap gap-2">
+      {#each endpoints as ep}
+        <Button
+          variant="ghost"
+          href="#{slugify(ep.name, ep.method)}"
+          class="font-inter text-xs font-semibold text-hister-indigo hover:underline no-underline px-2 py-1 h-auto border-[3px] border-brutal-border bg-muted-surface hover:border-hister-indigo shadow-[2px_2px_0_var(--brutal-shadow)] hover:shadow-[1px_1px_0_var(--brutal-shadow)] hover:translate-x-[1px] hover:translate-y-[1px] transition-all rounded-none"
+        >
+          {ep.name}
+        </Button>
+      {/each}
+    </nav>
+
+    <div class="space-y-4">
+      {#each endpoints as ep}
+        <Card.Root id={slugify(ep.name, ep.method)} class="bg-card-surface border-[3px] border-brutal-border rounded-none py-0 gap-0 overflow-hidden shadow-[4px_4px_0_var(--brutal-shadow)]">
+          <Card.Header class="flex-col md:flex-row md:items-center justify-between px-4 py-3 gap-2">
+            <div class="space-y-1">
+              <Card.Title class="font-outfit text-base font-extrabold text-text-brand">{ep.name}</Card.Title>
+              <div class="flex items-center gap-2 flex-wrap">
                 <Badge
                   variant="default"
                   class="text-[11px] font-bold px-2 py-0 border-0 leading-5 {ep.method === 'GET' ? 'bg-hister-teal text-white' : 'bg-hister-coral text-white'}"
@@ -70,7 +88,8 @@
                 {/if}
               </div>
               <Card.Description class="font-inter text-sm text-text-brand-secondary">{ep.description}</Card.Description>
-            </Card.Header>
+            </div>
+          </Card.Header>
 
             {#if ep.args && ep.args.length > 0}
               <Card.Content class="px-4 py-3 border-t-[1px]">

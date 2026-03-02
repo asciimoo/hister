@@ -1,4 +1,6 @@
 <script lang="ts">
+  import * as Card from '@hister/components/ui/card';
+
   let { data } = $props();
 </script>
 
@@ -12,16 +14,19 @@
   <ul class="flex flex-col gap-4 list-none m-0 p-0">
     {#each data.posts as post}
       <li>
-        <a
-          href="/posts/{post.slug}/"
-          class="block p-6 bg-brutal-card border-[3px] border-brutal-border shadow-[6px_6px_0_var(--brutal-shadow)] no-underline hover:shadow-[3px_3px_0_var(--brutal-shadow)] hover:translate-x-[3px] hover:translate-y-[3px] transition-all"
-        >
-          <h2 class="font-space text-xl font-extrabold tracking-[0.5px] text-[var(--text-primary)] mb-2">{post.title}</h2>
-          {#if post.date}
-            <time class="font-inter text-sm text-[var(--text-secondary)]" datetime={post.date}>
-              {new Date(post.date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
-            </time>
-          {/if}
+        <a href="/posts/{post.slug}/" class="block no-underline hover:translate-x-[3px] hover:translate-y-[3px] transition-all group">
+          <Card.Root class="bg-brutal-card border-[3px] border-brutal-border shadow-[6px_6px_0_var(--brutal-shadow)] group-hover:shadow-[3px_3px_0_var(--brutal-shadow)] rounded-none p-0 gap-0 transition-shadow">
+            <Card.Content class="p-6">
+              <Card.Title class="font-space text-xl font-extrabold tracking-[0.5px] text-[var(--text-primary)] mb-2">{post.title}</Card.Title>
+              {#if post.date}
+                <Card.Description>
+                  <time class="font-inter text-sm text-[var(--text-secondary)]" datetime={post.date}>
+                    {new Date(post.date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                  </time>
+                </Card.Description>
+              {/if}
+            </Card.Content>
+          </Card.Root>
         </a>
       </li>
     {/each}

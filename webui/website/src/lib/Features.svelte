@@ -8,6 +8,7 @@
   import WifiOff from '@lucide/svelte/icons/wifi-off';
   import Download from '@lucide/svelte/icons/download';
   import Terminal from '@lucide/svelte/icons/terminal';
+  import * as Card from '@hister/components/ui/card';
 
   const rows = [
     [
@@ -41,26 +42,30 @@
     {#each rows as row}
       <div class="grid grid-cols-1 gap-4 {row.length === 2 ? 'md:grid-cols-2' : 'md:grid-cols-3'}">
         {#each row as card}
-          <div class="{card.bg} p-7 border-[3px] border-brutal-border shadow-[6px_6px_0_var(--brutal-shadow)] flex flex-col gap-4">
-            <div class="{card.iconBg} w-12 h-12 flex items-center justify-center">
-              <card.icon size={24} class="{card.iconColor ?? 'text-white'}" />
-            </div>
-            <h3 class="{card.textColor} font-space text-xl md:text-3xl font-extrabold tracking-[1px]">{card.title}</h3>
-            <p class="{card.descColor} font-inter text-sm md:text-lg leading-relaxed">{card.desc}</p>
-          </div>
+          <Card.Root class="{card.bg} p-0 border-[3px] border-brutal-border shadow-[6px_6px_0_var(--brutal-shadow)] rounded-none gap-0">
+            <Card.Content class="p-7 flex flex-col gap-4">
+              <div class="{card.iconBg} w-12 h-12 flex items-center justify-center">
+                <card.icon size={24} class="{card.iconColor ?? 'text-white'}" />
+              </div>
+              <Card.Title class="{card.textColor} font-space text-xl md:text-3xl font-extrabold tracking-[1px]">{card.title}</Card.Title>
+              <Card.Description class="{card.descColor} font-inter text-sm md:text-lg leading-relaxed">{card.desc}</Card.Description>
+            </Card.Content>
+          </Card.Root>
         {/each}
       </div>
     {/each}
 
     <!-- Row 4: Search Aliases (horizontal) -->
-    <div class="{aliasCard.bg} p-7 border-[3px] border-brutal-border shadow-[6px_6px_0_var(--brutal-shadow)] flex items-center gap-5">
-      <div class="{aliasCard.iconBg} w-12 h-12 flex items-center justify-center shrink-0">
-        <aliasCard.icon size={24} class="{aliasCard.iconColor}" />
-      </div>
-      <div class="flex flex-col gap-2">
-        <h3 class="{aliasCard.textColor} font-space text-xl md:text-3xl font-extrabold tracking-[1px]">{aliasCard.title}</h3>
-        <p class="{aliasCard.descColor} font-inter text-sm md:text-lg leading-relaxed">{aliasCard.desc}</p>
-      </div>
-    </div>
+    <Card.Root class="{aliasCard.bg} p-0 border-[3px] border-brutal-border shadow-[6px_6px_0_var(--brutal-shadow)] rounded-none gap-0">
+      <Card.Content class="p-7 flex items-center gap-5">
+        <div class="{aliasCard.iconBg} w-12 h-12 flex items-center justify-center shrink-0">
+          <aliasCard.icon size={24} class="{aliasCard.iconColor}" />
+        </div>
+        <div class="flex flex-col gap-2">
+          <Card.Title class="{aliasCard.textColor} font-space text-xl md:text-3xl font-extrabold tracking-[1px]">{aliasCard.title}</Card.Title>
+          <Card.Description class="{aliasCard.descColor} font-inter text-sm md:text-lg leading-relaxed">{aliasCard.desc}</Card.Description>
+        </div>
+      </Card.Content>
+    </Card.Root>
   </div>
 </section>

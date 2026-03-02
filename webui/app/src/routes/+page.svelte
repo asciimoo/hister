@@ -25,7 +25,8 @@
   import { Separator } from '@hister/components/ui/separator';
   import * as Dialog from '@hister/components/ui/dialog';
   import * as Card from '@hister/components/ui/card';
-  import * as DropdownMenu from '@hister/components/ui/dropdown-menu';
+  import * as Collapsible from '@hister/components/ui/collapsible';
+  import * as ContextMenu from '@hister/components/ui/context-menu';
   import { ScrollArea } from '@hister/components/ui/scroll-area';
   import { Kbd } from '@hister/components/ui/kbd';
   import {
@@ -72,8 +73,6 @@
   let showHelp = $state(false);
   let resultsShown = $state(false);
 
-  let contextMenuSearch: string | null = $state(null);
-  let contextMenuPos = $state({ x: 0, y: 0 });
 
   let recentSearches: string[] = $state([]);
   let rulesCount = $state(0);
@@ -323,11 +322,9 @@
     keyHandler?.handle(e, isInputFocus);
     if (e.key === 'Escape') {
       if (showHelp) { showHelp = false; e.preventDefault(); return; }
-      if (contextMenuSearch) { contextMenuSearch = null; e.preventDefault(); return; }
       if (closePopup()) { e.preventDefault(); return; }
     }
     showActionsForResult = null;
-    contextMenuSearch = null;
   }
 
   function getResultColor(idx: number): string {
@@ -354,11 +351,6 @@
     recentSearches = [];
   }
 
-  function showChipContextMenu(e: MouseEvent, q: string) {
-    e.preventDefault();
-    contextMenuSearch = q;
-    contextMenuPos = { x: e.clientX, y: e.clientY };
-  }
 
   function getFaviconSrc(favicon: string | undefined, url: string): string | null {
     if (favicon) return favicon;
@@ -621,6 +613,7 @@
         {#if lastResults?.history?.length}
           {#each lastResults.history as r, i}
             {@const favSrc = getFaviconSrc(r.favicon, r.url)}
+            <Collapsible.Root open={showActionsForResult === 'history:' + r.url}>
             <article data-result class="flex gap-3 py-3.5 w-full overflow-hidden transition-all duration-150"
               style={i === highlightIdx ? 'background: linear-gradient(90deg, transparent, rgba(90, 138, 138, 0.12), transparent); border-left: 3px solid var(--hister-teal); padding-left: 0.75rem;' : ''}>
               <div class="w-5 h-5 shrink-0 flex items-center justify-center mt-0.5 overflow-hidden bg-hister-teal">
@@ -643,17 +636,22 @@
                   </Button>
                 </div>
               </div>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                class="shrink-0 text-text-brand-muted hover:text-text-brand cursor-pointer"
-                onclick={() => { showActionsForResult = showActionsForResult === 'history:' + r.url ? null : 'history:' + r.url; }}
-              >
-                <MoreVertical class="size-4" />
-              </Button>
+              <Collapsible.Trigger asChild>
+                {#snippet children({ props })}
+                  <Button
+                    {...props}
+                    variant="ghost"
+                    size="icon-sm"
+                    class="shrink-0 text-text-brand-muted hover:text-text-brand cursor-pointer"
+                    onclick={() => { showActionsForResult = showActionsForResult === 'history:' + r.url ? null : 'history:' + r.url; }}
+                  >
+                    <MoreVertical class="size-4" />
+                  </Button>
+                {/snippet}
+              </Collapsible.Trigger>
             </article>
-            {#if showActionsForResult === 'history:' + r.url}
-              <Card.Root class="ml-8 border-[3px] border-brutal-border bg-card-surface rounded-none py-3 gap-2 shadow-[3px_3px_0_var(--brutal-shadow)]">
+            <Collapsible.Content class="ml-8">
+              <Card.Root class="border-[3px] border-brutal-border bg-card-surface rounded-none py-3 gap-2 shadow-[3px_3px_0_var(--brutal-shadow)]">
                 <Card.Content class="space-y-2">
                   <Button variant="outline" size="sm" class="text-xs border-[2px] border-hister-rose text-hister-rose hover:bg-hister-rose/10" onclick={() => updatePriorityResult(r.url, r.title || '*title*', true)}>
                     <PinOff class="size-3.5" />
@@ -664,7 +662,8 @@
                   {/if}
                 </Card.Content>
               </Card.Root>
-            {/if}
+            </Collapsible.Content>
+            </Collapsible.Root>
           {/each}
         {/if}
 
@@ -673,6 +672,7 @@
             {@const idx = historyLen + i}
             {@const color = "hister-cyan" }
             {@const favSrc = getFaviconSrc(r.favicon, r.url)}
+            <Collapsible.Root open={showActionsForResult === 'doc:' + r.url}>
             <article data-result class="flex gap-3 py-3.5 w-full overflow-hidden transition-all duration-150"
               style={idx === highlightIdx ? `background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--${color}) 12%, transparent), transparent); border-left: 3px solid var(--${color}); padding-left: 0.75rem;` : ''}>
               <div class="w-5 h-5 shrink-0 flex items-center justify-center mt-0.5 overflow-hidden" style="background-color: var(--{color});">
@@ -700,17 +700,22 @@
                   <p class="font-inter text-text-brand-secondary text-sm md:text-base leading-[1.4]">{@html r.text}</p>
                 {/if}
               </div>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                class="shrink-0 text-text-brand-muted hover:text-text-brand cursor-pointer"
-                onclick={() => { showActionsForResult = showActionsForResult === 'doc:' + r.url ? null : 'doc:' + r.url; }}
-              >
-                <MoreVertical class="size-4" />
-              </Button>
+              <Collapsible.Trigger asChild>
+                {#snippet children({ props })}
+                  <Button
+                    {...props}
+                    variant="ghost"
+                    size="icon-sm"
+                    class="shrink-0 text-text-brand-muted hover:text-text-brand cursor-pointer"
+                    onclick={() => { showActionsForResult = showActionsForResult === 'doc:' + r.url ? null : 'doc:' + r.url; }}
+                  >
+                    <MoreVertical class="size-4" />
+                  </Button>
+                {/snippet}
+              </Collapsible.Trigger>
             </article>
-            {#if showActionsForResult === 'doc:' + r.url}
-              <Card.Root class="ml-8 border-[3px] border-brutal-border bg-card-surface rounded-none py-3 gap-2 shadow-[3px_3px_0_var(--brutal-shadow)]">
+            <Collapsible.Content class="ml-8">
+              <Card.Root class="border-[3px] border-brutal-border bg-card-surface rounded-none py-3 gap-2 shadow-[3px_3px_0_var(--brutal-shadow)]">
                 <Card.Content class="space-y-2">
                   <div class="flex items-center gap-2">
                     <Input bind:value={actionsQuery} placeholder="Query for priority..." class="flex-1 h-7 text-sm font-inter border-[2px] border-border-brand-muted shadow-none focus-visible:ring-0 focus-visible:border-hister-indigo" />
@@ -728,7 +733,8 @@
                   {/if}
                 </Card.Content>
               </Card.Root>
-            {/if}
+            </Collapsible.Content>
+            </Collapsible.Root>
           {/each}
         {/if}
 
@@ -799,14 +805,26 @@
       <div bind:this={chipsContainerEl} class="flex flex-wrap gap-3 items-center justify-center relative">
         {#each recentSearches as search, i}
           {@const chip = chipColors[i % chipColors.length]}
-          <Button
-            variant="outline"
-            class="border-[3px] {chip.border} {chip.bg} px-3.5 py-1.5 font-inter text-sm font-semibold {chip.text} shadow-[3px_3px_0_var(--brutal-shadow)] hover:shadow-[1px_1px_0_var(--brutal-shadow)] hover:translate-x-[2px] hover:translate-y-[2px] transition-all duration-200 h-auto rounded-none"
-            onclick={() => clickChip(search)}
-            oncontextmenu={(e) => showChipContextMenu(e, search)}
-          >
-            {search}
-          </Button>
+          <ContextMenu.Root>
+            <ContextMenu.Trigger>
+              <Button
+                variant="outline"
+                class="border-[3px] {chip.border} {chip.bg} px-3.5 py-1.5 font-inter text-sm font-semibold {chip.text} shadow-[3px_3px_0_var(--brutal-shadow)] hover:shadow-[1px_1px_0_var(--brutal-shadow)] hover:translate-x-[2px] hover:translate-y-[2px] transition-all duration-200 h-auto rounded-none"
+                onclick={() => clickChip(search)}
+              >
+                {search}
+              </Button>
+            </ContextMenu.Trigger>
+            <ContextMenu.Content class="border-[3px] border-brutal-border bg-card-surface shadow-[4px_4px_0_var(--brutal-shadow)] rounded-none min-w-[160px]">
+              <ContextMenu.Item class="gap-2 font-inter text-sm text-text-brand rounded-none cursor-pointer" onclick={() => clickChip(search)}>
+                <Search class="size-3.5" /> Search "{search}"
+              </ContextMenu.Item>
+              <ContextMenu.Separator class="bg-border-brand-muted mx-2" />
+              <ContextMenu.Item class="gap-2 font-inter text-sm text-hister-rose hover:bg-hister-rose/10 rounded-none cursor-pointer" onclick={() => deleteRecentSearch(search)}>
+                <Trash2 class="size-3.5" /> Remove
+              </ContextMenu.Item>
+            </ContextMenu.Content>
+          </ContextMenu.Root>
         {/each}
         <Button
           variant="ghost"
@@ -820,34 +838,6 @@
       </div>
     {/if}
 
-    {#if contextMenuSearch}
-      <div
-        class="fixed inset-0 z-40"
-        role="presentation"
-        onclick={() => { contextMenuSearch = null; }}
-        oncontextmenu={(e) => { e.preventDefault(); contextMenuSearch = null; }}
-      ></div>
-      <div
-        class="fixed z-50 border-[3px] border-brutal-border bg-card-surface shadow-[4px_4px_0_var(--brutal-shadow)] py-1 min-w-[160px]"
-        style="left: {contextMenuPos.x}px; top: {contextMenuPos.y}px;"
-      >
-        <Button
-          variant="ghost"
-          class="w-full justify-start gap-2 px-3 py-2 font-inter text-sm text-text-brand hover:bg-muted-surface h-auto rounded-none"
-          onclick={() => { clickChip(contextMenuSearch!); contextMenuSearch = null; }}
-        >
-          <Search class="size-3.5" /> Search "{contextMenuSearch}"
-        </Button>
-        <Separator class="bg-border-brand-muted mx-2" />
-        <Button
-          variant="ghost"
-          class="w-full justify-start gap-2 px-3 py-2 font-inter text-sm text-hister-rose hover:bg-hister-rose/10 h-auto rounded-none"
-          onclick={() => deleteRecentSearch(contextMenuSearch!)}
-        >
-          <Trash2 class="size-3.5" /> Remove
-        </Button>
-      </div>
-    {/if}
 
     <div bind:this={statsRowEl} class="flex items-center gap-8 flex-col md:flex-row">
       <div class="flex items-center gap-2 text-hister-indigo border-[3px] border-brutal-border px-4 py-2 shadow-[3px_3px_0_var(--brutal-shadow)]">

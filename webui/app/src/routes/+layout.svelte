@@ -2,6 +2,7 @@
   import { page } from '$app/stores';
   import { onMount } from 'svelte';
   import { Button } from '@hister/components/ui/button';
+  import { Switch } from '@hister/components/ui/switch';
   import { Sun, Moon } from 'lucide-svelte';
   import "../style.css";
 
@@ -26,12 +27,16 @@
   onMount(() => {
     theme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
     applyTheme();
+    isDark = theme === 'dark';
   });
+
+  let isDark = $state(false);
 
   function toggleTheme() {
     const current = document.documentElement.getAttribute('data-theme');
     theme = current === 'dark' ? 'light' : 'dark';
     applyTheme();
+    isDark = theme === 'dark';
     localStorage.setItem('theme', theme);
   }
 </script>
@@ -44,35 +49,36 @@
       Hister
     </a>
   </h1>
-  <nav class="flex items-center gap-3 md:gap-6">
+  <nav class="flex items-center gap-1 md:gap-2">
     {#each navItems as item (item.href)}
-      <a
-        class="font-space text-[11px] md:text-[13px] tracking-[1px] md:tracking-[1.5px] font-semibold no-underline hover:underline uppercase {$page.url.pathname === new URL(item.href, $page.url).pathname ? 'text-text-brand font-bold' : 'text-text-brand-secondary hover:text-text-brand'}"
+      <Button
+        variant="ghost"
         href={item.href}
+        class="font-space text-[11px] md:text-[13px] tracking-[1px] md:tracking-[1.5px] font-semibold no-underline hover:underline uppercase px-2 md:px-3 h-8 md:h-9 rounded-none {$page.url.pathname === new URL(item.href, $page.url).pathname ? 'text-text-brand font-bold' : 'text-text-brand-secondary hover:text-text-brand'}"
       >
         {item.label}
-      </a>
+      </Button>
     {/each}
   </nav>
-  <Button
-    variant="ghost"
-    size="icon"
-    class="text-text-brand-muted hover:text-hister-indigo transition-all hover:scale-110 shrink-0 size-8 md:size-10"
-    title="Toggle theme"
-    onclick={toggleTheme}
-  >
-    {#if theme ==='dark' }<Sun class="size-6" />{:else}<Moon class="size-6" />{/if}
-  </Button>
+  <div class="flex items-center gap-1.5 shrink-0" title="Toggle theme">
+    <Sun class="size-3.5 md:size-4 text-text-brand-muted" />
+    <Switch
+      checked={isDark}
+      onCheckedChange={toggleTheme}
+      class="data-[state=checked]:bg-hister-indigo data-[state=unchecked]:bg-border-brand-muted border-[2px] border-brutal-border h-5 w-9 rounded-none [&_span[data-slot=switch-thumb]]:rounded-none"
+    />
+    <Moon class="size-3.5 md:size-4 text-text-brand-muted" />
+  </div>
 </header>
 
 <main class="flex flex-col overflow-clip flex-1 min-h-0">
   {@render children()}
 </main>
 
-<footer class="h-12 px-6 bg-brutal-bg border-t-[3px] border-brutal-border flex items-center justify-center gap-6 text-sm">
-  <a href="help" class="font-space text-[13px] tracking-[1px] text-text-brand-secondary hover:text-hister-indigo no-underline hover:underline uppercase">Help</a>
-  <a href="about" class="font-space text-[13px] tracking-[1px] text-text-brand-secondary hover:text-hister-indigo no-underline hover:underline uppercase">About</a>
-  <a href="api-docs" class="font-space text-[11px] md:text-[13px] tracking-[1px] text-text-brand-secondary hover:text-hister-indigo no-underline hover:underline uppercase">API</a>
-  <a href="https://github.com/asciimoo/hister/" class="font-space text-[13px] tracking-[1px] text-text-brand-secondary hover:text-hister-indigo no-underline hover:underline uppercase" target="_blank" rel="noopener">GitHub</a>
+<footer class="h-10 md:h-12 px-3 md:px-6 bg-brutal-bg border-t-[3px] border-brutal-border flex items-center justify-center gap-1 md:gap-2 text-sm shrink-0">
+  <Button variant="ghost" href="help" class="font-space text-[11px] md:text-[13px] tracking-[1px] text-text-brand-secondary hover:text-hister-indigo no-underline hover:underline uppercase px-2 md:px-3 h-8 rounded-none">Help</Button>
+  <Button variant="ghost" href="about" class="font-space text-[11px] md:text-[13px] tracking-[1px] text-text-brand-secondary hover:text-hister-indigo no-underline hover:underline uppercase px-2 md:px-3 h-8 rounded-none">About</Button>
+  <Button variant="ghost" href="api-docs" class="font-space text-[11px] md:text-[13px] tracking-[1px] text-text-brand-secondary hover:text-hister-indigo no-underline hover:underline uppercase px-2 md:px-3 h-8 rounded-none">API</Button>
+  <Button variant="ghost" href="https://github.com/asciimoo/hister/" target="_blank" rel="noopener" class="font-space text-[11px] md:text-[13px] tracking-[1px] text-text-brand-secondary hover:text-hister-indigo no-underline hover:underline uppercase px-2 md:px-3 h-8 rounded-none">GitHub</Button>
 </footer>
 </div>

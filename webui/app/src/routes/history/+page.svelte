@@ -7,6 +7,7 @@
   import { Badge } from '@hister/components/ui/badge';
   import { Separator } from '@hister/components/ui/separator';
   import { ScrollArea } from '@hister/components/ui/scroll-area';
+  import * as AlertDialog from '@hister/components/ui/alert-dialog';
   import StatusMessage from '$lib/components/StatusMessage.svelte';
   import { Search, Clock, Trash2 } from 'lucide-svelte';
 
@@ -16,6 +17,7 @@
   let filter = $state('');
   let activeGroup = $state('');
   let filterByDate = $state('');
+  let showDeleteAllDialog = $state(false);
 
   const groupColors = [
     'hister-indigo', 'hister-coral', 'hister-teal', 'hister-amber',
@@ -129,7 +131,6 @@
   }
 
   async function deleteAllHistory() {
-    if (!confirm('Delete all history? This cannot be undone.')) return;
     try {
       for (const item of items) {
         await apiFetch('/history', {
@@ -176,15 +177,38 @@
       />
     </div>
     {#if items.length > 0}
-      <Button
-        variant="outline"
-        size="sm"
-        class="border-[3px] border-hister-rose text-hister-rose hover:bg-hister-rose/10 font-inter text-xs font-semibold h-8 gap-1.5 shrink-0 shadow-[3px_3px_0_var(--brutal-shadow)] hover:shadow-[1px_1px_0_var(--brutal-shadow)] hover:translate-x-[2px] hover:translate-y-[2px] transition-all"
-        onclick={deleteAllHistory}
-      >
-        <Trash2 class="size-3.5" />
-        <span class="hidden md:inline">Delete All</span>
-      </Button>
+      <AlertDialog.Root bind:open={showDeleteAllDialog}>
+        <AlertDialog.Trigger asChild>
+          {#snippet children({ props })}
+            <Button
+              {...props}
+              variant="outline"
+              size="sm"
+              class="border-[3px] border-hister-rose text-hister-rose hover:bg-hister-rose/10 font-inter text-xs font-semibold h-8 gap-1.5 shrink-0 shadow-[3px_3px_0_var(--brutal-shadow)] hover:shadow-[1px_1px_0_var(--brutal-shadow)] hover:translate-x-[2px] hover:translate-y-[2px] transition-all"
+            >
+              <Trash2 class="size-3.5" />
+              <span class="hidden md:inline">Delete All</span>
+            </Button>
+          {/snippet}
+        </AlertDialog.Trigger>
+        <AlertDialog.Content class="border-[3px] border-brutal-border bg-card-surface rounded-none shadow-[6px_6px_0_var(--brutal-shadow)]">
+          <AlertDialog.Header>
+            <AlertDialog.Title class="font-space text-lg font-extrabold tracking-[1px] text-text-brand">DELETE ALL HISTORY</AlertDialog.Title>
+            <AlertDialog.Description class="font-inter text-sm text-text-brand-secondary">
+              This will permanently delete all search history entries. This action cannot be undone.
+            </AlertDialog.Description>
+          </AlertDialog.Header>
+          <AlertDialog.Footer>
+            <AlertDialog.Cancel class="border-[3px] border-brutal-border font-space text-xs font-bold tracking-[0.5px] rounded-none">CANCEL</AlertDialog.Cancel>
+            <AlertDialog.Action
+              class="bg-hister-rose text-white border-[3px] border-brutal-border font-space text-xs font-bold tracking-[0.5px] rounded-none shadow-[3px_3px_0_var(--brutal-shadow)] hover:shadow-[1px_1px_0_var(--brutal-shadow)] hover:translate-x-[2px] hover:translate-y-[2px] transition-all"
+              onclick={deleteAllHistory}
+            >
+              DELETE ALL
+            </AlertDialog.Action>
+          </AlertDialog.Footer>
+        </AlertDialog.Content>
+      </AlertDialog.Root>
     {/if}
   </nav>
 </header>

@@ -7,6 +7,7 @@
    import * as Card from '@hister/components/ui/card';
    import * as Alert from '@hister/components/ui/alert';
    import * as Table from '@hister/components/ui/table';
+   import * as Select from '@hister/components/ui/select';
    import { Shield, Link2, Plus, Trash2, AlertCircle, CheckCircle } from 'lucide-svelte';
 
   interface RulesData {
@@ -373,13 +374,15 @@
                 placeholder="Enter regex pattern..."
                 class="flex-1 h-10 px-3 bg-card-surface border-[3px] border-brutal-border font-fira text-sm text-text-brand shadow-none focus-visible:ring-0 focus-visible:border-hister-coral"
               />
-              <select
-                bind:value={newRuleType}
-                class="h-10 px-3 w-[100px] md:w-[110px] bg-card-surface border-[3px] border-brutal-border font-space text-xs font-bold tracking-[0.5px] text-text-brand outline-none cursor-pointer appearance-none text-center shrink-0"
-              >
-                <option value="skip">SKIP</option>
-                <option value="priority">PRIORITY</option>
-              </select>
+              <Select.Root type="single" bind:value={newRuleType}>
+                <Select.Trigger class="h-10 px-3 w-[100px] md:w-[110px] bg-card-surface border-[3px] border-brutal-border font-space text-xs font-bold tracking-[0.5px] text-text-brand outline-none cursor-pointer shrink-0 rounded-none shadow-none focus-visible:ring-0 focus-visible:border-hister-coral justify-center gap-1">
+                  {newRuleType === 'skip' ? 'SKIP' : 'PRIORITY'}
+                </Select.Trigger>
+                <Select.Content class="border-[3px] border-brutal-border bg-card-surface rounded-none shadow-[4px_4px_0_var(--brutal-shadow)] min-w-[100px]">
+                  <Select.Item value="skip" label="SKIP" class="font-space text-xs font-bold tracking-[0.5px] rounded-none cursor-pointer">SKIP</Select.Item>
+                  <Select.Item value="priority" label="PRIORITY" class="font-space text-xs font-bold tracking-[0.5px] rounded-none cursor-pointer">PRIORITY</Select.Item>
+                </Select.Content>
+              </Select.Root>
             </div>
             <Button
               type="button"
