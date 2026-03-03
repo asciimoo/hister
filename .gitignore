@@ -1,9 +1,9 @@
 hister
-ext/dist
-ext/node_modules
-ext/hister_ext_src.zip
-ext/hister_ext_ff.zip
-ext/hister_ext_chrome.zip
+webui/ext/dist
+webui/ext/node_modules
+webui/ext/hister_ext_src.zip
+webui/ext/hister_ext_ff.zip
+webui/ext/hister_ext_chrome.zip
 result
 result-*
 node_modules/

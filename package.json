@@ -5,7 +5,8 @@
   "workspaces": [
     "webui/app",
     "webui/website",
-    "webui/components"
+    "webui/components",
+    "webui/ext"
   ],
   "devDependencies": {
     "@types/node": "^25.3.0",

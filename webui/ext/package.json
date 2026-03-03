@@ -1,5 +1,5 @@
 {
-    "name": "Hister",
+    "name": "@hister/ext",
     "version": "0.10.0",
     "scripts": {
         "clean": "rm -r dist/*",

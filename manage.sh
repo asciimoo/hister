@@ -51,10 +51,7 @@ check_npm() {
 
 install_js_deps() {
     check_npm
-    cd ext
-    npm install cross-env
-    npm i
-    cd ..
+    npm install --workspaces
 }
 
 run_unit_tests() {
@@ -69,9 +66,9 @@ build() {
 build_addon() {
     check_npm
     echo "[!] Warning: The default manifest.json is for chrome browsers, overwrite it with manifest_ff.json for firefox"
-    cd ext
+    cd webui/ext
     npm run build
-    cd ..
+    cd ../..
 }
 
 build_website() {
@@ -81,10 +78,10 @@ build_website() {
 
 build_addon_artifact() {
     build_addon
-    [ -e "$EXT_SRC_ZIP" ] && rm "$EXT_SRC_ZIP" || :
-    [ -e "$EXT_CHROME_ZIP" ] && rm "$EXT_CHROME_ZIP" || :
-    [ -e "$EXT_FF_ZIP" ] && rm "$EXT_FF_ZIP" || :
-    cd ext
+    [ -e "webui/ext/$EXT_SRC_ZIP" ] && rm "webui/ext/$EXT_SRC_ZIP" || :
+    [ -e "webui/ext/$EXT_CHROME_ZIP" ] && rm "webui/ext/$EXT_CHROME_ZIP" || :
+    [ -e "webui/ext/$EXT_FF_ZIP" ] && rm "webui/ext/$EXT_FF_ZIP" || :
+    cd webui/ext
     zip -r "$EXT_SRC_ZIP" src tsconfig.json package* webpack.config.js
     cd dist
     zip "../$EXT_CHROME_ZIP" ./* assets/* assets/icons/*
