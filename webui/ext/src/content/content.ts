@@ -5,10 +5,11 @@ import {
 } from '../modules/extract';
 
 let d : PageData;
-// ms
-const defaultSleepTime = 10*1000;
-let sleepTime = defaultSleepTime;
-const sleepIncrementRatio = 2;
+const debounceDelay = 2000;
+const minSendInterval = 60*1000;
+let lastSentTime = 0;
+let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+let throttleTimer: ReturnType<typeof setTimeout> | null = null;
 
 // @ts-ignore
 var isFirefox = typeof InstallTrigger !== 'undefined';
@@ -22,7 +23,9 @@ if(isFirefox) {
 } else {
 	window.addEventListener("load", extract);
 }
-window.addEventListener("navigatesuccess", update)
+window.addEventListener("navigatesuccess", () => {
+    checkAndSend(true);
+});
 
 function extract(sendResponse) {
     registerResultExtractor(window, r => chrome.runtime.sendMessage({resultData:  r}));
@@ -32,6 +35,7 @@ function extract(sendResponse) {
         console.log("failed to extract page data:", e);
         return;
     }
+    lastSentTime = Date.now();
     chrome.runtime.sendMessage(
         {pageData:  d},
         resp => {
@@ -42,15 +46,12 @@ function extract(sendResponse) {
                 console.log("failed to submit page data, stopping extraction", resp);
                 return;
             }
-            setTimeout(update, sleepTime);
+            startObserving();
         }
     );
 }
 
-function update() {
-    if(!d) {
-        return;
-    }
+function checkAndSend(immediate = false) {
     let d2;
     try {
         d2 = extractPageData();
@@ -58,14 +59,44 @@ function update() {
         console.log("failed to extract page data", e);
         return;
     }
-    if(d2.html != d.html || d2.url != d.url) {
-        sleepTime = defaultSleepTime;
-        d = d2;
-        chrome.runtime.sendMessage({pageData:  d}, resp => {});
-    } else {
-        sleepTime *= sleepIncrementRatio;
+    if(d2.text === d.text && d2.url === d.url) {
+        return;
     }
-    setTimeout(update, sleepTime);
+    d = d2;
+    if(immediate) {
+        lastSentTime = Date.now();
+        chrome.runtime.sendMessage({pageData: d}, resp => {});
+        return;
+    }
+    const elapsed = Date.now() - lastSentTime;
+    if(elapsed >= minSendInterval) {
+        lastSentTime = Date.now();
+        chrome.runtime.sendMessage({pageData: d}, resp => {});
+    } else if(!throttleTimer) {
+        throttleTimer = setTimeout(() => {
+            throttleTimer = null;
+            lastSentTime = Date.now();
+            chrome.runtime.sendMessage({pageData: d}, resp => {});
+        }, minSendInterval - elapsed);
+    }
+}
+
+let observer: MutationObserver | null = null;
+
+function startObserving() {
+    if(observer) return;
+    observer = new MutationObserver(() => {
+        if(debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+            debounceTimer = null;
+            checkAndSend();
+        }, debounceDelay);
+    });
+    observer.observe(document.body, {
+        childList: true,
+        subtree: true,
+        characterData: true,
+    });
 }
 
 // Get message from background page
