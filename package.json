@@ -11,8 +11,14 @@
     "webui/components",
     "webui/ext"
   ],
+  "scripts": {
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
   "devDependencies": {
     "@types/node": "^25.3.0",
-    "@typescript-eslint/types": "^8.56.1"
+    "@typescript-eslint/types": "^8.56.1",
+    "prettier": "^3.8.1",
+    "prettier-plugin-svelte": "^3.5.1"
   }
 }

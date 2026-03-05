@@ -1,0 +1,10 @@
+# Build outputs
+server/static/app/
+webui/website/build/
+webui/ext/dist/
+
+# Auto-generated
+.svelte-kit/
+
+# Dependencies
+node_modules/
