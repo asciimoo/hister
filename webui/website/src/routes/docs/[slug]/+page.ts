@@ -9,12 +9,18 @@ const docsMap = Object.fromEntries(
   Object.entries(modules).map(([path, mod]) => {
     const slug = path.split('/').pop()?.replace('.md', '') ?? path;
     return [slug, mod];
-  })
+  }),
 ) as Record<string, { default: unknown; metadata?: Record<string, unknown> }>;
 
 export const entries = () => Object.keys(docsMap).map((slug) => ({ slug }));
 
-export async function load({ params, parent }: { params: { slug: string }; parent: () => Promise<{ docs: DocEntry[] }> }) {
+export async function load({
+  params,
+  parent,
+}: {
+  params: { slug: string };
+  parent: () => Promise<{ docs: DocEntry[] }>;
+}) {
   const post = docsMap[params.slug];
   if (!post) {
     error(404, `Documentation page "${params.slug}" not found`);
@@ -29,6 +35,6 @@ export async function load({ params, parent }: { params: { slug: string }; paren
     content: post.default,
     meta: post.metadata ?? {},
     prev,
-    next
+    next,
   };
 }

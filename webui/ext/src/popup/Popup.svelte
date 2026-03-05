@@ -1,46 +1,44 @@
 <script lang="ts">
-  import { Button } from "@hister/components/ui/button";
-  import { Input } from "@hister/components/ui/input";
-  import { Label } from "@hister/components/ui/label";
-  import { Separator } from "@hister/components/ui/separator";
+  import { Button } from '@hister/components/ui/button';
+  import { Input } from '@hister/components/ui/input';
+  import { Label } from '@hister/components/ui/label';
+  import { Separator } from '@hister/components/ui/separator';
 
-  const defaultURL = "http://127.0.0.1:4433/";
+  const defaultURL = 'http://127.0.0.1:4433/';
 
   let url = $state(defaultURL);
-  let token = $state("");
-  let message = $state("");
+  let token = $state('');
+  let message = $state('');
 
-  chrome.storage.local.get(["histerURL", "histerToken"], (data) => {
-    if (!data["histerURL"]) {
+  chrome.storage.local.get(['histerURL', 'histerToken'], (data) => {
+    if (!data['histerURL']) {
       chrome.storage.local.set({ histerURL: defaultURL });
     }
-    url = data["histerURL"] || defaultURL;
-    token = data["histerToken"] || "";
+    url = data['histerURL'] || defaultURL;
+    token = data['histerToken'] || '';
   });
 
   function save(e: Event) {
     e.preventDefault();
-    chrome.storage.local
-      .set({ histerURL: url, histerToken: token })
-      .then(() => {
-        message = "Settings saved";
-      });
+    chrome.storage.local.set({ histerURL: url, histerToken: token }).then(() => {
+      message = 'Settings saved';
+    });
   }
 
   function reindex() {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       if (!tabs?.length) return;
-      chrome.tabs.sendMessage(tabs[0].id!, { action: "reindex" }, (r) => {
-        if (r?.status === "ok" && r.status_code === 201) {
-          message = "Reindex successful";
+      chrome.tabs.sendMessage(tabs[0].id!, { action: 'reindex' }, (r) => {
+        if (r?.status === 'ok' && r.status_code === 201) {
+          message = 'Reindex successful';
           return;
         }
-        message = "Reindex failed";
+        message = 'Reindex failed';
         if (r?.error) {
-          message += ": " + r.error;
+          message += ': ' + r.error;
         }
         if (r?.status_code === 403) {
-          message += ": Unauthorized - invalid access token";
+          message += ': Unauthorized - invalid access token';
         }
       });
     });
@@ -67,9 +65,7 @@
   <Separator class="my-3" />
 
   <div class="text-center">
-    <Button variant="outline" onclick={reindex} class="w-full">
-      Reindex page
-    </Button>
+    <Button variant="outline" onclick={reindex} class="w-full">Reindex page</Button>
   </div>
 
   {#if message}

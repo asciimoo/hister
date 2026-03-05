@@ -18,9 +18,10 @@ export async function load() {
       const mod = modules[`../../content/docs/${slug}.md`] as { metadata?: Record<string, string> };
       return {
         slug,
-        title: mod?.metadata?.title ?? slug.replace(/-/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase()),
+        title:
+          mod?.metadata?.title ?? slug.replace(/-/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase()),
       };
-    })
+    }),
   );
 
   const categories: DocCategory[] = docsStructure

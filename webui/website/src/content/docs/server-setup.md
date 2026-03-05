@@ -38,8 +38,8 @@ Edit your configuration file (e.g., `~/.config/hister/config.yml`):
 
 ```yaml
 server:
-  address: "0.0.0.0:4433" # or the target interface's address
-  base_url: "http://192.168.1.100:4433"  # Use your actual server IP or hostname
+  address: '0.0.0.0:4433' # or the target interface's address
+  base_url: 'http://192.168.1.100:4433' # Use your actual server IP or hostname
 ```
 
 Replace `192.168.1.100` with your server's actual IP address or domain name.
@@ -102,8 +102,8 @@ Update your `~/.config/hister/config.yml` to use the public URL:
 
 ```yaml
 server:
-  address: "127.0.0.1:4433"  # Keep localhost since proxy handles external access
-  base_url: "https://hister.example.com"  # Your public URL
+  address: '127.0.0.1:4433' # Keep localhost since proxy handles external access
+  base_url: 'https://hister.example.com' # Your public URL
 ```
 
 ## Configuration via Environment Variables
@@ -114,14 +114,14 @@ Hister can be fully configured using environment variables. This is the **recomm
 
 All configuration options can be set using environment variables with the prefix `HISTER__`. Nested keys are separated by double underscores (`__`).
 
-| Variable                    | Description                                                           |
-|-----------------------------|-----------------------------------------------------------------------|
-| `HISTER__SERVER__ADDRESS`   | The address and port the server binds to (default: `127.0.0.1:4433`)  |
-| `HISTER__SERVER__BASE_URL`  | The external URL used to access Hister (e.g., `https://hister.com`)   |
-| `HISTER__SERVER__DATABASE`  | The filename of the SQLite database (default: `db.sqlite3`)           |
-| `HISTER__APP__DIRECTORY`    | The directory where Hister stores its data (shorthand: `DATA_DIR`)    |
-| `HISTER__APP__LOG_LEVEL`    | Logging verbosity: `debug`, `info`, `warn`, `error` (default: `info`) |
-| `HISTER_PORT`               | Shorthand to override only the port in `server.address`               |
+| Variable                   | Description                                                           |
+| -------------------------- | --------------------------------------------------------------------- |
+| `HISTER__SERVER__ADDRESS`  | The address and port the server binds to (default: `127.0.0.1:4433`)  |
+| `HISTER__SERVER__BASE_URL` | The external URL used to access Hister (e.g., `https://hister.com`)   |
+| `HISTER__SERVER__DATABASE` | The filename of the SQLite database (default: `db.sqlite3`)           |
+| `HISTER__APP__DIRECTORY`   | The directory where Hister stores its data (shorthand: `DATA_DIR`)    |
+| `HISTER__APP__LOG_LEVEL`   | Logging verbosity: `debug`, `info`, `warn`, `error` (default: `info`) |
+| `HISTER_PORT`              | Shorthand to override only the port in `server.address`               |
 
 ## Docker Setup
 
@@ -146,7 +146,7 @@ services:
   hister:
     image: ghcr.io/asciimoo/hister:latest
     container_name: hister
-    user: "1000:1000"
+    user: '1000:1000'
     restart: unless-stopped
     volumes:
       - ./data:/hister/data
@@ -163,7 +163,7 @@ services:
   hister:
     image: ghcr.io/asciimoo/hister:latest
     container_name: hister
-    user: "1000:1000"
+    user: '1000:1000'
     restart: unless-stopped
     environment:
       - HISTER__SERVER__ADDRESS=0.0.0.0:4433
@@ -183,7 +183,7 @@ services:
   hister:
     image: ghcr.io/asciimoo/hister:latest
     container_name: hister
-    user: "1000:1000"
+    user: '1000:1000'
     restart: unless-stopped
     environment:
       - HISTER__SERVER__ADDRESS=0.0.0.0:4433

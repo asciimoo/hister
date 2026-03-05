@@ -1,13 +1,13 @@
 <script lang="ts">
-   import { onMount } from 'svelte';
-   import { fetchConfig, apiFetch } from '$lib/api';
-   import { Button } from '@hister/components/ui/button';
-   import { Input } from '@hister/components/ui/input';
-   import { Badge } from '@hister/components/ui/badge';
-   import * as Card from '@hister/components/ui/card';
-   import * as Alert from '@hister/components/ui/alert';
-   import * as Table from '@hister/components/ui/table';
-   import { Shield, Link2, Plus, Trash2, AlertCircle, CheckCircle } from 'lucide-svelte';
+  import { onMount } from 'svelte';
+  import { fetchConfig, apiFetch } from '$lib/api';
+  import { Button } from '@hister/components/ui/button';
+  import { Input } from '@hister/components/ui/input';
+  import { Badge } from '@hister/components/ui/badge';
+  import * as Card from '@hister/components/ui/card';
+  import * as Alert from '@hister/components/ui/alert';
+  import * as Table from '@hister/components/ui/table';
+  import { Shield, Link2, Plus, Trash2, AlertCircle, CheckCircle } from 'lucide-svelte';
 
   interface RulesData {
     skip: string[];
@@ -45,7 +45,7 @@
   async function loadRules() {
     loading = true;
     try {
-      const res = await apiFetch('/rules', { headers: { 'Accept': 'application/json' } });
+      const res = await apiFetch('/rules', { headers: { Accept: 'application/json' } });
       if (!res.ok) throw new Error('Failed to load rules');
       rules = await res.json();
     } catch (e) {
@@ -67,7 +67,7 @@
       const res = await apiFetch('/rules', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: formData.toString()
+        body: formData.toString(),
       });
       if (!res.ok) throw new Error('Failed to save rules');
       message = 'Rules saved successfully';
@@ -83,9 +83,9 @@
 
   function removeRule(pattern: string, type: 'skip' | 'priority') {
     if (type === 'skip') {
-      rules.skip = rules.skip.filter(p => p !== pattern);
+      rules.skip = rules.skip.filter((p) => p !== pattern);
     } else {
-      rules.priority = rules.priority.filter(p => p !== pattern);
+      rules.priority = rules.priority.filter((p) => p !== pattern);
     }
     saveRules();
   }
@@ -106,7 +106,7 @@
     const res = await apiFetch('/delete_alias', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: formData.toString()
+      body: formData.toString(),
     });
     if (res.ok) await loadRules();
   }
@@ -116,12 +116,12 @@
     if (!newAliasKeyword || !newAliasValue) return;
     const formData = new URLSearchParams({
       'alias-keyword': newAliasKeyword,
-      'alias-value': newAliasValue
+      'alias-value': newAliasValue,
     });
     const res = await apiFetch('/add_alias', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: formData.toString()
+      body: formData.toString(),
     });
     if (res.ok) {
       newAliasKeyword = '';
@@ -140,18 +140,26 @@
   <div class="flex flex-col gap-4">
     <div class="flex items-center gap-6">
       <div class="w-1.5 h-10 bg-hister-coral"></div>
-      <h1 class="font-space text-3xl md:text-5xl font-black tracking-[3px] text-text-brand">RULES & ALIASES</h1>
+      <h1 class="font-space text-3xl md:text-5xl font-black tracking-[3px] text-text-brand">
+        RULES & ALIASES
+      </h1>
     </div>
-    <p class="font-inter text-base md:text-lg text-text-brand-secondary leading-relaxed max-w-[700px]">
+    <p
+      class="font-inter text-base md:text-lg text-text-brand-secondary leading-relaxed max-w-[700px]"
+    >
       Configure how Hister indexes and searches your browsing history.
     </p>
     <div class="flex items-center gap-3 md:gap-4">
-      <div class="flex items-center gap-2 text-hister-coral border-[3px] border-brutal-border px-4 py-2 shadow-[3px_3px_0_var(--brutal-shadow)]">
+      <div
+        class="flex items-center gap-2 text-hister-coral border-[3px] border-brutal-border px-4 py-2 shadow-[3px_3px_0_var(--brutal-shadow)]"
+      >
         <Shield class="size-[18px]" />
         <span class="font-outfit text-xl font-extrabold">{ruleRows.length}</span>
         <span class="font-inter text-sm">rules</span>
       </div>
-      <div class="flex items-center gap-2 text-hister-indigo border-[3px] border-brutal-border px-4 py-2 shadow-[3px_3px_0_var(--brutal-shadow)]">
+      <div
+        class="flex items-center gap-2 text-hister-indigo border-[3px] border-brutal-border px-4 py-2 shadow-[3px_3px_0_var(--brutal-shadow)]"
+      >
         <Link2 class="size-[18px]" />
         <span class="font-outfit text-xl font-extrabold">{Object.keys(rules.aliases).length}</span>
         <span class="font-inter text-sm">aliases</span>
@@ -160,7 +168,11 @@
   </div>
 
   {#if message}
-    <Alert.Root class="border-[3px] rounded-none shadow-[4px_4px_0_var(--brutal-shadow)] {isError ? 'border-hister-rose bg-hister-rose/10 text-hister-rose' : 'border-hister-teal bg-hister-teal/10 text-hister-teal'}">
+    <Alert.Root
+      class="border-[3px] rounded-none shadow-[4px_4px_0_var(--brutal-shadow)] {isError
+        ? 'border-hister-rose bg-hister-rose/10 text-hister-rose'
+        : 'border-hister-teal bg-hister-teal/10 text-hister-teal'}"
+    >
       {#if isError}
         <AlertCircle class="size-5" />
       {:else}
@@ -177,14 +189,20 @@
   {:else}
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <!-- Search Aliases Card -->
-      <Card.Root class="bg-card-surface border-[3px] border-brutal-border rounded-none py-0 gap-0 overflow-hidden shadow-[6px_6px_0_var(--brutal-shadow)] flex flex-col">
+      <Card.Root
+        class="bg-card-surface border-[3px] border-brutal-border rounded-none py-0 gap-0 overflow-hidden shadow-[6px_6px_0_var(--brutal-shadow)] flex flex-col"
+      >
         <Card.Header class="flex-row items-center gap-4 px-6 py-6 bg-hister-indigo">
           <div class="bg-white/20 w-12 h-12 flex items-center justify-center shrink-0">
             <Link2 class="size-6 text-white" />
           </div>
           <div class="flex flex-col gap-1">
-            <Card.Title class="font-space text-xl font-extrabold tracking-[1px] text-white">SEARCH ALIASES</Card.Title>
-            <Card.Description class="font-inter text-sm text-white/70">{Object.keys(rules.aliases).length} aliases configured</Card.Description>
+            <Card.Title class="font-space text-xl font-extrabold tracking-[1px] text-white"
+              >SEARCH ALIASES</Card.Title
+            >
+            <Card.Description class="font-inter text-sm text-white/70"
+              >{Object.keys(rules.aliases).length} aliases configured</Card.Description
+            >
           </div>
         </Card.Header>
 
@@ -193,17 +211,31 @@
           <div class="hidden md:block">
             <Table.Root>
               <Table.Header>
-                <Table.Row class="bg-muted-surface border-b-[3px] border-brutal-border hover:bg-muted-surface">
-                  <Table.Head class="font-space text-xs font-bold tracking-[1px] text-text-brand-muted w-[140px] px-5 py-3 h-auto">KEYWORD</Table.Head>
-                  <Table.Head class="font-space text-xs font-bold tracking-[1px] text-text-brand-muted px-5 py-3 h-auto">EXPANDS TO</Table.Head>
+                <Table.Row
+                  class="bg-muted-surface border-b-[3px] border-brutal-border hover:bg-muted-surface"
+                >
+                  <Table.Head
+                    class="font-space text-xs font-bold tracking-[1px] text-text-brand-muted w-[140px] px-5 py-3 h-auto"
+                    >KEYWORD</Table.Head
+                  >
+                  <Table.Head
+                    class="font-space text-xs font-bold tracking-[1px] text-text-brand-muted px-5 py-3 h-auto"
+                    >EXPANDS TO</Table.Head
+                  >
                   <Table.Head class="w-10 px-5 py-3 h-auto"></Table.Head>
                 </Table.Row>
               </Table.Header>
               <Table.Body>
                 {#each Object.entries(rules.aliases) as [keyword, value]}
                   <Table.Row class="border-b-[3px] border-brutal-border">
-                    <Table.Cell class="font-fira text-sm font-semibold text-text-brand w-[140px] px-5 py-3">{keyword}</Table.Cell>
-                    <Table.Cell class="font-fira text-sm text-text-brand-secondary truncate px-5 py-3 max-w-0">{value}</Table.Cell>
+                    <Table.Cell
+                      class="font-fira text-sm font-semibold text-text-brand w-[140px] px-5 py-3"
+                      >{keyword}</Table.Cell
+                    >
+                    <Table.Cell
+                      class="font-fira text-sm text-text-brand-secondary truncate px-5 py-3 max-w-0"
+                      >{value}</Table.Cell
+                    >
                     <Table.Cell class="w-10 px-5 py-3">
                       <Button
                         variant="ghost"
@@ -227,7 +259,9 @@
                 <div class="flex-1 min-w-0">
                   <span class="font-fira text-sm font-semibold text-text-brand">{keyword}</span>
                   <span class="font-inter text-xs text-text-brand-muted mx-1.5">&rarr;</span>
-                  <span class="font-fira text-sm text-text-brand-secondary truncate block">{value}</span>
+                  <span class="font-fira text-sm text-text-brand-secondary truncate block"
+                    >{value}</span
+                  >
                 </div>
                 <Button
                   variant="ghost"
@@ -251,8 +285,13 @@
           {/if}
         </Card.Content>
 
-        <Card.Footer class="px-4 md:px-5 py-4 md:py-5 bg-muted-surface border-t-[3px] border-brutal-border">
-          <form onsubmit={addAlias} class="flex flex-col md:flex-row items-stretch md:items-center gap-3 w-full">
+        <Card.Footer
+          class="px-4 md:px-5 py-4 md:py-5 bg-muted-surface border-t-[3px] border-brutal-border"
+        >
+          <form
+            onsubmit={addAlias}
+            class="flex flex-col md:flex-row items-stretch md:items-center gap-3 w-full"
+          >
             <div class="flex items-center gap-3 md:contents">
               <Input
                 type="text"
@@ -279,14 +318,20 @@
       </Card.Root>
 
       <!-- Indexing Rules Card -->
-      <Card.Root class="bg-card-surface border-[3px] border-brutal-border rounded-none py-0 gap-0 overflow-hidden shadow-[6px_6px_0_var(--brutal-shadow)] flex flex-col">
+      <Card.Root
+        class="bg-card-surface border-[3px] border-brutal-border rounded-none py-0 gap-0 overflow-hidden shadow-[6px_6px_0_var(--brutal-shadow)] flex flex-col"
+      >
         <Card.Header class="flex-row items-center gap-4 px-6 py-6 bg-hister-coral">
           <div class="bg-white/20 w-12 h-12 flex items-center justify-center shrink-0">
             <Shield class="size-6 text-white" />
           </div>
           <div class="flex flex-col gap-1">
-            <Card.Title class="font-space text-xl font-extrabold tracking-[1px] text-white">INDEXING RULES</Card.Title>
-            <Card.Description class="font-inter text-sm text-white/70">{ruleRows.length} rules configured</Card.Description>
+            <Card.Title class="font-space text-xl font-extrabold tracking-[1px] text-white"
+              >INDEXING RULES</Card.Title
+            >
+            <Card.Description class="font-inter text-sm text-white/70"
+              >{ruleRows.length} rules configured</Card.Description
+            >
           </div>
         </Card.Header>
 
@@ -295,20 +340,33 @@
           <div class="hidden md:block">
             <Table.Root>
               <Table.Header>
-                <Table.Row class="bg-muted-surface border-b-[3px] border-brutal-border hover:bg-muted-surface">
-                  <Table.Head class="font-space text-xs font-bold tracking-[1px] text-text-brand-muted px-5 py-3 h-auto">PATTERN</Table.Head>
-                  <Table.Head class="font-space text-xs font-bold tracking-[1px] text-text-brand-muted px-5 py-3 h-auto w-28">TYPE</Table.Head>
+                <Table.Row
+                  class="bg-muted-surface border-b-[3px] border-brutal-border hover:bg-muted-surface"
+                >
+                  <Table.Head
+                    class="font-space text-xs font-bold tracking-[1px] text-text-brand-muted px-5 py-3 h-auto"
+                    >PATTERN</Table.Head
+                  >
+                  <Table.Head
+                    class="font-space text-xs font-bold tracking-[1px] text-text-brand-muted px-5 py-3 h-auto w-28"
+                    >TYPE</Table.Head
+                  >
                   <Table.Head class="w-10 px-5 py-3 h-auto"></Table.Head>
                 </Table.Row>
               </Table.Header>
               <Table.Body>
                 {#each ruleRows as row}
                   <Table.Row class="border-b-[3px] border-brutal-border">
-                    <Table.Cell class="font-fira text-sm text-text-brand truncate px-5 py-3 max-w-0">{row.pattern}</Table.Cell>
+                    <Table.Cell class="font-fira text-sm text-text-brand truncate px-5 py-3 max-w-0"
+                      >{row.pattern}</Table.Cell
+                    >
                     <Table.Cell class="px-5 py-3 w-28">
                       <Badge
                         variant="default"
-                        class="font-space text-xs font-bold tracking-[0.5px] px-3 py-1 border-0 {row.type === 'skip' ? 'bg-hister-rose text-white' : 'bg-hister-teal text-white'}"
+                        class="font-space text-xs font-bold tracking-[0.5px] px-3 py-1 border-0 {row.type ===
+                        'skip'
+                          ? 'bg-hister-rose text-white'
+                          : 'bg-hister-teal text-white'}"
                       >
                         {row.type === 'skip' ? 'SKIP' : 'PRIORITY'}
                       </Badge>
@@ -334,11 +392,15 @@
             {#each ruleRows as row}
               <div class="flex items-center gap-3 px-4 py-3.5">
                 <div class="flex-1 min-w-0">
-                  <span class="font-fira text-sm text-text-brand block truncate">{row.pattern}</span>
+                  <span class="font-fira text-sm text-text-brand block truncate">{row.pattern}</span
+                  >
                 </div>
                 <Badge
                   variant="default"
-                  class="font-space text-xs font-bold tracking-[0.5px] px-2.5 py-0.5 border-0 shrink-0 {row.type === 'skip' ? 'bg-hister-rose text-white' : 'bg-hister-teal text-white'}"
+                  class="font-space text-xs font-bold tracking-[0.5px] px-2.5 py-0.5 border-0 shrink-0 {row.type ===
+                  'skip'
+                    ? 'bg-hister-rose text-white'
+                    : 'bg-hister-teal text-white'}"
                 >
                   {row.type === 'skip' ? 'SKIP' : 'PRIORITY'}
                 </Badge>
@@ -364,7 +426,9 @@
           {/if}
         </Card.Content>
 
-        <Card.Footer class="px-4 md:px-5 py-4 md:py-5 bg-muted-surface border-t-[3px] border-brutal-border">
+        <Card.Footer
+          class="px-4 md:px-5 py-4 md:py-5 bg-muted-surface border-t-[3px] border-brutal-border"
+        >
           <div class="flex flex-col md:flex-row items-stretch md:items-center gap-3 w-full">
             <div class="flex items-center gap-3 md:contents">
               <Input

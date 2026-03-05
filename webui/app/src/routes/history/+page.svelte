@@ -18,8 +18,13 @@
   let filterByDate = $state('');
 
   const groupColors = [
-    'hister-indigo', 'hister-coral', 'hister-teal', 'hister-amber',
-    'hister-rose', 'hister-cyan', 'hister-lime'
+    'hister-indigo',
+    'hister-coral',
+    'hister-teal',
+    'hister-amber',
+    'hister-rose',
+    'hister-cyan',
+    'hister-lime',
   ];
 
   function getColorVar(color: string): string {
@@ -36,7 +41,12 @@
 
     if (itemDate.getTime() === today.getTime()) return 'Today';
     if (itemDate.getTime() === yesterday.getTime()) return 'Yesterday';
-    return itemDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+    return itemDate.toLocaleDateString('en-US', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
   }
 
   function getDateKey(dateStr: string): string {
@@ -48,14 +58,17 @@
     let result = items;
     if (filter) {
       const f = filter.toLowerCase();
-      result = result.filter(item =>
-        item.query.toLowerCase().includes(f) ||
-        item.title.toLowerCase().includes(f) ||
-        item.url.toLowerCase().includes(f)
+      result = result.filter(
+        (item) =>
+          item.query.toLowerCase().includes(f) ||
+          item.title.toLowerCase().includes(f) ||
+          item.url.toLowerCase().includes(f),
       );
     }
     if (filterByDate) {
-      result = result.filter(item => item.updated_at && getDateKey(item.updated_at) === filterByDate);
+      result = result.filter(
+        (item) => item.updated_at && getDateKey(item.updated_at) === filterByDate,
+      );
     }
     return result;
   });
@@ -66,10 +79,11 @@
     let baseItems = items;
     if (filter) {
       const f = filter.toLowerCase();
-      baseItems = baseItems.filter(item =>
-        item.query.toLowerCase().includes(f) ||
-        item.title.toLowerCase().includes(f) ||
-        item.url.toLowerCase().includes(f)
+      baseItems = baseItems.filter(
+        (item) =>
+          item.query.toLowerCase().includes(f) ||
+          item.title.toLowerCase().includes(f) ||
+          item.url.toLowerCase().includes(f),
       );
     }
     for (const item of baseItems) {
@@ -120,9 +134,9 @@
       await apiFetch('/history', {
         method: 'POST',
         headers: { 'Content-type': 'application/json; charset=UTF-8' },
-        body: JSON.stringify({ url: item.url, title: item.title, query: item.query, delete: true })
+        body: JSON.stringify({ url: item.url, title: item.title, query: item.query, delete: true }),
       });
-      items = items.filter(i => i.url !== item.url || i.query !== item.query);
+      items = items.filter((i) => i.url !== item.url || i.query !== item.query);
     } catch (e) {
       error = String(e);
     }
@@ -135,7 +149,12 @@
         await apiFetch('/history', {
           method: 'POST',
           headers: { 'Content-type': 'application/json; charset=UTF-8' },
-          body: JSON.stringify({ url: item.url, title: item.title, query: item.query, delete: true })
+          body: JSON.stringify({
+            url: item.url,
+            title: item.title,
+            query: item.query,
+            delete: true,
+          }),
         });
       }
       items = [];
@@ -148,7 +167,7 @@
     try {
       await fetchConfig();
       const res = await apiFetch('/history', {
-        headers: { 'Accept': 'application/json' }
+        headers: { Accept: 'application/json' },
       });
       if (!res.ok) throw new Error('Failed to load history');
       items = await res.json();
@@ -164,10 +183,19 @@
   <title>Hister - History</title>
 </svelte:head>
 
-<header class="flex items-center justify-between px-3 md:px-6 py-3 bg-card-surface border-b-[3px] border-brutal-border shrink-0 gap-2 overflow-hidden">
-  <h1 class="flex items-center gap-2 shrink-0 min-w-0"><span class="w-1 h-6 bg-hister-indigo shrink-0"></span><span class="font-space text-sm md:text-lg tracking-[1px] font-extrabold text-text-brand truncate uppercase">Search History</span></h1>
+<header
+  class="flex items-center justify-between px-3 md:px-6 py-3 bg-card-surface border-b-[3px] border-brutal-border shrink-0 gap-2 overflow-hidden"
+>
+  <h1 class="flex items-center gap-2 shrink-0 min-w-0">
+    <span class="w-1 h-6 bg-hister-indigo shrink-0"></span><span
+      class="font-space text-sm md:text-lg tracking-[1px] font-extrabold text-text-brand truncate uppercase"
+      >Search History</span
+    >
+  </h1>
   <nav class="flex items-center gap-2 md:gap-3 min-w-0 shrink-0">
-    <div class="flex items-center gap-2 h-8 px-2 md:px-3 border-[3px] border-brutal-border bg-page-bg min-w-0">
+    <div
+      class="flex items-center gap-2 h-8 px-2 md:px-3 border-[3px] border-brutal-border bg-page-bg min-w-0"
+    >
       <Search class="size-3.5 text-text-brand-muted shrink-0" />
       <Input
         bind:value={filter}
@@ -198,9 +226,13 @@
 {:else}
   <div class="flex flex-col md:flex-row flex-1 min-h-0 overflow-hidden">
     <!-- Timeline sidebar: hidden on mobile, shown on md+ -->
-    <ScrollArea class="hidden md:block w-[280px] shrink-0 border-r-[3px] border-brutal-border pt-5 pr-3">
+    <ScrollArea
+      class="hidden md:block w-[280px] shrink-0 border-r-[3px] border-brutal-border pt-5 pr-3"
+    >
       <div class="space-y-1">
-        <span class="font-space text-xs font-bold tracking-[2px] text-text-brand-muted px-2.5 flex items-center gap-1.5 uppercase">
+        <span
+          class="font-space text-xs font-bold tracking-[2px] text-text-brand-muted px-2.5 flex items-center gap-1.5 uppercase"
+        >
           <Clock class="size-3" />
           Timeline
         </span>
@@ -208,15 +240,22 @@
 
         <Button
           variant="ghost"
-          class="flex items-center gap-2 w-full py-1.5 px-2.5 justify-start h-auto rounded-none {!filterByDate ? 'bg-[var(--hister-indigo)] text-white hover:bg-[var(--hister-indigo)]/90 hover:text-white' : 'hover:bg-muted-surface'}"
+          class="flex items-center gap-2 w-full py-1.5 px-2.5 justify-start h-auto rounded-none {!filterByDate
+            ? 'bg-[var(--hister-indigo)] text-white hover:bg-[var(--hister-indigo)]/90 hover:text-white'
+            : 'hover:bg-muted-surface'}"
           onclick={showAll}
         >
-          <span class="font-inter text-sm font-semibold" class:text-text-brand-secondary={!!filterByDate}>
+          <span
+            class="font-inter text-sm font-semibold"
+            class:text-text-brand-secondary={!!filterByDate}
+          >
             Show All
           </span>
           <Badge
             variant="secondary"
-            class="ml-auto shrink-0 text-xs px-1.5 py-0 h-4 border-0 {filterByDate ? 'bg-muted-surface text-text-brand-muted' : 'bg-white/20 text-white'}"
+            class="ml-auto shrink-0 text-xs px-1.5 py-0 h-4 border-0 {filterByDate
+              ? 'bg-muted-surface text-text-brand-muted'
+              : 'bg-white/20 text-white'}"
           >
             {filteredItems.length}
           </Badge>
@@ -229,13 +268,17 @@
           {@const isActive = filterByDate === group.key}
           <Button
             variant="ghost"
-            class="flex items-center gap-2 w-full py-1.5 px-2.5 justify-start h-auto rounded-none {isActive ? 'text-white hover:text-white' : 'hover:bg-muted-surface'}"
+            class="flex items-center gap-2 w-full py-1.5 px-2.5 justify-start h-auto rounded-none {isActive
+              ? 'text-white hover:text-white'
+              : 'hover:bg-muted-surface'}"
             style={isActive ? `background-color: ${getColorVar(color)};` : ''}
             onclick={() => scrollToGroup(group.key)}
           >
             <span
               class="w-2 h-2 shrink-0 rounded-full"
-              style={isActive ? 'background-color: white;' : `background-color: ${getColorVar(color)};`}
+              style={isActive
+                ? 'background-color: white;'
+                : `background-color: ${getColorVar(color)};`}
             ></span>
             <span
               class="font-inter text-sm truncate"
@@ -247,7 +290,9 @@
             </span>
             <Badge
               variant="secondary"
-              class="ml-auto shrink-0 text-xs px-1.5 py-0 h-4 border-0 {isActive ? 'bg-white/20 text-white' : 'bg-muted-surface text-text-brand-muted'}"
+              class="ml-auto shrink-0 text-xs px-1.5 py-0 h-4 border-0 {isActive
+                ? 'bg-white/20 text-white'
+                : 'bg-muted-surface text-text-brand-muted'}"
             >
               {group.items.length}
             </Badge>
@@ -257,11 +302,15 @@
     </ScrollArea>
 
     <!-- Mobile timeline: horizontal scrollable filter chips -->
-    <div class="flex md:hidden items-center gap-2 px-4 py-2 overflow-x-auto border-b-[3px] border-brutal-border bg-card-surface shrink-0">
+    <div
+      class="flex md:hidden items-center gap-2 px-4 py-2 overflow-x-auto border-b-[3px] border-brutal-border bg-card-surface shrink-0"
+    >
       <Button
         variant="ghost"
         size="sm"
-        class="shrink-0 text-xs font-inter font-semibold h-7 px-2.5 rounded-none {!filterByDate ? 'bg-hister-indigo text-white hover:bg-hister-indigo/90 hover:text-white' : 'text-text-brand-secondary hover:bg-muted-surface'}"
+        class="shrink-0 text-xs font-inter font-semibold h-7 px-2.5 rounded-none {!filterByDate
+          ? 'bg-hister-indigo text-white hover:bg-hister-indigo/90 hover:text-white'
+          : 'text-text-brand-secondary hover:bg-muted-surface'}"
         onclick={showAll}
       >
         All ({filteredItems.length})
@@ -272,7 +321,9 @@
         <Button
           variant="ghost"
           size="sm"
-          class="shrink-0 text-xs font-inter font-medium h-7 px-2.5 rounded-none {isActive ? 'text-white hover:text-white' : 'text-text-brand-secondary hover:bg-muted-surface'}"
+          class="shrink-0 text-xs font-inter font-medium h-7 px-2.5 rounded-none {isActive
+            ? 'text-white hover:text-white'
+            : 'text-text-brand-secondary hover:bg-muted-surface'}"
           style={isActive ? `background-color: ${getColorVar(color)};` : ''}
           onclick={() => scrollToGroup(group.key)}
         >
@@ -283,55 +334,60 @@
 
     <ScrollArea orientation="vertical" class="flex-1 min-w-0 min-h-0 max-w-full overflow-x-hidden">
       <div class="w-full overflow-hidden px-3 md:px-6 py-3 md:py-5 space-y-4 md:space-y-6">
-      {#each groups as group, gi}
-        {@const color = getGroupColor(gi)}
-        <div id="group-{encodeURIComponent(group.key)}" class="space-y-2">
-          <span class="font-outfit text-sm font-bold" style="color: {getColorVar(color)};">{group.label}</span>
-          <Separator class="h-0.5" style="background-color: {getColorVar(color)};" />
+        {#each groups as group, gi}
+          {@const color = getGroupColor(gi)}
+          <div id="group-{encodeURIComponent(group.key)}" class="space-y-2">
+            <span class="font-outfit text-sm font-bold" style="color: {getColorVar(color)};"
+              >{group.label}</span
+            >
+            <Separator class="h-0.5" style="background-color: {getColorVar(color)};" />
 
-          <div class="space-y-0">
-            {#each group.items as item, ii}
-              {@const itemColor = getGroupColor(gi + ii)}
-              <article
-                class="flex items-start md:items-center gap-2 md:gap-3 py-2 md:py-2.5 px-2.5 md:px-3.5 bg-card-surface border-b-[3px] border-b-brutal-border overflow-hidden"
-                style="border-left: 3px solid {getColorVar(itemColor)};"
-              >
-                <div class="flex-1 min-w-0 w-0 space-y-0.5">
-                  <a
-                    href={item.url}
-                    class="font-outfit text-sm md:text-base font-bold hover:underline block truncate no-underline"
-                    style="color: {getColorVar(itemColor)};"
-                    target="_blank"
-                    rel="noopener"
-                  >
-                    {(item.title || item.url).replace(/<[^>]*>/g, '')}
-                  </a>
-                  <span class="font-fira text-xs md:text-sm text-text-brand-muted block truncate" title={item.url}>{item.url}</span>
-                </div>
-                <nav class="flex items-center gap-1 shrink-0">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    class="text-xs font-inter text-text-brand-muted shrink-0 hover:text-hister-indigo gap-1 h-7 px-1.5 md:px-2 no-underline"
-                    href="/?q={encodeURIComponent(item.query)}"
-                  >
-                    <Search class="size-3" />
-                    <span class="hidden md:inline">Search</span>
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    class="text-text-brand-muted hover:text-hister-rose shrink-0 size-7"
-                    onclick={() => deleteHistoryItem(item)}
-                  >
-                    <Trash2 class="size-3.5" />
-                  </Button>
-                </nav>
-              </article>
-            {/each}
+            <div class="space-y-0">
+              {#each group.items as item, ii}
+                {@const itemColor = getGroupColor(gi + ii)}
+                <article
+                  class="flex items-start md:items-center gap-2 md:gap-3 py-2 md:py-2.5 px-2.5 md:px-3.5 bg-card-surface border-b-[3px] border-b-brutal-border overflow-hidden"
+                  style="border-left: 3px solid {getColorVar(itemColor)};"
+                >
+                  <div class="flex-1 min-w-0 w-0 space-y-0.5">
+                    <a
+                      href={item.url}
+                      class="font-outfit text-sm md:text-base font-bold hover:underline block truncate no-underline"
+                      style="color: {getColorVar(itemColor)};"
+                      target="_blank"
+                      rel="noopener"
+                    >
+                      {(item.title || item.url).replace(/<[^>]*>/g, '')}
+                    </a>
+                    <span
+                      class="font-fira text-xs md:text-sm text-text-brand-muted block truncate"
+                      title={item.url}>{item.url}</span
+                    >
+                  </div>
+                  <nav class="flex items-center gap-1 shrink-0">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      class="text-xs font-inter text-text-brand-muted shrink-0 hover:text-hister-indigo gap-1 h-7 px-1.5 md:px-2 no-underline"
+                      href="/?q={encodeURIComponent(item.query)}"
+                    >
+                      <Search class="size-3" />
+                      <span class="hidden md:inline">Search</span>
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      class="text-text-brand-muted hover:text-hister-rose shrink-0 size-7"
+                      onclick={() => deleteHistoryItem(item)}
+                    >
+                      <Trash2 class="size-3.5" />
+                    </Button>
+                  </nav>
+                </article>
+              {/each}
+            </div>
           </div>
-        </div>
-      {/each}
+        {/each}
       </div>
     </ScrollArea>
   </div>

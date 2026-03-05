@@ -7,7 +7,7 @@
   const categoryColors: Record<string, string> = {
     'Getting Started': 'bg-hister-indigo',
     Reference: 'bg-hister-teal',
-    Deployment: 'bg-hister-coral'
+    Deployment: 'bg-hister-coral',
   };
 </script>
 
@@ -16,7 +16,9 @@
 </svelte:head>
 
 <section class="max-w-4xl mx-auto px-6 md:px-12 py-12">
-  <h1 class="font-space text-4xl md:text-5xl font-black tracking-[-1px] uppercase text-[var(--text-primary)] mb-10">
+  <h1
+    class="font-space text-4xl md:text-5xl font-black tracking-[-1px] uppercase text-[var(--text-primary)] mb-10"
+  >
     Documentation
   </h1>
 
@@ -24,7 +26,9 @@
     <div class="mb-8">
       <div class="flex items-center gap-2 mb-3">
         <div class="w-2.5 h-2.5 {categoryColors[category.name] ?? 'bg-brutal-border'}"></div>
-        <span class="font-space text-xs font-bold tracking-[2px] uppercase text-[var(--text-secondary)]">
+        <span
+          class="font-space text-xs font-bold tracking-[2px] uppercase text-[var(--text-secondary)]"
+        >
           {category.name}
         </span>
       </div>
@@ -36,7 +40,9 @@
               href="/docs/{doc.slug}/"
               class="block p-5 bg-brutal-card border-[3px] border-brutal-border shadow-[6px_6px_0_var(--brutal-shadow)] no-underline hover:shadow-[3px_3px_0_var(--brutal-shadow)] hover:translate-x-[3px] hover:translate-y-[3px] transition-all"
             >
-              <h2 class="font-space text-lg font-extrabold tracking-[0.5px] text-[var(--text-primary)]">
+              <h2
+                class="font-space text-lg font-extrabold tracking-[0.5px] text-[var(--text-primary)]"
+              >
                 {doc.title}
               </h2>
             </a>
@@ -49,7 +55,9 @@
   <div class="mb-8">
     <div class="flex items-center gap-2 mb-3">
       <div class="w-2.5 h-2.5 bg-hister-indigo"></div>
-      <span class="font-space text-xs font-bold tracking-[2px] uppercase text-[var(--text-secondary)]">
+      <span
+        class="font-space text-xs font-bold tracking-[2px] uppercase text-[var(--text-secondary)]"
+      >
         Browser Extensions
       </span>
     </div>

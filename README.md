@@ -10,7 +10,6 @@ Hister is a web history management tool that provides blazing fast, content-base
 
 ![hister screencast](webui/website/static/demo.gif)
 
-
 ## Features
 
 - **Privacy-focused**: Keep your browsing history indexed locally - don't use remote search engines if it isn't necessary
@@ -38,10 +37,10 @@ Execute `./hister` to see all available commands.
 
 **NPM is required**
 
- - Clone the repository
- - Build with `./manage.sh build` (or `go generate ./...; go build`)
- - Run `./hister help` to list the available commands
- - Execute `./hister listen` to start the web application
+- Clone the repository
+- Build with `./manage.sh build` (or `go generate ./...; go build`)
+- Run `./hister help` to list the available commands
+- Execute `./hister listen` to start the web application
 
 ### Development
 
@@ -63,7 +62,6 @@ TUI-specific settings are stored in a separate `~/.config/hister/tui.yaml` file 
 
 Execute `./hister create-config config.yml` to generate a configuration file with the default configuration values.
 
-
 ## Check out our [Documentation](https://hister.org/docs/) for more details
 
 ## Community
@@ -73,7 +71,6 @@ Join us on IRCNet: #hister or on [Discord](https://discord.gg/vAjtDtFp)
 ## Bugs
 
 Bugs or suggestions? Visit the [issue tracker](https://github.com/asciimoo/hister/issues).
-
 
 ## License
 

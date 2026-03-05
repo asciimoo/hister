@@ -23,14 +23,20 @@
 </svelte:head>
 
 <div class="flex items-center justify-center min-h-screen p-4 bg-brutal-bg">
-  <Card.Root class="w-full max-w-md border-[3px] border-brutal-border shadow-[8px_8px_0px_var(--hister-indigo)] rounded-none">
+  <Card.Root
+    class="w-full max-w-md border-[3px] border-brutal-border shadow-[8px_8px_0px_var(--hister-indigo)] rounded-none"
+  >
     <Card.Header class="space-y-4 text-center border-b-[3px] border-border-brand-muted pb-6">
       <div class="flex justify-center">
-        <div class="size-16 rounded-full bg-hister-indigo/10 flex items-center justify-center border-[3px] border-hister-indigo">
+        <div
+          class="size-16 rounded-full bg-hister-indigo/10 flex items-center justify-center border-[3px] border-hister-indigo"
+        >
           <Lock class="size-8 text-hister-indigo" />
         </div>
       </div>
-      <Card.Title class="font-outfit text-2xl font-extrabold text-text-brand uppercase tracking-wide">
+      <Card.Title
+        class="font-outfit text-2xl font-extrabold text-text-brand uppercase tracking-wide"
+      >
         Authentication Required
       </Card.Title>
       <Card.Description class="font-inter text-text-brand-secondary">
@@ -39,7 +45,10 @@
     </Card.Header>
     <Card.Content class="pt-6 space-y-6">
       <div class="space-y-2">
-        <label for="token" class="font-space text-sm font-semibold text-text-brand uppercase tracking-wider">
+        <label
+          for="token"
+          class="font-space text-sm font-semibold text-text-brand uppercase tracking-wider"
+        >
           Token
         </label>
         <Input

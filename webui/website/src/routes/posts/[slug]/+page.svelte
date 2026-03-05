@@ -20,7 +20,9 @@
     {#if data.date}
       <time class="font-inter text-sm text-white/40" datetime={data.date}>{data.date}</time>
     {/if}
-    <h1 class="font-space text-3xl md:text-5xl font-black text-white tracking-[-1px] leading-tight mt-3">
+    <h1
+      class="font-space text-3xl md:text-5xl font-black text-white tracking-[-1px] leading-tight mt-3"
+    >
       {data.meta.title}
     </h1>
   </div>

@@ -61,9 +61,9 @@ After installing the extension, configure it to point to your Hister server (def
 
 Check available commands:
 
-   ```bash
-   ./hister help
-   ```
+```bash
+./hister help
+```
 
 1. Start the Hister server:
 
@@ -166,22 +166,22 @@ hister search
 
 The TUI uses the following keybindings by default:
 
-| Key                | Action          | Description                                     |
-|--------------------|-----------------|-------------------------------------------------|
-| `ctrl+c`           | quit            | Exit the TUI                                    |
-| `f1`               | toggle_help     | Show/hide keybindings help overlay              |
-| `tab`, `esc`       | toggle_focus    | Switch between search input and results list    |
-| `up`, `k`          | scroll_up       | Navigate up in results                          |
-| `down`, `j`        | scroll_down     | Navigate down in results                        |
-| `enter`            | open_result     | Open the selected result in your browser        |
-| `ctrl+d`, `d`      | delete_result   | Delete the selected result from the index       |
-| `ctrl+t`, `t`      | toggle_theme    | Open the interactive theme picker               |
-| `ctrl+s`, `s`      | toggle_settings | Open the keybinding editor overlay              |
-| `ctrl+o`, `o`      | toggle_sort     | Toggle domain-based sorting for search results  |
-| `alt+1`            | tab_search      | Switch to the Search tab                        |
-| `alt+2`            | tab_history     | Switch to the History tab                       |
-| `alt+3`            | tab_rules       | Switch to the Rules tab                         |
-| `alt+4`            | tab_add         | Switch to the Add tab                           |
+| Key           | Action          | Description                                    |
+| ------------- | --------------- | ---------------------------------------------- |
+| `ctrl+c`      | quit            | Exit the TUI                                   |
+| `f1`          | toggle_help     | Show/hide keybindings help overlay             |
+| `tab`, `esc`  | toggle_focus    | Switch between search input and results list   |
+| `up`, `k`     | scroll_up       | Navigate up in results                         |
+| `down`, `j`   | scroll_down     | Navigate down in results                       |
+| `enter`       | open_result     | Open the selected result in your browser       |
+| `ctrl+d`, `d` | delete_result   | Delete the selected result from the index      |
+| `ctrl+t`, `t` | toggle_theme    | Open the interactive theme picker              |
+| `ctrl+s`, `s` | toggle_settings | Open the keybinding editor overlay             |
+| `ctrl+o`, `o` | toggle_sort     | Toggle domain-based sorting for search results |
+| `alt+1`       | tab_search      | Switch to the Search tab                       |
+| `alt+2`       | tab_history     | Switch to the History tab                      |
+| `alt+3`       | tab_rules       | Switch to the Rules tab                        |
+| `alt+4`       | tab_add         | Switch to the Add tab                          |
 
 ### Mouse Controls
 
@@ -200,21 +200,21 @@ TUI settings are stored in a separate `tui.yaml` file alongside your main config
 
 ```yaml
 # Theme settings
-dark_theme: "dracula"
-light_theme: "gruvbox"
-color_scheme: "auto"
+dark_theme: 'dracula'
+light_theme: 'gruvbox'
+color_scheme: 'auto'
 # themes_dir: "/path/to/custom/themes"  # optional
 
 # TUI keybindings
 hotkeys:
-  ctrl+c: "quit"
-  ctrl+t: "toggle_theme"
-  ctrl+s: "toggle_settings"
-  ctrl+o: "toggle_sort"
-  alt+1: "tab_search"
-  alt+2: "tab_history"
-  alt+3: "tab_rules"
-  alt+4: "tab_add"
+  ctrl+c: 'quit'
+  ctrl+t: 'toggle_theme'
+  ctrl+s: 'toggle_settings'
+  ctrl+o: 'toggle_sort'
+  alt+1: 'tab_search'
+  alt+2: 'tab_history'
+  alt+3: 'tab_rules'
+  alt+4: 'tab_add'
   # ... and all other TUI keybindings
 ```
 

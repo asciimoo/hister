@@ -1,13 +1,10 @@
 {
-    "compilerOptions": {
-        "target": "ES6",
-        "module": "ES2015",
-        "moduleResolution": "bundler",
-        "skipLibCheck": true,
-        "types": ["chrome"]
-    },
-    "include": [
-        "src/**/*.ts",
-        "src/**/*.svelte"
-    ]
+  "compilerOptions": {
+    "target": "ES6",
+    "module": "ES2015",
+    "moduleResolution": "bundler",
+    "skipLibCheck": true,
+    "types": ["chrome"]
+  },
+  "include": ["src/**/*.ts", "src/**/*.svelte"]
 }

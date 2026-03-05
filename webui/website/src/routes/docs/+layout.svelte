@@ -6,13 +6,13 @@
   const isIndex = $derived(page.url.pathname === '/docs' || page.url.pathname === '/docs/');
 
   const currentDoc = $derived(
-    !isIndex ? data.docs.find((d) => page.url.pathname === `/docs/${d.slug}`) : null
+    !isIndex ? data.docs.find((d) => page.url.pathname === `/docs/${d.slug}`) : null,
   );
 
   const categoryColors: Record<string, string> = {
     'Getting Started': 'bg-hister-indigo',
     Reference: 'bg-hister-teal',
-    Deployment: 'bg-hister-coral'
+    Deployment: 'bg-hister-coral',
   };
 </script>
 
@@ -22,11 +22,14 @@
   <!-- Dark header banner -->
   <header class="w-full bg-[var(--text-primary)] px-6 py-10 md:py-14">
     <div class="max-w-7xl mx-auto">
-      <nav class="flex items-center gap-2 font-space text-[11px] font-bold tracking-[2px] uppercase text-white/40 mb-4">
+      <nav
+        class="flex items-center gap-2 font-space text-[11px] font-bold tracking-[2px] uppercase text-white/40 mb-4"
+      >
         <a
           href="/docs"
           class="hover:text-white/60 text-white/40 transition-colors no-underline font-space text-[11px] font-bold tracking-[2px]"
-        >Docs</a>
+          >Docs</a
+        >
         <span>/</span>
         <span class="text-white/70">{currentDoc?.title}</span>
       </nav>
@@ -54,7 +57,8 @@
             {#each category.docs as doc}
               <a
                 href="/docs/{doc.slug}"
-                class="font-inter text-sm py-2 px-3 no-underline border-l-[3px] transition-colors {page.url.pathname === `/docs/${doc.slug}`
+                class="font-inter text-sm py-2 px-3 no-underline border-l-[3px] transition-colors {page
+                  .url.pathname === `/docs/${doc.slug}`
                   ? 'border-hister-indigo text-[var(--text-primary)] font-semibold bg-hister-indigo/5'
                   : 'border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-brutal-border'}"
               >

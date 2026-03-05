@@ -2,7 +2,7 @@
 version: 2
 
 snapshot:
-  version_template: "latest"
+  version_template: 'latest'
 
 builds:
   - id: build_cgo_unix
@@ -76,4 +76,4 @@ release:
   replace_existing_artifacts: true
 
 archives:
-  - formats: ["binary"]
+  - formats: ['binary']

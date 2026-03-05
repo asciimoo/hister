@@ -5,11 +5,15 @@
 </script>
 
 <section class="w-full bg-brutal-bg px-6 py-12 md:py-24 flex flex-col items-center gap-8">
-  <h1 class="font-outfit text-5xl md:text-7xl lg:text-[100px] font-black text-center leading-[0.95] tracking-[-2px] text-[var(--text-primary)] max-w-[1000px] uppercase">
-    Your Own <br> Search Engine
+  <h1
+    class="font-outfit text-5xl md:text-7xl lg:text-[100px] font-black text-center leading-[0.95] tracking-[-2px] text-[var(--text-primary)] max-w-[1000px] uppercase"
+  >
+    Your Own <br /> Search Engine
   </h1>
 
-  <p class="font-inter text-base md:text-lg text-center leading-relaxed text-[var(--text-secondary)] max-w-[700px]">
+  <p
+    class="font-inter text-base md:text-lg text-center leading-relaxed text-[var(--text-secondary)] max-w-[700px]"
+  >
     Hister automatically indexes every page you visit.<br />
     Full-text search across your entire browsing history and beyond.<br />
     Private. Fast. Yours.

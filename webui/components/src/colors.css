@@ -1,6 +1,6 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
-@import "tw-animate-css";
+@import 'tw-animate-css';
 
 @custom-variant dark (&:is(.dark *));
 
@@ -75,30 +75,30 @@
   --muted-foreground: #888888;
   --accent: #363636;
   --accent-foreground: #e0e0e0;
-  --destructive: #D47B8B;
+  --destructive: #d47b8b;
   --border: #333333;
   --input: #383838;
-  --ring: #9B9BD4;
-  --chart-1: #D4956B;
-  --chart-2: #6BA8A8;
-  --chart-3: #9B9BD4;
-  --chart-4: #D4B86B;
-  --chart-5: #D47B8B;
+  --ring: #9b9bd4;
+  --chart-1: #d4956b;
+  --chart-2: #6ba8a8;
+  --chart-3: #9b9bd4;
+  --chart-4: #d4b86b;
+  --chart-5: #d47b8b;
   --sidebar: #1e1e1e;
   --sidebar-foreground: #e0e0e0;
-  --sidebar-primary: #9B9BD4;
+  --sidebar-primary: #9b9bd4;
   --sidebar-primary-foreground: #e0e0e0;
   --sidebar-accent: #363636;
   --sidebar-accent-foreground: #e0e0e0;
   --sidebar-border: #333333;
-  --sidebar-ring: #9B9BD4;
-  --hister-coral: #D4956B;
-  --hister-indigo: #9B9BD4;
-  --hister-teal: #6BA8A8;
-  --hister-amber: #D4B86B;
-  --hister-rose: #D47B8B;
+  --sidebar-ring: #9b9bd4;
+  --hister-coral: #d4956b;
+  --hister-indigo: #9b9bd4;
+  --hister-teal: #6ba8a8;
+  --hister-amber: #d4b86b;
+  --hister-rose: #d47b8b;
   --hister-cyan: #74b9ff;
-  --hister-lime: #A0C070;
+  --hister-lime: #a0c070;
   --brutal-bg: #1a1a1a;
   --brutal-border: #333333;
   --brutal-card: #222222;

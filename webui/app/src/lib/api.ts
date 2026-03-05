@@ -34,12 +34,9 @@ export async function fetchConfig(): Promise<AppConfig> {
   return _config!;
 }
 
-export async function apiFetch(
-  url: string,
-  options: RequestInit = {}
-): Promise<Response> {
+export async function apiFetch(url: string, options: RequestInit = {}): Promise<Response> {
   const headers: Record<string, string> = {
-    ...(options.headers as Record<string, string>)
+    ...(options.headers as Record<string, string>),
   };
   if (_csrf && options.method && options.method.toUpperCase() !== 'GET') {
     headers['X-CSRF-Token'] = _csrf;
@@ -48,7 +45,7 @@ export async function apiFetch(
   if (token) {
     headers['X-Access-Token'] = token;
   }
-  const res = await fetch("api"+url, { ...options, headers });
+  const res = await fetch('api' + url, { ...options, headers });
   if (res.status === 403) {
     window.location.href = '/auth';
     throw new Error('Authentication required');

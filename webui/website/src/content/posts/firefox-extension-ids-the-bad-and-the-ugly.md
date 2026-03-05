@@ -49,13 +49,13 @@ In Chrome, CSRF protection for extension-to-server communication is straightforw
 
 ```javascript
 app.post('/api/add', (req, res) => {
-    const allowedOrigin = 'chrome-extension://cciilamhchpmbdnniabclekddabkifhb';
+  const allowedOrigin = 'chrome-extension://cciilamhchpmbdnniabclekddabkifhb';
 
-    if (req.headers.origin !== allowedOrigin) {
-        return res.status(403).json({ error: 'Invalid origin' });
-    }
+  if (req.headers.origin !== allowedOrigin) {
+    return res.status(403).json({ error: 'Invalid origin' });
+  }
 
-    // Process the request...
+  // Process the request...
 });
 ```
 

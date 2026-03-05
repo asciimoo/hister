@@ -3,8 +3,12 @@
   import { Button } from '@hister/components';
 </script>
 
-<section class="w-full bg-[var(--text-primary)] border-t-[3px] border-hister-indigo px-6 py-16 md:py-24 flex flex-col items-center gap-10">
-  <h2 class="font-space text-4xl md:text-6xl lg:text-[64px] font-black text-white text-center leading-[0.95] tracking-[-1px] max-w-[800px]">
+<section
+  class="w-full bg-[var(--text-primary)] border-t-[3px] border-hister-indigo px-6 py-16 md:py-24 flex flex-col items-center gap-10"
+>
+  <h2
+    class="font-space text-4xl md:text-6xl lg:text-[64px] font-black text-white text-center leading-[0.95] tracking-[-1px] max-w-[800px]"
+  >
     READY TO OWN YOUR SEARCH?
   </h2>
 

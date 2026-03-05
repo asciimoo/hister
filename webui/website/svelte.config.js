@@ -8,6 +8,6 @@ export default {
   preprocess: [mdsvex({ extensions: ['.md', '.svx'], rehypePlugins: [rehypeSlug] })],
   kit: {
     adapter: adapter({ pages: 'build', assets: 'build', fallback: undefined }),
-    prerender: { handleHttpError: 'warn', handleMissingId: 'ignore' }
-  }
+    prerender: { handleHttpError: 'warn', handleMissingId: 'ignore' },
+  },
 };

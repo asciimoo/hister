@@ -44,4 +44,4 @@ builds:
           - CC=oa64-clang
 
 archives:
-  - formats: ["binary"]
+  - formats: ['binary']

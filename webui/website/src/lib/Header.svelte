@@ -21,7 +21,10 @@
 
 <header class="sticky top-0 z-50 w-full bg-brutal-bg border-b-[3px] border-brutal-border">
   <nav class="flex items-center justify-between px-6 md:px-12 py-4">
-    <a href="/" class="font-space text-[28px] font-extrabold tracking-[2px] text-[var(--text-primary)] no-underline">
+    <a
+      href="/"
+      class="font-space text-[28px] font-extrabold tracking-[2px] text-[var(--text-primary)] no-underline"
+    >
       HISTER
     </a>
 
@@ -30,7 +33,9 @@
         <li>
           <a
             href={link.href}
-            class="font-space text-[13px] font-semibold tracking-[1.5px] no-underline transition-colors {isActive(link.href)
+            class="font-space text-[13px] font-semibold tracking-[1.5px] no-underline transition-colors {isActive(
+              link.href,
+            )
               ? 'text-[var(--text-primary)]'
               : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}"
           >
@@ -52,11 +57,7 @@
       </Button>
     </div>
 
-    <button
-      class="md:hidden p-2"
-      onclick={() => menuOpen = !menuOpen}
-      aria-label="Toggle menu"
-    >
+    <button class="md:hidden p-2" onclick={() => (menuOpen = !menuOpen)} aria-label="Toggle menu">
       {#if menuOpen}
         <X size={24} />
       {:else}
@@ -66,15 +67,19 @@
   </nav>
 
   {#if menuOpen}
-    <ul class="md:hidden border-t-[2px] border-brutal-border bg-brutal-bg px-6 py-4 flex flex-col gap-4 list-none m-0">
+    <ul
+      class="md:hidden border-t-[2px] border-brutal-border bg-brutal-bg px-6 py-4 flex flex-col gap-4 list-none m-0"
+    >
       {#each links as link}
         <li>
           <a
             href={link.href}
-            class="font-space text-[15px] font-semibold tracking-[1.5px] no-underline {isActive(link.href)
+            class="font-space text-[15px] font-semibold tracking-[1.5px] no-underline {isActive(
+              link.href,
+            )
               ? 'text-[var(--text-primary)]'
               : 'text-[var(--text-secondary)]'}"
-            onclick={() => menuOpen = false}
+            onclick={() => (menuOpen = false)}
           >
             {link.label}
           </a>

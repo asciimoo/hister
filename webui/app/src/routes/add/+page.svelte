@@ -29,7 +29,7 @@
       const res = await apiFetch('/add', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url, title, text })
+        body: JSON.stringify({ url, title, text }),
       });
       if (res.status === 201) {
         message = 'Document added successfully.';
@@ -58,15 +58,23 @@
 </svelte:head>
 
 <div class="flex-1 flex items-start justify-center pt-12 px-6 overflow-y-auto">
-  <Card.Root class="w-full max-w-[640px] bg-card-surface border-[3px] border-hister-indigo shadow-[6px_6px_0px_var(--hister-indigo)] rounded-none py-0 gap-0 overflow-hidden">
+  <Card.Root
+    class="w-full max-w-[640px] bg-card-surface border-[3px] border-hister-indigo shadow-[6px_6px_0px_var(--hister-indigo)] rounded-none py-0 gap-0 overflow-hidden"
+  >
     <Card.Header class="flex-row items-center justify-between px-7 py-5 bg-hister-indigo gap-2">
       <Card.Title class="font-outfit font-black text-[22px] text-white">Add Entry</Card.Title>
-      <Card.Description class="font-inter text-[13px] font-medium text-white/70">Manually index a page</Card.Description>
+      <Card.Description class="font-inter text-[13px] font-medium text-white/70"
+        >Manually index a page</Card.Description
+      >
     </Card.Header>
 
     <Card.Content class="p-7 space-y-6">
       {#if message}
-        <Alert.Root class="border-[2px] rounded-none {isError ? 'border-hister-rose bg-hister-rose/10 text-hister-rose' : 'border-hister-teal bg-hister-teal/10 text-hister-teal'}">
+        <Alert.Root
+          class="border-[2px] rounded-none {isError
+            ? 'border-hister-rose bg-hister-rose/10 text-hister-rose'
+            : 'border-hister-teal bg-hister-teal/10 text-hister-teal'}"
+        >
           {#if isError}
             <AlertCircle class="size-4 shrink-0" />
           {:else}

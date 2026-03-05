@@ -3,10 +3,7 @@ import { defineConfig } from 'vite';
 import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig(({ mode }) => ({
-  plugins: [
-    tailwindcss(),
-    sveltekit(),
-  ],
+  plugins: [tailwindcss(), sveltekit()],
   build: {
     minify: mode !== 'development',
     cssMinify: mode !== 'development',

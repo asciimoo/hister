@@ -9,9 +9,7 @@
 execute `./manage.sh build` to build the `app/`
 execute `npm run build -w @hister/website` to build the `website/`
 
-
 live preview available for the `website/` with: `npm run preview -w @hister/website`
-
 
 ## Add new component from ShadCN
 
@@ -19,4 +17,5 @@ live preview available for the `website/` with: `npm run preview -w @hister/webs
 cd components
 npx shadcn-svelte@latest add [component]
 ```
+
 change imports from `$lib/utils` to `@hister/components/utils` under `src/lib/components/ui/[component]/*` if necessary

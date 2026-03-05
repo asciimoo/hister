@@ -189,6 +189,6 @@ Hister is open source (AGPLv3) and welcomes contributions!
 
 ---
 
-*Have questions or feedback? Open an issue on [GitHub](https://github.com/asciimoo/hister) or reach out to [@asciimoo](https://github.com/asciimoo).*
+_Have questions or feedback? Open an issue on [GitHub](https://github.com/asciimoo/hister) or reach out to [@asciimoo](https://github.com/asciimoo)._
 
-*Last updated: February 2026*
+_Last updated: February 2026_

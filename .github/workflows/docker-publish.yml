@@ -2,12 +2,12 @@ name: Publish Docker Image
 
 on:
   push:
-    branches: [ "master" ]    # Trigger on pushes to master branch
-    tags: [ "v*.*.*" ]     # Trigger on semantic version tags (e.g., v1.0.0)
+    branches: ['master'] # Trigger on pushes to master branch
+    tags: ['v*.*.*'] # Trigger on semantic version tags (e.g., v1.0.0)
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository_owner }}/hister   # Auto-uses your GitHub username/org
+  IMAGE_NAME: ${{ github.repository_owner }}/hister # Auto-uses your GitHub username/org
 
 jobs:
   build-and-push:
@@ -17,14 +17,14 @@ jobs:
       matrix:
         include:
           - target: release
-            suffix: ""
+            suffix: ''
           - target: root
-            suffix: "-root"
+            suffix: '-root'
           - target: debug
-            suffix: "-debug"
+            suffix: '-debug'
     permissions:
       contents: read
-      packages: write    # Required to push to GHCR
+      packages: write # Required to push to GHCR
 
     steps:
       - name: Checkout Code
@@ -33,7 +33,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
-          driver: docker-container  # Required for multi-platform
+          driver: docker-container # Required for multi-platform
           install: true
 
       - name: Log in to GHCR
@@ -41,7 +41,7 @@ jobs:
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}   # Auto-generated, no setup needed
+          password: ${{ secrets.GITHUB_TOKEN }} # Auto-generated, no setup needed
 
       - name: Extract Metadata (tags, labels)
         id: meta
@@ -61,7 +61,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          platforms: linux/amd64,linux/arm64   # Build for Intel + ARM
+          platforms: linux/amd64,linux/arm64 # Build for Intel + ARM
           target: ${{ matrix.target }}
           push: ${{ github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/') }}
           tags: ${{ steps.meta.outputs.tags }}

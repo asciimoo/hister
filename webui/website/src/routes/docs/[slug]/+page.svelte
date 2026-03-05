@@ -26,7 +26,7 @@
     toc = Array.from(headings).map((h) => ({
       id: h.id,
       text: h.textContent ?? '',
-      level: h.tagName === 'H2' ? 2 : 3
+      level: h.tagName === 'H2' ? 2 : 3,
     }));
 
     const observer = new IntersectionObserver(
@@ -37,7 +37,7 @@
           }
         }
       },
-      { rootMargin: '-80px 0px -60% 0px', threshold: 0 }
+      { rootMargin: '-80px 0px -60% 0px', threshold: 0 },
     );
 
     headings.forEach((h) => observer.observe(h));
@@ -64,12 +64,10 @@
           href="/docs/{data.prev.slug}"
           class="group flex items-center gap-3 no-underline text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors h-auto rounded-none px-2 py-2"
         >
-          <ArrowLeft
-            size={18}
-            class="transition-transform group-hover:-translate-x-1"
-          />
+          <ArrowLeft size={18} class="transition-transform group-hover:-translate-x-1" />
           <div class="flex flex-col items-start">
-            <span class="font-space text-[10px] font-bold tracking-[2px] uppercase text-[var(--text-secondary)]"
+            <span
+              class="font-space text-[10px] font-bold tracking-[2px] uppercase text-[var(--text-secondary)]"
               >Previous</span
             >
             <span class="font-inter text-sm font-semibold">{data.prev.title}</span>
@@ -86,15 +84,13 @@
           class="group flex items-center gap-3 no-underline text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors text-right h-auto rounded-none px-2 py-2"
         >
           <div class="flex flex-col items-end">
-            <span class="font-space text-[10px] font-bold tracking-[2px] uppercase text-[var(--text-secondary)]"
+            <span
+              class="font-space text-[10px] font-bold tracking-[2px] uppercase text-[var(--text-secondary)]"
               >Next</span
             >
             <span class="font-inter text-sm font-semibold">{data.next.title}</span>
           </div>
-          <ArrowRight
-            size={18}
-            class="transition-transform group-hover:translate-x-1"
-          />
+          <ArrowRight size={18} class="transition-transform group-hover:translate-x-1" />
         </Button>
       {:else}
         <div></div>

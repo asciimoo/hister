@@ -1,5 +1,5 @@
-import "../app.css";
-import { mount } from "svelte";
-import Options from "./Options.svelte";
+import '../app.css';
+import { mount } from 'svelte';
+import Options from './Options.svelte';
 
-mount(Options, { target: document.getElementById("app")! });
+mount(Options, { target: document.getElementById('app')! });

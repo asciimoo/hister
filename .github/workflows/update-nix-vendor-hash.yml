@@ -48,10 +48,10 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           branch: update-nix-hashes
-          commit-message: "[chore] update Nix hashes for Go/NPM changes"
-          title: "Update Nix hashes"
+          commit-message: '[chore] update Nix hashes for Go/NPM changes'
+          title: 'Update Nix hashes'
           body: |
             [chore] update nix/package.nix hashes (vendorHash and/or npmDepsHash)
-            
+
             Triggered by: ${{ github.repository }}@${{ github.sha }}
           delete-branch: true

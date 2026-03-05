@@ -1,1 +1,1 @@
-declare module "$app/stores";
+declare module '$app/stores';

@@ -68,7 +68,7 @@ jobs:
         uses: softprops/action-gh-release@v2.5.0
         with:
           tag_name: rolling
-          name: "Hister (Dev Build)"
+          name: 'Hister (Dev Build)'
           body: ${{ steps.release_body.outputs.body }}
           prerelease: true
           make_latest: true

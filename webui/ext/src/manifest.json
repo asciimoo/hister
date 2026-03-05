@@ -15,30 +15,21 @@
   },
   "content_scripts": [
     {
-      "js": [
-        "content.js"
-      ],
+      "js": ["content.js"],
       "matches": ["<all_urls>"]
     }
   ],
-  "background": {
-  },
+  "background": {},
   "options_page": "options.html",
-  "web_accessible_resources": [{
-    "resources": [
-      "assets/*"
-    ],
-    "matches": [],
-    "extension_ids": []
-  }],
-  "permissions": [
-    "tabs",
-    "storage",
-    "webRequest"
+  "web_accessible_resources": [
+    {
+      "resources": ["assets/*"],
+      "matches": [],
+      "extension_ids": []
+    }
   ],
-  "host_permissions": [
-    "*://*/*"
-  ],
+  "permissions": ["tabs", "storage", "webRequest"],
+  "host_permissions": ["*://*/*"],
   "chrome_settings_overrides": {
     "search_provider": {
       "name": "Hister",
