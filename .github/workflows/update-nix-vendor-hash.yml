@@ -28,7 +28,7 @@ jobs:
         uses: actions/checkout@v6.0.2
 
       - name: Install Nix
-        uses: cachix/install-nix-action@v31.9.0
+        uses: cachix/install-nix-action@v31.10.0
 
       - name: Update Nix hashes
         run: ./nix/update-nix-vendor-hash.sh
