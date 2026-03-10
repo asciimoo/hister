@@ -25,7 +25,7 @@ jobs:
         uses: actions/setup-go@v5
 
       - name: Set up Node
-        uses: actions/setup-node@v6.2.0
+        uses: actions/setup-node@v6.3.0
         with:
           node-version: latest
 
