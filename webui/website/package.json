@@ -15,7 +15,7 @@
     "@tailwindcss/vite": "^4.2.1",
     "mdsvex": "^0.12.6",
     "shiki": "^4.0.1",
-    "svelte": "^5.53.7",
+    "svelte": "^5.53.9",
     "tailwindcss": "^4.2.1",
     "vite": "^7.3.1"
   },
