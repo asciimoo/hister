@@ -27,6 +27,6 @@
     "@hister/components": "^1.0.0",
     "@tailwindcss/typography": "^0.5.19",
     "animejs": "^4.3.6",
-    "lucide-svelte": "^0.575.0"
+    "lucide-svelte": "^0.577.0"
   }
 }
