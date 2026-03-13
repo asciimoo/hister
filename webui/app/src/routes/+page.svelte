@@ -860,7 +860,7 @@
                       openResult(r.url, r.title || '*title*', e.ctrlKey || e.metaKey);
                     }}
                   >
-                    {r.title || '*title*'}
+                    {@html r.title || '*title*'}
                   </a>
                   <div class="flex items-center gap-2">
                     <span
@@ -973,7 +973,7 @@
                       openResult(r.url, r.title || '*title*', e.ctrlKey || e.metaKey);
                     }}
                   >
-                    {r.title || '*title*'}
+                    {@html r.title || '*title*'}
                   </a>
                   <div class="items-left flex flex-col gap-0 md:flex-row md:items-center md:gap-2">
                     <span

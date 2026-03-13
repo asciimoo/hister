@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -385,7 +386,6 @@ func Search(cfg *config.Config, q *Query) (*Results, error) {
 	switch q.Highlight {
 	case "HTML":
 		req.Highlight = bleve.NewHighlight()
-		req.Highlight.Fields = []string{"text"}
 	case "text":
 		req.Highlight = bleve.NewHighlightWithStyle("ansi")
 	case "tui":
@@ -409,11 +409,12 @@ func Search(cfg *config.Config, q *Query) (*Results, error) {
 			d.Text = t[0]
 		}
 		if t, ok := v.Fragments["title"]; ok {
+			// Bleve HTML Highlighter HTML-escapes the original title (so that fragments are surrounded with `<mark>`)
 			d.Title = t[0]
 		} else {
 			s, ok := v.Fields["title"].(string)
 			if ok {
-				d.Title = s
+				d.Title = html.EscapeString(s)
 			}
 		}
 		if i, ok := v.Fields["favicon"].(string); ok {
