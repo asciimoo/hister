@@ -2,6 +2,9 @@
   import { Button } from '@hister/components/ui/button';
   import * as Card from '@hister/components/ui/card';
   import SettingsInput from './SettingsInput.svelte';
+  import { queueStore } from '../modules/queue-store.svelte';
+  import QueuePanel from '../modules/QueuePanel.svelte';
+  import { STORAGE_KEYS } from '../modules/constants';
 
   const defaultURL = 'http://127.0.0.1:4433/';
 
@@ -10,17 +13,33 @@
   let message = $state('');
   let messageType: 'success' | 'error' = $state('success');
 
-  chrome.storage.local.get(['histerURL', 'histerToken'], (data) => {
-    if (!data['histerURL']) {
-      chrome.storage.local.set({ histerURL: defaultURL });
+  const queue = queueStore();
+
+  chrome.storage.local.get([STORAGE_KEYS.url, STORAGE_KEYS.token], (data) => {
+    if (!data[STORAGE_KEYS.url]) {
+      chrome.storage.local.set({ [STORAGE_KEYS.url]: defaultURL });
     }
-    url = data['histerURL'] || defaultURL;
-    token = data['histerToken'] || '';
+    url = data[STORAGE_KEYS.url] || defaultURL;
+    token = data[STORAGE_KEYS.token] || '';
   });
+
+  queue.refresh();
+
+  async function retry() {
+    const r = await queue.retry();
+    message = r.message;
+    messageType = r.type;
+  }
+
+  async function clear() {
+    const r = await queue.clear();
+    message = r.message;
+    messageType = r.type;
+  }
 
   function save(e: Event) {
     e.preventDefault();
-    chrome.storage.local.set({ histerURL: url, histerToken: token }).then(() => {
+    chrome.storage.local.set({ [STORAGE_KEYS.url]: url, [STORAGE_KEYS.token]: token }).then(() => {
       message = 'Settings saved';
       messageType = 'success';
     });
@@ -36,6 +55,17 @@
   </div>
 
   <div class="mx-auto max-w-2xl space-y-8 px-8 py-10">
+    <QueuePanel
+      status={queue.status}
+      count={queue.count}
+      expanded={queue.expanded}
+      items={queue.items}
+      onretry={retry}
+      onclear={clear}
+      ontoggle={queue.toggle}
+      onremove={queue.remove}
+    />
+
     <!-- Connection settings card -->
     <Card.Root
       class="bg-card-surface border-hister-indigo gap-0 overflow-hidden rounded-none border-[3px] py-0 shadow-[6px_6px_0_var(--hister-indigo)]"

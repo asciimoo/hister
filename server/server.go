@@ -273,8 +273,9 @@ func withCSRF(handler endpointHandler) endpointHandler {
 			handler(c)
 			return
 		}
-		// Allow add requests from the addons
-		if c.Request.URL.Path == c.Config.BasePathPrefix()+"/add" || c.Request.URL.Path == c.Config.BasePathPrefix()+"/api/add" {
+		// Allow add/batch requests from the addons
+		p := strings.TrimPrefix(c.Request.URL.Path, c.Config.BasePathPrefix())
+		if p == "/add" || p == "/api/add" || p == "/api/batch" {
 			if strings.HasPrefix(c.Request.Header.Get("Origin"), "moz-extension://") {
 				handler(c)
 				return
@@ -548,6 +549,75 @@ func doSearch(query *indexer.Query, cfg *config.Config) (*indexer.Results, error
 	duration := float32(time.Since(start).Milliseconds()) / 1000.
 	res.SearchDuration = fmt.Sprintf("%.3f seconds", duration)
 	return res, nil
+}
+
+func serveBatch(c *webContext) {
+	type batchRequest struct {
+		Documents []*indexer.Document `json:"documents"`
+		History   []historyItem       `json:"history"`
+	}
+	type batchResponse struct {
+		Indexed int      `json:"indexed"`
+		Skipped int      `json:"skipped"`
+		Errors  []string `json:"errors,omitempty"`
+	}
+
+	var req batchRequest
+	if err := json.NewDecoder(c.Request.Body).Decode(&req); err != nil {
+		http.Error(c.Response, "invalid JSON body", http.StatusBadRequest)
+		return
+	}
+
+	if len(req.Documents)+len(req.History) == 0 {
+		c.JSON(batchResponse{})
+		return
+	}
+	if len(req.Documents)+len(req.History) > 100 {
+		http.Error(c.Response, "batch size exceeds 100 items", http.StatusBadRequest)
+		return
+	}
+
+	var resp batchResponse
+
+	// Filter and index documents
+	if len(req.Documents) > 0 {
+		docs := make([]*indexer.Document, 0, len(req.Documents))
+		for _, d := range req.Documents {
+			if d.URL == "" {
+				resp.Skipped++
+				resp.Errors = append(resp.Errors, "document missing URL")
+				continue
+			}
+			if c.Config.Rules.IsSkip(d.URL) || strings.HasPrefix(d.URL, c.Config.BaseURL("/")) {
+				resp.Skipped++
+				continue
+			}
+			docs = append(docs, d)
+		}
+		if len(docs) > 0 {
+			indexed, skipped, errs := indexer.AddBatch(docs)
+			resp.Indexed += indexed
+			resp.Skipped += skipped
+			for _, e := range errs {
+				resp.Errors = append(resp.Errors, e.Error())
+			}
+		}
+	}
+
+	// Process history items
+	for _, h := range req.History {
+		if h.Delete {
+			if err := model.DeleteHistoryItem(h.Query, h.URL); err != nil {
+				resp.Errors = append(resp.Errors, err.Error())
+			}
+			continue
+		}
+		if err := model.UpdateHistory(strings.TrimSpace(h.Query), strings.TrimSpace(h.URL), strings.TrimSpace(h.Title)); err != nil {
+			resp.Errors = append(resp.Errors, err.Error())
+		}
+	}
+
+	c.JSON(resp)
 }
 
 func serveAdd(c *webContext) {

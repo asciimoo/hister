@@ -195,6 +195,14 @@ func init() {
 			},
 		},
 		{
+			Name:         "Batch add",
+			Path:         "/api/batch",
+			Method:       POST,
+			CSRFRequired: true,
+			Handler:      serveBatch,
+			Description:  "Batch add documents and history items",
+		},
+		{
 			Name:         "API",
 			Path:         "/api",
 			Method:       GET,

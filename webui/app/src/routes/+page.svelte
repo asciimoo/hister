@@ -17,7 +17,7 @@
     openURL,
   } from '$lib/search';
   import { fetchConfig, apiFetch } from '$lib/api';
-  import type { SearchResults } from '$lib/search';
+  import type { SearchResults, SearchResult } from '$lib/search';
   import { animate } from 'animejs';
   import { Input } from '@hister/components/ui/input';
   import { Button } from '@hister/components/ui/button';
@@ -26,7 +26,7 @@
   import * as Dialog from '@hister/components/ui/dialog';
   import * as Card from '@hister/components/ui/card';
   import * as DropdownMenu from '@hister/components/ui/dropdown-menu';
-  import * as Tooltip from  '@hister/components/ui/tooltip';
+  import * as Tooltip from '@hister/components/ui/tooltip';
   import { ScrollArea } from '@hister/components/ui/scroll-area';
   import { Kbd } from '@hister/components/ui/kbd';
   import {
@@ -203,6 +203,23 @@
     autocomplete = (query && res.query_suggestion) || '';
     highlightIdx = 0;
     resultsShown = true;
+
+    // Request supplemental results from extension's offline queue
+    if (query) {
+      window.dispatchEvent(new CustomEvent('hister:search', { detail: { query } }));
+    }
+  }
+
+  function mergeQueuedResults(queuedResults: SearchResult[]) {
+    if (!lastResults || !queuedResults?.length) return;
+    const existingUrls = new Set((lastResults.documents || []).map((d) => d.url));
+    const newResults = queuedResults.filter((r) => !existingUrls.has(r.url));
+    if (newResults.length > 0) {
+      lastResults = {
+        ...lastResults,
+        documents: [...(lastResults.documents || []), ...newResults],
+      };
+    }
   }
 
   function stripHtml(s: string): string {
@@ -598,9 +615,17 @@
       keyHandler = new KeyHandler(config.hotkeys, hotkeyActions);
       loadHomeStats();
     })();
+
+    // Listen for supplemental results from extension's offline queue
+    const onQueued = ((e: CustomEvent<{ results: SearchResult[] }>) => {
+      mergeQueuedResults(e.detail?.results);
+    }) as EventListener;
+    window.addEventListener('hister:queue-results', onQueued);
+
     return () => {
       wsManager?.close();
       cleanupAnimations();
+      window.removeEventListener('hister:queue-results', onQueued);
     };
   });
 </script>
@@ -690,13 +715,11 @@
         bind:value={query}
         placeholder="Search..."
         class="font-inter text-text-brand placeholder:text-text-brand-muted h-full flex-1 border-0 bg-transparent p-0 text-lg font-medium shadow-none focus-visible:ring-0 md:text-2xl"
-        />
+      />
       <Tooltip.Provider delayDuration={0}>
         <Tooltip.Root>
           <Tooltip.Trigger>
-            <div
-                class="h-3 w-3 shrink-0 {connected ? 'bg-hister-lime' : 'bg-hister-rose'}"
-            ></div>
+            <div class="h-3 w-3 shrink-0 {connected ? 'bg-hister-lime' : 'bg-hister-rose'}"></div>
           </Tooltip.Trigger>
           <Tooltip.Portal>
             <Tooltip.Content>
@@ -1006,6 +1029,12 @@
                         title={formatTimestamp(r.added)}>· {formatRelativeTime(r.added)}</span
                       >
                     {/if}
+                    {#if r.queued}
+                      <Badge
+                        variant="outline"
+                        class="border-hister-indigo text-hister-indigo text-xs">Pending sync</Badge
+                      >
+                    {/if}
                     <Button
                       data-readable
                       variant="link"
@@ -1135,18 +1164,16 @@
           class="font-inter text-text-brand placeholder:text-text-brand-muted h-full min-w-0 flex-1 border-0 bg-transparent p-0 shadow-none focus-visible:ring-0 md:text-lg"
         />
         <Tooltip.Provider delayDuration={0}>
-            <Tooltip.Root>
+          <Tooltip.Root>
             <Tooltip.Trigger class="mr-4">
-                <div
-                    class="h-3 w-3 shrink-0 {connected ? 'bg-hister-lime' : 'bg-hister-rose'}"
-                ></div>
+              <div class="h-3 w-3 shrink-0 {connected ? 'bg-hister-lime' : 'bg-hister-rose'}"></div>
             </Tooltip.Trigger>
             <Tooltip.Portal>
-                <Tooltip.Content>
+              <Tooltip.Content>
                 Server: {connected ? 'Connected' : 'Disconnected'}
-                </Tooltip.Content>
+              </Tooltip.Content>
             </Tooltip.Portal>
-            </Tooltip.Root>
+          </Tooltip.Root>
         </Tooltip.Provider>
       </div>
     </div>

@@ -4,6 +4,9 @@
   import { Switch } from '@hister/components/ui/switch';
   import * as Card from '@hister/components/ui/card';
   import SettingsInput from '../options/SettingsInput.svelte';
+  import { queueStore } from '../modules/queue-store.svelte';
+  import QueuePanel from '../modules/QueuePanel.svelte';
+  import { STORAGE_KEYS } from '../modules/constants';
 
   const defaultURL = 'http://127.0.0.1:4433/';
 
@@ -14,15 +17,31 @@
   let message = $state('');
   let messageType: 'success' | 'error' = $state('success');
 
-  chrome.storage.local.get(['histerURL', 'histerToken', 'indexingEnabled'], (data) => {
-    if (!data['histerURL']) {
-      chrome.storage.local.set({ histerURL: defaultURL });
+  const queue = queueStore();
+
+  chrome.storage.local.get(Object.values(STORAGE_KEYS), (data) => {
+    if (!data[STORAGE_KEYS.url]) {
+      chrome.storage.local.set({ [STORAGE_KEYS.url]: defaultURL });
     }
-    url = data['histerURL'] || defaultURL;
-    token = data['histerToken'] || '';
-    indexingEnabled = data['indexingEnabled'] !== false;
+    url = data[STORAGE_KEYS.url] || defaultURL;
+    token = data[STORAGE_KEYS.token] || '';
+    indexingEnabled = data[STORAGE_KEYS.indexingEnabled] !== false;
     showTokenInput = !token;
   });
+
+  queue.refresh();
+
+  async function retry() {
+    const r = await queue.retry();
+    message = r.message;
+    messageType = r.type;
+  }
+
+  async function clear() {
+    const r = await queue.clear();
+    message = r.message;
+    messageType = r.type;
+  }
 
   function save(e: Event) {
     e.preventDefault();
@@ -53,7 +72,11 @@
           .json()
           .then(() => {
             chrome.storage.local
-              .set({ histerURL: url, histerToken: token, indexingEnabled: indexingEnabled })
+              .set({
+                [STORAGE_KEYS.url]: url,
+                [STORAGE_KEYS.token]: token,
+                [STORAGE_KEYS.indexingEnabled]: indexingEnabled,
+              })
               .then(() => {
                 message = 'Settings saved';
                 messageType = 'success';
@@ -102,6 +125,18 @@
   <div class="bg-hister-indigo border-brutal-border border-b-[3px] px-5 py-3">
     <span class="font-outfit text-lg font-black tracking-widest text-white uppercase">Hister</span>
   </div>
+
+  <QueuePanel
+    status={queue.status}
+    count={queue.count}
+    expanded={queue.expanded}
+    items={queue.items}
+    onretry={retry}
+    onclear={clear}
+    ontoggle={queue.toggle}
+    onremove={queue.remove}
+    compact
+  />
 
   <!-- Settings card -->
   <Card.Root

@@ -279,6 +279,22 @@ func Add(d *Document) error {
 	return i.AddDocument(d)
 }
 
+func AddBatch(docs []*Document) (indexed, skipped int, errs []error) {
+	batch := newMultiBatch(i)
+	for _, d := range docs {
+		if err := batch.Add(d); err != nil {
+			errs = append(errs, err)
+			skipped++
+		} else {
+			indexed++
+		}
+	}
+	if err := batch.Save(); err != nil {
+		errs = append(errs, err)
+	}
+	return
+}
+
 func (i *indexer) Total() uint64 {
 	q := query.NewMatchAllQuery()
 	req := bleve.NewSearchRequest(q)

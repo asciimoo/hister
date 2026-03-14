@@ -1,6 +1,7 @@
 {
   "compilerOptions": {
     "target": "ES6",
+    "lib": ["ES2017", "DOM"],
     "module": "ES2015",
     "moduleResolution": "bundler",
     "skipLibCheck": true,

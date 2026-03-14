@@ -1,37 +1,51 @@
-async function fetchFavicon(url) {
+async function fetchFavicon(url: string): Promise<string> {
   const response = await fetch(url);
-  let iconBytes = await response.blob();
-  const reader = new FileReader();
-  reader.readAsDataURL(iconBytes);
-  //let icon = btoa(iconBytes.text());
+  const blob = await response.blob();
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onloadend = () => {
-      resolve(reader.result);
-    };
-    reader.onerror = () => resolve('');
-    reader.readAsDataURL(iconBytes);
+    reader.onloadend = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
   });
 }
 
-async function sendPageData(url, doc, tok) {
-  try {
-    doc['favicon'] = await fetchFavicon(doc.faviconURL);
-  } catch (e) {
-    doc['favicon'] = '';
-  }
-  return sendResult(url, doc, tok);
+function normalize(url: string): string {
+  return url.endsWith('/') ? url : url + '/';
 }
 
-async function sendResult(url, res, tok) {
+function headers(tok: string): HeadersInit {
+  const h: HeadersInit = { 'Content-type': 'application/json; charset=UTF-8' };
+  if (tok) h['X-Access-Token'] = tok;
+  return h;
+}
+
+async function resolvePageData(doc: { favicon?: string; faviconURL?: string }) {
+  try {
+    doc.favicon = await fetchFavicon(doc.faviconURL!);
+  } catch (e) {
+    doc.favicon = '';
+  }
+  return doc;
+}
+
+async function sendResult(url: string, res: object, tok: string) {
   return fetch(url, {
     method: 'POST',
     body: JSON.stringify(res),
-    headers: {
-      'Content-type': 'application/json; charset=UTF-8',
-      'X-Access-Token': tok,
-    },
+    headers: headers(tok),
   });
 }
 
-export { sendPageData, sendResult };
+async function sendBatch(base: string, documents: object[], history: object[], tok: string) {
+  const r = await fetch(normalize(base) + 'api/batch', {
+    method: 'POST',
+    body: JSON.stringify({ documents, history }),
+    headers: headers(tok),
+  });
+  if (!r.ok) {
+    throw new Error(`Batch request failed with status ${r.status}`);
+  }
+  return r.json();
+}
+
+export { sendResult as send, resolvePageData as resolve, sendBatch as batch, normalize, headers };

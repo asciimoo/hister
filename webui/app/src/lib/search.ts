@@ -27,6 +27,7 @@ export interface SearchResult {
   text?: string;
   favicon?: string;
   added?: number;
+  queued?: boolean;
 }
 
 export interface SearchResults {
