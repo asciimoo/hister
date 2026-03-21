@@ -2,6 +2,7 @@ package indexer
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -19,20 +20,46 @@ import (
 )
 
 type Document struct {
-	URL                string        `json:"url"`
-	Domain             string        `json:"domain"`
-	HTML               string        `json:"html"`
-	Title              string        `json:"title"`
-	Text               string        `json:"text"`
-	Favicon            string        `json:"favicon"`
-	Score              float64       `json:"score"`
-	Added              int64         `json:"added"`
-	Type               types.DocType `json:"type"`
-	Language           string        `json:"language"`
-	UserID             uint          `json:"user_id"`
+	URL                string         `json:"url"`
+	Domain             string         `json:"domain"`
+	HTML               string         `json:"html"`
+	Title              string         `json:"title"`
+	Text               string         `json:"text"`
+	Favicon            string         `json:"favicon"`
+	Score              float64        `json:"score"`
+	Added              int64          `json:"added"`
+	Type               types.DocType  `json:"type"`
+	Language           string         `json:"language"`
+	UserID             uint           `json:"user_id"`
+	Properties         map[string]any `json:"properties,omitempty"`
+	PropertiesRaw      string         `json:"properties_raw,omitempty"`
 	faviconURL         string
 	processed          bool
 	skipSensitiveCheck bool
+}
+
+// PrepareForIndex serializes Properties into PropertiesRaw for Bleve storage.
+func (d *Document) PrepareForIndex() {
+	if len(d.Properties) > 0 {
+		b, err := json.Marshal(d.Properties)
+		if err != nil {
+			log.Warn().Err(err).Str("URL", d.URL).Msg("Failed to marshal properties")
+			return
+		}
+		d.PropertiesRaw = string(b)
+	}
+}
+
+// LoadProperties deserializes PropertiesRaw into Properties.
+func (d *Document) LoadProperties() {
+	if d.PropertiesRaw != "" {
+		var props map[string]any
+		if err := json.Unmarshal([]byte(d.PropertiesRaw), &props); err != nil {
+			log.Warn().Err(err).Str("URL", d.URL).Msg("Failed to unmarshal properties")
+			return
+		}
+		d.Properties = props
+	}
 }
 
 func (d *Document) extractHTML() error {

@@ -33,6 +33,7 @@ type Config struct {
 	App                      App               `yaml:"app" mapstructure:"app"`
 	Server                   Server            `yaml:"server" mapstructure:"server"`
 	Indexer                  Indexer           `yaml:"indexer" mapstructure:"indexer"`
+	Enrichment               Enrichment        `yaml:"enrichment" mapstructure:"enrichment"`
 	Hotkeys                  Hotkeys           `yaml:"hotkeys" mapstructure:"hotkeys"`
 	TUI                      TUI               `yaml:"-" mapstructure:"tui"`
 	SensitiveContentPatterns map[string]string `yaml:"sensitive_content_patterns" mapstructure:"sensitive_content_patterns"`
@@ -77,6 +78,12 @@ type Indexer struct {
 	DetectLanguages bool         `yaml:"detect_languages" mapstructure:"detect_languages"`
 	Directories     []*Directory `yaml:"directories" mapstructure:"directories"`
 	MaxFileSize     int64        `yaml:"max_file_size_mb" mapstructure:"max_file_size_mb"`
+}
+
+type Enrichment struct {
+	Enabled bool `yaml:"enabled" mapstructure:"enabled"`
+	Workers int  `yaml:"workers" mapstructure:"workers"`
+	Timeout int  `yaml:"timeout_seconds" mapstructure:"timeout_seconds"`
 }
 
 type Hotkeys struct {
@@ -297,6 +304,11 @@ func CreateDefaultConfig() *Config {
 		Indexer: Indexer{
 			DetectLanguages: true,
 			MaxFileSize:     1,
+		},
+		Enrichment: Enrichment{
+			Enabled: false,
+			Workers: 2,
+			Timeout: 60,
 		},
 		Hotkeys: Hotkeys{
 			Web: map[string]string{
