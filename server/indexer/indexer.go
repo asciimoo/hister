@@ -16,6 +16,7 @@ import (
 	"github.com/asciimoo/hister/server/indexer/querybuilder"
 	"github.com/asciimoo/hister/server/indexer/types"
 	"github.com/asciimoo/hister/server/model"
+	"github.com/asciimoo/hister/xsync"
 
 	"github.com/blevesearch/bleve/v2"
 	"github.com/blevesearch/bleve/v2/analysis/analyzer/custom"
@@ -36,8 +37,8 @@ import (
 var Version = 3
 
 type indexer struct {
-	idx          bleve.IndexAlias       // used only for Search()
-	indexers     map[string]bleve.Index // default and language specific indexers
+	idx          bleve.IndexAlias               // used only for Search()
+	indexers     xsync.Map[string, bleve.Index] // default and language specific indexers
 	dir          string
 	langDetector LanguageDetector
 }
@@ -137,11 +138,9 @@ func initializeIndexer(basePath string, detectLanguages bool) (*indexer, error) 
 	idx.SetName(defaultIndexerName)
 	i = &indexer{
 		idx: bleve.NewIndexAlias(idx),
-		indexers: map[string]bleve.Index{
-			defaultIndexerName: idx,
-		},
 		dir: basePath,
 	}
+	i.indexers.Store(defaultIndexerName, idx)
 	if !detectLanguages {
 		i.langDetector = NewNullLanguageDetector()
 	} else {
@@ -167,7 +166,7 @@ func initializeIndexer(basePath string, detectLanguages bool) (*indexer, error) 
 		}
 		langIdx.SetName(fn)
 		i.idx.Add(langIdx)
-		i.indexers[fn] = langIdx
+		i.indexers.Store(fn, langIdx)
 	}
 	return i, nil
 }
@@ -259,14 +258,14 @@ func Reindex(basePath string, rules *config.Rules, skipSensitiveChecks bool, det
 	}
 	idx.Close()
 	tmpIdx.Close()
-	for n := range idx.indexers {
+	for n := range idx.indexers.All {
 		idxPath := filepath.Join(basePath, n)
 		if err := os.RemoveAll(idxPath); err != nil {
 			return err
 		}
 	}
 	var renameError error
-	for n := range tmpIdx.indexers {
+	for n := range tmpIdx.indexers.All {
 		idxPath := filepath.Join(basePath, n)
 		tmpIdxPath := filepath.Join(tmpBasePath, n)
 		if err := os.Rename(tmpIdxPath, idxPath); err != nil {
@@ -342,37 +341,43 @@ func GetLatestDocuments(limit int, latest string) *Results {
 
 func (i *indexer) getOrCreate(lang string) bleve.Index {
 	if lang == UnknownLanguage || lang == "" {
-		return i.indexers[defaultIndexerName]
+		idx, _ := i.indexers.Load(defaultIndexerName)
+		return idx
 	}
 	idxName := fmt.Sprintf(langIndexerName, lang)
-	idx, ok := i.indexers[idxName]
-	if !ok {
-		err := i.addIndexer(idxName, lang)
-		if err != nil {
-			log.Warn().Err(err).Str("Name", idxName).Msg("Failed to create language indexer")
-			return i.indexers[defaultIndexerName]
-		}
-		idx = i.indexers[idxName]
+	idx, err := i.indexers.LoadOrCompute(idxName, func() (bleve.Index, error) {
+		return i.createIndex(idxName, lang)
+	})
+	if err != nil {
+		log.Warn().Err(err).Str("Name", idxName).Msg("Failed to create language indexer")
+		fallback, _ := i.indexers.Load(defaultIndexerName)
+		return fallback
 	}
 	return idx
 }
 
-func (i *indexer) addIndexer(name, lang string) error {
+func (i *indexer) createIndex(name, lang string) (bleve.Index, error) {
 	mapping := createMapping(lang)
 	idx, err := bleve.NewUsing(filepath.Join(i.dir, name), mapping, bleve.Config.DefaultIndexType, bleve.Config.DefaultMemKVStore, bleveConfig)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	idx.SetName(name)
-	i.indexers[name] = idx
-	return nil
+	i.idx.Add(idx)
+	return idx, nil
 }
 
 func (i *indexer) Close() {
-	for name, idx := range i.indexers {
+	for name, idx := range i.indexers.All {
 		if err := idx.Close(); err != nil {
 			log.Warn().Err(err).Str("index", name).Msg("failed to close index")
 		}
+	}
+}
+
+func Close() {
+	if i != nil {
+		i.Close()
 	}
 }
 
@@ -389,7 +394,7 @@ func newMultiBatch(idx *indexer) *MultiBatch {
 
 func (b *MultiBatch) Add(d *Document) error {
 	if !d.processed {
-		if err := d.Process(i.langDetector); err != nil {
+		if err := d.Process(b.indexer.langDetector); err != nil {
 			return err
 		}
 	}
@@ -401,8 +406,7 @@ func (b *MultiBatch) Add(d *Document) error {
 }
 
 func (b *MultiBatch) Delete(u string) error {
-	// Delete from all language indices
-	for _, idx := range b.indexer.indexers {
+	for _, idx := range b.indexer.indexers.All {
 		if err := idx.Delete(u); err != nil {
 			return err
 		}
@@ -421,7 +425,7 @@ func (b *MultiBatch) Save() error {
 }
 
 func Delete(u string) error {
-	for _, idx := range i.indexers {
+	for _, idx := range i.indexers.All {
 		if err := idx.Delete(u); err != nil {
 			return err
 		}

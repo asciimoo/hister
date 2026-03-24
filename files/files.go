@@ -9,7 +9,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -18,6 +17,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/asciimoo/hister/config"
+	"github.com/asciimoo/hister/xsync"
 )
 
 func ExpandHome(path string) string {
@@ -31,7 +31,7 @@ func ExpandHome(path string) string {
 	return path
 }
 
-// Debounce so we don't spam the index as write events can file multiple times before closing a file after editing
+// Debounce so we don't spam the index as write events can fire multiple times before closing a file after editing
 const debounceTime = 200 * time.Millisecond
 
 // findMatchingDir returns the Directory config whose expanded path contains filePath, or nil.
@@ -45,11 +45,6 @@ func findMatchingDir(dirs []*config.Directory, filePath string) *config.Director
 	return nil
 }
 
-// skipDirs lists directory names that are skipped by default during watching.
-// These are well-known dependency/cache directories whose names are unambiguous
-// and can contain tens of thousands of entries, easily exhausting OS watch limits.
-// Hidden directories (starting with ".") are always skipped separately.
-// Users can exclude additional directories via the per-directory excludes config.
 var skipDirs = map[string]struct{}{
 	"node_modules":     {},
 	"bower_components": {},
@@ -59,8 +54,6 @@ var skipDirs = map[string]struct{}{
 }
 
 // shouldSkipDir reports whether a directory should be excluded from watching.
-// It skips hidden directories, well-known dependency/cache directories, and
-// directories matching any exclude pattern from the config.
 func shouldSkipDir(name string, excludes []string, includeHidden bool) bool {
 	if !includeHidden {
 		if strings.HasPrefix(name, ".") {
@@ -78,18 +71,26 @@ func shouldSkipDir(name string, excludes []string, includeHidden bool) bool {
 	return false
 }
 
-// ShouldSkipDir is the exported form of shouldSkipDir for use by the indexer.
+// ShouldSkipDir is the exported form of shouldSkipDir.
 func ShouldSkipDir(name string, excludes []string, includeHidden bool) bool {
 	return shouldSkipDir(name, excludes, includeHidden)
 }
 
-// walkAndWatch registers all subdirectories of each configured directory with
-// the fsnotify watcher, skipping hidden dirs and user-configured excludes.
-func walkAndWatch(watcher *fsnotify.Watcher, dirs []*config.Directory) {
+// walkAndWatch registers subdirectories with the fsnotify watcher, up to maxWatchDirs total.
+func walkAndWatch(watcher *fsnotify.Watcher, dirs []*config.Directory, maxWatchDirs int, watched *xsync.Set[string]) {
 	for _, dir := range dirs {
 		expanded := ExpandHome(dir.Path)
+		if watched.Len() >= maxWatchDirs {
+			log.Warn().
+				Int("limit", maxWatchDirs).
+				Str("path", expanded).
+				Msg("Watch directory limit reached; remaining directories will not be watched for live changes")
+			return
+		}
 		if err := watcher.Add(expanded); err != nil {
 			log.Error().Err(err).Str("path", expanded).Msg("Failed to add path to file watcher")
+		} else {
+			watched.Add(expanded)
 		}
 		excludes := dir.Excludes
 		_ = filepath.WalkDir(expanded, func(path string, d fs.DirEntry, err error) error {
@@ -100,20 +101,31 @@ func walkAndWatch(watcher *fsnotify.Watcher, dirs []*config.Directory) {
 			if !d.IsDir() {
 				return nil
 			}
-			if path != expanded && shouldSkipDir(d.Name(), excludes, dir.IncludeHidden) {
+			if path == expanded {
+				return nil
+			}
+			if shouldSkipDir(d.Name(), excludes, dir.IncludeHidden) {
 				return filepath.SkipDir
+			}
+			if watched.Len() >= maxWatchDirs {
+				log.Warn().
+					Int("limit", maxWatchDirs).
+					Str("path", path).
+					Msg("Watch directory limit reached; skipping remaining subdirectories")
+				return filepath.SkipAll
 			}
 			if err := watcher.Add(path); err != nil {
 				log.Warn().Err(err).Str("path", path).Msg("Failed to watch subdirectory")
+			} else {
+				watched.Add(path)
 			}
 			return nil
 		})
 	}
+	log.Debug().Int("directories", watched.Len()).Msg("File watcher registered directories")
 }
 
-// handleWrite debounces a file-write event and invokes the callback after the
-// debounce period.
-func handleWrite(event fsnotify.Event, dirs []*config.Directory, mu *sync.Mutex, debounced map[string]*time.Timer, callback func(string)) {
+func handleWrite(ctx context.Context, event fsnotify.Event, dirs []*config.Directory, mu *sync.Mutex, debounced map[string]*time.Timer, work chan<- string) {
 	dir := findMatchingDir(dirs, event.Name)
 	if dir == nil || !dir.IsMatching(event.Name) {
 		return
@@ -127,15 +139,18 @@ func handleWrite(event fsnotify.Event, dirs []*config.Directory, mu *sync.Mutex,
 			mu.Lock()
 			delete(debounced, name)
 			mu.Unlock()
-			callback(name)
+			select {
+			case work <- name:
+			case <-ctx.Done():
+			default:
+				log.Debug().Str("path", name).Msg("Index worker queue full; dropping file event")
+			}
 		})
 	}
 	mu.Unlock()
 }
 
-// handleCreate processes a file or directory creation event: new directories
-// are added to the watcher, new files matching filters are passed to the callback.
-func handleCreate(event fsnotify.Event, dirs []*config.Directory, watcher *fsnotify.Watcher, callback func(string)) {
+func handleCreate(ctx context.Context, event fsnotify.Event, dirs []*config.Directory, watcher *fsnotify.Watcher, maxWatchDirs int, watched *xsync.Set[string], work chan<- string) {
 	st, err := os.Stat(event.Name)
 	if err != nil {
 		return
@@ -145,9 +160,18 @@ func handleCreate(event fsnotify.Event, dirs []*config.Directory, watcher *fsnot
 		if dir == nil || shouldSkipDir(filepath.Base(event.Name), dir.Excludes, dir.IncludeHidden) {
 			return
 		}
-		if !slices.Contains(watcher.WatchList(), event.Name) {
+		if !watched.Has(event.Name) {
+			if watched.Len() >= maxWatchDirs {
+				log.Warn().
+					Int("limit", maxWatchDirs).
+					Str("path", event.Name).
+					Msg("Watch directory limit reached; new directory will not be watched")
+				return
+			}
 			if err := watcher.Add(event.Name); err != nil {
 				log.Warn().Err(err).Str("path", event.Name).Msg("Failed to watch new directory")
+			} else {
+				watched.Add(event.Name)
 			}
 		}
 		return
@@ -156,10 +180,23 @@ func handleCreate(event fsnotify.Event, dirs []*config.Directory, watcher *fsnot
 	if dir == nil || !dir.IsMatching(event.Name) {
 		return
 	}
-	callback(event.Name)
+	select {
+	case work <- event.Name:
+	case <-ctx.Done():
+	default:
+		log.Debug().Str("path", event.Name).Msg("Index worker queue full; dropping file event")
+	}
 }
 
-func WatchDirectories(ctx context.Context, dirs []*config.Directory, callback func(string)) error {
+// WatchDirectories watches configured directories for file changes and calls
+// callback for each changed file.
+func WatchDirectories(ctx context.Context, dirs []*config.Directory, workers int, maxWatchDirs int, callback func(string)) error {
+	if workers < 1 {
+		workers = 1
+	}
+	if maxWatchDirs < 1 {
+		maxWatchDirs = 1
+	}
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		return fmt.Errorf("failed to create file watcher: %w", err)
@@ -170,28 +207,71 @@ func WatchDirectories(ctx context.Context, dirs []*config.Directory, callback fu
 		}
 	}()
 
+	// innerCtx is cancelled and pending timers are stopped before work is closed,
+	// ensuring timer closures never send on a closed channel.
+	innerCtx, cancelInner := context.WithCancel(ctx)
+	defer cancelInner()
+
+	work := make(chan string, workers*4)
+
 	var mu sync.Mutex
 	debounced := make(map[string]*time.Timer)
 
+	var closeOnce sync.Once
+	closeWork := func() {
+		closeOnce.Do(func() {
+			cancelInner()
+			mu.Lock()
+			for name, t := range debounced {
+				t.Stop()
+				delete(debounced, name)
+			}
+			mu.Unlock()
+			close(work)
+		})
+	}
+
+	// Start the worker pool.
+	var wg sync.WaitGroup
+	for range workers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for path := range work {
+				callback(path)
+			}
+		}()
+	}
+
+	var watched xsync.Set[string]
+
 	log.Debug().Msg("Starting file watcher")
-	walkAndWatch(watcher, dirs)
+	walkAndWatch(watcher, dirs, maxWatchDirs, &watched)
 
 	for {
 		select {
 		case <-ctx.Done():
+			closeWork()
+			wg.Wait()
 			return ctx.Err()
 		case event, ok := <-watcher.Events:
 			if !ok {
+				closeWork()
+				wg.Wait()
 				return nil
 			}
 			switch {
 			case event.Has(fsnotify.Write):
-				handleWrite(event, dirs, &mu, debounced, callback)
+				handleWrite(innerCtx, event, dirs, &mu, debounced, work)
 			case event.Has(fsnotify.Create):
-				handleCreate(event, dirs, watcher, callback)
+				handleCreate(innerCtx, event, dirs, watcher, maxWatchDirs, &watched, work)
+			case event.Has(fsnotify.Remove), event.Has(fsnotify.Rename):
+				watched.Delete(event.Name)
 			}
 		case err, ok := <-watcher.Errors:
 			if !ok {
+				closeWork()
+				wg.Wait()
 				return nil
 			}
 			log.Error().Err(err).Msg("Watcher failed to process event")
