@@ -17,6 +17,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/asciimoo/hister/client"
@@ -88,19 +89,34 @@ var listenCmd = &cobra.Command{
 		if cfg.App.AccessToken != "" && strings.HasPrefix(cfg.BaseURL(""), "http://") {
 			log.Warn().Msg("Using authentication token without https. Token is sent plain-text in network requests.")
 		}
+
+		ctx, cancel := context.WithCancel(context.Background())
+		if err := indexer.IndexAll(ctx, cfg.Indexer.Directories); err != nil && !errors.Is(err, context.Canceled) {
+			log.Error().Err(err).Msg("Initial indexing failed")
+		}
+
+		var wg sync.WaitGroup
 		if len(cfg.Indexer.Directories) > 0 {
-			indexer.IndexAll(cfg.Indexer.Directories)
-			go func() {
-				if err := files.WatchDirectories(context.Background(), cfg.Indexer.Directories, func(path string) {
+			wg.Go(func() {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
+				if err := files.WatchDirectories(ctx, cfg.Indexer.Directories, func(path string) {
 					if err := indexer.IndexFile(path); err != nil {
 						log.Debug().Err(err).Str("path", path).Msg("Failed to index file")
 					}
-				}); err != nil {
+				}); err != nil && !errors.Is(err, context.Canceled) {
 					log.Error().Err(err).Msg("File watcher failed")
 				}
-			}()
+			})
 		}
-		server.Listen(cfg)
+		server.Listen(cfg, func() {
+			cancel()
+			wg.Wait()
+			indexer.Close()
+		})
 	},
 }
 

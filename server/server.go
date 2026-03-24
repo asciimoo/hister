@@ -3,6 +3,7 @@ package server
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/rand"
 	"encoding/json"
 	"errors"
@@ -13,10 +14,12 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/signal"
 	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/asciimoo/hister/config"
@@ -143,7 +146,7 @@ func recParseStaticFiles(entries []iofs.DirEntry, dir, baseDir string) error {
 	return nil
 }
 
-func Listen(cfg *config.Config) {
+func Listen(cfg *config.Config, onShutdown func()) {
 	sessionStore = sessions.NewCookieStore(cfg.SecretKey()[:32])
 	sessionStore.Options = &sessions.Options{
 		Path:     "/",
@@ -165,11 +168,39 @@ func Listen(cfg *config.Config) {
 	handler := registerEndpoints(cfg)
 	handler = withLogging(handler)
 
+	ctx, stop := signal.NotifyContext(
+		context.Background(),
+		syscall.SIGINT,
+		syscall.SIGTERM,
+	)
+	defer stop()
+
+	srv := &http.Server{Addr: cfg.Server.Address, Handler: handler}
+	shutdownDone := make(chan struct{})
+
+	go func() {
+		<-ctx.Done()
+		stop()
+		log.Info().Msg("Shutting down server...")
+
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			log.Error().Err(err).Msg("Server shutdown error")
+		}
+		if onShutdown != nil {
+			onShutdown()
+		}
+		close(shutdownDone)
+	}()
+
 	log.Info().Str("Address", cfg.Server.Address).Str("URL", cfg.BaseURL("/")).Msg("Starting webserver")
-	err := http.ListenAndServe(cfg.Server.Address, handler)
-	if err != nil {
+	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Error().Err(err).Msg("Webserver failed to listen on " + cfg.Server.Address)
+		stop() // cancel context so shutdown goroutine runs cleanup
 	}
+	<-shutdownDone
 }
 
 func registerEndpoints(cfg *config.Config) http.Handler {

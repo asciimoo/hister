@@ -1,6 +1,7 @@
 package indexer
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -35,16 +36,27 @@ func (e *ReadFileError) Error() string {
 	return fmt.Sprintf("%s: %s", ErrReadFile.Error(), e.Msg)
 }
 
-func IndexAll(dirs []*config.Directory) {
+func IndexAll(ctx context.Context, dirs []*config.Directory) error {
 	for _, dir := range dirs {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
 		expanded := files.ExpandHome(dir.Path)
-		if err := indexDirectory(expanded, dir); err != nil {
+		if err := indexDirectory(ctx, expanded, dir); err != nil {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+			}
 			log.Error().Err(err).Str("directory", expanded).Msg("Failed to index directory")
 		}
 	}
+	return nil
 }
 
-func indexDirectory(dir string, cfg *config.Directory) error {
+func indexDirectory(ctx context.Context, dir string, cfg *config.Directory) error {
 	info, err := os.Stat(dir)
 	if err != nil {
 		return fmt.Errorf("cannot access directory: %w", err)
@@ -59,6 +71,11 @@ func indexDirectory(dir string, cfg *config.Directory) error {
 	log.Debug().Str("directory", dir).Msg("Indexing directory")
 
 	err = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
 		if err != nil {
 			log.Warn().Err(err).Str("path", path).Msg("Error accessing path")
 			return nil

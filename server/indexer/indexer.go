@@ -376,6 +376,12 @@ func (i *indexer) Close() {
 	}
 }
 
+func Close() {
+	if i != nil {
+		i.Close()
+	}
+}
+
 func NewMultiBatch() *MultiBatch {
 	return newMultiBatch(i)
 }
