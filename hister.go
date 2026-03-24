@@ -91,13 +91,12 @@ var listenCmd = &cobra.Command{
 		}
 
 		ctx, cancel := context.WithCancel(context.Background())
-		if err := indexer.IndexAll(ctx, cfg.Indexer.Directories); err != nil && !errors.Is(err, context.Canceled) {
-			log.Error().Err(err).Msg("Initial indexing failed")
-		}
-
 		var wg sync.WaitGroup
 		if len(cfg.Indexer.Directories) > 0 {
 			wg.Go(func() {
+				if err := indexer.IndexAll(ctx, cfg.Indexer.Directories); err != nil && !errors.Is(err, context.Canceled) {
+					log.Error().Err(err).Msg("Initial indexing failed")
+				}
 				select {
 				case <-ctx.Done():
 					return
