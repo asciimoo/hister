@@ -22,7 +22,8 @@ import (
 
 	"github.com/asciimoo/hister/config"
 	"github.com/asciimoo/hister/files"
-	"github.com/asciimoo/hister/server/enricher"
+	"github.com/asciimoo/hister/server/extractor"
+
 	"github.com/asciimoo/hister/server/indexer"
 	"github.com/asciimoo/hister/server/indexer/types"
 	"github.com/asciimoo/hister/server/model"
@@ -35,15 +36,16 @@ import (
 )
 
 var (
-	appSubFS         iofs.FS
-	staticFileServer http.Handler
-	sessionStore     *sessions.CookieStore
-	errCSRFMismatch  = errors.New("CSRF token mismatch")
-	storeName        = "hister"
-	tokName          = "csrf_token"
-	staticTextFiles  map[string][]byte
+	appSubFS                 iofs.FS
+	staticFileServer         http.Handler
+	sessionStore             *sessions.CookieStore
+	errCSRFMismatch          = errors.New("CSRF token mismatch")
+	storeName                = "hister"
+	tokName                  = "csrf_token"
+	staticTextFiles          map[string][]byte
 	multiUserNotSupportedMsg = map[string]string{"error": "rule management is not yet supported in multi-user mode"}
-	enricherManager          *enricher.Manager
+	extractorManager         *extractor.Manager
+
 )
 
 type historyItem struct {
@@ -169,10 +171,10 @@ func Listen(cfg *config.Config) {
 	}
 
 	if cfg.Enrichment.Enabled {
-		enricherManager = enricher.New(
+		extractorManager = extractor.NewManager(
 			cfg.Enrichment.Workers,
 			cfg.Enrichment.Timeout,
-			func(url string, result *enricher.Result, existing *enricher.ExistingDoc) error {
+			func(url string, result *extractor.Result, existing *extractor.ExistingDoc) error {
 				d := &indexer.Document{
 					URL:        url,
 					Title:      result.Title,
@@ -189,12 +191,12 @@ func Listen(cfg *config.Config) {
 				}
 				return indexer.AddEnriched(d)
 			},
-			func(url string) *enricher.ExistingDoc {
+			func(url string) *extractor.ExistingDoc {
 				d := indexer.GetByURL(url)
 				if d == nil {
 					return nil
 				}
-				return &enricher.ExistingDoc{
+				return &extractor.ExistingDoc{
 					Domain:   d.Domain,
 					Favicon:  d.Favicon,
 					Added:    d.Added,
@@ -202,7 +204,7 @@ func Listen(cfg *config.Config) {
 				}
 			},
 		)
-		log.Info().Msg("Enrichment enabled")
+		log.Info().Msg("Async extraction enabled")
 	}
 
 	// This is an ugly hack required to set the base path dynamically in svelte files.
@@ -224,9 +226,10 @@ func Listen(cfg *config.Config) {
 	if err != nil {
 		log.Error().Err(err).Msg("Webserver failed to listen on " + cfg.Server.Address)
 	}
-	if enricherManager != nil {
-		enricherManager.Close()
+	if extractorManager != nil {
+		extractorManager.Close()
 	}
+
 }
 
 func registerEndpoints(cfg *config.Config) http.Handler {
@@ -801,9 +804,10 @@ func serveAdd(c *webContext) {
 			serve500(c)
 			return
 		}
-		if enricherManager != nil {
-			enricherManager.Enqueue(d.URL, d.Domain)
+		if extractorManager != nil {
+			extractorManager.Enqueue(d.URL, d.Domain)
 		}
+
 		c.Response.WriteHeader(http.StatusCreated)
 	} else {
 		log.Debug().Str("url", d.URL).Msg("skip indexing")
@@ -962,13 +966,13 @@ func serveReadable(c *webContext) {
 		return
 	}
 
-	// If this document was enriched, return structured properties
-	if enricher.IsStoredEnrichment(doc.HTML) {
-		enricherName, _ := enricher.ParseStoredEnricherName(doc.HTML)
+	// If this document was extracted asynchronously, return structured properties
+	if extractor.IsStoredExtraction(doc.HTML) {
+		extractorName, _ := extractor.ParseStoredExtractorName(doc.HTML)
 		c.JSON(map[string]any{
 			"title":      doc.Title,
 			"properties": doc.Properties,
-			"enricher":   enricherName,
+			"extractor":  extractorName,
 		})
 		return
 	}
@@ -1307,12 +1311,12 @@ func serveBatch(c *webContext) {
 		return
 	}
 
-	if enricherManager != nil {
+	if extractorManager != nil {
 		for i, op := range req.Ops {
 			if op.Op == batchOpAdd && results[i].Status == http.StatusCreated {
 				pu, err := url.Parse(op.URL)
 				if err == nil && pu.Host != "" {
-					enricherManager.Enqueue(op.URL, pu.Host)
+					extractorManager.Enqueue(op.URL, pu.Host)
 				}
 			}
 		}
