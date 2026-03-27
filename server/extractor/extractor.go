@@ -17,8 +17,7 @@ type Result struct {
 	Title      string         `json:"title"`
 	Text       string         `json:"text"` // searchable text for the index
 	FaviconURL string         `json:"favicon_url,omitempty"`
-	Properties map[string]any `json:"properties,omitempty"`  // display metadata (key-value pairs)
-	StoredData string         `json:"stored_data,omitempty"` // JSON blob stored in HTML field (survives reindex)
+	Properties map[string]any `json:"properties,omitempty"` // display metadata (key-value pairs)
 }
 
 // Extractor defines the interface for content extraction.
