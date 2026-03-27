@@ -2,7 +2,6 @@ package indexer
 
 import (
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -32,34 +31,9 @@ type Document struct {
 	Language           string         `json:"language"`
 	UserID             uint           `json:"user_id"`
 	Properties         map[string]any `json:"properties,omitempty"`
-	PropertiesRaw      string         `json:"properties_raw,omitempty"`
 	faviconURL         string
 	processed          bool
 	skipSensitiveCheck bool
-}
-
-// PrepareForIndex serializes Properties into PropertiesRaw for Bleve storage.
-func (d *Document) PrepareForIndex() {
-	if len(d.Properties) > 0 {
-		b, err := json.Marshal(d.Properties)
-		if err != nil {
-			log.Warn().Err(err).Str("URL", d.URL).Msg("Failed to marshal properties")
-			return
-		}
-		d.PropertiesRaw = string(b)
-	}
-}
-
-// LoadProperties deserializes PropertiesRaw into Properties.
-func (d *Document) LoadProperties() {
-	if d.PropertiesRaw != "" {
-		var props map[string]any
-		if err := json.Unmarshal([]byte(d.PropertiesRaw), &props); err != nil {
-			log.Warn().Err(err).Str("URL", d.URL).Msg("Failed to unmarshal properties")
-			return
-		}
-		d.Properties = props
-	}
 }
 
 func (d *Document) extractHTML() error {
