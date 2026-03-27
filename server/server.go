@@ -935,7 +935,7 @@ func serveReadable(c *webContext) {
 	if r.Title() != "" {
 		title = r.Title()
 	}
-	c.JSON(map[string]any{
+	c.JSON(map[string]string{
 		"title":   title,
 		"content": htmlContent.String(),
 	})
