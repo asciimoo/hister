@@ -351,13 +351,6 @@ func (i *indexer) AddDocument(d *Document) error {
 	return i.getOrCreate(d.Language).Index(d.ID(), d)
 }
 
-// AddEnriched indexes a pre-enriched document, overwriting any existing
-// document with the same URL in the appropriate language index.
-func AddEnriched(d *Document) error {
-	d.PrepareForIndex()
-	return i.getOrCreate(d.Language).Index(d.ID(), d)
-}
-
 func GetLatestDocuments(limit int, latest string) *Results {
 	q := query.NewMatchAllQuery()
 	req := bleve.NewSearchRequest(q)

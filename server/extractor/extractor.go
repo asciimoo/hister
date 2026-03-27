@@ -2,9 +2,7 @@ package extractor
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"strings"
 )
 
 // Input holds the data available for extraction.
@@ -40,57 +38,6 @@ type Extractor interface {
 	Rebuild(storedData string) (*Result, error)
 }
 
-// ExistingDoc holds fields from an already-indexed document that should
-// be preserved when re-indexing after extraction.
-type ExistingDoc struct {
-	Domain   string
-	Favicon  string
-	Added    int64
-	Language string
-}
-
 // ErrRebuildNotSupported is returned by extractors that do not support
 // rebuilding from stored data.
 var ErrRebuildNotSupported = errors.New("rebuild not supported")
-
-const extractorKey = "_extractor"
-
-// IsStoredExtraction checks whether the HTML field contains extraction
-// data rather than regular HTML content.
-func IsStoredExtraction(html string) bool {
-	if !strings.HasPrefix(html, "{") {
-		return false
-	}
-	var m map[string]any
-	if err := json.Unmarshal([]byte(html), &m); err != nil {
-		return false
-	}
-	_, ok := m[extractorKey]
-	return ok
-}
-
-// ParseStoredExtractorName extracts the extractor name from stored extraction JSON.
-func ParseStoredExtractorName(html string) (string, error) {
-	var m map[string]any
-	if err := json.Unmarshal([]byte(html), &m); err != nil {
-		return "", err
-	}
-	name, ok := m[extractorKey].(string)
-	if !ok || name == "" {
-		return "", errors.New("missing or invalid _extractor field")
-	}
-	return name, nil
-}
-
-// ParseStoredProperties extracts the properties from stored extraction JSON.
-func ParseStoredProperties(html string) (map[string]any, error) {
-	var m map[string]any
-	if err := json.Unmarshal([]byte(html), &m); err != nil {
-		return nil, err
-	}
-	props, ok := m["properties"].(map[string]any)
-	if !ok {
-		return nil, errors.New("missing or invalid properties field")
-	}
-	return props, nil
-}
