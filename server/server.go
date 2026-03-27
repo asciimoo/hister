@@ -1211,7 +1211,7 @@ func serveBatch(c *webContext) {
 				results[i] = batchOpResult{Status: http.StatusBadRequest, Error: "missing url"}
 				continue
 			}
-			d := &indexer.Document{URL: op.URL, Title: op.Title, Text: op.Text, HTML: op.HTML, Favicon: op.Favicon}
+			d := &indexer.Document{URL: op.URL, Title: op.Title, Text: op.Text, HTML: op.HTML, Favicon: op.Favicon, UserID: c.UserID}
 			if c.effectiveRules().IsSkip(d.URL) || strings.HasPrefix(d.URL, c.Config.BaseURL("/")) {
 				results[i] = batchOpResult{Status: http.StatusNotAcceptable, Error: "url skipped by rules"}
 				continue
