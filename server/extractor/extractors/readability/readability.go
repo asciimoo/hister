@@ -17,6 +17,10 @@ func (e *Extractor) Name() string {
 	return "Readability"
 }
 
+func (e *Extractor) Initialize(_ map[string]any) error {
+	return nil
+}
+
 func (e *Extractor) Match(_, _ string) bool {
 	return true
 }
@@ -41,8 +45,4 @@ func (e *Extractor) Extract(_ context.Context, input *extractor.Input) (*extract
 		Text:       buf.String(),
 		FaviconURL: a.Favicon(),
 	}, nil
-}
-
-func (e *Extractor) Rebuild(_ string) (*extractor.Result, error) {
-	return nil, extractor.ErrRebuildNotSupported
 }

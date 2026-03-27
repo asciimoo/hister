@@ -74,10 +74,10 @@ type Directory struct {
 }
 
 type Indexer struct {
-	DetectLanguages bool             `yaml:"detect_languages" mapstructure:"detect_languages"`
-	Directories     []*Directory     `yaml:"directories" mapstructure:"directories"`
-	MaxFileSize     int64            `yaml:"max_file_size_mb" mapstructure:"max_file_size_mb"`
-	Extractor       ExtractorConfig  `yaml:"extractor" mapstructure:"extractor"`
+	DetectLanguages bool            `yaml:"detect_languages" mapstructure:"detect_languages"`
+	Directories     []*Directory    `yaml:"directories" mapstructure:"directories"`
+	MaxFileSize     int64           `yaml:"max_file_size_mb" mapstructure:"max_file_size_mb"`
+	Extractor       ExtractorConfig `yaml:"extractor" mapstructure:"extractor"`
 }
 
 type ExtractorConfig struct {

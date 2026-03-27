@@ -19,6 +19,10 @@ func (e *Extractor) Name() string {
 	return "Default"
 }
 
+func (e *Extractor) Initialize(_ map[string]any) error {
+	return nil
+}
+
 func (e *Extractor) Match(_, _ string) bool {
 	return true
 }
@@ -72,8 +76,4 @@ out:
 		return nil, errors.New("no content found")
 	}
 	return result, nil
-}
-
-func (e *Extractor) Rebuild(_ string) (*extractor.Result, error) {
-	return nil, extractor.ErrRebuildNotSupported
 }

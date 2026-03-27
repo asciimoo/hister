@@ -35,14 +35,13 @@ import (
 )
 
 var (
-	appSubFS                 iofs.FS
-	staticFileServer         http.Handler
-	sessionStore             *sessions.CookieStore
-	errCSRFMismatch          = errors.New("CSRF token mismatch")
-	storeName                = "hister"
-	tokName                  = "csrf_token"
-	staticTextFiles          map[string][]byte
-	multiUserNotSupportedMsg = map[string]string{"error": "rule management is not yet supported in multi-user mode"}
+	appSubFS         iofs.FS
+	staticFileServer http.Handler
+	sessionStore     *sessions.CookieStore
+	errCSRFMismatch  = errors.New("CSRF token mismatch")
+	storeName        = "hister"
+	tokName          = "csrf_token"
+	staticTextFiles  map[string][]byte
 )
 
 type historyItem struct {

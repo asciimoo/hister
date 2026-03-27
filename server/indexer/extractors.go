@@ -18,11 +18,25 @@ var syncExtractors []extractor.Extractor = []extractor.Extractor{
 
 var ErrNoExtractor = errors.New("no extractor found")
 
+func InitExtractors() error {
+	for _, e := range syncExtractors {
+		if err := e.Initialize(nil); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func Extract(d *Document) error {
 	input := &extractor.Input{
-		URL:    d.URL,
-		Domain: d.Domain,
-		HTML:   d.HTML,
+		URL:      d.URL,
+		Domain:   d.Domain,
+		HTML:     d.HTML,
+		Title:    d.Title,
+		Text:     d.Text,
+		Type:     int(d.Type),
+		Language: d.Language,
+		UserID:   d.UserID,
 	}
 	for _, e := range syncExtractors {
 		if e.Match(d.URL, d.Domain) {
