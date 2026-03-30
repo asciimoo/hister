@@ -12,6 +12,7 @@ import (
 
 	"github.com/asciimoo/hister/config"
 	"github.com/asciimoo/hister/files"
+	"github.com/asciimoo/hister/server/indexer/types"
 )
 
 var (
@@ -119,11 +120,11 @@ func IndexFile(path string) error {
 		return ErrBinaryFile
 	}
 
-	doc := &Document{
+	doc := &Document{Document: types.Document{
 		URL:   fileURL,
 		Text:  string(content),
 		Added: info.ModTime().Unix(),
-	}
+	}}
 
 	return i.AddDocument(doc)
 }

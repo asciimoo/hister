@@ -370,11 +370,11 @@ func GetLatestDocuments(limit int, latest string) *Results {
 	}
 	docs := make([]*Document, len(res.Hits))
 	for i, h := range res.Hits {
-		d := &Document{
+		d := &Document{Document: types.Document{
 			Title: h.Fields["title"].(string),
 			URL:   h.Fields["url"].(string),
 			Added: int64(h.Fields["added"].(float64)),
-		}
+		}}
 		docs[i] = d
 	}
 	return &Results{

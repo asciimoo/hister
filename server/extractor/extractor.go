@@ -2,19 +2,9 @@ package extractor
 
 import (
 	"context"
-)
 
-// Input holds the data available for extraction.
-type Input struct {
-	URL      string
-	Domain   string
-	HTML     string
-	Title    string
-	Text     string
-	Type     int
-	Language string
-	UserID   uint
-}
+	"github.com/asciimoo/hister/server/indexer/types"
+)
 
 // Result holds the output of an extraction operation.
 type Result struct {
@@ -32,6 +22,6 @@ type Extractor interface {
 	Initialize(config map[string]any) error
 	// Match returns true if this extractor can handle the given URL.
 	Match(url, domain string) bool
-	// Extract processes the input and returns a Result.
-	Extract(ctx context.Context, input *Input) (*Result, error)
+	// Extract processes the document and returns a Result.
+	Extract(ctx context.Context, doc *types.Document) (*Result, error)
 }

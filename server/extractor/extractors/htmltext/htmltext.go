@@ -10,6 +10,7 @@ import (
 	"golang.org/x/net/html"
 
 	"github.com/asciimoo/hister/server/extractor"
+	"github.com/asciimoo/hister/server/indexer/types"
 )
 
 // Extractor is a fallback that parses raw HTML tokens to extract title and body text.
@@ -27,26 +28,26 @@ func (e *Extractor) Match(_, _ string) bool {
 	return true
 }
 
-func (e *Extractor) Extract(_ context.Context, input *extractor.Input) (*extractor.Result, error) {
+func (e *Extractor) Extract(_ context.Context, doc *types.Document) (*extractor.Result, error) {
 	result := &extractor.Result{}
-	r := bytes.NewReader([]byte(input.HTML))
-	doc := html.NewTokenizer(r)
+	r := bytes.NewReader([]byte(doc.HTML))
+	tokenizer := html.NewTokenizer(r)
 	inBody := false
 	skip := false
 	var text strings.Builder
 	var currentTag string
 out:
 	for {
-		tt := doc.Next()
+		tt := tokenizer.Next()
 		switch tt {
 		case html.ErrorToken:
-			err := doc.Err()
+			err := tokenizer.Err()
 			if errors.Is(err, io.EOF) {
 				break out
 			}
 			return nil, errors.New("failed to parse html: " + err.Error())
 		case html.SelfClosingTagToken, html.StartTagToken:
-			tn, _ := doc.TagName()
+			tn, _ := tokenizer.TagName()
 			currentTag = string(tn)
 			switch currentTag {
 			case "body":
@@ -56,13 +57,13 @@ out:
 			}
 		case html.TextToken:
 			if currentTag == "title" {
-				result.Title += strings.TrimSpace(string(doc.Text()))
+				result.Title += strings.TrimSpace(string(tokenizer.Text()))
 			}
 			if inBody && !skip {
-				text.Write(doc.Text())
+				text.Write(tokenizer.Text())
 			}
 		case html.EndTagToken:
-			tn, _ := doc.TagName()
+			tn, _ := tokenizer.TagName()
 			switch string(tn) {
 			case "body":
 				inBody = false

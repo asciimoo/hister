@@ -19,18 +19,7 @@ import (
 )
 
 type Document struct {
-	URL                string         `json:"url"`
-	Domain             string         `json:"domain"`
-	HTML               string         `json:"html"`
-	Title              string         `json:"title"`
-	Text               string         `json:"text"`
-	Favicon            string         `json:"favicon"`
-	Score              float64        `json:"score"`
-	Added              int64          `json:"added"`
-	Type               types.DocType  `json:"type"`
-	Language           string         `json:"language"`
-	UserID             uint           `json:"user_id"`
-	Properties         map[string]any `json:"properties,omitempty"`
+	types.Document
 	faviconURL         string
 	processed          bool
 	skipSensitiveCheck bool

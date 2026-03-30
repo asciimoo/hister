@@ -24,6 +24,7 @@ import (
 	"github.com/asciimoo/hister/files"
 	"github.com/asciimoo/hister/server"
 	"github.com/asciimoo/hister/server/indexer"
+	"github.com/asciimoo/hister/server/indexer/types"
 	"github.com/asciimoo/hister/server/model"
 	"github.com/asciimoo/hister/ui"
 
@@ -809,10 +810,10 @@ func indexURL(u string) error {
 		return errors.New(`failed to read response body: ` + err.Error())
 	}
 
-	d := &indexer.Document{
+	d := &indexer.Document{Document: types.Document{
 		URL:  u,
 		HTML: buf.String(),
-	}
+	}}
 	if err := d.Process(nil); err != nil {
 		return errors.New(`failed to process document: ` + err.Error())
 	}

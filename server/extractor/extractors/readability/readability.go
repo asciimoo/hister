@@ -8,6 +8,7 @@ import (
 	goreadability "codeberg.org/readeck/go-readability/v2"
 
 	"github.com/asciimoo/hister/server/extractor"
+	"github.com/asciimoo/hister/server/indexer/types"
 )
 
 // Extractor uses the go-readability library to extract article content from HTML.
@@ -25,10 +26,10 @@ func (e *Extractor) Match(_, _ string) bool {
 	return true
 }
 
-func (e *Extractor) Extract(_ context.Context, input *extractor.Input) (*extractor.Result, error) {
-	r := bytes.NewReader([]byte(input.HTML))
+func (e *Extractor) Extract(_ context.Context, doc *types.Document) (*extractor.Result, error) {
+	r := bytes.NewReader([]byte(doc.HTML))
 
-	u, err := url.Parse(input.URL)
+	u, err := url.Parse(doc.URL)
 	if err != nil {
 		return nil, err
 	}

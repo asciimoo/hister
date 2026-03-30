@@ -28,19 +28,9 @@ func InitExtractors() error {
 }
 
 func Extract(d *Document) error {
-	input := &extractor.Input{
-		URL:      d.URL,
-		Domain:   d.Domain,
-		HTML:     d.HTML,
-		Title:    d.Title,
-		Text:     d.Text,
-		Type:     int(d.Type),
-		Language: d.Language,
-		UserID:   d.UserID,
-	}
 	for _, e := range syncExtractors {
 		if e.Match(d.URL, d.Domain) {
-			result, err := e.Extract(context.Background(), input)
+			result, err := e.Extract(context.Background(), &d.Document)
 			if err != nil {
 				log.Warn().Err(err).Str("URL", d.URL).Str("Extractor", e.Name()).Msg("Failed to extract content")
 				continue
