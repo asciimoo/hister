@@ -76,10 +76,20 @@ func (m *Manager) Enqueue(url, domain string) {
 	}
 }
 
-// Close signals workers to stop and waits for them to finish.
+// Close signals workers to stop, waits for in-flight work to finish,
+// and drains any remaining items in the queue.
 func (m *Manager) Close() {
 	close(m.done)
 	m.wg.Wait()
+	// Drain any items that were queued but not yet picked up by a worker.
+	for {
+		select {
+		case item := <-m.queue:
+			m.process(item)
+		default:
+			return
+		}
+	}
 }
 
 func (m *Manager) worker() {
