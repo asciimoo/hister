@@ -83,6 +83,20 @@ func init() {
 			CSRFRequired: true,
 			Handler:      serveAdd,
 			Description:  "Save added document",
+			Args: []*EndpointArg{
+				{
+					Name:        "url",
+					Type:        "string",
+					Required:    true,
+					Description: "URL of the document to add",
+				},
+				{
+					Name:        "title",
+					Type:        "string",
+					Required:    false,
+					Description: "Optional title of the document",
+				},
+			},
 		},
 		// alias for /api/add - backward compatibility - use /api/add in the future
 		{
@@ -92,6 +106,20 @@ func init() {
 			CSRFRequired: true,
 			Handler:      serveAdd,
 			Description:  "Save added document",
+			Args: []*EndpointArg{
+				{
+					Name:        "url",
+					Type:        "string",
+					Required:    true,
+					Description: "URL of the document to add",
+				},
+				{
+					Name:        "title",
+					Type:        "string",
+					Required:    false,
+					Description: "Optional title of the document",
+				},
+			},
 		},
 		{
 			Name:         "Get document",
@@ -240,6 +268,20 @@ func init() {
 			NoAuth:       true,
 			Handler:      serveLogin,
 			Description:  "Login with username and password",
+			Args: []*EndpointArg{
+				{
+					Name:        "username",
+					Type:        "string",
+					Required:    true,
+					Description: "Username of the user",
+				},
+				{
+					Name:        "password",
+					Type:        "string",
+					Required:    true,
+					Description: "Password of the user",
+				},
+			},
 		},
 		{
 			Name:         "Logout",
@@ -264,6 +306,14 @@ func init() {
 			CSRFRequired: true,
 			Handler:      serveGenerateToken,
 			Description:  "Generate a new access token for the current user",
+			Args: []*EndpointArg{
+				{
+					Name:        "description",
+					Type:        "string",
+					Required:    false,
+					Description: "Optional description for the generated token",
+				},
+			},
 		},
 	}
 }
