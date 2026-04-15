@@ -1,0 +1,28 @@
+name: Nix flake check
+
+on:
+  pull_request:
+    paths:
+      - flake.nix
+      - flake.lock
+      - nix/**
+      - '*.go'
+      - go.mod
+      - go.sum
+  push:
+    branches:
+      - master
+
+jobs:
+  flake-check:
+    name: flake-check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v6.0.4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31.10.4
+
+      - name: Run nix flake check
+        run: nix flake check --all-systems
