@@ -5,28 +5,66 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "[dep] "
     groups:
       go-deps:
-        patterns:
-          - '*'
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
 
   - package-ecosystem: npm
-    directory: /
+    directories:
+      - "/"
+      - "/webui/*"
     schedule:
       interval: weekly
       day: monday
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "[dep] "
+      prefix-development: "[dep] "
     groups:
-      npm-deps:
-        patterns:
-          - '*'
+      npm-dev-deps:
+        applies-to: version-updates
+        dependency-type: development
+        update-types:
+          - minor
+          - patch
+      npm-prod-deps:
+        applies-to: version-updates
+        dependency-type: production
+        update-types:
+          - minor
+          - patch
 
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
       day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "[dep] "
     groups:
       gha-deps:
+        applies-to: version-updates
+        patterns:
+          - '*'
+
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "[dep] "
+    groups:
+      docker-deps:
+        applies-to: version-updates
         patterns:
           - '*'
 
@@ -35,7 +73,11 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "[dep] "
     groups:
       nix-deps:
+        applies-to: version-updates
         patterns:
           - '*'
