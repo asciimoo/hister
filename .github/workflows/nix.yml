@@ -1,0 +1,83 @@
+name: Nix checks
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+
+jobs:
+  flake-check-linux:
+    name: nix flake check (ubuntu-latest)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Check for Nix-relevant changes
+        id: changes
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD -- \
+            'flake.nix' 'flake.lock' 'nix/**' '.github/workflows/nix.yml')
+          if [ -z "$FILES" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install Nix
+        if: steps.changes.outputs.skip != 'true'
+        uses: cachix/install-nix-action@v31.10.4
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            accept-flake-config = true
+
+      - name: Run flake checks
+        if: steps.changes.outputs.skip != 'true'
+        run: nix flake check -L --keep-going
+
+  flake-check-darwin:
+    name: nix flake check (macos-latest)
+    runs-on: macos-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Check for Nix-relevant changes
+        id: changes
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD -- \
+            'flake.nix' 'flake.lock' 'nix/**' '.github/workflows/nix.yml')
+          if [ -z "$FILES" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install Nix
+        if: steps.changes.outputs.skip != 'true'
+        uses: cachix/install-nix-action@v31.10.4
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            accept-flake-config = true
+
+      # Darwin module checks only live under darwin systems. Everything
+      # else (the NixOS / home-manager eval checks) runs on Linux too, so
+      # we limit this runner to the darwin-specific ones to keep it fast.
+      - name: Run darwin + cross-platform flake checks
+        if: steps.changes.outputs.skip != 'true'
+        run: nix flake check -L --keep-going

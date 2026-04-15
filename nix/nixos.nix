@@ -52,7 +52,11 @@
       after = [ "network.target" ];
       wantedBy = [ "multi-user.target" ];
 
-      environment = histerEnv config.services.hister;
+      environment =
+        histerEnv config.services.hister
+        // lib.optionalAttrs (config.services.hister.dataDir == null) {
+          HISTER_DATA_DIR = "/var/lib/hister";
+        };
 
       serviceConfig = {
         ExecStart = "${lib.getExe config.services.hister.package} listen";

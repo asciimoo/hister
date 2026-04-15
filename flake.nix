@@ -3,8 +3,15 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
-    flake-parts.url = "github:hercules-ci/flake-parts";
+
     flake-parts.inputs.nixpkgs-lib.follows = "nixpkgs";
+    flake-parts.url = "github:hercules-ci/flake-parts";
+
+    home-manager.inputs.nixpkgs.follows = "nixpkgs";
+    home-manager.url = "github:nix-community/home-manager";
+
+    nix-darwin.inputs.nixpkgs.follows = "nixpkgs";
+    nix-darwin.url = "github:nix-darwin/nix-darwin";
   };
 
   outputs =
@@ -35,6 +42,10 @@
 
           devShells.default = pkgs.mkShell {
             packages = builtins.attrValues { inherit (pkgs) go gopls gotools; };
+          };
+
+          checks = import ./nix/checks {
+            inherit pkgs system inputs;
           };
         };
 
