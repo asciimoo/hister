@@ -15,8 +15,10 @@ jobs:
 
       - name: Check for Go changes
         id: changes
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD -- '*.go' 'go.mod' 'go.sum')
+          FILES=$(git diff --name-only "origin/${BASE_REF}...HEAD" -- '*.go' 'go.mod' 'go.sum')
           if [ -z "$FILES" ]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
           else
@@ -25,7 +27,7 @@ jobs:
 
       - name: Set up Go
         if: steps.changes.outputs.skip != 'true'
-        uses: actions/setup-go@v6.3.0
+        uses: actions/setup-go@v6.4.0
         with:
           go-version: 'stable'
 
@@ -54,8 +56,10 @@ jobs:
 
       - name: Check for NPM-related changes
         id: changes
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD -- 'webui/**' 'package.json' 'package-lock.json' 'prettier.config.js')
+          FILES=$(git diff --name-only "origin/${BASE_REF}...HEAD" -- 'webui/**' 'package.json' 'package-lock.json' 'prettier.config.js')
           if [ -z "$FILES" ]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
           else
@@ -96,8 +100,10 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Check for merge commits
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          MERGE_COMMITS=$(git log --merges --oneline origin/${{ github.base_ref }}..HEAD)
+          MERGE_COMMITS=$(git log --merges --oneline "origin/${BASE_REF}..HEAD")
           if [ -n "$MERGE_COMMITS" ]; then
             echo "::error::PR contains merge commits. Please rebase instead of merging"
             echo "$MERGE_COMMITS"

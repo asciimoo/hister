@@ -1,0 +1,44 @@
+name: actionlint
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+
+jobs:
+  actionlint:
+    name: actionlint
+    runs-on: ubuntu-latest
+    env:
+      ACTIONLINT_VERSION: "1.7.12"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Check for workflow changes
+        id: changes
+        if: github.event_name == 'pull_request'
+        shell: bash
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          FILES=$(git diff --name-only "origin/${BASE_REF}...HEAD" -- '.github/workflows/**')
+          if [ -z "$FILES" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download actionlint
+        if: steps.changes.outputs.skip != 'true'
+        shell: bash
+        run: |
+          bash <(curl -fsSL "https://raw.githubusercontent.com/rhysd/actionlint/v${ACTIONLINT_VERSION}/scripts/download-actionlint.bash") "${ACTIONLINT_VERSION}"
+
+      - name: Run actionlint
+        if: steps.changes.outputs.skip != 'true'
+        shell: bash
+        run: ./actionlint -color
