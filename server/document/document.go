@@ -138,10 +138,12 @@ func (d *Document) Process(ld LanguageDetector, extractFn func(*Document) error)
 		return errors.New("invalid URL: missing scheme/host")
 	}
 	d.normalizeWebURL(pu)
-	d.Added = time.Now().Unix()
+	if d.Added == 0 {
+		d.Added = time.Now().Unix()
+	}
 	d.Type = types.Web
 	d.Domain = pu.Hostname()
-	if d.HTML != "" {
+	if d.HTML != "" && d.Text == "" {
 		if err := extractFn(d); err != nil {
 			return err
 		}
@@ -207,7 +209,9 @@ func (d *Document) processFile(ld LanguageDetector) error {
 
 // finalizeDocument sets the document language and marks it as processed.
 func (d *Document) finalizeDocument(ld LanguageDetector) {
-	d.Language = ld.DetectLanguage(d.Text)
+	if d.Language == "" || d.Language == UnknownLanguage {
+		d.Language = ld.DetectLanguage(d.Text)
+	}
 	d.processed = true
 }
 
