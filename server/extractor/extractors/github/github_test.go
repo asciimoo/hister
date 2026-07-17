@@ -218,6 +218,37 @@ func TestExtractRepo(t *testing.T) {
 	}
 }
 
+func TestPreviewRepo(t *testing.T) {
+	d := &document.Document{
+		URL:  "https://github.com/asciimoo/hister",
+		HTML: minimalRepoPage,
+	}
+	e := &GitHubExtractor{}
+	response, state, err := e.Preview(d)
+	c := response.Content
+	if err != nil {
+		t.Fatalf("Extract error: %v", err)
+	}
+	if state != types.ExtractorStop {
+		t.Fatalf("state = %v, want Stop", state)
+	}
+	if c == "" {
+		t.Fatalf("content is empty")
+	}
+	if !strings.Contains(c, `<p class="gh-description">Your own search engine</p>`) {
+		t.Error("Preview should contain the description")
+	}
+	if !strings.Contains(c, "<h1>Hister</h1>") {
+		t.Error("Preview should contain the README, properly formatted")
+	}
+	if !strings.Contains(c, "Hister is a general purpose web search engine providing automatic full-text indexing for visited websites") {
+		t.Error("Preview should contain the README body")
+	}
+	if !strings.Contains(c, `<p class="gh-stats">`) {
+		t.Errorf("Preview should show the stats nicely")
+	}
+}
+
 // --- Issue ---------------------------------------------------------------
 const issuePage = `<html>
 <head><title>Extractors wanted! · Issue #305 · asciimoo/hister</title></head>
