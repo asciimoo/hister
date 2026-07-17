@@ -332,6 +332,28 @@ func TestExtractIssuePage(t *testing.T) {
 	}
 }
 
+func TestPreviewIssue(t *testing.T) {
+	d := &document.Document{
+		URL:  "https://github.com/asciimoo/hister/issues/305",
+		HTML: issuePage,
+	}
+	e := &GitHubExtractor{}
+	response, state, err := e.Preview(d)
+	c := response.Content
+	if err != nil {
+		t.Fatalf("Extract error: %v", err)
+	}
+	if state != types.ExtractorStop {
+		t.Fatalf("state = %v, want Stop", state)
+	}
+	if c == "" {
+		t.Fatalf("content is empty")
+	}
+	if !strings.Contains(c, `<h1>This is a meta issue raising awareness to contribute to existing extractors or add new ones</h1>`) {
+		t.Error("Preview should contain the issue title, if it exists")
+	}
+}
+
 const issuesPage = `<html>
 <head><title>Issues · asciimoo/hister</title></head>
 <body>
