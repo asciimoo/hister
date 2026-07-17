@@ -272,6 +272,7 @@ const issuePage = `<html>
 		<div data-testid="markdown-body">
 		  <h1 dir="auto">This is a meta issue raising awareness to contribute to existing extractors or add new ones</h1>
 		  <p dir="auto">Extractors are modules that provide custom, content-specific document parsing or rendering functions to enhance the data quality of Hister. [...]</p>
+		  <ul><li><div><div><div><div><div data-testid="tasklist-item-0-0"><div><div></div><div id="checkbox-item-0"><input disabled="" aria-required="false" aria-invalid="false" aria-label="Video information extractor using yt-dlp (@FlameFlag) checklist item" data-component="Checkbox" type="checkbox" checked="" aria-checked="true"><div> Video information extractor using<code>yt-dlp</code> (@FlameFlag)</div></div></div><div></div></div></div></div><div><div><div data-testid="tasklist-item-0-1"><div><div></div><div id="checkbox-item-1"><input disabled="" aria-required="false" aria-invalid="false" aria-label="GitHub project information extractor checklist item" data-component="Checkbox" type="checkbox" aria-checked="false"><div> GitHub project information extractor</div></div></div><div></div></div></div></div><div><div><div data-testid="tasklist-item-0-2"><div><div></div><div id="checkbox-item-2"><input disabled="" aria-required="false" aria-invalid="false" aria-label="General StackExchange question/answer extractor checklist item" data-component="Checkbox" type="checkbox" checked="" aria-checked="true"><div> General StackExchange question/answer extractor</div></div></div><div></div></div></div></div><div><div><div data-testid="tasklist-item-0-3"><div><div></div><div id="checkbox-item-3"><input disabled="" aria-required="false" aria-invalid="false" aria-label="Reddit post extractor (@dinzz005) checklist item" data-component="Checkbox" type="checkbox" aria-checked="false"><div> Reddit post extractor (<a data-hovercard-type="user" data-hovercard-url="/users/dinzz005/hovercard" data-octo-click="hovercard-link-click" data-octo-dimensions="link_type:self" href="https://github.com/dinzz005" aria-keyshortcuts="Alt+ArrowUp">@dinzz005</a>)</div></div></div><div></div></div></div></div></div></div></li></ul>
 		</div>
       </div>
 	</div>
@@ -349,8 +350,17 @@ func TestPreviewIssue(t *testing.T) {
 	if c == "" {
 		t.Fatalf("content is empty")
 	}
-	if !strings.Contains(c, `<h1>This is a meta issue raising awareness to contribute to existing extractors or add new ones</h1>`) {
-		t.Error("Preview should contain the issue title, if it exists")
+	if !strings.Contains(c, `<h1>Extractors wanted!</h1>`) {
+		t.Error("Preview should contain the issue title")
+	}
+	if !strings.Contains(c, `This is a meta issue raising awareness to contribute to existing extractors or add new ones`) {
+		t.Error("Preview should contain the issue body, if it exists")
+	}
+	if !strings.Contains(c, `General StackExchange question/answer extractor`) {
+		t.Error("Preview should contain the issue body, if it exists")
+	}
+	if !strings.Contains(c, `Thanks bro, is there any deadline for this ???`) {
+		t.Error("Preview should contain the issue comments")
 	}
 }
 

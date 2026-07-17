@@ -465,7 +465,33 @@ func extractIssue(d *document.Document) (types.ExtractorState, error) {
 }
 
 func previewIssue(d *document.Document) (types.PreviewResponse, types.ExtractorState, error) {
-	return types.PreviewResponse{}, types.ExtractorContinue, nil
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(d.HTML))
+	if err != nil {
+		return types.PreviewResponse{}, types.ExtractorContinue, err
+	}
+
+	info := parseIssue(doc)
+	if info == nil {
+		return types.PreviewResponse{}, types.ExtractorContinue, nil
+	}
+
+	var b strings.Builder
+
+	fmt.Println(info.title)
+	fmt.Println(info.body)
+	if info.title != "" {
+		fmt.Fprintf(&b, "<h1>%s</h1>", info.title)
+	}
+
+	if info.body != "" {
+		fmt.Fprintf(&b, "<hr>%s", info.body)
+	}
+
+	if len(info.commentBodies) > 0 {
+		fmt.Fprintf(&b, "<hr>%s", strings.Join(info.commentBodies, "<br><br>"))
+	}
+
+	return types.PreviewResponse{Content: b.String()}, types.ExtractorStop, nil
 }
 
 type issueInfo struct {
