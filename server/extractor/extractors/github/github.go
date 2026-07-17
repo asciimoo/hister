@@ -97,13 +97,14 @@ var (
 type githubPattern = struct {
 	re      *regexp.Regexp
 	handler func(*document.Document) (types.ExtractorState, error)
+	preview func(*document.Document) (types.PreviewResponse, types.ExtractorState, error)
 }
 
 var githubPatterns = []githubPattern{
-	{fullRepoRe, extractRepo},
-	{issueRe, extractIssue},
-	{issuesRe, extractIssues},
-	{prRe, extractPull},
+	{fullRepoRe, extractRepo, previewRepo},
+	{issueRe, extractIssue, previewIssue},
+	{issuesRe, extractIssues, previewIssues},
+	{prRe, extractPull, previewPull},
 }
 
 // Match returns true for known github URLs, defined in githubPatterns
@@ -144,57 +145,14 @@ func (e *GitHubExtractor) Extract(d *document.Document) (types.ExtractorState, e
 	return types.ExtractorContinue, fmt.Errorf("no extractor matched for %s", d.URL)
 }
 
-// Preview renders a summary card (description, stars, topics, languages) and
-// the sanitized README HTML suitable for the preview panel.
 func (e *GitHubExtractor) Preview(d *document.Document) (types.PreviewResponse, types.ExtractorState, error) {
-	doc, err := goquery.NewDocumentFromReader(strings.NewReader(d.HTML))
-	if err != nil {
-		return types.PreviewResponse{}, types.ExtractorContinue, err
-	}
-
-	info := parseRepoPage(doc, d.HTML)
-	if info == nil {
-		return types.PreviewResponse{}, types.ExtractorContinue, nil
-	}
-
-	var b strings.Builder
-
-	// Metadata card.
-	b.WriteString(`<div class="gh-meta">`)
-
-	if info.description != "" {
-		fmt.Fprintf(&b, `<p class="gh-description">%s</p>`, stdhtml.EscapeString(info.description))
-	}
-
-	if info.stars != "" || len(info.languages) > 0 {
-		b.WriteString(`<p class="gh-stats">`)
-		parts := make([]string, 0, 2)
-		if info.stars != "" {
-			parts = append(parts, fmt.Sprintf("&#9733; %s stars", stdhtml.EscapeString(info.stars)))
+	for _, p := range githubPatterns {
+		if p.re.MatchString(d.URL) {
+			return p.preview(d)
 		}
-		if len(info.languages) > 0 {
-			parts = append(parts, stdhtml.EscapeString(strings.Join(info.languages, " / ")))
-		}
-		b.WriteString(strings.Join(parts, " &nbsp;&middot;&nbsp; "))
-		b.WriteString("</p>")
 	}
 
-	if len(info.topics) > 0 {
-		b.WriteString(`<p class="gh-topics">`)
-		for _, t := range info.topics {
-			fmt.Fprintf(&b, `<code>%s</code> `, stdhtml.EscapeString(t))
-		}
-		b.WriteString("</p>")
-	}
-
-	b.WriteString("</div>")
-
-	if info.readmeHTML != "" {
-		b.WriteString("<hr>")
-		b.WriteString(sanitizer.SanitizeHTML(info.readmeHTML))
-	}
-
-	return types.PreviewResponse{Content: b.String()}, types.ExtractorStop, nil
+	return types.PreviewResponse{}, types.ExtractorContinue, fmt.Errorf("no previewer matched for %s", d.URL)
 }
 
 // --- Repositories --------------------------------------------------------
@@ -265,6 +223,59 @@ func extractRepo(d *document.Document) (types.ExtractorState, error) {
 		return types.ExtractorContinue, fmt.Errorf("no content found")
 	}
 	return types.ExtractorStop, nil
+}
+
+// Preview renders a summary card (description, stars, topics, languages) and
+// the sanitized README HTML suitable for the preview panel.
+func previewRepo(d *document.Document) (types.PreviewResponse, types.ExtractorState, error) {
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(d.HTML))
+	if err != nil {
+		return types.PreviewResponse{}, types.ExtractorContinue, err
+	}
+
+	info := parseRepoPage(doc, d.HTML)
+	if info == nil {
+		return types.PreviewResponse{}, types.ExtractorContinue, nil
+	}
+
+	var b strings.Builder
+
+	// Metadata card.
+	b.WriteString(`<div class="gh-meta">`)
+
+	if info.description != "" {
+		fmt.Fprintf(&b, `<p class="gh-description">%s</p>`, stdhtml.EscapeString(info.description))
+	}
+
+	if info.stars != "" || len(info.languages) > 0 {
+		b.WriteString(`<p class="gh-stats">`)
+		parts := make([]string, 0, 2)
+		if info.stars != "" {
+			parts = append(parts, fmt.Sprintf("&#9733; %s stars", stdhtml.EscapeString(info.stars)))
+		}
+		if len(info.languages) > 0 {
+			parts = append(parts, stdhtml.EscapeString(strings.Join(info.languages, " / ")))
+		}
+		b.WriteString(strings.Join(parts, " &nbsp;&middot;&nbsp; "))
+		b.WriteString("</p>")
+	}
+
+	if len(info.topics) > 0 {
+		b.WriteString(`<p class="gh-topics">`)
+		for _, t := range info.topics {
+			fmt.Fprintf(&b, `<code>%s</code> `, stdhtml.EscapeString(t))
+		}
+		b.WriteString("</p>")
+	}
+
+	b.WriteString("</div>")
+
+	if info.readmeHTML != "" {
+		b.WriteString("<hr>")
+		b.WriteString(sanitizer.SanitizeHTML(info.readmeHTML))
+	}
+
+	return types.PreviewResponse{Content: b.String()}, types.ExtractorStop, nil
 }
 
 // repoInfo holds the extracted fields from a GitHub repository page.
@@ -452,6 +463,10 @@ func extractIssue(d *document.Document) (types.ExtractorState, error) {
 	return types.ExtractorStop, nil
 }
 
+func previewIssue(d *document.Document) (types.PreviewResponse, types.ExtractorState, error) {
+	return types.PreviewResponse{}, types.ExtractorContinue, nil
+}
+
 func extractIssues(d *document.Document) (types.ExtractorState, error) {
 	doc, err := goquery.NewDocumentFromReader(strings.NewReader(d.HTML))
 	if err != nil {
@@ -491,6 +506,10 @@ func extractIssues(d *document.Document) (types.ExtractorState, error) {
 		return types.ExtractorContinue, fmt.Errorf("no content found")
 	}
 	return types.ExtractorStop, nil
+}
+
+func previewIssues(d *document.Document) (types.PreviewResponse, types.ExtractorState, error) {
+	return types.PreviewResponse{}, types.ExtractorContinue, nil
 }
 
 // --- Pull Requests -------------------------------------------------------
@@ -539,4 +558,8 @@ func extractPull(d *document.Document) (types.ExtractorState, error) {
 	}
 
 	return types.ExtractorStop, nil
+}
+
+func previewPull(d *document.Document) (types.PreviewResponse, types.ExtractorState, error) {
+	return types.PreviewResponse{}, types.ExtractorContinue, nil
 }
