@@ -42,6 +42,11 @@
       Use <code>visits:</code> to filter by visit count, such as <code>visits:1</code>,
       <code>visits:2..4</code>, or <code>visits:10..</code>.
     </p>
+    <p>
+      Use <code>added:</code> and <code>updated:</code> to filter by relative time or an absolute
+      <code>YYYY-MM-DD</code> date, such as <code>updated:&gt;90d</code> or
+      <code>added:&gt;=2026-04-01</code>.
+    </p>
 
     <h3>Examples</h3>
     <p>
@@ -55,6 +60,13 @@
     <p>
       <code>project docs visits:5..9</code>: Search matching pages that have been visited between 5
       and 9 times.
+    </p>
+    <p>
+      <code>updated:&gt;90d</code>: Search pages that have not been updated in more than 90 days.
+    </p>
+    <p>
+      <code>updated:&gt;=2026-04-01 updated:&lt;2026-05-01</code>: Search pages updated during April
+      2026. Absolute dates represent midnight UTC.
     </p>
 
     <h2>Search Aliases</h2>

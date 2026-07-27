@@ -35,6 +35,14 @@
     FacetsResult,
   } from '$lib/search';
   import { RESULTS_PER_PAGE } from '$lib/search';
+  import {
+    DATE_BUCKET_FILTERS,
+    customDatesFromQuery,
+    removeUpdatedTimeFilters,
+    replaceUpdatedTimeFilters,
+    shiftISODate,
+    updatedTimeFilters,
+  } from '$lib/time-filters';
   import { animate } from 'animejs';
   import { Input } from '@hister/components/ui/input';
   import { Button } from '@hister/components/ui/button';
@@ -458,7 +466,7 @@
     last_year: 'Last year',
     older: 'Older',
   };
-  // facetsCache maps a query+date key to the fetched FacetsResult
+  // facetsCache maps a canonical query key to the fetched FacetsResult.
   let facetsCache = $state(new Map<string, FacetsResult>());
   let facetsLoading = $state(false);
   let filtersDropdownOpen = $state(false);
@@ -475,7 +483,7 @@
 
   function facetsCacheKey(): string {
     const sizes = [...facetSizes.entries()].sort(([a], [b]) => a.localeCompare(b));
-    return `${query}|${dateFrom}|${dateTo}|${JSON.stringify(sizes)}`;
+    return `${query}|${JSON.stringify(sizes)}`;
   }
 
   const currentFacets = $derived(facetsCache.get(facetsCacheKey()));
@@ -487,12 +495,6 @@
     facetsLoading = true;
     try {
       const params = new URLSearchParams({ q: query });
-      if (dateFrom) {
-        params.set('date_from', String(Math.floor(new Date(dateFrom).getTime() / 1000)));
-      }
-      if (dateTo) {
-        params.set('date_to', String(Math.floor(new Date(dateTo).getTime() / 1000)));
-      }
       for (const [name, size] of facetSizes) {
         if (size !== DEFAULT_FACET_SIZE) params.set(`size_${name}`, String(size));
       }
@@ -515,34 +517,12 @@
     if (filtersDropdownOpen) fetchFacets();
   });
 
-  // Invalidate cache and reset sizes when query or dates change
+  // Invalidate cache and reset sizes when the canonical query changes.
   $effect(() => {
     const _q = query;
-    const _df = dateFrom;
-    const _dt = dateTo;
     facetsCache = new Map();
     facetSizes = new Map();
   });
-
-  function dateRangeForBucket(name: string): { from: string; to: string } {
-    const now = new Date();
-    const toISO = (d: Date) => d.toISOString().slice(0, 10);
-    const ago = (days: number) => toISO(new Date(now.getTime() - days * 86400 * 1000));
-    switch (name) {
-      case 'last_24h':
-        return { from: ago(1), to: '' };
-      case 'last_7d':
-        return { from: ago(7), to: '' };
-      case 'last_30d':
-        return { from: ago(30), to: '' };
-      case 'last_year':
-        return { from: ago(365), to: '' };
-      case 'older':
-        return { from: '', to: ago(365) };
-      default:
-        return { from: '', to: '' };
-    }
-  }
 
   const activeDomainFilters = $derived(
     new Set([...query.matchAll(/\bdomain:(\S+)/g)].map((m) => m[1])),
@@ -556,28 +536,22 @@
   const activeVisitFilters = $derived(
     new Set([...query.matchAll(/\bvisits:(\S+)/g)].map((m) => m[1])),
   );
+  const activeUpdatedTimeFilters = $derived(updatedTimeFilters(query));
   const activeDateBucket = $derived(
-    (() => {
-      if (!dateFrom && !dateTo) return null;
-      const now = new Date();
-      const toISO = (d: Date) => d.toISOString().slice(0, 10);
-      const ago = (days: number) => toISO(new Date(now.getTime() - days * 86400 * 1000));
-      const buckets = [
-        { name: 'last_24h', from: ago(1), to: '' },
-        { name: 'last_7d', from: ago(7), to: '' },
-        { name: 'last_30d', from: ago(30), to: '' },
-        { name: 'last_year', from: ago(365), to: '' },
-        { name: 'older', from: '', to: ago(365) },
-      ];
-      return buckets.find((b) => b.from === dateFrom && b.to === dateTo)?.name ?? null;
-    })(),
+    activeUpdatedTimeFilters.length === 1
+      ? (Object.entries(DATE_BUCKET_FILTERS).find(
+          ([, value]) =>
+            value ===
+            `${activeUpdatedTimeFilters[0].comparison}${activeUpdatedTimeFilters[0].value.toLowerCase()}`,
+        )?.[0] ?? null)
+      : null,
   );
   const activeFilterCount = $derived(
     activeDomainFilters.size +
       activeLanguageFilters.size +
       activeTypeFilters.size +
       activeVisitFilters.size +
-      (activeDateBucket ? 1 : 0),
+      (activeUpdatedTimeFilters.length > 0 ? 1 : 0),
   );
 
   function showFacetCategory(name: string, activeFilters: Set<string>) {
@@ -600,15 +574,32 @@
 
   function toggleDateBucket(name: string) {
     if (activeDateBucket === name) {
-      dateFrom = '';
-      dateTo = '';
-      sendQuery(query);
+      query = removeUpdatedTimeFilters(query);
     } else {
-      const { from, to } = dateRangeForBucket(name);
-      dateFrom = from;
-      dateTo = to;
+      const filter = DATE_BUCKET_FILTERS[name];
+      if (filter) query = replaceUpdatedTimeFilters(query, [filter]);
     }
   }
+
+  function updateCustomDateFilter(field: 'from' | 'to', value: string) {
+    const from = field === 'from' ? value : dateFrom;
+    const to = field === 'to' ? value : dateTo;
+    dateFrom = from;
+    dateTo = to;
+    const filters: string[] = [];
+    if (shiftISODate(from, 0)) filters.push(`>=${from}`);
+    const exclusiveTo = shiftISODate(to, 1);
+    if (exclusiveTo) filters.push(`<${exclusiveTo}`);
+    query = replaceUpdatedTimeFilters(query, filters);
+  }
+
+  $effect(() => {
+    const dates = customDatesFromQuery(query);
+    untrack(() => {
+      dateFrom = dates.from;
+      dateTo = dates.to;
+    });
+  });
 
   function connect() {
     wsManager = new WebSocketManager(config.wsUrl, {
@@ -630,8 +621,6 @@
   function searchQueryOpts(pageKey = ''): SearchQueryOptions {
     return {
       sort: currentSort,
-      dateFrom,
-      dateTo,
       semantic: { enabled: semanticOn && config.semanticEnabled, threshold: similarityThreshold },
       pageKey,
       limit: RESULTS_PER_PAGE,
@@ -663,8 +652,6 @@
   function buildSearchUrl(): string {
     const params = new URLSearchParams();
     if (query) params.set('q', query);
-    if (dateFrom) params.set('date_from', dateFrom);
-    if (dateTo) params.set('date_to', dateTo);
     if (currentSort) params.set('sort', currentSort);
     const search = params.toString();
     return `${base}/${search ? `?${search}` : ''}`;
@@ -674,13 +661,13 @@
 
   function pushSearchHistory() {
     const url = buildSearchUrl();
-    history.pushState({ type: 'search', query, dateFrom, dateTo, sort: currentSort }, '', url);
+    history.pushState({ type: 'search', query, sort: currentSort }, '', url);
     lastPushedEmpty = !query;
   }
 
   function replaceSearchHistory() {
     const url = buildSearchUrl();
-    history.replaceState({ type: 'search', query, dateFrom, dateTo, sort: currentSort }, '', url);
+    history.replaceState({ type: 'search', query, sort: currentSort }, '', url);
     lastPushedEmpty = !query;
   }
 
@@ -714,8 +701,6 @@
     skipUrl.value = true;
     const params = new URLSearchParams(window.location.search);
     query = params.get('q') || '';
-    dateFrom = params.get('date_from') || '';
-    dateTo = params.get('date_to') || '';
     currentSort = parseSortParam(params.get('sort'));
     lastPushedEmpty = !query;
     if (query && connected) sendQuery(query);
@@ -1293,10 +1278,6 @@
       loadingMoreForQuery = '';
     }
   });
-  $effect(() => {
-    if (dateFrom || dateTo) sendQuery(query);
-  });
-
   // Persist and react to semantic setting changes.
   $effect(() => {
     localStorage.setItem('hister-semantic-on', String(semanticOn));
@@ -1338,13 +1319,9 @@
   });
   $effect.pre(() => {
     const urlParams = new URLSearchParams(window.location.search);
-    const q = urlParams.get('q');
-    const df = urlParams.get('date_from');
-    const dt = urlParams.get('date_to');
+    const q = urlParams.get('q') || '';
     const sort = urlParams.get('sort');
     if (q) query = q;
-    if (df) dateFrom = df;
-    if (dt) dateTo = dt;
     currentSort = parseSortParam(sort);
     lastPushedEmpty = !q;
   });
@@ -1540,12 +1517,6 @@
         >{query}</code
       >
       <p class="font-inter text-hister-rose text-xs font-semibold">This action cannot be undone.</p>
-      {#if dateFrom || dateTo}
-        <p class="font-inter text-text-brand-muted text-xs">
-          Note: date filters are not applied to deletion — all results matching the text query above
-          will be deleted.
-        </p>
-      {/if}
     </div>
     <div class="border-border-brand-muted flex shrink-0 justify-end gap-2 border-t-[3px] px-5 py-3">
       <Button
@@ -1822,7 +1793,9 @@
                                   >
                                   <Input
                                     type="date"
-                                    bind:value={dateFrom}
+                                    value={dateFrom}
+                                    oninput={(event) =>
+                                      updateCustomDateFilter('from', event.currentTarget.value)}
                                     class="border-border-brand-muted bg-card-surface text-text-brand font-fira focus-visible:border-hister-indigo h-7 w-auto min-w-0 border-[2px] px-2 text-xs shadow-none focus-visible:ring-0"
                                   />
                                   <span class="font-inter text-text-brand-secondary text-xs"
@@ -1830,7 +1803,9 @@
                                   >
                                   <Input
                                     type="date"
-                                    bind:value={dateTo}
+                                    value={dateTo}
+                                    oninput={(event) =>
+                                      updateCustomDateFilter('to', event.currentTarget.value)}
                                     class="border-border-brand-muted bg-card-surface text-text-brand font-fira focus-visible:border-hister-indigo h-7 w-auto min-w-0 border-[2px] px-2 text-xs shadow-none focus-visible:ring-0"
                                   />
                                 </div>
@@ -1845,7 +1820,7 @@
                                   class="font-inter text-text-brand-muted flex items-center gap-1.5 text-xs font-semibold"
                                 >
                                   <Calendar class="size-3" />
-                                  Date
+                                  Updated
                                 </p>
                                 <div class="flex flex-col gap-1">
                                   {#each currentFacets.date_histogram as { name, count } (name)}
@@ -1871,7 +1846,7 @@
                                   class="font-inter text-text-brand-muted flex items-center gap-1.5 text-xs font-semibold"
                                 >
                                   <Calendar class="size-3" />
-                                  Date
+                                  Updated
                                 </p>
                                 {@render customDateInputs()}
                               </div>

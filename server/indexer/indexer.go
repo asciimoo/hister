@@ -1874,21 +1874,10 @@ func (q *Query) create() query.Query {
 		sq = querybuilder.Build(q.Text)
 	}
 
-	if q.DateFrom != 0 || q.DateTo != 0 {
-		if q.DateFrom != 0 && q.DateTo == 0 {
-			q.DateTo = time.Now().Unix()
-		}
-		var min, max *float64
-		if q.DateFrom != 0 {
-			min = new(float64)
-			*min = float64(q.DateFrom)
-		}
-		if q.DateTo != 0 {
-			max = new(float64)
-			*max = float64(q.DateTo)
-		}
-		dateQuery := bleve.NewNumericRangeQuery(min, max)
-		dateQuery.SetField("updated")
+	if q.DateFrom != 0 && q.DateTo == 0 {
+		q.DateTo = time.Now().Unix()
+	}
+	if dateQuery, ok := q.legacyDateFilterQuery(); ok {
 		sq = bleve.NewConjunctionQuery(sq, dateQuery)
 	}
 
@@ -1919,6 +1908,22 @@ func (q *Query) create() query.Query {
 	}
 
 	return sq
+}
+
+func (q *Query) legacyDateFilterQuery() (query.Query, bool) {
+	if q.DateFrom == 0 && q.DateTo == 0 {
+		return nil, false
+	}
+	var min, max *int64
+	if q.DateFrom != 0 {
+		min = new(int64)
+		*min = q.DateFrom
+	}
+	if q.DateTo != 0 {
+		max = new(int64)
+		*max = q.DateTo
+	}
+	return querybuilder.BuildTimestampRange("updated", min, max, true, true)
 }
 
 func createMapping(lang string, keepStopwords bool) mapping.IndexMapping {

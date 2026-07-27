@@ -105,6 +105,7 @@ Examples:
   hister delete "url:file:///home/user/file.pdf"
   hister delete "domain:example.com"
   hister delete "language:en domain:example.com"
+  hister delete --dry "updated:>90d"
 
 Non-admin users are restricted to their own documents by the server.`,
 	Args: cobra.ExactArgs(1),

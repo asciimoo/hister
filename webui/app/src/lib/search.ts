@@ -14,8 +14,6 @@ interface SearchConfig {
 interface SearchMessage {
   text: string;
   sort?: string;
-  date_from?: number;
-  date_to?: number;
   highlight?: string;
   semantic_enabled?: boolean;
   semantic_threshold?: number;
@@ -385,8 +383,6 @@ export const RESULTS_PER_PAGE = 20;
 
 export interface SearchQueryOptions {
   sort?: string;
-  dateFrom?: string;
-  dateTo?: string;
   semantic?: { enabled: boolean; threshold: number };
   pageKey?: string;
   limit?: number;
@@ -396,8 +392,6 @@ export interface SearchQueryOptions {
 interface QueryParams {
   text: string;
   sort?: string;
-  date_from?: number;
-  date_to?: number;
   highlight?: string;
   semantic_enabled?: boolean;
   semantic_threshold?: number;
@@ -407,15 +401,11 @@ interface QueryParams {
 }
 
 export function buildSearchQuery(text: string, opts: SearchQueryOptions = {}): QueryParams {
-  const { sort, dateFrom, dateTo, semantic, pageKey, limit, facets } = opts;
+  const { sort, semantic, pageKey, limit, facets } = opts;
   return {
     text,
     highlight: 'HTML',
     ...(sort && { sort }),
-    ...(dateFrom && {
-      date_from: Math.floor(new Date(dateFrom).getTime() / 1000),
-    }),
-    ...(dateTo && { date_to: Math.floor(new Date(dateTo).getTime() / 1000) }),
     ...(semantic && { semantic_enabled: semantic.enabled, semantic_threshold: semantic.threshold }),
     ...(limit && { limit }),
     ...(pageKey && { page_key: pageKey }),

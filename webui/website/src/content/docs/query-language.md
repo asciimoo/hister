@@ -47,6 +47,8 @@ You can search within specific fields using the `field:value` syntax:
 - **language:** - Filter by detected language (e.g., `en`, `de`, `fr`. Use `unknown` for languages Hister doesn't support)
 - **type:** - Filter by document type (`web` for websites, `file` or `local` for local files)
 - **visits:** - Filter by visit count, with exact values (`visits:1`), bounded ranges (`visits:2..4`), or open ranges (`visits:10..`)
+- **added:** Filter by when a document was first added, using a relative duration such as `added:>90d` or an absolute date such as `added:>=2026-04-01`
+- **updated:** Filter by when a document was last updated, using a relative duration such as `updated:>90d` or an absolute date such as `updated:<2026-05-01`. Relative durations support seconds (`s`), minutes (`m`), hours (`h`), days (`d`), and weeks (`w`). Absolute dates use `YYYY-MM-DD` and midnight UTC
 - **user_id:** - Filter by user ID (admin use; e.g., `user_id:3`)
 
 **Examples:**
@@ -100,6 +102,18 @@ visits:10..
 Finds pages visited 10 or more times.
 
 ```textplain
+updated:>90d
+```
+
+Finds pages that have not been updated in more than 90 days. Use `added:>90d` to compare against the time a page was first added. The comparison operators `<`, `<=`, `>`, and `>=` are supported.
+
+```textplain
+updated:>=2026-04-01 updated:<2026-05-01
+```
+
+Finds pages updated during April 2026. Absolute comparisons apply directly to the timestamp. Using the following day as an exclusive upper bound includes the entire final day. Relative comparisons apply to elapsed time, so `updated:>90d` means older than 90 days.
+
+```textplain
 user_id:3
 ```
 
@@ -120,6 +134,7 @@ url:*/privacy-policy
 domain:privacyguides.org text:encryption
 language:en type:web
 visits:2..4 domain:example.com
+added:<7d domain:example.com
 user_id:3 domain:example.com
 ```
 

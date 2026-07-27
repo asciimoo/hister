@@ -17,8 +17,8 @@
   ],
   "devDependencies": {
     "@types/node": "^26.1.1",
-    "fallow": "^3.7.1",
-    "prettier": "^3.9.5",
+    "fallow": "^3.9.1",
+    "prettier": "^3.9.6",
     "prettier-plugin-svelte": "^4.1.1",
     "prettier-plugin-tailwindcss": "^0.8.1"
   }

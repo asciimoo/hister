@@ -3,6 +3,7 @@ package indexer
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/asciimoo/hister/server/document"
 	"github.com/asciimoo/hister/server/testutil"
@@ -133,6 +134,133 @@ func TestSearchFiltersByVisitCount(t *testing.T) {
 	}
 	if res.Documents[0].URL != mostVisitedURL {
 		t.Fatalf("result URL = %q, want %q", res.Documents[0].URL, mostVisitedURL)
+	}
+}
+
+func TestSearchAndDeleteFilterByRelativeTime(t *testing.T) {
+	idxCfg := testutil.Config(t)
+	if err := Init(idxCfg); err != nil {
+		t.Fatalf("failed to init indexer: %v", err)
+	}
+	defer i.Close()
+
+	now := time.Now()
+	oldDocument := &document.Document{
+		URL:       "https://example.com/time-filter-old",
+		Title:     "Time filter old",
+		Text:      "Time filter document text",
+		Added:     now.Add(-100 * 24 * time.Hour).Unix(),
+		Updated:   now.Add(-100 * 24 * time.Hour).Unix(),
+		Processed: true,
+	}
+	revisitedDocument := &document.Document{
+		URL:       "https://example.com/time-filter-revisited",
+		Title:     "Time filter revisited",
+		Text:      "Time filter document text",
+		Added:     now.Add(-100 * 24 * time.Hour).Unix(),
+		Updated:   now.Add(-10 * 24 * time.Hour).Unix(),
+		Processed: true,
+	}
+	recentDocument := &document.Document{
+		URL:       "https://example.com/time-filter-recent",
+		Title:     "Time filter recent",
+		Text:      "Time filter document text",
+		Added:     now.Add(-10 * 24 * time.Hour).Unix(),
+		Updated:   now.Add(-10 * 24 * time.Hour).Unix(),
+		Processed: true,
+	}
+	for _, doc := range []*document.Document{oldDocument, revisitedDocument, recentDocument} {
+		if err := Add(doc); err != nil {
+			t.Fatalf("Add failed: %v", err)
+		}
+	}
+
+	res, err := Search(idxCfg, &Query{Text: "Time filter added:>90d updated:<90d"})
+	if err != nil {
+		t.Fatalf("Search failed: %v", err)
+	}
+	if len(res.Documents) != 1 || res.Documents[0].URL != revisitedDocument.URL {
+		t.Fatalf("combined relative time search returned %#v, want only %q", res.Documents, revisitedDocument.URL)
+	}
+
+	deleted, err := DeleteByQuery("updated:>90d", nil, nil)
+	if err != nil {
+		t.Fatalf("DeleteByQuery failed: %v", err)
+	}
+	if deleted != 1 {
+		t.Fatalf("DeleteByQuery deleted %d documents, want 1", deleted)
+	}
+	if GetByURLAndUser(oldDocument.URL, 0) != nil {
+		t.Fatal("old document still exists after relative time deletion")
+	}
+	if GetByURLAndUser(revisitedDocument.URL, 0) == nil {
+		t.Fatal("recently updated document was removed by relative time deletion")
+	}
+	if GetByURLAndUser(recentDocument.URL, 0) == nil {
+		t.Fatal("recent document was removed by relative time deletion")
+	}
+}
+
+func TestSearchFiltersByAbsoluteDate(t *testing.T) {
+	idxCfg := testutil.Config(t)
+	if err := Init(idxCfg); err != nil {
+		t.Fatalf("failed to init indexer: %v", err)
+	}
+	defer i.Close()
+
+	beforeCutoff := time.Date(2025, time.December, 31, 23, 59, 59, 0, time.UTC).Unix()
+	atCutoff := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()
+	afterCutoff := time.Date(2026, time.January, 2, 0, 0, 0, 0, time.UTC).Unix()
+	documents := []*document.Document{
+		{
+			URL:       "https://example.com/absolute-date-before",
+			Title:     "Absolute date before",
+			Text:      "Absolute date filter text",
+			Added:     beforeCutoff,
+			Updated:   beforeCutoff,
+			Processed: true,
+		},
+		{
+			URL:       "https://example.com/absolute-date-boundary",
+			Title:     "Absolute date boundary",
+			Text:      "Absolute date filter text",
+			Added:     atCutoff,
+			Updated:   atCutoff,
+			Processed: true,
+		},
+		{
+			URL:       "https://example.com/absolute-date-after",
+			Title:     "Absolute date after",
+			Text:      "Absolute date filter text",
+			Added:     afterCutoff,
+			Updated:   afterCutoff,
+			Processed: true,
+		},
+	}
+	for _, doc := range documents {
+		if err := Add(doc); err != nil {
+			t.Fatalf("Add failed: %v", err)
+		}
+	}
+
+	res, err := Search(idxCfg, &Query{Text: "Absolute date added:<2026-01-01"})
+	if err != nil {
+		t.Fatalf("Search before absolute date failed: %v", err)
+	}
+	if len(res.Documents) != 1 || res.Documents[0].URL != documents[0].URL {
+		t.Fatalf("absolute date search returned %#v, want only %q", res.Documents, documents[0].URL)
+	}
+
+	res, err = Search(idxCfg, &Query{Text: "Absolute date updated:>=2026-01-01"})
+	if err != nil {
+		t.Fatalf("Search from absolute date failed: %v", err)
+	}
+	gotURLs := make(map[string]bool, len(res.Documents))
+	for _, doc := range res.Documents {
+		gotURLs[doc.URL] = true
+	}
+	if len(gotURLs) != 2 || !gotURLs[documents[1].URL] || !gotURLs[documents[2].URL] {
+		t.Fatalf("absolute date search returned %#v, want boundary and after documents", res.Documents)
 	}
 }
 

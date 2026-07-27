@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/asciimoo/hister/files"
 	"github.com/asciimoo/hister/server/types"
@@ -15,14 +16,19 @@ import (
 	"github.com/blevesearch/bleve/v2/search/query"
 )
 
-var weights = map[string]float64{
-	"text":     1,
-	"label":    1,
-	"language": 1,
-	"url":      4,
-	"domain":   8,
-	"title":    12,
-}
+var (
+	weights = map[string]float64{
+		"text":     1,
+		"label":    1,
+		"language": 1,
+		"url":      4,
+		"domain":   8,
+		"title":    12,
+	}
+
+	relativeTimeFilterPattern = regexp.MustCompile(`^(<=|>=|<|>)([0-9]+)([smhdw])$`)
+	absoluteDateFilterPattern = regexp.MustCompile(`^(<=|>=|<|>)([0-9]{4}-[0-9]{2}-[0-9]{2})$`)
+)
 
 func Build(s string) query.Query {
 	if strings.TrimSpace(s) == "" {
@@ -43,9 +49,10 @@ func Build(s string) query.Query {
 
 	qs := []query.Query{}
 	nqs := []query.Query{}
+	now := time.Now()
 
 	for _, t := range qt {
-		q, negated := getTokenQuery(t)
+		q, negated := getTokenQuery(t, now)
 		if negated {
 			nqs = append(nqs, q)
 		} else {
@@ -125,6 +132,9 @@ func isFieldSpecific(t Token) bool {
 		}
 		if _, ok := visitCountFilterValue(v); ok {
 			return true
+		}
+		if _, value, ok := timeFilterValue(v); ok {
+			return validTimeFilter(value)
 		}
 		if _, ok := strings.CutPrefix(v, "user_id:"); ok {
 			return true
@@ -255,6 +265,133 @@ func buildVisitCountQuery(v string) (query.Query, bool) {
 	return q, true
 }
 
+func timeFilterValue(v string) (string, string, bool) {
+	if value, ok := strings.CutPrefix(v, "added:"); ok {
+		return "added", value, true
+	}
+	if value, ok := strings.CutPrefix(v, "updated:"); ok {
+		return "updated", value, true
+	}
+	return "", "", false
+}
+
+func parseRelativeTimeFilter(v string) (string, int64, bool) {
+	parts := relativeTimeFilterPattern.FindStringSubmatch(strings.ToLower(v))
+	if parts == nil {
+		return "", 0, false
+	}
+	amount, err := strconv.ParseInt(parts[2], 10, 64)
+	if err != nil {
+		return "", 0, false
+	}
+	var unitSeconds int64
+	switch parts[3] {
+	case "s":
+		unitSeconds = 1
+	case "m":
+		unitSeconds = 60
+	case "h":
+		unitSeconds = 60 * 60
+	case "d":
+		unitSeconds = 24 * 60 * 60
+	case "w":
+		unitSeconds = 7 * 24 * 60 * 60
+	default:
+		return "", 0, false
+	}
+	if amount > (1<<63-1)/unitSeconds {
+		return "", 0, false
+	}
+	return parts[1], amount * unitSeconds, true
+}
+
+func parseAbsoluteDateFilter(v string) (string, int64, bool) {
+	parts := absoluteDateFilterPattern.FindStringSubmatch(v)
+	if parts == nil {
+		return "", 0, false
+	}
+	date, err := time.Parse("2006-01-02", parts[2])
+	if err != nil {
+		return "", 0, false
+	}
+	return parts[1], date.Unix(), true
+}
+
+func validTimeFilter(v string) bool {
+	if _, _, ok := parseRelativeTimeFilter(v); ok {
+		return true
+	}
+	_, _, ok := parseAbsoluteDateFilter(v)
+	return ok
+}
+
+// BuildTimestampRange creates a numeric timestamp range for an indexed time
+// field. It is shared by query syntax and legacy structured API parameters.
+func BuildTimestampRange(field string, min, max *int64, minInclusive, maxInclusive bool) (query.Query, bool) {
+	if (field != "added" && field != "updated") || (min == nil && max == nil) {
+		return nil, false
+	}
+	var minValue, maxValue *float64
+	if min != nil {
+		minValue = new(float64)
+		*minValue = float64(*min)
+	}
+	if max != nil {
+		maxValue = new(float64)
+		*maxValue = float64(*max)
+	}
+	q := bleve.NewNumericRangeInclusiveQuery(minValue, maxValue, &minInclusive, &maxInclusive)
+	q.SetField(field)
+	return q, true
+}
+
+func buildTimeQuery(field, v string, now time.Time) (query.Query, bool) {
+	if field != "added" && field != "updated" {
+		return nil, false
+	}
+	comparison, durationSeconds, relative := parseRelativeTimeFilter(v)
+	var cutoff int64
+	if relative {
+		cutoff = now.Unix() - durationSeconds
+		switch comparison {
+		case ">":
+			comparison = "<"
+		case ">=":
+			comparison = "<="
+		case "<":
+			comparison = ">"
+		case "<=":
+			comparison = ">="
+		}
+	} else {
+		var timestamp int64
+		var ok bool
+		comparison, timestamp, ok = parseAbsoluteDateFilter(v)
+		if !ok {
+			return nil, false
+		}
+		cutoff = timestamp
+	}
+	var min, max *int64
+	minInclusive := true
+	maxInclusive := true
+	switch comparison {
+	case ">":
+		min = &cutoff
+		minInclusive = false
+	case ">=":
+		min = &cutoff
+	case "<":
+		max = &cutoff
+		maxInclusive = false
+	case "<=":
+		max = &cutoff
+	default:
+		return nil, false
+	}
+	return BuildTimestampRange(field, min, max, minInclusive, maxInclusive)
+}
+
 // Matches exact phrases without stopwords
 func createMatchPhraseQuery(s string, boost float64) query.Query {
 	tiq := bleve.NewMatchPhraseQuery(s)
@@ -268,7 +405,7 @@ func createMatchPhraseQuery(s string, boost float64) query.Query {
 	return q
 }
 
-func getTokenQuery(t Token) (query.Query, bool) {
+func getTokenQuery(t Token, now time.Time) (query.Query, bool) {
 	negated := false
 	switch t.Type {
 	case TokenQuoted:
@@ -279,13 +416,13 @@ func getTokenQuery(t Token) (query.Query, bool) {
 		}
 		var field string
 		for f := range weights {
-			if strings.HasPrefix(t.Value, f+":") {
+			if strings.HasPrefix(v, f+":") {
 				field = f
 				break
 			}
 		}
 		if field != "" {
-			v := t.Value[len(field)+1:]
+			v := v[len(field)+1:]
 			if strings.HasPrefix(v, "-") && len(v) > 1 {
 				negated = true
 				v = v[1:]
@@ -313,6 +450,11 @@ func getTokenQuery(t Token) (query.Query, bool) {
 		}
 		if v, ok := visitCountFilterValue(t.Value); ok {
 			if q, ok := buildVisitCountQuery(v); ok {
+				return q, negated
+			}
+		}
+		if field, v, ok := timeFilterValue(t.Value); ok {
+			if q, ok := buildTimeQuery(field, v, now); ok {
 				return q, negated
 			}
 		}
@@ -352,7 +494,7 @@ func getTokenQuery(t Token) (query.Query, bool) {
 						qs := []query.Query{}
 						for _, p := range parts {
 							partToken := Token{Type: TokenWord, Value: field + ":" + p.Value}
-							q, _ := getTokenQuery(partToken)
+							q, _ := getTokenQuery(partToken, now)
 							qs = append(qs, q)
 						}
 						return bleve.NewDisjunctionQuery(qs...), negated
@@ -383,7 +525,7 @@ func getTokenQuery(t Token) (query.Query, bool) {
 	case TokenAlternation:
 		qs := []query.Query{}
 		for _, p := range t.Parts {
-			r, _ := getTokenQuery(p)
+			r, _ := getTokenQuery(p, now)
 			qs = append(qs, r)
 		}
 		return bleve.NewDisjunctionQuery(qs...), negated

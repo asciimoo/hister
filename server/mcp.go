@@ -297,8 +297,8 @@ func mcpToolSearch(c *webContext, id json.RawMessage, rawArgs json.RawMessage) {
 			mcpWriteError(c, id, mcpErrInvalidParam, "invalid date_to (expected YYYY-MM-DD): "+err.Error())
 			return
 		}
-		// Use start of the following day so the entire given day is included.
-		q.DateTo = t.AddDate(0, 0, 1).Unix()
+		// Use the final second of the given day, matching the HTTP date parameter.
+		q.DateTo = t.AddDate(0, 0, 1).Add(-time.Second).Unix()
 	}
 	for _, f := range args.Fields {
 		switch f {
