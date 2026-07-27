@@ -406,6 +406,20 @@
             />
           </div>
 
+          <div class="flex items-center justify-between">
+            <Label
+              for="index-only-once"
+              class="font-outfit text-text-brand cursor-pointer text-sm font-bold"
+            >
+              Index only once
+            </Label>
+            <Switch
+              id="index-only-once"
+              bind:checked={indexOnlyOnce}
+              onCheckedChange={toggleIndexOnlyOnce}
+            />
+          </div>
+
           {#if isAuthenticated(profileUserID)}
             <div class="flex items-center justify-between">
               <Label
@@ -451,17 +465,6 @@
         </Label>
         <Switch id="indexing" bind:checked={indexingEnabled} onCheckedChange={toggleIndexing} />
       </div>
-      <label
-        class="font-inter text-text-brand-secondary mt-1 flex cursor-pointer items-center gap-2 text-xs select-none"
-      >
-        <input
-          type="checkbox"
-          bind:checked={indexOnlyOnce}
-          onchange={toggleIndexOnlyOnce}
-          class="accent-hister-rose h-3.5 w-3.5 cursor-pointer"
-        />
-        Index only once
-      </label>
     </div>
 
     <!-- Reindex section -->
