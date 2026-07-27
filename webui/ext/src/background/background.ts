@@ -456,7 +456,7 @@ function cjsMsgHandler(request, sender, sendResponse) {
     .then((data) => {
       let u = data['histerURL'] || '';
       const indexingEnabled = data['indexingEnabled'] !== false;
-      const indexOnlyOnce = data['indexOnlyOnce'] !== false;
+      const indexOnlyOnce = data['indexOnlyOnce'] === true;
       const showIndexedBadge = data['showIndexedBadge'] === true;
       const customHeaders = getCustomHeaders(data);
 
