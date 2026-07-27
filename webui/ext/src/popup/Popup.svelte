@@ -16,6 +16,7 @@
   let url = $state(defaultURL);
   let customHeaders: { name: string; value: string }[] = $state([]);
   let indexingEnabled = $state(true);
+  let indexOnlyOnce = $state(false);
   let showIndexedBadge = $state(false);
   let submitPublicDocuments = $state(false);
   let profileUserID = $state(0);
@@ -124,6 +125,7 @@
       url = data['histerURL'] || defaultURL;
       customHeaders = Array.isArray(data['histerCustomHeaders']) ? data['histerCustomHeaders'] : [];
       indexingEnabled = data['indexingEnabled'] !== false;
+      indexOnlyOnce = data['indexOnlyOnce'] === true;
       showIndexedBadge = data['showIndexedBadge'] === true;
       submitPublicDocuments = data['submitPublicDocuments'] === true;
       profileUserID = Number(data['histerProfileUserID'] ?? 0);
@@ -241,6 +243,10 @@
   function toggleIndexing() {
     chrome.storage.local.set({ indexingEnabled: indexingEnabled });
     setSuccessMessage(`Automatic indexing ${indexingEnabled ? 'enabled' : 'disabled'}`);
+  }
+
+  function toggleIndexOnlyOnce() {
+    chrome.storage.local.set({ indexOnlyOnce: indexOnlyOnce });
   }
 
   function toggleShowIndexedBadge() {
@@ -443,6 +449,17 @@
         </Label>
         <Switch id="indexing" bind:checked={indexingEnabled} onCheckedChange={toggleIndexing} />
       </div>
+      <label
+        class="font-inter text-text-brand-secondary mt-1 flex cursor-pointer items-center gap-2 text-xs select-none"
+      >
+        <input
+          type="checkbox"
+          bind:checked={indexOnlyOnce}
+          onchange={toggleIndexOnlyOnce}
+          class="accent-hister-rose h-3.5 w-3.5 cursor-pointer"
+        />
+        Index only once
+      </label>
     </div>
 
     <!-- Reindex section -->
