@@ -112,6 +112,7 @@
       'histerURL',
       'histerCustomHeaders',
       'indexingEnabled',
+      'indexOnlyOnce',
       'histerCookies',
       'histerLabel',
       'showIndexedBadge',
@@ -247,6 +248,7 @@
 
   function toggleIndexOnlyOnce() {
     chrome.storage.local.set({ indexOnlyOnce: indexOnlyOnce });
+    setSuccessMessage(`Index only once ${indexOnlyOnce ? 'enabled' : 'disabled'}`);
   }
 
   function toggleShowIndexedBadge() {
