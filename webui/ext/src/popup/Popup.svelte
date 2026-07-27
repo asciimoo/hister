@@ -246,13 +246,12 @@
     setSuccessMessage(`Automatic indexing ${indexingEnabled ? 'enabled' : 'disabled'}`);
   }
 
-  function toggleIndexOnlyOnce() {
-    chrome.storage.local.set({ indexOnlyOnce: indexOnlyOnce });
-    setSuccessMessage(`Index only once ${indexOnlyOnce ? 'enabled' : 'disabled'}`);
-  }
-
   function toggleShowIndexedBadge() {
     chrome.storage.local.set({ showIndexedBadge: showIndexedBadge });
+  }
+
+  function toggleIndexOnlyOnce() {
+    chrome.storage.local.set({ indexOnlyOnce: indexOnlyOnce });
   }
 
   function toggleSubmitPublicDocuments() {
