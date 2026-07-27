@@ -448,6 +448,7 @@ function cjsMsgHandler(request, sender, sendResponse) {
       'histerURL',
       'histerToken',
       'indexingEnabled',
+      'indexOnlyOnce',
       'histerCustomHeaders',
       'showIndexedBadge',
       'submitPublicDocuments',
@@ -455,6 +456,7 @@ function cjsMsgHandler(request, sender, sendResponse) {
     .then((data) => {
       let u = data['histerURL'] || '';
       const indexingEnabled = data['indexingEnabled'] !== false;
+      const indexOnlyOnce = data['indexOnlyOnce'] !== false;
       const showIndexedBadge = data['showIndexedBadge'] === true;
       const customHeaders = getCustomHeaders(data);
 
@@ -505,42 +507,68 @@ function cjsMsgHandler(request, sender, sendResponse) {
         u += '/';
       }
       if (request.pageData) {
-        if (!indexingEnabled && request.action != 'reindex') {
+        if (!indexingEnabled && request.action !== 'reindex') {
           sendResponse({ status: 'disabled' });
           return;
         }
-        chrome.storage.local.get(['histerLabel']).then((labelData) => {
-          const pageData = { ...request.pageData };
-          if (labelData['histerLabel']) {
-            pageData.label = labelData['histerLabel'];
+        (async () => {
+          let labelData;
+          try {
+            labelData = await chrome.storage.local.get(['histerLabel']);
+          } catch {
+            return;
           }
-          sendPageData(u + 'api/add', pageData, getDocumentSubmissionHeaders(data))
-            .then((r) => {
-              if (r.status === 201) {
+
+          const customHeaders = getDocumentSubmissionHeaders(data);
+          if (indexOnlyOnce && request.action !== 'reindex') {
+            try {
+              const indexed = await isUrlPreviouslyIndexed(request.pageData.url, u, customHeaders);
+              if (indexed) {
                 setNormalIcon(sender.tab.id);
                 if (showIndexedBadge) {
                   setPreviouslyIndexedBadge(sender.tab.id);
                 } else {
                   clearBadge(sender.tab.id);
                 }
-              } else if (r.status === 406) {
-                // URL matched a server-side skip rule; invalidate cache and grey out
-                skipRulesCache = null;
-                setGreyIcon(sender.tab.id);
-              } else if (r.status === 422) {
-                // Document rejected due to sensitive content; not an error
-                tabSensitiveState.set(sender.tab.id, sender.tab.url ?? '');
-                setGreyIcon(sender.tab.id);
-              } else {
-                setErrorBadge(sender.tab.id);
+                return;
               }
-              sendResponse({ status: 'ok', status_code: r.status });
-            })
-            .catch((err) => {
-              setErrorBadge(sender.tab.id);
-              sendResponse({ error: err.message });
-            });
-        });
+            } catch {
+              // isUrlPreviouslyIndexed must have failed, try adding the page manually
+            }
+          }
+
+          const pageData = { ...request.pageData };
+          if (labelData['histerLabel']) {
+            pageData.label = labelData['histerLabel'];
+          }
+          let r;
+          try {
+            r = await sendPageData(u + 'api/add', pageData, customHeaders);
+          } catch(err) {
+            setErrorBadge(sender.tab.id);
+            sendResponse({ error: err.message });
+            return;
+          }
+          if (r.status === 201) {
+            setNormalIcon(sender.tab.id);
+            if (showIndexedBadge) {
+              setPreviouslyIndexedBadge(sender.tab.id);
+            } else {
+              clearBadge(sender.tab.id);
+            }
+          } else if (r.status === 406) {
+            // URL matched a server-side skip rule; invalidate cache and grey out
+            skipRulesCache = null;
+            setGreyIcon(sender.tab.id);
+          } else if (r.status === 422) {
+            // Document rejected due to sensitive content; not an error
+            tabSensitiveState.set(sender.tab.id, sender.tab.url ?? '');
+            setGreyIcon(sender.tab.id);
+          } else {
+            setErrorBadge(sender.tab.id);
+          }
+          sendResponse({ status: 'ok', status_code: r.status });
+        })();
         return true;
       }
       if (request.resultData) {
