@@ -361,7 +361,7 @@
         e.preventDefault();
         chrome.tabs.create({ url });
       }}
-      class="font-outfit text-lg font-black tracking-widest text-white uppercase hover:underline cursor-pointer"
+      class="font-outfit cursor-pointer text-lg font-black tracking-widest text-white uppercase hover:underline"
       >Hister</a
     >
     <div class="flex items-center gap-2">

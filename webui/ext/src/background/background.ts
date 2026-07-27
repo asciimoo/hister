@@ -544,7 +544,7 @@ function cjsMsgHandler(request, sender, sendResponse) {
           let r;
           try {
             r = await sendPageData(u + 'api/add', pageData, customHeaders);
-          } catch(err) {
+          } catch (err) {
             setErrorBadge(sender.tab.id);
             sendResponse({ error: err.message });
             return;
