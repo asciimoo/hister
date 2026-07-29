@@ -31,6 +31,13 @@ func (g GoogleOAuth) Prepare(_ context.Context, _ *PrepareRequest) error { retur
 func (g GoogleOAuth) GetRedirectURL(req *RedirectURIRequest) string {
 	params := &url.Values{}
 
+	scopeName, scopeValue := g.GetScope()
+	if len(req.scopes) > 0 { // config-based scopes
+		params.Add(scopeName.String(), strings.Join(req.scopes, " "))
+	} else { // default scopes
+		params.Add(scopeName.String(), scopeValue.String())
+	}
+
 	params.Add("client_id", req.clientID)
 	params.Add("response_type", responseTypeCode.String())
 	params.Add("redirect_uri", req.redirectURI)
