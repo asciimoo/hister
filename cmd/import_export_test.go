@@ -195,7 +195,6 @@ func TestDocumentImportFlags(t *testing.T) {
 	if flags.Lookup("batch-size") == nil {
 		t.Fatal("batch-size flag not found")
 	}
-
 	if flags.Lookup("skip-existing") == nil {
 		t.Fatal("skip-existing flag not found")
 	}
