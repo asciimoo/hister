@@ -183,6 +183,34 @@ func TestImportJSONFileUsesConfiguredBatchSize(t *testing.T) {
 	}
 }
 
+func TestDocumentImportFlags(t *testing.T) {
+	flags := importFileCmd.Flags()
+
+	if flags.Lookup("start-date") == nil {
+		t.Fatal("start-date flag not found")
+	}
+	if flags.Lookup("end-date") == nil {
+		t.Fatal("end-date flag not found")
+	}
+	if flags.Lookup("batch-size") == nil {
+		t.Fatal("batch-size flag not found")
+	}
+
+	if flags.Lookup("skip-existing") == nil {
+		t.Fatal("skip-existing flag not found")
+	}
+	if flags.Lookup("global") == nil {
+		t.Fatal("global flag not found")
+	}
+	if flags.Lookup("user-id") == nil {
+		t.Fatal("user-id flag not found")
+	}
+	if flags.Lookup("label") == nil {
+		t.Fatal("label flag not found")
+	}
+
+}
+
 func TestImportBatchSizeDefault(t *testing.T) {
 	batchSize, err := importFileCmd.Flags().GetInt("batch-size")
 	if err != nil {

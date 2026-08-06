@@ -241,6 +241,7 @@ func addDocumentImportFlags(cmd *cobra.Command) {
 	cmd.Flags().Bool("skip-existing", false, "Do not overwrite documents that are already in the index")
 	cmd.Flags().Bool("global", false, "Make imported documents available for all users (only for admins in multiuser mode)")
 	cmd.Flags().Uint("user-id", 0, "Import documents under the given user ID (only for admins in multiuser mode)")
+	cmd.Flags().String("label", "", "Override the label for imported documents")
 }
 
 func printImportSummary(imported, skipped, errCount int) {
