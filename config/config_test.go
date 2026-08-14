@@ -89,6 +89,29 @@ func TestIndexerDefaults(t *testing.T) {
 	}
 }
 
+func TestIndexerValidate(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		indexer Indexer
+		wantErr bool
+	}{
+		{"no languages detects everything", Indexer{}, false},
+		{"two languages", Indexer{Languages: []string{"en", "de"}}, false},
+		{"one language", Indexer{Languages: []string{"en"}}, true},
+		// A repeated code resolves to a single language, which would leave the
+		// detector disabled rather than narrowed.
+		{"repeated language", Indexer{Languages: []string{"en", " EN "}}, true},
+		{"unknown accuracy", Indexer{LanguageDetectionAccuracy: "medium"}, true},
+		{"low accuracy", Indexer{LanguageDetectionAccuracy: "low"}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := tc.indexer.Validate(); (err != nil) != tc.wantErr {
+				t.Fatalf("Validate() error = %v, wantErr %v", err, tc.wantErr)
+			}
+		})
+	}
+}
+
 func TestDirectoryLabelConfig(t *testing.T) {
 	cfg, err := parseConfig([]byte("indexer:\n  directories:\n    - path: /srv/docs\n      label: reference\n"))
 	if err != nil {

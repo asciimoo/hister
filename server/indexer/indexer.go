@@ -65,10 +65,45 @@ type Indexer struct {
 	embeddingWorkers  int
 	disablePreviews   bool
 	keepStopwords     bool
+	languages         []string
+	lowAccuracyDetect bool
 	directories       []*config.Directory
 	maxFileSize       int64
 	sensitivePattern  *regexp.Regexp
 	semanticConfig    config.SemanticSearch
+}
+
+// indexOptions carries the settings that decide how indexes are created and
+// which languages get one of their own.
+type indexOptions struct {
+	DetectLanguages bool
+	KeepStopwords   bool
+	// Languages restricts detection to these ISO 639-1 codes. Empty means every
+	// language document.Languages supports.
+	Languages []string
+	// LowAccuracy restricts lingua to its trigram models.
+	LowAccuracy bool
+}
+
+func optionsFromConfig(cfg *config.Config) indexOptions {
+	return indexOptions{
+		DetectLanguages: cfg.Indexer.DetectLanguages,
+		KeepStopwords:   cfg.Indexer.KeepStopwords,
+		Languages:       cfg.Indexer.Languages,
+		LowAccuracy:     cfg.Indexer.LowAccuracyLanguageDetection(),
+	}
+}
+
+// optionsWith combines the receiver's language settings with a per-request
+// override of detectLanguages and keepStopwords, so a reindex keeps the
+// configured language set while still honouring the request.
+func (i *Indexer) optionsWith(detectLanguages, keepStopwords bool) indexOptions {
+	return indexOptions{
+		DetectLanguages: detectLanguages,
+		KeepStopwords:   keepStopwords,
+		Languages:       i.languages,
+		LowAccuracy:     i.lowAccuracyDetect,
+	}
 }
 
 const (
@@ -330,7 +365,7 @@ func New(cfg *config.Config) (*Indexer, error) {
 		sp = append(sp, v)
 	}
 	sensitivePattern := regexp.MustCompile(fmt.Sprintf("(%s)", strings.Join(sp, "|")))
-	idx, err := initializeIndexer(cfg.FullPath(""), cfg.Indexer.DetectLanguages, cfg.Indexer.KeepStopwords)
+	idx, err := initializeIndexer(cfg.FullPath(""), optionsFromConfig(cfg))
 	if err != nil {
 		return nil, err
 	}
@@ -389,7 +424,11 @@ func registerHighlighters() error {
 	return registerHighlightersErr
 }
 
-func initializeIndexer(basePath string, detectLanguages, keepStopwords bool) (*Indexer, error) {
+func initializeIndexer(basePath string, opts indexOptions) (*Indexer, error) {
+	if unsupported := document.UnsupportedLanguages(opts.Languages); len(unsupported) > 0 {
+		return nil, fmt.Errorf("unsupported language(s) in indexer.languages: %s", strings.Join(unsupported, ", "))
+	}
+	detectLanguages, keepStopwords := opts.DetectLanguages, opts.KeepStopwords
 	if _, err := os.Stat(basePath); errors.Is(err, os.ErrNotExist) {
 		if err := os.MkdirAll(basePath, os.ModePerm); err != nil {
 			return nil, err
@@ -416,12 +455,14 @@ func initializeIndexer(basePath string, detectLanguages, keepStopwords bool) (*I
 		indexers: map[string]bleve.Index{
 			defaultIndexerName: idx,
 		},
-		dir:           basePath,
-		keepStopwords: keepStopwords,
-		embedCtx:      embedCtx,
-		embedCancel:   embedCancel,
-		data:          newDataStore(filepath.Join(basePath, dataDirName)),
-		maxFileSize:   defaultMaxFileSize,
+		dir:               basePath,
+		keepStopwords:     keepStopwords,
+		languages:         opts.Languages,
+		lowAccuracyDetect: opts.LowAccuracy,
+		embedCtx:          embedCtx,
+		embedCancel:       embedCancel,
+		data:              newDataStore(filepath.Join(basePath, dataDirName)),
+		maxFileSize:       defaultMaxFileSize,
 	}
 	initialized := false
 	defer func() {
@@ -432,7 +473,7 @@ func initializeIndexer(basePath string, detectLanguages, keepStopwords bool) (*I
 	if !detectLanguages {
 		i.langDetector = document.NewNullLanguageDetector()
 	} else {
-		i.langDetector = document.NewLanguageDetector()
+		i.langDetector = document.NewLanguageDetectorFor(opts.Languages, opts.LowAccuracy)
 	}
 	entries, err := os.ReadDir(basePath)
 	if err != nil {
@@ -601,7 +642,7 @@ func (idx *Indexer) reindex(basePath string, rules *config.Rules, skipSensitiveC
 		return err
 	}
 	defer closeExtraSources()
-	tmpIdx, err := initializeIndexer(tmpBasePath, detectLanguages, keepStopwords)
+	tmpIdx, err := initializeIndexer(tmpBasePath, idx.optionsWith(detectLanguages, keepStopwords))
 	if err != nil {
 		return err
 	}
@@ -764,7 +805,7 @@ func (idx *Indexer) reindex(basePath string, rules *config.Rules, skipSensitiveC
 	if renameError != nil {
 		return errors.New("failed to rename tmp indexes during the reindex, resolve the issue manually")
 	}
-	replacement, err := initializeIndexer(basePath, detectLanguages, keepStopwords)
+	replacement, err := initializeIndexer(basePath, idx.optionsWith(detectLanguages, keepStopwords))
 	if err != nil {
 		return err
 	}
@@ -1367,6 +1408,8 @@ func (i *Indexer) adopt(replacement *Indexer) {
 	i.embeddingWorkers = replacement.embeddingWorkers
 	i.disablePreviews = replacement.disablePreviews
 	i.keepStopwords = replacement.keepStopwords
+	i.languages = replacement.languages
+	i.lowAccuracyDetect = replacement.lowAccuracyDetect
 	i.directories = replacement.directories
 	i.maxFileSize = replacement.maxFileSize
 	i.sensitivePattern = replacement.sensitivePattern
