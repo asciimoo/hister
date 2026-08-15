@@ -115,18 +115,12 @@ type Directory struct {
 }
 
 type Indexer struct {
-	DetectLanguages bool         `yaml:"detect_languages" mapstructure:"detect_languages"`
-	KeepStopwords   bool         `yaml:"keep_stopwords" mapstructure:"keep_stopwords"`
-	Directories     []*Directory `yaml:"directories" mapstructure:"directories"`
-	MaxFileSize     int64        `yaml:"max_file_size_mb" mapstructure:"max_file_size_mb"`
-	// Languages restricts detection to the given ISO 639-1 codes. An empty list
-	// detects every supported language. Each language kept here holds its
-	// detection models on the heap for the lifetime of the process.
-	Languages []string `yaml:"languages" mapstructure:"languages"`
-	// LanguageDetectionAccuracy is "high" or "low". Low restricts lingua to its
-	// trigram models, which is what it already uses on its own for text longer
-	// than 120 characters.
-	LanguageDetectionAccuracy string `yaml:"language_detection_accuracy" mapstructure:"language_detection_accuracy"`
+	DetectLanguages           bool         `yaml:"detect_languages" mapstructure:"detect_languages"`
+	KeepStopwords             bool         `yaml:"keep_stopwords" mapstructure:"keep_stopwords"`
+	Directories               []*Directory `yaml:"directories" mapstructure:"directories"`
+	MaxFileSize               int64        `yaml:"max_file_size_mb" mapstructure:"max_file_size_mb"`
+	Languages                 []string     `yaml:"languages" mapstructure:"languages"`
+	LanguageDetectionAccuracy string       `yaml:"language_detection_accuracy" mapstructure:"language_detection_accuracy"`
 }
 
 const (

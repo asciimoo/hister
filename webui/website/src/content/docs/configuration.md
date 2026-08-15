@@ -181,6 +181,18 @@ description: 'Explore every configuration section, option, default value, enviro
       description: 'Enables automatic language detection. Changing this setting requires reindexing.',
     },
     {
+      name: 'languages',
+      type: 'string[]',
+      defaultValue: '(none)',
+      description: 'Restricts language detection to these ISO 639-1 codes, which reduces memory use. Empty detects every supported language. Changing this setting does not require reindexing.',
+    },
+    {
+      name: 'language_detection_accuracy',
+      type: 'string',
+      defaultValue: 'high',
+      description: 'Detection accuracy, high or low. Low uses only trigram models and less memory. The two settings detect text of 120 letters or more identically, so only shorter text is affected.',
+    },
+    {
       name: 'keep_stopwords',
       type: 'bool',
       defaultValue: 'false',
