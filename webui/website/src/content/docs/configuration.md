@@ -622,6 +622,8 @@ server:
 
 indexer:
   detect_languages: true
+  language_detection_accuracy: 'high'
+  languages: ['en', 'de']
   keep_stopwords: false
   directories:
     - path: '~/notes'
@@ -998,7 +1000,7 @@ The `indexer.keep_stopwords` option defaults to `false`. When enabled together w
 
 **Performance considerations**: Language detection increases both CPU usage and memory consumption. Each document requires additional processing to analyze text and determine its language, and separate indexes are maintained for each detected language. If you're experiencing memory pressure or slow indexing performance, especially with large numbers of documents, consider disabling this feature.
 
-**Important**: Changing either analyzer setting requires a full reindex to take effect. After changing `detect_languages` or `keep_stopwords`, run:
+**Important**: Changing `detect_languages` or `keep_stopwords` requires a full reindex to take effect. Neither `languages` nor `language_detection_accuracy` does; both apply to documents indexed after the change, and existing indexes stay searchable. After changing `detect_languages` or `keep_stopwords`, run:
 
 ```bash
 hister reindex
