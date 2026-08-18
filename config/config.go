@@ -116,10 +116,51 @@ type Directory struct {
 }
 
 type Indexer struct {
-	DetectLanguages bool         `yaml:"detect_languages" mapstructure:"detect_languages"`
-	KeepStopwords   bool         `yaml:"keep_stopwords" mapstructure:"keep_stopwords"`
-	Directories     []*Directory `yaml:"directories" mapstructure:"directories"`
-	MaxFileSize     int64        `yaml:"max_file_size_mb" mapstructure:"max_file_size_mb"`
+	DetectLanguages           bool         `yaml:"detect_languages" mapstructure:"detect_languages"`
+	KeepStopwords             bool         `yaml:"keep_stopwords" mapstructure:"keep_stopwords"`
+	Directories               []*Directory `yaml:"directories" mapstructure:"directories"`
+	MaxFileSize               int64        `yaml:"max_file_size_mb" mapstructure:"max_file_size_mb"`
+	Languages                 []string     `yaml:"languages" mapstructure:"languages"`
+	LanguageDetectionAccuracy string       `yaml:"language_detection_accuracy" mapstructure:"language_detection_accuracy"`
+}
+
+const (
+	LanguageDetectionAccuracyHigh = "high"
+	LanguageDetectionAccuracyLow  = "low"
+)
+
+// LowAccuracyLanguageDetection reports whether lingua should run in its reduced
+// memory mode.
+func (i Indexer) LowAccuracyLanguageDetection() bool {
+	return i.LanguageDetectionAccuracy == LanguageDetectionAccuracyLow
+}
+
+// Validate checks what can be checked without knowing which languages the
+// detector supports. The codes themselves are validated in server/document,
+// which owns that list; config keeps no dependency on it.
+func (i Indexer) Validate() error {
+	switch i.LanguageDetectionAccuracy {
+	case "", LanguageDetectionAccuracyHigh, LanguageDetectionAccuracyLow:
+	default:
+		return fmt.Errorf(
+			"invalid indexer.language_detection_accuracy %q: must be %q or %q",
+			i.LanguageDetectionAccuracy, LanguageDetectionAccuracyHigh, LanguageDetectionAccuracyLow,
+		)
+	}
+	if len(i.Languages) == 0 {
+		return nil
+	}
+	// Count distinct codes the way the detector resolves them: a repeated entry
+	// would otherwise pass this check, resolve to a single language, and leave
+	// the detector disabled without saying so.
+	distinct := make(map[string]struct{}, len(i.Languages))
+	for _, code := range i.Languages {
+		distinct[strings.ToLower(strings.TrimSpace(code))] = struct{}{}
+	}
+	if len(distinct) < 2 {
+		return errors.New("indexer.languages needs at least two distinct languages, or none at all to detect every supported language")
+	}
+	return nil
 }
 
 type CrawlerCookie struct {
@@ -517,9 +558,10 @@ func CreateDefaultConfig() *Config {
 			MaxBatchBodySize: DefaultMaxBatchBodySize,
 		},
 		Indexer: Indexer{
-			DetectLanguages: true,
-			KeepStopwords:   false,
-			MaxFileSize:     1,
+			DetectLanguages:           true,
+			KeepStopwords:             false,
+			MaxFileSize:               1,
+			LanguageDetectionAccuracy: LanguageDetectionAccuracyHigh,
 		},
 		Crawler: CrawlerConfig{
 			Backend: "http",
@@ -649,6 +691,9 @@ func (c *Config) init() error {
 		return err
 	}
 	if err := c.SemanticSearch.Validate(); err != nil {
+		return err
+	}
+	if err := c.Indexer.Validate(); err != nil {
 		return err
 	}
 	if err := c.validateOAuth(); err != nil {

@@ -187,6 +187,18 @@ description: 'Explore every configuration section, option, default value, enviro
       description: 'Enables automatic language detection. Changing this setting requires reindexing.',
     },
     {
+      name: 'languages',
+      type: 'string[]',
+      defaultValue: '(none)',
+      description: 'Restricts language detection to these ISO 639-1 codes, which reduces memory use. Empty detects every supported language. Changing this setting does not require reindexing.',
+    },
+    {
+      name: 'language_detection_accuracy',
+      type: 'string',
+      defaultValue: 'high',
+      description: 'Detection accuracy, high or low. Low uses only trigram models and less memory. The two settings detect text of 120 letters or more identically, so only shorter text is affected.',
+    },
+    {
       name: 'keep_stopwords',
       type: 'bool',
       defaultValue: 'false',
@@ -622,6 +634,8 @@ server:
 
 indexer:
   detect_languages: true
+  language_detection_accuracy: 'high'
+  languages: ['en', 'de']
   keep_stopwords: false
   directories:
     - path: '~/notes'
@@ -998,7 +1012,7 @@ The `indexer.keep_stopwords` option defaults to `false`. When enabled together w
 
 **Performance considerations**: Language detection increases both CPU usage and memory consumption. Each document requires additional processing to analyze text and determine its language, and separate indexes are maintained for each detected language. If you're experiencing memory pressure or slow indexing performance, especially with large numbers of documents, consider disabling this feature.
 
-**Important**: Changing either analyzer setting requires a full reindex to take effect. After changing `detect_languages` or `keep_stopwords`, run:
+**Important**: Changing `detect_languages` or `keep_stopwords` requires a full reindex to take effect. Neither `languages` nor `language_detection_accuracy` does; both apply to documents indexed after the change, and existing indexes stay searchable. After changing `detect_languages` or `keep_stopwords`, run:
 
 ```bash
 hister reindex

@@ -49,7 +49,7 @@ func TestProcessedFieldIsNotStoredOrIndexed(t *testing.T) {
 
 func TestLanguageIndexesAreReindexSourcesWhenDetectionIsDisabled(t *testing.T) {
 	dir := t.TempDir()
-	idx, err := initializeIndexer(dir, true, false)
+	idx, err := initializeIndexer(dir, indexOptions{DetectLanguages: true, KeepStopwords: false})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +67,7 @@ func TestLanguageIndexesAreReindexSourcesWhenDetectionIsDisabled(t *testing.T) {
 	}
 	idx.Close()
 
-	idx, err = initializeIndexer(dir, false, false)
+	idx, err = initializeIndexer(dir, indexOptions{DetectLanguages: false, KeepStopwords: false})
 	if err != nil {
 		t.Fatal(err)
 	}
