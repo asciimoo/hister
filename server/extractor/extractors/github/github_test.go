@@ -218,6 +218,37 @@ func TestExtractRepo(t *testing.T) {
 	}
 }
 
+func TestPreviewRepo(t *testing.T) {
+	d := &document.Document{
+		URL:  "https://github.com/asciimoo/hister",
+		HTML: minimalRepoPage,
+	}
+	e := &GitHubExtractor{}
+	response, state, err := e.Preview(d)
+	c := response.Content
+	if err != nil {
+		t.Fatalf("Extract error: %v", err)
+	}
+	if state != types.ExtractorStop {
+		t.Fatalf("state = %v, want Stop", state)
+	}
+	if c == "" {
+		t.Fatalf("content is empty")
+	}
+	if !strings.Contains(c, `<p class="gh-description">Your own search engine</p>`) {
+		t.Error("Preview should contain the description")
+	}
+	if !strings.Contains(c, "<h1>Hister</h1>") {
+		t.Error("Preview should contain the README, properly formatted")
+	}
+	if !strings.Contains(c, "Hister is a general purpose web search engine providing automatic full-text indexing for visited websites") {
+		t.Error("Preview should contain the README body")
+	}
+	if !strings.Contains(c, `<p class="gh-stats">`) {
+		t.Errorf("Preview should show the stats nicely")
+	}
+}
+
 // --- Issue ---------------------------------------------------------------
 const issuePage = `<html>
 <head><title>Extractors wanted! · Issue #305 · asciimoo/hister</title></head>
@@ -241,6 +272,7 @@ const issuePage = `<html>
 		<div data-testid="markdown-body">
 		  <h1 dir="auto">This is a meta issue raising awareness to contribute to existing extractors or add new ones</h1>
 		  <p dir="auto">Extractors are modules that provide custom, content-specific document parsing or rendering functions to enhance the data quality of Hister. [...]</p>
+		  <ul><li><div><div><div><div><div data-testid="tasklist-item-0-0"><div><div></div><div id="checkbox-item-0"><input disabled="" aria-required="false" aria-invalid="false" aria-label="Video information extractor using yt-dlp (@FlameFlag) checklist item" data-component="Checkbox" type="checkbox" checked="" aria-checked="true"><div> Video information extractor using<code>yt-dlp</code> (@FlameFlag)</div></div></div><div></div></div></div></div><div><div><div data-testid="tasklist-item-0-1"><div><div></div><div id="checkbox-item-1"><input disabled="" aria-required="false" aria-invalid="false" aria-label="GitHub project information extractor checklist item" data-component="Checkbox" type="checkbox" aria-checked="false"><div> GitHub project information extractor</div></div></div><div></div></div></div></div><div><div><div data-testid="tasklist-item-0-2"><div><div></div><div id="checkbox-item-2"><input disabled="" aria-required="false" aria-invalid="false" aria-label="General StackExchange question/answer extractor checklist item" data-component="Checkbox" type="checkbox" checked="" aria-checked="true"><div> General StackExchange question/answer extractor</div></div></div><div></div></div></div></div><div><div><div data-testid="tasklist-item-0-3"><div><div></div><div id="checkbox-item-3"><input disabled="" aria-required="false" aria-invalid="false" aria-label="Reddit post extractor (@dinzz005) checklist item" data-component="Checkbox" type="checkbox" aria-checked="false"><div> Reddit post extractor (<a data-hovercard-type="user" data-hovercard-url="/users/dinzz005/hovercard" data-octo-click="hovercard-link-click" data-octo-dimensions="link_type:self" href="https://github.com/dinzz005" aria-keyshortcuts="Alt+ArrowUp">@dinzz005</a>)</div></div></div><div></div></div></div></div></div></div></li></ul>
 		</div>
       </div>
 	</div>
@@ -298,6 +330,37 @@ func TestExtractIssuePage(t *testing.T) {
 	}
 	if d.Metadata["date"] != "2026-04-09T07:47:32.000Z" {
 		t.Errorf("Metadata[date] = %v, want 2026-04-09T07:47:32.000Z", d.Metadata["date"])
+	}
+}
+
+func TestPreviewIssue(t *testing.T) {
+	d := &document.Document{
+		URL:  "https://github.com/asciimoo/hister/issues/305",
+		HTML: issuePage,
+	}
+	e := &GitHubExtractor{}
+	response, state, err := e.Preview(d)
+	c := response.Content
+	if err != nil {
+		t.Fatalf("Extract error: %v", err)
+	}
+	if state != types.ExtractorStop {
+		t.Fatalf("state = %v, want Stop", state)
+	}
+	if c == "" {
+		t.Fatalf("content is empty")
+	}
+	if !strings.Contains(c, `<h1>Extractors wanted!</h1>`) {
+		t.Error("Preview should contain the issue title")
+	}
+	if !strings.Contains(c, `This is a meta issue raising awareness to contribute to existing extractors or add new ones`) {
+		t.Error("Preview should contain the issue body, if it exists")
+	}
+	if !strings.Contains(c, `General StackExchange question/answer extractor`) {
+		t.Error("Preview should contain the issue body, if it exists")
+	}
+	if !strings.Contains(c, `Thanks bro, is there any deadline for this ???`) {
+		t.Error("Preview should contain the issue comments")
 	}
 }
 
