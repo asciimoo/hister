@@ -358,6 +358,10 @@ func withCSRF(handler endpointHandler) endpointHandler {
 				handler(c)
 				return
 			}
+			if strings.HasPrefix(c.Request.Header.Get("Origin"), "safari-web-extension://") {
+				handler(c)
+				return
+			}
 			if c.Request.Header.Get("Origin") == "chrome-extension://cciilamhchpmbdnniabclekddabkifhb" {
 				handler(c)
 				return
