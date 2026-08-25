@@ -5,6 +5,7 @@ package crawler
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/url"
 	"strings"
 	"time"
@@ -47,12 +48,14 @@ func WithSkipURLChecker(skipURLChecker SkipURLChecker) Option {
 
 // fetcher is the internal interface implemented by each scraping backend.
 // fetchPage downloads rawURL and returns the final URL after any redirects,
-// its HTML content together with the raw href values of all anchor tags found
-// on the page.
+// the raw response body, the links found on the page, fetch metadata, and any error.
 type fetcher interface {
-	fetchPage(ctx context.Context, rawURL string) (finalURL string, htmlContent string, links []string, err error)
+	fetchPage(ctx context.Context, rawURL string, hints RequestHints) (finalURL string, body []byte, links []Link, meta FetchMeta, err error)
 	close() error
 }
+
+// errResponseTooLarge is returned when a response body exceeds the configured limit.
+var errResponseTooLarge = fmt.Errorf("response body exceeds size limit")
 
 // baseCrawler wraps a fetcher with BFS traversal logic.
 type baseCrawler struct {
@@ -196,7 +199,7 @@ func (c *baseCrawler) bfsCrawl(ctx context.Context, startURL string, v *Validato
 			}
 		}
 
-		finalURL, htmlContent, links, err := c.fetcher.fetchPage(ctx, cur.rawURL)
+		finalURL, body, links, _, err := c.fetcher.fetchPage(ctx, cur.rawURL, RequestHints{})
 		if err != nil {
 			log.Warn().Err(err).Str("url", cur.rawURL).Msg("crawler: failed to fetch page")
 			continue
@@ -215,7 +218,7 @@ func (c *baseCrawler) bfsCrawl(ctx context.Context, startURL string, v *Validato
 
 		doc := &document.Document{
 			URL:  finalURL,
-			HTML: htmlContent,
+			HTML: string(body),
 		}
 
 		select {
@@ -225,7 +228,7 @@ func (c *baseCrawler) bfsCrawl(ctx context.Context, startURL string, v *Validato
 		}
 
 		for _, link := range links {
-			abs, err := resolveURL(finalParsed, link)
+			abs, err := resolveURL(finalParsed, link.Href)
 			if err != nil || abs == "" {
 				continue
 			}
@@ -252,28 +255,48 @@ func resolveURL(base *url.URL, href string) (string, error) {
 	return abs.String(), nil
 }
 
-// extractLinks parses htmlContent and returns the raw href attribute values
-// of all <a> elements.
-func extractLinks(htmlContent string) []string {
-	doc, err := html.Parse(strings.NewReader(htmlContent))
-	if err != nil {
-		return nil
+// isNofollow returns true if the rel string contains "nofollow" as a token.
+func isNofollow(rel string) bool {
+	for _, token := range strings.Fields(rel) {
+		if strings.EqualFold(token, "nofollow") {
+			return true
+		}
 	}
-	var links []string
-	var walk func(*html.Node)
-	walk = func(n *html.Node) {
-		if n.Type == html.ElementNode && n.Data == "a" {
-			for _, attr := range n.Attr {
-				if attr.Key == "href" {
-					links = append(links, attr.Val)
+	return false
+}
+
+// extractLinks parses HTML from r and returns the links found in <a> elements.
+// It captures the href and rel attributes. Multi-valued rel is preserved as-is
+// (space-separated); callers can use isNofollow to check individual tokens.
+func extractLinks(r io.Reader) []Link {
+	var links []Link
+	z := html.NewTokenizer(r)
+	for {
+		tt := z.Next()
+		switch tt {
+		case html.ErrorToken:
+			return links
+		case html.StartTagToken, html.SelfClosingTagToken:
+			name, hasAttr := z.TagName()
+			if !hasAttr || string(name) != "a" {
+				continue
+			}
+			var href, rel string
+			for {
+				key, val, more := z.TagAttr()
+				switch string(key) {
+				case "href":
+					href = string(val)
+				case "rel":
+					rel = string(val)
+				}
+				if !more {
 					break
 				}
 			}
-		}
-		for c := n.FirstChild; c != nil; c = c.NextSibling {
-			walk(c)
+			if href != "" {
+				links = append(links, Link{Href: href, Rel: rel})
+			}
 		}
 	}
-	walk(doc)
-	return links
 }

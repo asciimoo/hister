@@ -153,7 +153,7 @@ func (c *persistentCrawler) persistentBFS(ctx context.Context, startURL string, 
 			}
 		}
 
-		finalURL, htmlContent, links, fetchErr := c.fetcher.fetchPage(ctx, cur.URL)
+		finalURL, body, links, meta, fetchErr := c.fetcher.fetchPage(ctx, cur.URL, RequestHints{})
 		if fetchErr != nil {
 			log.Warn().Err(fetchErr).Str("url", cur.URL).Msg("crawler: failed to fetch page")
 			if err := model.UpdateCrawlURLStatus(cur.ID, model.CrawlURLFailed, fetchErr.Error()); err != nil {
@@ -189,7 +189,7 @@ func (c *persistentCrawler) persistentBFS(ctx context.Context, startURL string, 
 
 			resolved := make([]string, 0, len(links))
 			for _, link := range links {
-				abs, err := resolveURL(finalParsed, link)
+				abs, err := resolveURL(finalParsed, link.Href)
 				if err != nil || abs == "" {
 					continue
 				}
@@ -202,8 +202,10 @@ func (c *persistentCrawler) persistentBFS(ctx context.Context, startURL string, 
 		}
 
 		doc := &document.Document{
-			URL:  finalURL,
-			HTML: htmlContent,
+			URL:          finalURL,
+			HTML:         string(body),
+			ETag:         meta.ETag,
+			LastModified: meta.LastModified,
 		}
 
 		select {

@@ -3,12 +3,14 @@
 package crawler
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -23,6 +25,7 @@ type httpFetcher struct {
 	client    *http.Client
 	userAgent string
 	headers   map[string]string
+	maxBytes  int64
 }
 
 func newHTTPFetcher(cfg *config.CrawlerConfig) (*httpFetcher, error) {
@@ -61,22 +64,39 @@ func newHTTPFetcher(cfg *config.CrawlerConfig) (*httpFetcher, error) {
 		timeout = defaultTimeout
 	}
 
+	ua := cfg.UserAgent
+	if ua == "" {
+		contactURL := cfg.ContactURL
+		if contactURL == "" {
+			contactURL = "https://hister.info"
+		}
+		ua = fmt.Sprintf("Hister/dev (+%s)", contactURL)
+	}
+
+	maxBytes := cfg.Limits.MaxResponseBytes
+	if maxBytes == 0 {
+		maxBytes = 10 * 1024 * 1024
+	}
+
 	return &httpFetcher{
 		client: &http.Client{
 			Timeout:   timeout,
 			Jar:       jar,
 			Transport: transportWithProxy(proxyURL),
 		},
-		userAgent: cfg.UserAgent,
+		userAgent: ua,
 		headers:   cfg.Headers,
+		maxBytes:  maxBytes,
 	}, nil
 }
 
-func (f *httpFetcher) fetchPage(ctx context.Context, rawURL string) (string, string, []string, error) {
+func (f *httpFetcher) fetchPage(ctx context.Context, rawURL string, hints RequestHints) (string, []byte, []Link, FetchMeta, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
-		return "", "", nil, err
+		return "", nil, nil, FetchMeta{}, err
 	}
+
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,*/*;q=0.8")
 
 	if f.userAgent != "" {
 		req.Header.Set("User-Agent", f.userAgent)
@@ -84,10 +104,16 @@ func (f *httpFetcher) fetchPage(ctx context.Context, rawURL string) (string, str
 	for k, v := range f.headers {
 		req.Header.Set(k, v)
 	}
+	if hints.IfNoneMatch != "" {
+		req.Header.Set("If-None-Match", hints.IfNoneMatch)
+	}
+	if hints.IfModifiedSince != "" {
+		req.Header.Set("If-Modified-Since", hints.IfModifiedSince)
+	}
 
 	resp, err := f.client.Do(req)
 	if err != nil {
-		return "", "", nil, err
+		return "", nil, nil, FetchMeta{}, err
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
@@ -95,23 +121,73 @@ func (f *httpFetcher) fetchPage(ctx context.Context, rawURL string) (string, str
 		}
 	}()
 
+	meta := FetchMeta{
+		StatusCode:   resp.StatusCode,
+		ETag:         resp.Header.Get("ETag"),
+		LastModified: resp.Header.Get("Last-Modified"),
+		XRobotsTag:   resp.Header.Get("X-Robots-Tag"),
+	}
+
+	if resp.StatusCode == http.StatusNotModified {
+		return "", nil, nil, meta, &HTTPStatusError{Status: http.StatusNotModified}
+	}
+
 	if resp.StatusCode != http.StatusOK {
-		return "", "", nil, fmt.Errorf("unexpected status %d", resp.StatusCode)
+		retryAfter := parseRetryAfter(resp.Header.Get("Retry-After"))
+		meta.RetryAfter = retryAfter
+		return "", nil, nil, meta, &HTTPStatusError{Status: resp.StatusCode, RetryAfter: retryAfter}
 	}
 
 	ct := resp.Header.Get("Content-Type")
 	if !strings.Contains(ct, "html") {
-		return "", "", nil, fmt.Errorf("not an HTML response: %s", ct)
+		return "", nil, nil, meta, fmt.Errorf("not an HTML response: %s", ct)
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	// Check Content-Length before reading.
+	if cl := resp.ContentLength; cl > 0 && cl > f.maxBytes {
+		return "", nil, nil, meta, errResponseTooLarge
+	}
+
+	limitedBody := io.LimitReader(resp.Body, f.maxBytes+1)
+	body, err := io.ReadAll(limitedBody)
 	if err != nil {
-		return "", "", nil, err
+		return "", nil, nil, meta, err
+	}
+	if int64(len(body)) > f.maxBytes {
+		return "", nil, nil, meta, errResponseTooLarge
 	}
 
-	htmlContent := string(body)
 	finalURL := resp.Request.URL.String()
-	return finalURL, htmlContent, extractLinks(htmlContent), nil
+	links := extractLinks(bytes.NewReader(body))
+	return finalURL, body, links, meta, nil
 }
 
 func (f *httpFetcher) close() error { return nil }
+
+// parseRetryAfter parses the Retry-After header value as either a
+// delta-seconds integer or an HTTP-date string.
+func parseRetryAfter(s string) time.Duration {
+	if s == "" {
+		return 0
+	}
+	// Try delta-seconds first.
+	if n, err := strconv.ParseInt(strings.TrimSpace(s), 10, 64); err == nil && n > 0 {
+		return time.Duration(n) * time.Second
+	}
+	// Try HTTP-date.
+	for _, layout := range []string{
+		time.RFC1123,
+		"Monday, 02-Jan-06 15:04:05 MST",
+		time.RFC850,
+		time.ANSIC,
+	} {
+		if t, err := time.Parse(layout, s); err == nil {
+			d := time.Until(t)
+			if d > 0 {
+				return d
+			}
+			return 0
+		}
+	}
+	return 0
+}

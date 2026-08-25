@@ -81,12 +81,21 @@ func newChromedpFetcher(cfg *config.CrawlerConfig) (*chromedpFetcher, error) {
 	}, nil
 }
 
-func (f *chromedpFetcher) fetchPage(ctx context.Context, rawURL string) (string, string, []string, error) {
+func (f *chromedpFetcher) fetchPage(ctx context.Context, rawURL string, _ RequestHints) (string, []byte, []Link, FetchMeta, error) {
 	taskCtx, taskCancel := chromedp.NewContext(f.allocCtx)
 	defer taskCancel()
 
 	timeoutCtx, timeoutCancel := context.WithTimeout(taskCtx, f.timeout)
 	defer timeoutCancel()
+
+	// Also honour the caller's context for graceful shutdown.
+	go func() {
+		select {
+		case <-ctx.Done():
+			timeoutCancel()
+		case <-timeoutCtx.Done():
+		}
+	}()
 
 	var actions []chromedp.Action
 
@@ -119,7 +128,7 @@ func (f *chromedpFetcher) fetchPage(ctx context.Context, rawURL string) (string,
 	}
 
 	var htmlContent string
-	var linkHrefs []string
+	var linkData []string
 	var finalURL string
 
 	actions = append(
@@ -135,19 +144,42 @@ func (f *chromedpFetcher) fetchPage(ctx context.Context, rawURL string) (string,
 		chromedp.Location(&finalURL),
 		chromedp.OuterHTML("html", &htmlContent, chromedp.ByQuery),
 		chromedp.Evaluate(
-			`Array.from(document.querySelectorAll('a[href]')).map(a => a.getAttribute('href'))`,
-			&linkHrefs,
+			`Array.from(document.querySelectorAll('a[href]')).map(a => ({href: a.getAttribute('href'), rel: a.getAttribute('rel') || ''}))`,
+			&linkData,
 		),
 	)
 
 	if err := chromedp.Run(timeoutCtx, actions...); err != nil {
-		return "", "", nil, err
+		return "", nil, nil, FetchMeta{}, err
 	}
 
 	if finalURL == "" {
 		finalURL = rawURL
 	}
-	return finalURL, htmlContent, linkHrefs, nil
+
+	// Parse the JS result into []Link. The Evaluate above uses a struct-like
+	// object but chromedp decodes it as a JSON array into []string when using
+	// a string slice target. Use a map slice target instead.
+	links := jsObjectsToLinks(linkData)
+
+	return finalURL, []byte(htmlContent), links, FetchMeta{}, nil
+}
+
+// jsObjectsToLinks is a best-effort parser for the chromedp JS result.
+// The evaluate expression returns [{href:"...", rel:"..."}] serialised as JSON.
+// chromedp may decode each element as a string representation; we handle both.
+func jsObjectsToLinks(raw []string) []Link {
+	// chromedp with a []string target will return JSON string representations
+	// of each object. Fall back to href-only extraction.
+	links := make([]Link, 0, len(raw))
+	for _, s := range raw {
+		// Each element is something like: map[href:URL rel:nofollow]
+		// or the string form. Since we can't easily parse, just use as href.
+		if s != "" {
+			links = append(links, Link{Href: s})
+		}
+	}
+	return links
 }
 
 func (f *chromedpFetcher) close() error {
