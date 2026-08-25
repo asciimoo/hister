@@ -41,6 +41,8 @@ type Document struct {
 	Label      string         `json:"label"`
 	AddCount   uint           `json:"add_count"`
 	Metadata   map[string]any `json:"metadata"`
+	ETag         string `json:"etag,omitempty"`
+	LastModified string `json:"last_modified,omitempty"`
 	// ExtraDocuments can be populated by extractors to create new documents during the extraction
 	ExtraDocuments []*Document `json:"-"`
 	// SkipIndexing can be set by extractors to mark the document to exclude from indexing. Useful when populating ExtraDocuments
