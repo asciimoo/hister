@@ -3,11 +3,15 @@
 package crawler
 
 import (
+	"container/list"
 	"context"
 	"fmt"
+	"hash/fnv"
 	"io"
 	"net/url"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/net/html"
@@ -54,15 +58,75 @@ type fetcher interface {
 	close() error
 }
 
-// errResponseTooLarge is returned when a response body exceeds the configured limit.
-var errResponseTooLarge = fmt.Errorf("response body exceeds size limit")
+// HostStats tracks per-host counters.
+type HostStats struct {
+	Pages  atomic.Int64
+	Bytes  atomic.Int64
+	Errors atomic.Int64
+}
+
+// CrawlerStatsSnapshot is a point-in-time copy of CrawlerStats.
+type CrawlerStatsSnapshot struct {
+	Pages        int64
+	Bytes        int64
+	Count2xx     int64
+	Count3xx     int64
+	Count4xx     int64
+	Count5xx     int64
+	Retries      int64
+	BreakerTrips int64
+	RobotsDenials int64
+	BudgetStops  int64
+}
+
+// CrawlerStats holds atomic counters for a single crawl.
+type CrawlerStats struct {
+	Pages         atomic.Int64
+	Bytes         atomic.Int64
+	Count2xx      atomic.Int64
+	Count3xx      atomic.Int64
+	Count4xx      atomic.Int64
+	Count5xx      atomic.Int64
+	Retries       atomic.Int64
+	BreakerTrips  atomic.Int64
+	RobotsDenials atomic.Int64
+	BudgetStops   atomic.Int64
+	PerHost       sync.Map // host -> *HostStats
+}
+
+// Snapshot returns a point-in-time copy of the stats.
+func (s *CrawlerStats) Snapshot() CrawlerStatsSnapshot {
+	return CrawlerStatsSnapshot{
+		Pages:         s.Pages.Load(),
+		Bytes:         s.Bytes.Load(),
+		Count2xx:      s.Count2xx.Load(),
+		Count3xx:      s.Count3xx.Load(),
+		Count4xx:      s.Count4xx.Load(),
+		Count5xx:      s.Count5xx.Load(),
+		Retries:       s.Retries.Load(),
+		BreakerTrips:  s.BreakerTrips.Load(),
+		RobotsDenials: s.RobotsDenials.Load(),
+		BudgetStops:   s.BudgetStops.Load(),
+	}
+}
+
+func (s *CrawlerStats) hostStats(host string) *HostStats {
+	v, _ := s.PerHost.LoadOrStore(host, &HostStats{})
+	return v.(*HostStats)
+}
 
 // baseCrawler wraps a fetcher with BFS traversal logic.
 type baseCrawler struct {
 	fetcher        fetcher
 	cfg            *config.CrawlerConfig
-	robots         *RobotsCache // nil means robots.txt enforcement is disabled
+	robots         *RobotsCache
 	skipURLChecker SkipURLChecker
+	scheduler      *Scheduler
+	budget         *Budget
+	breaker        *CircuitBreaker
+	backoff        *Backoff
+	stats          *CrawlerStats
+	clock          Clock
 }
 
 // New creates a Crawler backed by the backend specified in cfg.Backend.
@@ -84,7 +148,38 @@ func New(cfg *config.CrawlerConfig, robots *RobotsCache, opts ...Option) (Crawle
 	if err != nil {
 		return nil, fmt.Errorf("%s backend: %w", crawlerBackendName(cfg), err)
 	}
-	return &baseCrawler{fetcher: f, cfg: cfg, robots: robots, skipURLChecker: o.skipURLChecker}, nil
+	return newBaseCrawler(f, cfg, robots, o), nil
+}
+
+func newBaseCrawler(f fetcher, cfg *config.CrawlerConfig, robots *RobotsCache, o options) *baseCrawler {
+	clock := RealClock{}
+	cooldown := time.Duration(cfg.CircuitBreaker.Cooldown) * time.Second
+	if cooldown == 0 {
+		cooldown = 5 * time.Minute
+	}
+	breaker := NewCircuitBreaker(cfg.CircuitBreaker.ConsecutiveFailures, cooldown, clock)
+	budget := NewBudget(cfg.Limits, cfg.Hosts, clock)
+	scheduler := NewScheduler(cfg, breaker, robots, clock)
+	initial := time.Duration(cfg.Retry.InitialBackoff) * time.Second
+	if initial == 0 {
+		initial = time.Second
+	}
+	maxB := time.Duration(cfg.Retry.MaxBackoff) * time.Second
+	if maxB == 0 {
+		maxB = 30 * time.Second
+	}
+	return &baseCrawler{
+		fetcher:        f,
+		cfg:            cfg,
+		robots:         robots,
+		skipURLChecker: o.skipURLChecker,
+		scheduler:      scheduler,
+		budget:         budget,
+		breaker:        breaker,
+		backoff:        NewBackoff(initial, maxB),
+		stats:          &CrawlerStats{},
+		clock:          clock,
+	}
 }
 
 func crawlerBackendName(cfg *config.CrawlerConfig) string {
@@ -141,6 +236,7 @@ func (c *baseCrawler) Crawl(ctx context.Context, startURL string, v *Validator) 
 
 // Close releases resources held by the underlying backend.
 func (c *baseCrawler) Close() error {
+	c.scheduler.Stop()
 	return c.fetcher.close()
 }
 
@@ -149,95 +245,340 @@ type queueItem struct {
 	depth  int
 }
 
+// seenSet deduplicates URLs using FNV-64 hashes to keep memory compact.
+type seenSet struct {
+	m map[uint64]struct{}
+}
+
+func newSeenSet() *seenSet {
+	return &seenSet{m: make(map[uint64]struct{})}
+}
+
+func (s *seenSet) add(key string) {
+	s.m[hashURL(key)] = struct{}{}
+}
+
+func (s *seenSet) contains(key string) bool {
+	_, ok := s.m[hashURL(key)]
+	return ok
+}
+
+func hashURL(key string) uint64 {
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(key))
+	return h.Sum64()
+}
+
 func (c *baseCrawler) bfsCrawl(ctx context.Context, startURL string, v *Validator, ch chan<- *document.Document) {
-	queue := []queueItem{{startURL, 0}}
-	seen := map[string]struct{}{startURL: {}}
+	// Graceful shutdown: crawlCtx cancels when caller cancels. fetchCtx is
+	// cancelled after shutdown grace period.
+	grace := time.Duration(c.cfg.ShutdownGrace) * time.Second
+	if grace == 0 {
+		grace = 30 * time.Second
+	}
 
-	for len(queue) > 0 {
+	crawlCtx, crawlCancel := context.WithCancel(ctx)
+	defer crawlCancel()
+
+	fetchCtx, fetchCancel := context.WithCancel(context.Background())
+	defer fetchCancel()
+
+	// When crawlCtx is cancelled, start grace-period countdown then cancel fetchCtx.
+	go func() {
+		<-crawlCtx.Done()
 		select {
-		case <-ctx.Done():
-			return
-		default:
+		case <-c.clock.After(grace):
+		case <-fetchCtx.Done():
 		}
+		fetchCancel()
+	}()
 
-		cur := queue[0]
-		queue = queue[1:]
+	queue := list.New()
+	seen := newSeenSet()
 
-		parsedURL, err := url.Parse(cur.rawURL)
-		if err != nil {
-			continue
-		}
+	normStart, err := normalizeRawURL(startURL)
+	if err != nil {
+		normStart = startURL
+	}
+	seen.add(normStart)
+	queue.PushBack(queueItem{startURL, 0})
 
-		switch v.Validate(parsedURL, cur.depth) {
-		case URLStop:
-			return
-		case URLSkip:
-			log.Info().Str("url", cur.rawURL).Int("depth", cur.depth).Msg("crawler: skipping URL by crawler rules")
-			continue
-		}
+	concurrency := c.cfg.Rate.GlobalConcurrency
+	if concurrency < 1 {
+		concurrency = 1
+	}
 
-		if c.robots != nil && !c.robots.Allowed(ctx, cur.rawURL) {
-			log.Info().Str("url", cur.rawURL).Msg("crawler: skipping URL disallowed by robots.txt")
-			continue
-		}
+	type result struct {
+		item      queueItem
+		finalURL  string
+		body      []byte
+		links     []Link
+		meta      FetchMeta
+		err       error
+		attempt   int
+		durationMs int64
+	}
 
-		if c.skipURLChecker != nil {
-			skip, err := c.skipURLChecker(cur.rawURL)
-			if err != nil {
-				log.Warn().Err(err).Str("url", cur.rawURL).Msg("crawler: failed to check whether URL should be skipped")
-			} else if skip {
-				log.Info().Str("url", cur.rawURL).Msg("crawler: skipping URL by prefetch skip predicate")
-				continue
+	work := make(chan queueItem, concurrency)
+	results := make(chan result, concurrency)
+	var wg sync.WaitGroup
+
+	// Worker goroutines.
+	maxAttempts := c.cfg.Retry.MaxAttempts
+	if maxAttempts < 1 {
+		maxAttempts = 1
+	}
+
+	for i := 0; i < concurrency; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for item := range work {
+				parsedURL, err := url.Parse(item.rawURL)
+				if err != nil {
+					results <- result{item: item, err: err}
+					continue
+				}
+				host := parsedURL.Hostname()
+
+				var res result
+				res.item = item
+
+				for attempt := 0; attempt < maxAttempts; attempt++ {
+					if attempt > 0 {
+						c.stats.Retries.Add(1)
+						wait := c.backoff.Duration(attempt)
+						select {
+						case <-fetchCtx.Done():
+							res.err = fetchCtx.Err()
+							goto done
+						case <-c.clock.After(wait):
+						}
+					}
+
+					if err := c.scheduler.Wait(crawlCtx, host); err != nil {
+						res.err = err
+						goto done
+					}
+
+					start := c.clock.Now()
+					finalURL, body, links, meta, fetchErr := c.fetcher.fetchPage(fetchCtx, item.rawURL, RequestHints{})
+					elapsed := c.clock.Now().Sub(start)
+
+					c.scheduler.Release(host)
+
+					res.attempt = attempt + 1
+					res.durationMs = elapsed.Milliseconds()
+
+					if fetchErr != nil {
+						retryable, retryAfter, statusCode := ClassifyError(fetchErr)
+						log.Warn().
+							Err(fetchErr).
+							Str("url", item.rawURL).
+							Str("host", host).
+							Int("status", statusCode).
+							Int("attempt", attempt+1).
+							Msg("crawler: fetch error")
+
+						if retryAfter > 0 {
+							c.scheduler.Cooldown(host, retryAfter)
+						}
+
+						if retryable && attempt < maxAttempts-1 {
+							c.breaker.RecordFailure(host)
+							continue
+						}
+						c.breaker.RecordFailure(host)
+						res.err = fetchErr
+						goto done
+					}
+
+					c.breaker.RecordSuccess(host)
+					res.finalURL = finalURL
+					res.body = body
+					res.links = links
+					res.meta = meta
+					goto done
+				}
+			done:
+				results <- res
 			}
-		}
+		}()
+	}
 
-		if c.cfg.Delay > 0 {
+	// Close results when all workers are done.
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	// Dispatcher: feed work to workers, collect results.
+	inFlight := 0
+	dispatch := func() {
+		for inFlight < concurrency && queue.Len() > 0 {
+			front := queue.Front()
+			queue.Remove(front)
+			item := front.Value.(queueItem)
+
 			select {
-			case <-time.After(time.Duration(c.cfg.Delay) * time.Second):
-			case <-ctx.Done():
+			case <-crawlCtx.Done():
 				return
+			case work <- item:
+				inFlight++
 			}
 		}
+	}
 
-		finalURL, body, links, _, err := c.fetcher.fetchPage(ctx, cur.rawURL, RequestHints{})
-		if err != nil {
-			log.Warn().Err(err).Str("url", cur.rawURL).Msg("crawler: failed to fetch page")
+	dispatch()
+
+	for inFlight > 0 {
+		res, ok := <-results
+		if !ok {
+			break
+		}
+		inFlight--
+
+		if res.err != nil {
+			hs := c.stats.hostStats("")
+			if res.item.rawURL != "" {
+				parsed, pErr := url.Parse(res.item.rawURL)
+				if pErr == nil {
+					hs = c.stats.hostStats(parsed.Hostname())
+				}
+			}
+			hs.Errors.Add(1)
+			dispatch()
 			continue
 		}
 
-		// If the server redirected to a different URL, mark it seen so it
-		// won't be queued again (e.g. /path/ -> /path). Use the final URL
-		// for the document and as the base for link resolution.
-		if finalURL != cur.rawURL {
-			seen[finalURL] = struct{}{}
-		}
-		finalParsed, err := url.Parse(finalURL)
+		// Re-validate the final URL (it may differ from the queued URL after redirects).
+		finalParsed, err := url.Parse(res.finalURL)
 		if err != nil {
-			finalParsed = parsedURL
+			dispatch()
+			continue
 		}
+
+		host := finalParsed.Hostname()
+		hs := c.stats.hostStats(host)
+
+		// Record stats.
+		bodyLen := int64(len(res.body))
+		c.stats.Pages.Add(1)
+		c.stats.Bytes.Add(bodyLen)
+		hs.Pages.Add(1)
+		hs.Bytes.Add(bodyLen)
+		c.budget.AddBytes(host, bodyLen)
+
+		switch {
+		case res.meta.StatusCode >= 200 && res.meta.StatusCode < 300:
+			c.stats.Count2xx.Add(1)
+		case res.meta.StatusCode >= 300 && res.meta.StatusCode < 400:
+			c.stats.Count3xx.Add(1)
+		case res.meta.StatusCode >= 400 && res.meta.StatusCode < 500:
+			c.stats.Count4xx.Add(1)
+		case res.meta.StatusCode >= 500:
+			c.stats.Count5xx.Add(1)
+		}
+
+		log.Info().
+			Str("url", res.finalURL).
+			Str("host", host).
+			Int("status", res.meta.StatusCode).
+			Int64("bytes", bodyLen).
+			Int64("duration_ms", res.durationMs).
+			Int("attempt", res.attempt).
+			Str("breaker_state", breakerStateName(c.breaker.State(host))).
+			Msg("crawler: fetched page")
+
+		// Mark final URL as seen if it differs from the queued URL.
+		normFinal, err := normalizeRawURL(res.finalURL)
+		if err != nil {
+			normFinal = res.finalURL
+		}
+		seen.add(normFinal)
 
 		doc := &document.Document{
-			URL:  finalURL,
-			HTML: string(body),
+			URL:          res.finalURL,
+			HTML:         string(res.body),
+			ETag:         res.meta.ETag,
+			LastModified: res.meta.LastModified,
 		}
 
 		select {
 		case ch <- doc:
-		case <-ctx.Done():
+		case <-crawlCtx.Done():
 			return
 		}
 
-		for _, link := range links {
-			abs, err := resolveURL(finalParsed, link.Href)
-			if err != nil || abs == "" {
-				continue
-			}
-			if _, exists := seen[abs]; !exists {
-				seen[abs] = struct{}{}
-				queue = append(queue, queueItem{abs, cur.depth + 1})
+		if !v.Rules().NoDepth {
+			for _, link := range res.links {
+				// Skip nofollow links.
+				if isNofollow(link.Rel) {
+					continue
+				}
+				abs, err := resolveURL(finalParsed, link.Href)
+				if err != nil || abs == "" {
+					continue
+				}
+				normAbs, nErr := normalizeRawURL(abs)
+				if nErr != nil {
+					normAbs = abs
+				}
+				if seen.contains(normAbs) {
+					continue
+				}
+				seen.add(normAbs)
+
+				absParsed, err := url.Parse(abs)
+				if err != nil {
+					continue
+				}
+				switch v.Validate(absParsed, res.item.depth+1) {
+				case URLStop:
+					c.stats.BudgetStops.Add(1)
+					return
+				case URLSkip:
+					continue
+				}
+				queue.PushBack(queueItem{abs, res.item.depth + 1})
 			}
 		}
+
+		dispatch()
 	}
+
+	close(work)
+}
+
+func breakerStateName(s BreakerState) string {
+	switch s {
+	case BreakerClosed:
+		return "closed"
+	case BreakerOpen:
+		return "open"
+	case BreakerHalfOpen:
+		return "half_open"
+	}
+	return "unknown"
+}
+
+// isNofollow returns true if the rel string contains "nofollow" as a token.
+func isNofollow(rel string) bool {
+	for _, token := range strings.Fields(rel) {
+		if strings.EqualFold(token, "nofollow") {
+			return true
+		}
+	}
+	return false
+}
+
+// normalizeRawURL parses and normalizes a raw URL string.
+func normalizeRawURL(rawURL string) (string, error) {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return "", err
+	}
+	return NormalizeURL(u), nil
 }
 
 // resolveURL turns a potentially relative href into an absolute http(s) URL
@@ -253,16 +594,6 @@ func resolveURL(base *url.URL, href string) (string, error) {
 	}
 	abs.Fragment = ""
 	return abs.String(), nil
-}
-
-// isNofollow returns true if the rel string contains "nofollow" as a token.
-func isNofollow(rel string) bool {
-	for _, token := range strings.Fields(rel) {
-		if strings.EqualFold(token, "nofollow") {
-			return true
-		}
-	}
-	return false
 }
 
 // extractLinks parses HTML from r and returns the links found in <a> elements.
@@ -300,3 +631,19 @@ func extractLinks(r io.Reader) []Link {
 		}
 	}
 }
+
+// activeRegistry holds references to active crawlers for debug inspection.
+var activeRegistry sync.Map // id -> *baseCrawler
+
+// RegisterActive registers c under id for debug inspection.
+func RegisterActive(id string, c *baseCrawler) {
+	activeRegistry.Store(id, c)
+}
+
+// Unregister removes id from the active registry.
+func Unregister(id string) {
+	activeRegistry.Delete(id)
+}
+
+// errResponseTooLarge is returned when a response body exceeds the configured limit.
+var errResponseTooLarge = fmt.Errorf("response body exceeds size limit")

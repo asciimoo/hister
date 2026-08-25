@@ -153,6 +153,7 @@ func (c *persistentCrawler) persistentBFS(ctx context.Context, startURL string, 
 			}
 		}
 
+		// TODO: wire up conditional GET - pass ETag/LastModified from doc store as hints.
 		finalURL, body, links, meta, fetchErr := c.fetcher.fetchPage(ctx, cur.URL, RequestHints{})
 		if fetchErr != nil {
 			log.Warn().Err(fetchErr).Str("url", cur.URL).Msg("crawler: failed to fetch page")
@@ -189,6 +190,10 @@ func (c *persistentCrawler) persistentBFS(ctx context.Context, startURL string, 
 
 			resolved := make([]string, 0, len(links))
 			for _, link := range links {
+				// Skip nofollow links.
+				if isNofollow(link.Rel) {
+					continue
+				}
 				abs, err := resolveURL(finalParsed, link.Href)
 				if err != nil || abs == "" {
 					continue
