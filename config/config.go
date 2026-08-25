@@ -132,15 +132,74 @@ type CrawlerCookie struct {
 // CrawlerConfig holds global crawler settings and backend-specific options.
 // Timeout and Delay default to 5s and 0s respectively when zero.
 type CrawlerConfig struct {
-	Timeout        int               `yaml:"timeout"         mapstructure:"timeout"`
-	Delay          int               `yaml:"delay"           mapstructure:"delay"`
-	Backend        string            `yaml:"backend"         mapstructure:"backend"`
-	BackendOptions map[string]any    `yaml:"backend_options" mapstructure:"backend_options"`
-	Proxy          string            `yaml:"proxy"           mapstructure:"proxy"`
-	UserAgent      string            `yaml:"user_agent"      mapstructure:"user_agent"`
-	Headers        map[string]string `yaml:"headers"         mapstructure:"headers"`
-	Cookies        []CrawlerCookie   `yaml:"cookies"         mapstructure:"cookies"`
-	NoRobots       bool              `yaml:"no_robots"       mapstructure:"no_robots"`
+	Timeout           int                            `yaml:"timeout"            mapstructure:"timeout"`
+	Delay             int                            `yaml:"delay"              mapstructure:"delay"`
+	Backend           string                         `yaml:"backend"            mapstructure:"backend"`
+	BackendOptions    map[string]any                 `yaml:"backend_options"    mapstructure:"backend_options"`
+	Proxy             string                         `yaml:"proxy"              mapstructure:"proxy"`
+	UserAgent         string                         `yaml:"user_agent"         mapstructure:"user_agent"`
+	Headers           map[string]string              `yaml:"headers"            mapstructure:"headers"`
+	Cookies           []CrawlerCookie                `yaml:"cookies"            mapstructure:"cookies"`
+	NoRobots          bool                           `yaml:"no_robots"          mapstructure:"no_robots"`
+	ContactURL        string                         `yaml:"contact_url"        mapstructure:"contact_url"`
+	ConditionalGet    bool                           `yaml:"conditional_get"    mapstructure:"conditional_get"`
+	RespectMetaRobots bool                           `yaml:"respect_meta_robots" mapstructure:"respect_meta_robots"`
+	Rate              CrawlerRate                    `yaml:"rate"               mapstructure:"rate"`
+	Retry             CrawlerRetry                   `yaml:"retry"              mapstructure:"retry"`
+	CircuitBreaker    CrawlerBreaker                 `yaml:"circuit_breaker"    mapstructure:"circuit_breaker"`
+	Limits            CrawlerLimits                  `yaml:"limits"             mapstructure:"limits"`
+	Robots            CrawlerRobots                  `yaml:"robots"             mapstructure:"robots"`
+	Hosts             map[string]CrawlerHostOverride `yaml:"hosts"              mapstructure:"hosts"`
+	ShutdownGrace     int                            `yaml:"shutdown_grace"     mapstructure:"shutdown_grace"`
+}
+
+// CrawlerRate configures global and per-host request rates.
+// RPS values are requests per second; 0 means use the default.
+// Duration fields are in seconds.
+type CrawlerRate struct {
+	GlobalRPS          float64 `yaml:"global_rps"          mapstructure:"global_rps"`
+	PerHostRPS         float64 `yaml:"per_host_rps"        mapstructure:"per_host_rps"`
+	GlobalConcurrency  int     `yaml:"global_concurrency"  mapstructure:"global_concurrency"`
+	PerHostConcurrency int     `yaml:"per_host_concurrency" mapstructure:"per_host_concurrency"`
+	Jitter             float64 `yaml:"jitter"              mapstructure:"jitter"`
+}
+
+// CrawlerRetry configures retry behaviour on transient failures.
+// Duration fields are in seconds.
+type CrawlerRetry struct {
+	MaxAttempts    int `yaml:"max_attempts"    mapstructure:"max_attempts"`
+	InitialBackoff int `yaml:"initial_backoff" mapstructure:"initial_backoff"`
+	MaxBackoff     int `yaml:"max_backoff"     mapstructure:"max_backoff"`
+}
+
+// CrawlerBreaker configures the per-host circuit breaker.
+// Cooldown is in seconds.
+type CrawlerBreaker struct {
+	ConsecutiveFailures int `yaml:"consecutive_failures" mapstructure:"consecutive_failures"`
+	Cooldown            int `yaml:"cooldown"             mapstructure:"cooldown"`
+}
+
+// CrawlerLimits caps total and per-host resource usage.
+// Duration fields are in seconds.
+type CrawlerLimits struct {
+	MaxResponseBytes int64 `yaml:"max_response_bytes" mapstructure:"max_response_bytes"`
+	MaxPages         int   `yaml:"max_pages"          mapstructure:"max_pages"`
+	MaxPagesPerHost  int   `yaml:"max_pages_per_host" mapstructure:"max_pages_per_host"`
+	MaxBytesPerHost  int64 `yaml:"max_bytes_per_host" mapstructure:"max_bytes_per_host"`
+	MaxDuration      int   `yaml:"max_duration"       mapstructure:"max_duration"`
+}
+
+// CrawlerRobots configures robots.txt handling.
+// CacheTTL is in seconds.
+type CrawlerRobots struct {
+	CacheTTL          int  `yaml:"cache_ttl"           mapstructure:"cache_ttl"`
+	RespectCrawlDelay bool `yaml:"respect_crawl_delay" mapstructure:"respect_crawl_delay"`
+}
+
+// CrawlerHostOverride allows per-host rate and page limit overrides.
+type CrawlerHostOverride struct {
+	PerHostRPS float64 `yaml:"per_host_rps" mapstructure:"per_host_rps"`
+	MaxPages   int     `yaml:"max_pages"    mapstructure:"max_pages"`
 }
 
 type Hotkeys struct {
@@ -524,6 +583,30 @@ func CreateDefaultConfig() *Config {
 		Crawler: CrawlerConfig{
 			Backend: "http",
 			Timeout: 5,
+			Rate: CrawlerRate{
+				GlobalRPS:          10,
+				PerHostRPS:         1,
+				GlobalConcurrency:  8,
+				PerHostConcurrency: 1,
+				Jitter:             0.2,
+			},
+			Retry: CrawlerRetry{
+				MaxAttempts:    3,
+				InitialBackoff: 1,
+				MaxBackoff:     30,
+			},
+			CircuitBreaker: CrawlerBreaker{
+				ConsecutiveFailures: 5,
+				Cooldown:            300,
+			},
+			Limits: CrawlerLimits{
+				MaxResponseBytes: 10 * 1024 * 1024,
+			},
+			Robots: CrawlerRobots{
+				CacheTTL:          86400,
+				RespectCrawlDelay: true,
+			},
+			ShutdownGrace: 30,
 		},
 		Hotkeys: Hotkeys{
 			Web: map[string]string{
@@ -595,6 +678,17 @@ func parseConfig(rawConfig []byte) (*Config, error) {
 		}
 		c.Server.BaseURL = strings.TrimSuffix(c.Server.BaseURL, "/")
 	}
+
+	// Backwards compatibility: if legacy delay > 0 and per-host RPS is still
+	// at its default, derive per-host RPS from the delay value.
+	if c.Crawler.Delay > 0 && c.Crawler.Rate.PerHostRPS == 0 {
+		c.Crawler.Rate.PerHostRPS = 1.0 / float64(c.Crawler.Delay)
+		log.Warn().
+			Int("delay", c.Crawler.Delay).
+			Float64("per_host_rps", c.Crawler.Rate.PerHostRPS).
+			Msg("config: crawler.delay is deprecated; use crawler.rate.per_host_rps instead")
+	}
+
 	return c, nil
 }
 
