@@ -584,8 +584,11 @@ func CreateDefaultConfig() *Config {
 			Backend: "http",
 			Timeout: 5,
 			Rate: CrawlerRate{
-				GlobalRPS:          10,
-				PerHostRPS:         1,
+				GlobalRPS: 10,
+				// PerHostRPS default is 0 so the scheduler's coalesce to 1
+				// stays in one place, and so the legacy `delay` deprecation
+				// check can detect an unset value.
+				PerHostRPS:         0,
 				GlobalConcurrency:  8,
 				PerHostConcurrency: 1,
 				Jitter:             0.2,
