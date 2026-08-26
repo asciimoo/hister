@@ -10,13 +10,6 @@ import (
 	"time"
 )
 
-// RetryDecision captures the outcome of ClassifyError.
-type RetryDecision struct {
-	Retry  bool
-	Wait   time.Duration
-	Reason string
-}
-
 // ClassifyError inspects err and returns whether it is retryable, any
 // server-specified retry-after duration, and the HTTP status code (0 for
 // network errors).

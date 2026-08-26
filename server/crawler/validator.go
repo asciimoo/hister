@@ -152,32 +152,6 @@ func (v *Validator) Validate(u *url.URL, depth int) URLStatus {
 	return URLAllow
 }
 
-// ValidateHost performs a cheap host-only check against the excluded and
-// allowed domain lists. It does not increment the visited counter and ignores
-// depth, pattern, and link-count rules. Use it to fast-path entire hosts
-// before paying the per-URL rule cost.
-func (v *Validator) ValidateHost(host string) bool {
-	v.mu.Lock()
-	defer v.mu.Unlock()
-
-	for _, d := range v.rules.ExcludeDomains {
-		if host == d || strings.HasSuffix(host, "."+d) {
-			return false
-		}
-	}
-
-	if len(v.rules.AllowedDomains) > 0 {
-		for _, d := range v.rules.AllowedDomains {
-			if host == d || strings.HasSuffix(host, "."+d) {
-				return true
-			}
-		}
-		return false
-	}
-
-	return true
-}
-
 // MarshalValidatorRules serializes rules to a JSON string for storage.
 func MarshalValidatorRules(rules *ValidatorRules) (string, error) {
 	b, err := json.Marshal(rules)
