@@ -128,7 +128,7 @@ func (f *chromedpFetcher) fetchPage(ctx context.Context, rawURL string, _ Reques
 	}
 
 	var htmlContent string
-	var linkData []string
+	var linkData [][]string
 	var finalURL string
 
 	actions = append(
@@ -144,7 +144,7 @@ func (f *chromedpFetcher) fetchPage(ctx context.Context, rawURL string, _ Reques
 		chromedp.Location(&finalURL),
 		chromedp.OuterHTML("html", &htmlContent, chromedp.ByQuery),
 		chromedp.Evaluate(
-			`Array.from(document.querySelectorAll('a[href]')).map(a => ({href: a.getAttribute('href'), rel: a.getAttribute('rel') || ''}))`,
+			`Array.from(document.querySelectorAll('a[href]')).map(a => [a.getAttribute('href'), a.getAttribute('rel') || ''])`,
 			&linkData,
 		),
 	)
@@ -157,29 +157,15 @@ func (f *chromedpFetcher) fetchPage(ctx context.Context, rawURL string, _ Reques
 		finalURL = rawURL
 	}
 
-	// Parse the JS result into []Link. The Evaluate above uses a struct-like
-	// object but chromedp decodes it as a JSON array into []string when using
-	// a string slice target. Use a map slice target instead.
-	links := jsObjectsToLinks(linkData)
+	links := make([]Link, 0, len(linkData))
+	for _, row := range linkData {
+		if len(row) < 2 || row[0] == "" {
+			continue
+		}
+		links = append(links, Link{Href: row[0], Rel: row[1]})
+	}
 
 	return finalURL, []byte(htmlContent), links, FetchMeta{}, nil
-}
-
-// jsObjectsToLinks is a best-effort parser for the chromedp JS result.
-// The evaluate expression returns [{href:"...", rel:"..."}] serialised as JSON.
-// chromedp may decode each element as a string representation; we handle both.
-func jsObjectsToLinks(raw []string) []Link {
-	// chromedp with a []string target will return JSON string representations
-	// of each object. Fall back to href-only extraction.
-	links := make([]Link, 0, len(raw))
-	for _, s := range raw {
-		// Each element is something like: map[href:URL rel:nofollow]
-		// or the string form. Since we can't easily parse, just use as href.
-		if s != "" {
-			links = append(links, Link{Href: s})
-		}
-	}
-	return links
 }
 
 func (f *chromedpFetcher) close() error {
