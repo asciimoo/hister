@@ -262,6 +262,8 @@ The request related flags are:
 
 For all backend options and configuration examples, see the
 [Crawler Configuration](configuration#crawler-backend-options) reference.
+For rate limiting, retry policy, circuit breaker, crawl budgets, robots.txt cache, and per-host
+overrides, see the [crawler config sections](configuration#rate-limiting) in the Configuration Reference.
 
 For example, route a crawl through a local SOCKS5 proxy:
 

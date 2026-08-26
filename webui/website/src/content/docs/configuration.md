@@ -332,7 +332,7 @@ description: 'Explore every configuration section, option, default value, enviro
       name: 'delay',
       type: 'int',
       defaultValue: '0',
-      description: 'Seconds to wait between requests to avoid overloading target servers.',
+      description: 'Deprecated. Sets rate.per_host_rps = 1/delay when rate.per_host_rps is unset. Prefer rate.per_host_rps directly.',
     },
     {
       name: 'user_agent',
@@ -357,6 +357,66 @@ description: 'Explore every configuration section, option, default value, enviro
       type: 'bool',
       defaultValue: 'false',
       description: 'Disables robots.txt compliance during crawling.',
+    },
+    {
+      name: 'contact_url',
+      type: 'string',
+      defaultValue: '(none)',
+      description: 'Contact URL advertised in the default User-agent header. When set and user_agent is empty, the crawler sends Hister/<version> (+<contact_url>) so operators of crawled sites can find out who is hitting them.',
+    },
+    {
+      name: 'conditional_get',
+      type: 'bool',
+      defaultValue: 'false',
+      description: 'Enable conditional GET (If-None-Match / If-Modified-Since) on refetches. The HTTP backend accepts the hints; end-to-end wire-up in the persistent crawler is pending.',
+    },
+    {
+      name: 'respect_meta_robots',
+      type: 'bool',
+      defaultValue: 'false',
+      description: 'Reserved for future support of <meta name=robots> and X-Robots-Tag header handling. No effect today.',
+    },
+    {
+      name: 'shutdown_grace',
+      type: 'int',
+      defaultValue: '30',
+      description: 'Seconds workers may keep draining in-flight fetches after the crawl context is cancelled. In-flight requests are aborted once this elapses.',
+    },
+    {
+      name: 'rate',
+      type: 'object',
+      defaultValue: '(see Rate Limiting below)',
+      description: 'Rate limiting and concurrency settings. See Rate Limiting below.',
+    },
+    {
+      name: 'retry',
+      type: 'object',
+      defaultValue: '(see Retry below)',
+      description: 'Retry policy for transient fetch failures. See Retry below.',
+    },
+    {
+      name: 'circuit_breaker',
+      type: 'object',
+      defaultValue: '(see Circuit Breaker below)',
+      description: 'Per-host circuit breaker settings. See Circuit Breaker below.',
+    },
+    {
+      name: 'limits',
+      type: 'object',
+      defaultValue: '(see Crawl Limits below)',
+      description: 'Response size and crawl budget limits. See Crawl Limits below.',
+    },
+    {
+      name: 'robots',
+      type: 'object',
+      defaultValue: '(see Robots.txt below)',
+      description: 'robots.txt cache and enforcement settings. See Robots.txt below.',
+    },
+    {
+      name: 'hosts',
+      type: 'map',
+      defaultValue: '(none)',
+      description: 'Per-host overrides. See Per-Host Overrides below.',
     },
   ];
 
@@ -515,6 +575,43 @@ description: 'Explore every configuration section, option, default value, enviro
       defaultValue: '0.4',
       description: 'Weight applied to semantic scores when merging them with keyword scores. Zero uses keyword results only, while one uses semantic results only.',
     },
+  ];
+
+  const crawlerRateOptions = [
+    { name: 'global_rps',           type: 'float', defaultValue: '10',  description: 'Total requests per second across all hosts.' },
+    { name: 'per_host_rps',         type: 'float', defaultValue: '1',   description: 'Requests per second per host. When 0 or unset, the crawler uses 1 req/s. The effective rate is the minimum of this value, any per-host override, and the robots.txt Crawl-delay for the host.' },
+    { name: 'global_concurrency',   type: 'int',   defaultValue: '8',   description: 'Number of worker goroutines that fetch pages concurrently.' },
+    { name: 'per_host_concurrency', type: 'int',   defaultValue: '1',   description: 'Maximum concurrent in-flight requests to a single host.' },
+    { name: 'jitter',               type: 'float', defaultValue: '0.2', description: 'Randomized wait added between per-host requests, expressed as a fraction of the per-host interval. 0.2 means up to ±20 percent jitter.' },
+  ];
+
+  const crawlerRetryOptions = [
+    { name: 'max_attempts',    type: 'int', defaultValue: '3',  description: 'Maximum fetch attempts per URL, including the initial try. Retries apply only to transient failures (network errors, 408, 429, 500, 502, 503, 504).' },
+    { name: 'initial_backoff', type: 'int', defaultValue: '1',  description: 'Seconds to wait before the second attempt. Subsequent attempts use exponential backoff with jitter, capped by max_backoff.' },
+    { name: 'max_backoff',     type: 'int', defaultValue: '30', description: 'Upper bound in seconds for any single backoff wait.' },
+  ];
+
+  const crawlerBreakerOptions = [
+    { name: 'consecutive_failures', type: 'int', defaultValue: '5',   description: 'Trip the circuit breaker after this many consecutive failures for a host.' },
+    { name: 'cooldown',             type: 'int', defaultValue: '300', description: 'Seconds the breaker stays open before entering half-open state. Half-open allows one probe request to test recovery.' },
+  ];
+
+  const crawlerLimitsOptions = [
+    { name: 'max_response_bytes', type: 'int', defaultValue: '10485760', description: 'Response body size cap in bytes. Fetches exceeding this size are rejected. Default is 10 MB.' },
+    { name: 'max_pages',          type: 'int', defaultValue: '0',        description: 'Global crawl budget: total pages a crawl may fetch. 0 means unlimited.' },
+    { name: 'max_pages_per_host', type: 'int', defaultValue: '0',        description: 'Per-host page cap. 0 means unlimited.' },
+    { name: 'max_bytes_per_host', type: 'int', defaultValue: '0',        description: 'Per-host byte cap. 0 means unlimited.' },
+    { name: 'max_duration',       type: 'int', defaultValue: '0',        description: 'Maximum crawl wall-clock time in seconds. 0 means unlimited.' },
+  ];
+
+  const crawlerRobotsOptions = [
+    { name: 'cache_ttl',           type: 'int',  defaultValue: '86400', description: "Seconds to cache each host's robots.txt. Default is 24 hours." },
+    { name: 'respect_crawl_delay', type: 'bool', defaultValue: 'true',  description: 'When true, robots.txt Crawl-delay lowers the effective per-host request rate for a host.' },
+  ];
+
+  const crawlerHostOverrideOptions = [
+    { name: 'per_host_rps', type: 'float', defaultValue: '(inherit)', description: 'Override rate.per_host_rps for this host. Effective rate is still the minimum of this value and any Crawl-delay from robots.txt.' },
+    { name: 'max_pages',    type: 'int',   defaultValue: '0',         description: 'Override limits.max_pages_per_host for this host. 0 means unlimited.' },
   ];
 
   const semanticProcessingOptions = [
@@ -1049,6 +1146,56 @@ without losing progress. See [Website Crawler](crawler) for usage details.
 
 <ConfigReference items={crawlerOptions} />
 
+### Rate Limiting
+
+Controls how aggressively the crawler makes requests. All values apply per crawl run.
+
+<ConfigReference items={crawlerRateOptions} />
+
+The effective per-host request rate is the minimum of `rate.per_host_rps`, any override in `hosts.<host>.per_host_rps`, and the robots.txt `Crawl-delay` for that host (when `robots.respect_crawl_delay` is true).
+
+### Retry
+
+<ConfigReference items={crawlerRetryOptions} />
+
+Non-retryable errors (most 4xx status codes, permanent DNS failures, TLS errors) fail immediately without retries.
+
+### Circuit Breaker
+
+Protects hosts that are struggling by pausing requests to them after repeated failures.
+
+<ConfigReference items={crawlerBreakerOptions} />
+
+### Crawl Limits
+
+Response size and budget guardrails that stop a crawl before it runs away.
+
+<ConfigReference items={crawlerLimitsOptions} />
+
+### Robots.txt
+
+<ConfigReference items={crawlerRobotsOptions} />
+
+Beyond these settings, the crawler follows [RFC 9309](https://www.rfc-editor.org/rfc/rfc9309.html): 404 for robots.txt means allow-all, 5xx means deny-all, and network errors default to allow-all with a short retry TTL.
+
+### Per-Host Overrides
+
+Set `hosts.<domain>` to override rate or budget for a specific host. The key is the exact host as it appears in URLs (no scheme, no port).
+
+<ConfigReference items={crawlerHostOverrideOptions} />
+
+Example:
+
+```yaml
+crawler:
+  hosts:
+    slow.example.com:
+      per_host_rps: 0.2
+      max_pages: 50
+    fast-mirror.example.com:
+      per_host_rps: 5
+```
+
 Set `proxy` to an `http://` or `socks5://` URL. The HTTP backend uses it as its transport proxy,
 Chromedp passes it to the browser process, and BiDi requests it when creating the browser session.
 robots.txt requests use the same proxy. For example:
@@ -1134,8 +1281,23 @@ crawler:
   backend: 'http'
   proxy: 'http://127.0.0.1:8080'
   timeout: 10
-  delay: 2
-  user_agent: 'Hister'
+  contact_url: 'https://example.org/hister-bot'
+  rate:
+    per_host_rps: 0.5
+    per_host_concurrency: 1
+    jitter: 0.2
+  retry:
+    max_attempts: 3
+    initial_backoff: 2
+    max_backoff: 60
+  limits:
+    max_response_bytes: 5242880
+    max_pages_per_host: 200
+  robots:
+    respect_crawl_delay: true
+  hosts:
+    slow.example.com:
+      per_host_rps: 0.1
   headers:
     Accept-Language: 'en-US,en;q=0.9'
   cookies:
