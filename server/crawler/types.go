@@ -13,13 +13,21 @@ type Link struct {
 	Rel  string
 }
 
+// MetaRobots holds the noindex/nofollow state derived from <meta name="robots">
+// tags and X-Robots-Tag response headers.
+type MetaRobots struct {
+	NoIndex  bool
+	NoFollow bool
+}
+
 // FetchMeta carries HTTP response metadata from a fetch.
 type FetchMeta struct {
-	StatusCode     int
-	ETag           string
-	LastModified   string
-	XRobotsTag     string
-	RetryAfter     time.Duration
+	StatusCode  int
+	ETag        string
+	LastModified string
+	XRobotsTag  string
+	RetryAfter  time.Duration
+	MetaRobots  MetaRobots // from <meta name="robots"> in the page body
 }
 
 // HTTPStatusError is returned by fetchPage when the server responds with a

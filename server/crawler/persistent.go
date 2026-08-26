@@ -4,6 +4,7 @@ package crawler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"time"
@@ -204,6 +205,17 @@ func (c *persistentCrawler) persistentBFS(ctx context.Context, startURL string, 
 			continue
 		}
 
+		var hints RequestHints
+		if c.cfg.ConditionalGet {
+			etag, lastMod, ok, lookupErr := model.GetLastFetchedURLMeta(cur.URL)
+			if lookupErr != nil {
+				log.Warn().Err(lookupErr).Str("url", cur.URL).Msg("crawler: failed to look up prior fetch meta")
+			} else if ok {
+				hints.IfNoneMatch = etag
+				hints.IfModifiedSince = lastMod
+			}
+		}
+
 		var finalURL string
 		var body []byte
 		var links []Link
@@ -231,7 +243,7 @@ func (c *persistentCrawler) persistentBFS(ctx context.Context, startURL string, 
 			}
 
 			start := c.clock.Now()
-			finalURL, body, links, meta, fetchErr = c.fetcher.fetchPage(ctx, cur.URL, RequestHints{})
+			finalURL, body, links, meta, fetchErr = c.fetcher.fetchPage(ctx, cur.URL, hints)
 			elapsed := c.clock.Now().Sub(start)
 
 			c.scheduler.Release(host)
@@ -274,6 +286,15 @@ func (c *persistentCrawler) persistentBFS(ctx context.Context, startURL string, 
 		}
 
 		if fetchErr != nil {
+			var httpErr *HTTPStatusError
+			if errors.As(fetchErr, &httpErr) && httpErr.Status == 304 {
+				// Not modified - mark done, no new doc, no re-enqueue.
+				log.Info().Str("url", cur.URL).Msg("crawler: 304 not modified, skipping re-index")
+				if err2 := model.UpdateCrawlURLStatus(cur.ID, model.CrawlURLDone, ""); err2 != nil {
+					log.Warn().Err(err2).Msg("failed to mark URL done (304)")
+				}
+				continue
+			}
 			if err2 := model.UpdateCrawlURLStatus(cur.ID, model.CrawlURLFailed, fetchErr.Error()); err2 != nil {
 				log.Warn().Err(err2).Msg("failed to mark URL failed")
 			}
@@ -295,48 +316,66 @@ func (c *persistentCrawler) persistentBFS(ctx context.Context, startURL string, 
 			}
 		}
 
+		effectiveMR := meta.MetaRobots
+		if c.cfg.RespectMetaRobots {
+			xr := parseXRobotsTag(meta.XRobotsTag)
+			if xr.NoIndex {
+				effectiveMR.NoIndex = true
+			}
+			if xr.NoFollow {
+				effectiveMR.NoFollow = true
+			}
+		}
+
+		noFollow := c.cfg.RespectMetaRobots && effectiveMR.NoFollow
+
 		if v.Rules().NoDepth {
 			if err := model.UpdateCrawlURLStatus(cur.ID, model.CrawlURLDone, ""); err != nil {
 				log.Warn().Err(err).Msg("failed to mark URL done")
 			}
 		} else {
-			// Resolve all discovered links first, then enqueue them together with
-			// the mark-done update in a single transaction.
+			// Resolve all discovered links first (unless nofollow), then enqueue
+			// them together with the mark-done update in a single transaction.
 			finalParsed, err := url.Parse(finalURL)
 			if err != nil {
 				finalParsed = parsedURL
 			}
 			finalParsed.Fragment = ""
 
-			resolved := make([]string, 0, len(links))
-			for _, link := range links {
-				// Skip nofollow links.
-				if isNofollow(link.Rel) {
-					continue
+			var resolved []string
+			if !noFollow {
+				resolved = make([]string, 0, len(links))
+				for _, link := range links {
+					// Skip nofollow links.
+					if isNofollow(link.Rel) {
+						continue
+					}
+					abs, err := resolveURL(finalParsed, link.Href)
+					if err != nil || abs == "" {
+						continue
+					}
+					resolved = append(resolved, abs)
 				}
-				abs, err := resolveURL(finalParsed, link.Href)
-				if err != nil || abs == "" {
-					continue
-				}
-				resolved = append(resolved, abs)
 			}
 
-			if err := model.MarkDoneAndEnqueueLinks(cur.ID, c.jobID, resolved, cur.Depth+1); err != nil {
+			if err := model.MarkDoneAndEnqueueLinks(cur.ID, c.jobID, resolved, cur.Depth+1, meta.ETag, meta.LastModified); err != nil {
 				log.Warn().Err(err).Msg("failed to mark URL done and enqueue links")
 			}
 		}
 
-		doc := &document.Document{
-			URL:          finalURL,
-			HTML:         string(body),
-			ETag:         meta.ETag,
-			LastModified: meta.LastModified,
-		}
+		if !c.cfg.RespectMetaRobots || !effectiveMR.NoIndex {
+			doc := &document.Document{
+				URL:          finalURL,
+				HTML:         string(body),
+				ETag:         meta.ETag,
+				LastModified: meta.LastModified,
+			}
 
-		select {
-		case ch <- doc:
-		case <-ctx.Done():
-			return model.UpdateCrawlJobStatus(c.jobID, model.CrawlJobInterrupted)
+			select {
+			case ch <- doc:
+			case <-ctx.Done():
+				return model.UpdateCrawlJobStatus(c.jobID, model.CrawlJobInterrupted)
+			}
 		}
 	}
 

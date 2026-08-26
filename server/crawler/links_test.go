@@ -7,6 +7,93 @@ import (
 	"testing"
 )
 
+func TestExtractLinksMetaRobots(t *testing.T) {
+	tests := []struct {
+		name     string
+		html     string
+		noIndex  bool
+		noFollow bool
+	}{
+		{
+			name:     "noindex only",
+			html:     `<html><head><meta name="robots" content="noindex"></head></html>`,
+			noIndex:  true,
+			noFollow: false,
+		},
+		{
+			name:     "noindex and nofollow",
+			html:     `<html><head><meta name="robots" content="noindex, nofollow"></head></html>`,
+			noIndex:  true,
+			noFollow: true,
+		},
+		{
+			name:     "case insensitive",
+			html:     `<html><head><meta name="robots" content="NoIndex"></head></html>`,
+			noIndex:  true,
+			noFollow: false,
+		},
+		{
+			name:     "multiple meta tags - combined",
+			html:     `<html><head><meta name="robots" content="noindex"><meta name="robots" content="nofollow"></head></html>`,
+			noIndex:  true,
+			noFollow: true,
+		},
+		{
+			name:     "no robots meta",
+			html:     `<html><head><meta name="description" content="test"></head></html>`,
+			noIndex:  false,
+			noFollow: false,
+		},
+		{
+			name:     "empty meta robots",
+			html:     `<html><head><meta name="robots" content=""></head></html>`,
+			noIndex:  false,
+			noFollow: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, mr := extractLinks(strings.NewReader(tt.html))
+			if mr.NoIndex != tt.noIndex {
+				t.Errorf("NoIndex = %v, want %v", mr.NoIndex, tt.noIndex)
+			}
+			if mr.NoFollow != tt.noFollow {
+				t.Errorf("NoFollow = %v, want %v", mr.NoFollow, tt.noFollow)
+			}
+		})
+	}
+}
+
+func TestParseXRobotsTag(t *testing.T) {
+	tests := []struct {
+		header   string
+		noIndex  bool
+		noFollow bool
+	}{
+		{"noindex", true, false},
+		{"nofollow", false, true},
+		{"noindex, nofollow", true, true},
+		{"NoIndex", true, false},
+		{"NOFOLLOW", false, true},
+		{"", false, false},
+		{"nosnippet", false, false},
+		{"noindex,nofollow", true, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.header, func(t *testing.T) {
+			mr := parseXRobotsTag(tt.header)
+			if mr.NoIndex != tt.noIndex {
+				t.Errorf("parseXRobotsTag(%q).NoIndex = %v, want %v", tt.header, mr.NoIndex, tt.noIndex)
+			}
+			if mr.NoFollow != tt.noFollow {
+				t.Errorf("parseXRobotsTag(%q).NoFollow = %v, want %v", tt.header, mr.NoFollow, tt.noFollow)
+			}
+		})
+	}
+}
+
 func TestExtractLinks(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -57,7 +144,7 @@ func TestExtractLinks(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := extractLinks(strings.NewReader(tt.html))
+			got, _ := extractLinks(strings.NewReader(tt.html))
 			if len(got) != len(tt.want) {
 				t.Fatalf("extractLinks() len = %d, want %d\ngot: %v\nwant: %v", len(got), len(tt.want), got, tt.want)
 			}
@@ -103,7 +190,7 @@ func TestExtractLinksStreaming(t *testing.T) {
 	}
 	sb.WriteString("</body></html>")
 
-	links := extractLinks(strings.NewReader(sb.String()))
+	links, _ := extractLinks(strings.NewReader(sb.String()))
 	if len(links) != n {
 		t.Errorf("extractLinks() len = %d, want %d", len(links), n)
 	}

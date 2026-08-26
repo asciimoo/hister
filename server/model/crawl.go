@@ -43,15 +43,17 @@ type CrawlJob struct {
 
 // CrawlURL tracks every URL discovered during a crawl job.
 type CrawlURL struct {
-	ID        uint      `gorm:"primaryKey;autoIncrement" json:"id"`
-	JobID     string    `gorm:"uniqueIndex:idx_crawl_job_url;not null" json:"job_id"`
-	URL       string    `gorm:"uniqueIndex:idx_crawl_job_url;not null" json:"url"`
-	Depth     int       `json:"depth"`
-	Status    string    `gorm:"not null;default:pending" json:"status"`
-	Error     string    `json:"error"`
-	ErrorCode int       `json:"error_code"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID           uint      `gorm:"primaryKey;autoIncrement" json:"id"`
+	JobID        string    `gorm:"uniqueIndex:idx_crawl_job_url;not null" json:"job_id"`
+	URL          string    `gorm:"uniqueIndex:idx_crawl_job_url;not null" json:"url"`
+	Depth        int       `json:"depth"`
+	Status       string    `gorm:"not null;default:pending" json:"status"`
+	Error        string    `json:"error"`
+	ErrorCode    int       `json:"error_code"`
+	ETag         string    `json:"etag"`          // ETag from last successful fetch
+	LastModified string    `json:"last_modified"` // Last-Modified from last successful fetch
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }
 
 // GenerateCrawlJobID returns a random 8-character hex string suitable as a job ID.
@@ -176,12 +178,40 @@ func insertCrawlURLs(db *gorm.DB, jobID string, urls []string, depth int) error 
 	return db.Clauses(clause.OnConflict{DoNothing: true}).CreateInBatches(records, 500).Error
 }
 
-// MarkDoneAndEnqueueLinks marks a crawl URL as done and inserts all discovered
-// child URLs in a single transaction, minimising the number of SQLite commits.
-func MarkDoneAndEnqueueLinks(id uint, jobID string, links []string, depth int) error {
+// GetLastFetchedURLMeta returns the ETag and Last-Modified from the most-recent
+// successful fetch of url across any job, or ok=false if none exists.
+func GetLastFetchedURLMeta(rawURL string) (etag, lastModified string, ok bool, err error) {
+	var cu CrawlURL
+	err = DB.Select("etag, last_modified").
+		Where("url = ? AND status = ?", rawURL, CrawlURLDone).
+		Order("updated_at DESC").
+		Limit(1).
+		First(&cu).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return "", "", false, nil
+	}
+	if err != nil {
+		return "", "", false, err
+	}
+	if cu.ETag == "" && cu.LastModified == "" {
+		return "", "", false, nil
+	}
+	return cu.ETag, cu.LastModified, true, nil
+}
+
+// MarkDoneAndEnqueueLinks marks a crawl URL as done (with conditional-GET
+// metadata) and inserts all discovered child URLs in a single transaction,
+// minimising the number of SQLite commits.
+func MarkDoneAndEnqueueLinks(id uint, jobID string, links []string, depth int, etag, lastModified string) error {
 	return DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Model(&CrawlURL{}).Where("id = ?", id).
-			Updates(map[string]any{"status": CrawlURLDone, "error": "", "error_code": 0}).Error; err != nil {
+			Updates(map[string]any{
+				"status":        CrawlURLDone,
+				"etag":          etag,
+				"last_modified": lastModified,
+				"error":         "",
+				"error_code":    0,
+			}).Error; err != nil {
 			return err
 		}
 		if len(links) == 0 {

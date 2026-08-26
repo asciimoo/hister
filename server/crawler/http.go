@@ -158,7 +158,8 @@ func (f *httpFetcher) fetchPage(ctx context.Context, rawURL string, hints Reques
 	}
 
 	finalURL := resp.Request.URL.String()
-	links := extractLinks(bytes.NewReader(body))
+	links, metaRobots := extractLinks(bytes.NewReader(body))
+	meta.MetaRobots = metaRobots
 	return finalURL, body, links, meta, nil
 }
 

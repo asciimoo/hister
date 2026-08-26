@@ -431,20 +431,33 @@ func (c *baseCrawler) bfsCrawl(ctx context.Context, startURL string, v *Validato
 		}
 		seen.add(normFinal)
 
-		doc := &document.Document{
-			URL:          res.finalURL,
-			HTML:         string(res.body),
-			ETag:         res.meta.ETag,
-			LastModified: res.meta.LastModified,
+		effective := res.meta.MetaRobots
+		if c.cfg.RespectMetaRobots {
+			xr := parseXRobotsTag(res.meta.XRobotsTag)
+			if xr.NoIndex {
+				effective.NoIndex = true
+			}
+			if xr.NoFollow {
+				effective.NoFollow = true
+			}
 		}
 
-		select {
-		case ch <- doc:
-		case <-crawlCtx.Done():
-			return
+		if !c.cfg.RespectMetaRobots || !effective.NoIndex {
+			doc := &document.Document{
+				URL:          res.finalURL,
+				HTML:         string(res.body),
+				ETag:         res.meta.ETag,
+				LastModified: res.meta.LastModified,
+			}
+
+			select {
+			case ch <- doc:
+			case <-crawlCtx.Done():
+				return
+			}
 		}
 
-		if !v.Rules().NoDepth {
+		if !v.Rules().NoDepth && !(c.cfg.RespectMetaRobots && effective.NoFollow) {
 			for _, link := range res.links {
 				// Skip nofollow links.
 				if isNofollow(link.Rel) {
@@ -527,40 +540,89 @@ func resolveURL(base *url.URL, href string) (string, error) {
 	return abs.String(), nil
 }
 
-// extractLinks parses HTML from r and returns the links found in <a> elements.
-// It captures the href and rel attributes. Multi-valued rel is preserved as-is
-// (space-separated); callers can use isNofollow to check individual tokens.
-func extractLinks(r io.Reader) []Link {
+// extractLinks parses HTML from r and returns the links found in <a> elements
+// and the MetaRobots directives from <meta name="robots"> tags.
+// Multi-valued rel is preserved as-is (space-separated); callers can use
+// isNofollow to check individual tokens.
+func extractLinks(r io.Reader) ([]Link, MetaRobots) {
 	var links []Link
+	var meta MetaRobots
 	z := html.NewTokenizer(r)
 	for {
 		tt := z.Next()
 		switch tt {
 		case html.ErrorToken:
-			return links
+			return links, meta
 		case html.StartTagToken, html.SelfClosingTagToken:
 			name, hasAttr := z.TagName()
-			if !hasAttr || string(name) != "a" {
+			tagName := string(name)
+			if !hasAttr {
 				continue
 			}
-			var href, rel string
-			for {
-				key, val, more := z.TagAttr()
-				switch string(key) {
-				case "href":
-					href = string(val)
-				case "rel":
-					rel = string(val)
+			switch tagName {
+			case "a":
+				var href, rel string
+				for {
+					key, val, more := z.TagAttr()
+					switch string(key) {
+					case "href":
+						href = string(val)
+					case "rel":
+						rel = string(val)
+					}
+					if !more {
+						break
+					}
 				}
-				if !more {
-					break
+				if href != "" {
+					links = append(links, Link{Href: href, Rel: rel})
 				}
-			}
-			if href != "" {
-				links = append(links, Link{Href: href, Rel: rel})
+			case "meta":
+				var metaName, metaContent string
+				for {
+					key, val, more := z.TagAttr()
+					switch strings.ToLower(string(key)) {
+					case "name":
+						metaName = strings.ToLower(string(val))
+					case "content":
+						metaContent = string(val)
+					}
+					if !more {
+						break
+					}
+				}
+				if metaName == "robots" {
+					mr := parseRobotsContent(metaContent)
+					if mr.NoIndex {
+						meta.NoIndex = true
+					}
+					if mr.NoFollow {
+						meta.NoFollow = true
+					}
+				}
 			}
 		}
 	}
+}
+
+// parseRobotsContent parses a comma-separated robots directive string
+// (from <meta name="robots"> or X-Robots-Tag) and returns a MetaRobots.
+func parseRobotsContent(content string) MetaRobots {
+	var mr MetaRobots
+	for _, token := range strings.Split(content, ",") {
+		switch strings.TrimSpace(strings.ToLower(token)) {
+		case "noindex":
+			mr.NoIndex = true
+		case "nofollow":
+			mr.NoFollow = true
+		}
+	}
+	return mr
+}
+
+// parseXRobotsTag parses the X-Robots-Tag header value.
+func parseXRobotsTag(header string) MetaRobots {
+	return parseRobotsContent(header)
 }
 
 // errResponseTooLarge is returned when a response body exceeds the configured limit.
