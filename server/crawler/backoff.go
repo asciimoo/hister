@@ -4,7 +4,7 @@ package crawler
 
 import (
 	"errors"
-	"math/rand"
+	randv2 "math/rand/v2"
 	"net"
 	"sync"
 	"time"
@@ -51,7 +51,6 @@ func ClassifyError(err error) (retryable bool, retryAfter time.Duration, statusC
 type Backoff struct {
 	initial time.Duration
 	max     time.Duration
-	rng     *rand.Rand
 }
 
 // NewBackoff creates a Backoff. initial and max must be positive.
@@ -59,7 +58,6 @@ func NewBackoff(initial, max time.Duration) *Backoff {
 	return &Backoff{
 		initial: initial,
 		max:     max,
-		rng:     rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 }
 
@@ -77,7 +75,7 @@ func (b *Backoff) Duration(attempt int) time.Duration {
 	if exp > b.max {
 		exp = b.max
 	}
-	jitter := time.Duration(b.rng.Int63n(int64(exp) + 1))
+	jitter := time.Duration(randv2.Int64N(int64(exp) + 1))
 	return jitter
 }
 
