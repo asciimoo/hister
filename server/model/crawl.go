@@ -45,7 +45,7 @@ type CrawlJob struct {
 type CrawlURL struct {
 	ID           uint      `gorm:"primaryKey;autoIncrement" json:"id"`
 	JobID        string    `gorm:"uniqueIndex:idx_crawl_job_url;not null" json:"job_id"`
-	URL          string    `gorm:"uniqueIndex:idx_crawl_job_url;not null" json:"url"`
+	URL          string    `gorm:"uniqueIndex:idx_crawl_job_url;index;not null" json:"url"`
 	Depth        int       `json:"depth"`
 	Status       string    `gorm:"not null;default:pending" json:"status"`
 	Error        string    `json:"error"`
