@@ -3,23 +3,25 @@
 package cmd
 
 import (
-	"os"
+	"fmt"
 	"strings"
 
-	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 )
 
 var importBookmarksCmd = &cobra.Command{
-	Use:   "bookmarks [BROWSER_TYPE] [DB_PATH]",
+	Use:   "bookmarks",
 	Short: "Import Firefox bookmarks",
 	Long: `Import bookmarks from a Firefox-family places.sqlite database.
 
 Usage:
-  hister import bookmarks                        auto-detect Firefox, Zen, and Waterfox
-  hister import bookmarks firefox                auto-detect the Firefox database path
-  hister import bookmarks DB_PATH                import bookmarks from a places.sqlite file
-  hister import bookmarks firefox DB_PATH        import bookmarks from a specific database
+  hister import bookmarks
+  hister import bookmarks --browser firefox
+  hister import bookmarks --db ~/.mozilla/firefox/example.default/places.sqlite
+  hister import bookmarks --browser firefox --db /path/to/places.sqlite
+
+--browser limits autodetection to firefox, zen, or waterfox.
+--db imports a specific places.sqlite file.
 
 Bookmarks live in the same Firefox places.sqlite file as browsing history, in
 the moz_bookmarks table. This command reads only bookmark rows (type=1), not
@@ -32,7 +34,7 @@ denylist for a browser's shipped default bookmarks.
 Use --label LABEL to replace the default bookmarks label. --start-date is not
 supported: it would drop bookmarks that have never been visited.
 `,
-	Args: cobra.RangeArgs(0, 2),
+	Args: cobra.NoArgs,
 	PreRun: func(_ *cobra.Command, _ []string) {
 		initDB()
 		initExtractor()
@@ -40,56 +42,57 @@ supported: it would drop bookmarks that have never been visited.
 	Run: importBookmarks,
 }
 
-func importBookmarks(cmd *cobra.Command, args []string) {
+func importBookmarks(cmd *cobra.Command, _ []string) {
 	cfg.Crawler.UserAgent = UserAgent
 	applyCrawlerBackendFlags(cmd)
 
-	switch len(args) {
-	case 0:
-		dbs := bookmarkDBPaths()
-		if len(dbs) == 0 {
-			log.Fatal().Msg("no Firefox bookmark databases found")
-		}
-		importDB(bookmarkImportsFromDBs(dbs), cmd, nil, browserImportKindBookmarks)
-	case 1:
-		if _, err := os.Stat(args[0]); os.IsNotExist(err) {
-			importBookmarksBrowser(strings.ToLower(args[0]), cmd)
-			return
-		}
-		importBookmarksFile(args[0], cmd)
-	case 2:
-		browser := strings.ToLower(args[0])
-		if !isFirefoxPlacesBrowser(browser) {
-			log.Fatal().Str("browser", args[0]).Msg("bookmark import currently supports firefox, zen, and waterfox")
-		}
-		importBookmarksFile(args[1], cmd)
+	browser, err := cmd.Flags().GetString("browser")
+	if err != nil {
+		exit(1, err.Error())
 	}
+	dbPath, err := cmd.Flags().GetString("db")
+	if err != nil {
+		exit(1, err.Error())
+	}
+	databases, err := resolveBookmarkImports(browser, dbPath)
+	if err != nil {
+		exit(1, err.Error())
+	}
+	importDB(databases, cmd, nil, browserImportKindBookmarks)
 }
 
-func importBookmarksBrowser(browser string, cmd *cobra.Command) {
-	if !isFirefoxPlacesBrowser(browser) {
-		log.Fatal().Str("browser", browser).Msg("bookmark import currently supports firefox, zen, and waterfox")
+func resolveBookmarkImports(browser, dbPath string) ([]DBToImport, error) {
+	browser = strings.ToLower(strings.TrimSpace(browser))
+	if browser != "" && !isFirefoxPlacesBrowser(browser) {
+		return nil, fmt.Errorf("bookmark import currently supports --browser firefox, zen, or waterfox")
 	}
-	var found bool
-	for _, db := range bookmarkDBPaths() {
-		if strings.HasPrefix(strings.ToLower(db.name), browser) {
-			found = true
-			importDB(bookmarkImportsFromDBs([]browserDB{db}), cmd, nil, browserImportKindBookmarks)
+	if dbPath != "" {
+		if !strings.HasSuffix(dbPath, "places.sqlite") {
+			return nil, fmt.Errorf("bookmark import --db expects a Firefox places.sqlite database")
 		}
+		return []DBToImport{{
+			table:        firefoxBookmarkTable,
+			databaseFile: dbPath,
+		}}, nil
 	}
-	if !found {
-		log.Fatal().Str("browser", browser).Msg("no bookmark database found for browser")
-	}
-}
 
-func importBookmarksFile(filePath string, cmd *cobra.Command) {
-	if !strings.HasSuffix(filePath, "places.sqlite") {
-		log.Fatal().Str("file", filePath).Msg("bookmark import expects a Firefox places.sqlite database")
+	dbs := bookmarkDBPaths()
+	if browser != "" {
+		var filtered []browserDB
+		for _, db := range dbs {
+			if strings.HasPrefix(strings.ToLower(db.name), browser) {
+				filtered = append(filtered, db)
+			}
+		}
+		dbs = filtered
 	}
-	importDB([]DBToImport{{
-		table:        firefoxBookmarkTable,
-		databaseFile: filePath,
-	}}, cmd, nil, browserImportKindBookmarks)
+	if len(dbs) == 0 {
+		if browser != "" {
+			return nil, fmt.Errorf("no bookmark database found for browser %s", browser)
+		}
+		return nil, fmt.Errorf("no Firefox bookmark databases found")
+	}
+	return bookmarkImportsFromDBs(dbs), nil
 }
 
 func bookmarkImportsFromDBs(dbs []browserDB) []DBToImport {

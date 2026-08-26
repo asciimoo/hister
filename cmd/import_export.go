@@ -144,7 +144,7 @@ The file importer reads and prepares local files before submitting documents
 to the server. The browser importer reads local browser history, keeps its
 resumable crawl state locally, fetches page contents, and submits the prepared
 documents to the server. Bookmark import reads Firefox bookmarks from the same
-places.sqlite file and uses the same crawl path.`,
+places.sqlite file via --browser and --db, and uses the same crawl path.`,
 }
 
 var importFileCmd = &cobra.Command{

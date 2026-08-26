@@ -441,6 +441,12 @@ func TestImportSubcommandFlagOwnership(t *testing.T) {
 	if importBookmarksCmd.Flags().Lookup("min-visit") != nil {
 		t.Error("import bookmarks unexpectedly has --min-visit")
 	}
+	if importBookmarksCmd.Flags().Lookup("browser") == nil {
+		t.Error("import bookmarks is missing --browser")
+	}
+	if importBookmarksCmd.Flags().Lookup("db") == nil {
+		t.Error("import bookmarks is missing --db")
+	}
 	for _, name := range []string{"source", "skip-existing", "global", "user-id", "allow-sensitive"} {
 		if importFileCmd.Flags().Lookup(name) == nil {
 			t.Errorf("import file is missing --%s", name)

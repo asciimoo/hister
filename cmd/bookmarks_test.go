@@ -156,3 +156,22 @@ func queryStrings(t *testing.T, db *sql.DB, q string) []string {
 	}
 	return out
 }
+
+func TestResolveBookmarkImportsUsesNamedDB(t *testing.T) {
+	got, err := resolveBookmarkImports("", "/tmp/profile/places.sqlite")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].databaseFile != "/tmp/profile/places.sqlite" || got[0].table != firefoxBookmarkTable {
+		t.Fatalf("resolveBookmarkImports() = %#v", got)
+	}
+}
+
+func TestResolveBookmarkImportsRejectsUnknownBrowser(t *testing.T) {
+	if _, err := resolveBookmarkImports("chrome", ""); err == nil {
+		t.Fatal("expected chrome to be rejected")
+	}
+	if _, err := resolveBookmarkImports("", "/tmp/History"); err == nil {
+		t.Fatal("expected a non-places path to be rejected")
+	}
+}

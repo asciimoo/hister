@@ -144,8 +144,8 @@ Firefox stores bookmarks in the same `places.sqlite` file as history. Bookmark i
 
 ```bash
 hister import bookmarks
-hister import bookmarks firefox
-hister import bookmarks ~/.mozilla/firefox/example.default/places.sqlite
+hister import bookmarks --browser firefox
+hister import bookmarks --db ~/.mozilla/firefox/example.default/places.sqlite
 ```
 
 Automatic detection covers Firefox, Firefox Developer Edition, Zen, and Waterfox. Chromium bookmark files are not imported by this command.
