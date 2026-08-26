@@ -30,7 +30,8 @@ var importBrowserCmd = &cobra.Command{
 	Short: "Import browsing history or bookmarks from a supported browser",
 	Long: `Import browsing history from a supported browser.
 
-Use ` + "`hister import browser bookmarks`" + ` to import bookmarks instead of visit history.
+Use ` + "`hister import browser history`" + ` or ` + "`hister import browser bookmarks`" + ` for named-flag imports.
+The bare ` + "`hister import browser`" + ` command still imports visit history.
 
 Usage:
   hister import browser                        auto-detect all installed browsers
@@ -195,15 +196,8 @@ func importBrowser(browser string, cmd *cobra.Command, startDate *time.Time) {
 }
 
 func importHistoryFile(file_path string, cmd *cobra.Command, startDate *time.Time) {
-	var table string
-
-	if strings.HasSuffix(file_path, "places.sqlite") {
-		table = "moz_places"
-	} else if strings.HasSuffix(file_path, "History") {
-		table = "urls"
-	} else if strings.HasSuffix(file_path, "History.db") {
-		table = "History"
-	} else {
+	table, err := historyTableFromPath(file_path)
+	if err != nil {
 		log.Fatal().Str("file", file_path).Msg("Couldn't auto detect table")
 	}
 

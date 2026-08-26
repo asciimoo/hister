@@ -107,6 +107,14 @@ hister import browser
 
 Automatic detection supports Firefox, Firefox Developer Edition, Zen, Waterfox, Chrome, Chromium, Brave, Vivaldi, Edge, Opera, and Ladybird.
 
+The same history import is also available with named flags:
+
+```bash
+hister import browser history
+hister import browser history --browser firefox
+hister import browser history --db ~/.mozilla/firefox/example.default/places.sqlite
+```
+
 ### Selecting a Browser or Database
 
 You can provide a browser name, a database path, or both:

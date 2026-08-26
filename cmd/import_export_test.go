@@ -396,16 +396,22 @@ func TestImportCommandHierarchy(t *testing.T) {
 			t.Fatalf("import %s command = %q, want %q", name, got.Name(), want.Name())
 		}
 	}
-	got, _, err := importCmd.Find([]string{"browser", "bookmarks"})
-	if err != nil {
-		t.Fatalf("import browser bookmarks lookup failed: %v", err)
+	nested := map[string]*cobra.Command{
+		"bookmarks": importBookmarksCmd,
+		"history":   importBrowserHistoryCmd,
 	}
-	if got != importBookmarksCmd {
-		t.Fatalf("import browser bookmarks = %q, want bookmarks", got.Name())
+	for name, want := range nested {
+		got, _, err := importCmd.Find([]string{"browser", name})
+		if err != nil {
+			t.Fatalf("import browser %s lookup failed: %v", name, err)
+		}
+		if got != want {
+			t.Fatalf("import browser %s = %q, want %q", name, got.Name(), want.Name())
+		}
 	}
 	for _, cmd := range importCmd.Commands() {
-		if cmd == importBookmarksCmd {
-			t.Fatal("import bookmarks should be nested under import browser")
+		if cmd == importBookmarksCmd || cmd == importBrowserHistoryCmd {
+			t.Fatal("browser import subcommands should be nested under import browser")
 		}
 	}
 	for _, cmd := range rootCmd.Commands() {
@@ -422,7 +428,7 @@ func TestImportSubcommandFlagOwnership(t *testing.T) {
 	if importCmd.PersistentFlags().Lookup("label") == nil {
 		t.Fatal("import is missing --label")
 	}
-	for _, importCommand := range []*cobra.Command{importFileCmd, importBrowserCmd, importBookmarksCmd, importLinkdingCmd, importLinkwardenCmd, importKarakeepCmd, importReadeckCmd, importShaarliCmd, importWallabagCmd} {
+	for _, importCommand := range []*cobra.Command{importFileCmd, importBrowserCmd, importBrowserHistoryCmd, importBookmarksCmd, importLinkdingCmd, importLinkwardenCmd, importKarakeepCmd, importReadeckCmd, importShaarliCmd, importWallabagCmd} {
 		if importCommand.InheritedFlags().Lookup("label") == nil {
 			t.Errorf("import %s does not inherit --label", importCommand.Name())
 		}
@@ -438,6 +444,9 @@ func TestImportSubcommandFlagOwnership(t *testing.T) {
 		}
 		if importBookmarksCmd.Flags().Lookup(name) != nil {
 			t.Errorf("import bookmarks unexpectedly has --%s", name)
+		}
+		if name != "start-date" && importBrowserHistoryCmd.Flags().Lookup(name) != nil {
+			t.Errorf("import browser history unexpectedly has --%s", name)
 		}
 	}
 	if importBrowserCmd.Flags().Lookup("start-date") == nil {
@@ -458,13 +467,25 @@ func TestImportSubcommandFlagOwnership(t *testing.T) {
 	if importBookmarksCmd.Flags().Lookup("db") == nil {
 		t.Error("import bookmarks is missing --db")
 	}
+	if importBrowserHistoryCmd.Flags().Lookup("start-date") == nil {
+		t.Error("import browser history is missing --start-date")
+	}
+	if importBrowserHistoryCmd.Flags().Lookup("min-visit") == nil {
+		t.Error("import browser history is missing --min-visit")
+	}
+	if importBrowserHistoryCmd.Flags().Lookup("browser") == nil {
+		t.Error("import browser history is missing --browser")
+	}
+	if importBrowserHistoryCmd.Flags().Lookup("db") == nil {
+		t.Error("import browser history is missing --db")
+	}
 	for _, name := range []string{"source", "skip-existing", "global", "user-id", "allow-sensitive"} {
 		if importFileCmd.Flags().Lookup(name) == nil {
 			t.Errorf("import file is missing --%s", name)
 		}
 	}
 	for _, name := range []string{"backend", "backend-option", "proxy", "header", "cookie"} {
-		for _, importCommand := range []*cobra.Command{importBrowserCmd, importBookmarksCmd, importLinkdingCmd, importLinkwardenCmd, importKarakeepCmd, importReadeckCmd, importShaarliCmd} {
+		for _, importCommand := range []*cobra.Command{importBrowserCmd, importBrowserHistoryCmd, importBookmarksCmd, importLinkdingCmd, importLinkwardenCmd, importKarakeepCmd, importReadeckCmd, importShaarliCmd} {
 			if importCommand.Flags().Lookup(name) == nil {
 				t.Errorf("import %s is missing --%s", importCommand.Name(), name)
 			}
