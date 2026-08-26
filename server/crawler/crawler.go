@@ -360,6 +360,11 @@ func (c *baseCrawler) bfsCrawl(ctx context.Context, startURL string, v *Validato
 			queue.Remove(front)
 			item := front.Value.(queueItem)
 
+			if c.robots != nil && !c.robots.Allowed(crawlCtx, item.rawURL) {
+				log.Info().Str("url", item.rawURL).Msg("crawler: skipping URL disallowed by robots.txt")
+				continue
+			}
+
 			parsedU, parseErr := url.Parse(item.rawURL)
 			if parseErr == nil {
 				host := parsedU.Hostname()
