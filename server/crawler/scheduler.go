@@ -224,12 +224,16 @@ func (s *Scheduler) Wait(ctx context.Context, host string) error {
 
 	// Jitter.
 	if s.cfg.Jitter > 0 {
+		const maxJitter = 30 * time.Second
 		rate := effectiveRate
 		if rate <= 0 {
 			rate = 1
 		}
 		jitterMax := s.cfg.Jitter / rate
 		jitter := time.Duration(randv2.Float64() * jitterMax * float64(time.Second))
+		if jitter > maxJitter {
+			jitter = maxJitter
+		}
 		if jitter > 0 {
 			select {
 			case <-ctx.Done():
