@@ -99,10 +99,18 @@ type CircuitBreaker struct {
 
 // NewCircuitBreaker creates a CircuitBreaker. threshold is the number of
 // consecutive failures before opening; cooldown is the duration to wait before
-// entering half-open state.
+// entering half-open state. Values <= 0 are coalesced to safe defaults (5
+// failures, 5 minutes) so a zero config value doesn't open the breaker
+// immediately.
 func NewCircuitBreaker(threshold int, cooldown time.Duration, clock Clock) *CircuitBreaker {
 	if clock == nil {
 		clock = RealClock{}
+	}
+	if threshold <= 0 {
+		threshold = 5
+	}
+	if cooldown <= 0 {
+		cooldown = 5 * time.Minute
 	}
 	return &CircuitBreaker{
 		threshold: threshold,
