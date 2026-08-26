@@ -26,6 +26,7 @@ type persistentCrawler struct {
 	scheduler      *Scheduler
 	breaker        *CircuitBreaker
 	backoff        *Backoff
+	budget         *Budget
 	clock          Clock
 }
 
@@ -54,6 +55,7 @@ func NewPersistent(cfg *config.CrawlerConfig, jobID string, robots *RobotsCache,
 		cooldown = 5 * time.Minute
 	}
 	breaker := NewCircuitBreaker(cfg.CircuitBreaker.ConsecutiveFailures, cooldown, clock)
+	budget := NewBudget(cfg.Limits, cfg.Hosts, clock)
 	scheduler := NewScheduler(cfg, breaker, robots, clock)
 	initial := time.Duration(cfg.Retry.InitialBackoff) * time.Second
 	if initial == 0 {
@@ -73,6 +75,7 @@ func NewPersistent(cfg *config.CrawlerConfig, jobID string, robots *RobotsCache,
 		scheduler:      scheduler,
 		breaker:        breaker,
 		backoff:        NewBackoff(initial, maxB),
+		budget:         budget,
 		clock:          clock,
 	}, nil
 }
@@ -119,6 +122,11 @@ func (c *persistentCrawler) persistentBFS(ctx context.Context, startURL string, 
 		case <-ctx.Done():
 			return model.UpdateCrawlJobStatus(c.jobID, model.CrawlJobInterrupted)
 		default:
+		}
+
+		if c.budget.Exhausted() {
+			log.Info().Str("job_id", c.jobID).Msg("crawler: budget exhausted, stopping")
+			return model.UpdateCrawlJobStatus(c.jobID, model.CrawlJobInterrupted)
 		}
 
 		cur, err := model.NextPendingCrawlURL(c.jobID)
@@ -180,6 +188,22 @@ func (c *persistentCrawler) persistentBFS(ctx context.Context, startURL string, 
 		}
 
 		host := parsedURL.Hostname()
+
+		if c.budget.HostExhausted(host) {
+			log.Info().Str("url", cur.URL).Str("host", host).Msg("crawler: per-host budget reached, skipping")
+			if err := model.UpdateCrawlURLStatus(cur.ID, model.CrawlURLSkipped, "budget"); err != nil {
+				log.Warn().Err(err).Msg("failed to mark URL skipped by budget")
+			}
+			continue
+		}
+		if !c.budget.TryReservePage(host) {
+			log.Info().Str("url", cur.URL).Str("host", host).Msg("crawler: page reservation failed (budget)")
+			if err := model.UpdateCrawlURLStatus(cur.ID, model.CrawlURLSkipped, "budget"); err != nil {
+				log.Warn().Err(err).Msg("failed to mark URL skipped by budget")
+			}
+			continue
+		}
+
 		var finalURL string
 		var body []byte
 		var links []Link
@@ -255,6 +279,9 @@ func (c *persistentCrawler) persistentBFS(ctx context.Context, startURL string, 
 			}
 			continue
 		}
+
+		bodyLen := int64(len(body))
+		c.budget.AddBytes(host, bodyLen)
 
 		// Handle redirects: insert the final URL as done so it won't be fetched again.
 		if finalURL != cur.URL {

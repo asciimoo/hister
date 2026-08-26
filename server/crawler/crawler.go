@@ -360,6 +360,19 @@ func (c *baseCrawler) bfsCrawl(ctx context.Context, startURL string, v *Validato
 			queue.Remove(front)
 			item := front.Value.(queueItem)
 
+			parsedU, parseErr := url.Parse(item.rawURL)
+			if parseErr == nil {
+				host := parsedU.Hostname()
+				if c.budget.HostExhausted(host) {
+					log.Info().Str("url", item.rawURL).Str("host", host).Msg("crawler: per-host budget reached, skipping")
+					continue
+				}
+				if !c.budget.TryReservePage(host) {
+					log.Info().Str("url", item.rawURL).Str("host", host).Msg("crawler: page reservation failed (budget)")
+					continue
+				}
+			}
+
 			select {
 			case <-crawlCtx.Done():
 				return
@@ -372,6 +385,11 @@ func (c *baseCrawler) bfsCrawl(ctx context.Context, startURL string, v *Validato
 	dispatch()
 
 	for inFlight > 0 {
+		if c.budget.Exhausted() {
+			log.Info().Msg("crawler: budget exhausted, stopping")
+			return
+		}
+
 		res, ok := <-results
 		if !ok {
 			break
