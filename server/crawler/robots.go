@@ -123,13 +123,14 @@ func (r *RobotsCache) CrawlDelay(rawURL string) time.Duration {
 
 	r.mu.Lock()
 	elem, ok := r.cache[key]
-	r.mu.Unlock()
-
 	if !ok {
+		r.mu.Unlock()
 		return 0
 	}
-	entry := elem.Value.(*lruEntry).data
-	return entry.crawlDelay
+	delay := elem.Value.(*lruEntry).data.crawlDelay
+	r.mu.Unlock()
+
+	return delay
 }
 
 // CrawlDelayForHost returns the crawl delay for a bare hostname by checking
