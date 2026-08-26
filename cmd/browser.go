@@ -103,10 +103,11 @@ type browserImportJob struct {
 }
 
 const (
-	browserImportJobPrefix     = "browser-history-import-"
-	bookmarkImportJobPrefix    = "browser-bookmark-import-"
-	browserImportKindHistory   = "history"
-	browserImportKindBookmarks = "bookmarks"
+	browserImportJobPrefix       = "browser-history-import-"
+	bookmarkImportJobPrefix      = "browser-bookmark-import-"
+	legacyBrowserImportJobPrefix = "browser-import-" // pre-#648 history jobs
+	browserImportKindHistory     = "history"
+	browserImportKindBookmarks   = "bookmarks"
 )
 
 var errNoBrowserURLs = errors.New("no URLs found to import")
@@ -434,6 +435,16 @@ func browserImportIdentity(kind string) (prefix, label string) {
 	return browserImportJobPrefix, "browser"
 }
 
+// browserImportMatchPrefixes is the set of job ID prefixes resume may offer.
+// History still matches the released browser-import-* name so an upgrade can
+// continue an in-flight import.
+func browserImportMatchPrefixes(kind string) []string {
+	if kind == browserImportKindBookmarks {
+		return []string{bookmarkImportJobPrefix}
+	}
+	return []string{browserImportJobPrefix, legacyBrowserImportJobPrefix}
+}
+
 func importChoiceNoun(kind string) string {
 	if kind == browserImportKindBookmarks {
 		return "Bookmarks"
@@ -497,7 +508,7 @@ func countBrowserImportURLs(db *sql.DB, query string, isSkip func(string) bool) 
 func beginBrowserImportJob(cmd *cobra.Command, kind string) (*browserImportJob, error) {
 	jobPrefix, defaultLabel := browserImportIdentity(kind)
 	defaultJobID := jobPrefix + time.Now().Format("2006-01-02")
-	jobID, resumeExisting, err := chooseBrowserImportJobID(defaultJobID, jobPrefix)
+	jobID, resumeExisting, err := chooseBrowserImportJobID(defaultJobID, browserImportMatchPrefixes(kind)...)
 	if err != nil {
 		return nil, err
 	}
@@ -632,12 +643,12 @@ func ensureBrowserImportJob(job *browserImportJob, startURL string) error {
 	return nil
 }
 
-func chooseBrowserImportJobID(defaultID, prefix string) (string, bool, error) {
+func chooseBrowserImportJobID(defaultID string, prefixes ...string) (string, bool, error) {
 	jobs, err := model.ListCrawlJobs()
 	if err != nil {
 		return "", false, fmt.Errorf("list crawl jobs: %w", err)
 	}
-	browserJobs := browserImportJobs(jobs, prefix)
+	browserJobs := browserImportJobs(jobs, prefixes...)
 	if len(browserJobs) == 0 {
 		id, err := nextBrowserImportJobID(defaultID)
 		return id, false, err
@@ -649,10 +660,10 @@ func chooseBrowserImportJobID(defaultID, prefix string) (string, bool, error) {
 	return id, false, err
 }
 
-func browserImportJobs(jobs []*model.CrawlJob, prefix string) []*model.CrawlJob {
+func browserImportJobs(jobs []*model.CrawlJob, prefixes ...string) []*model.CrawlJob {
 	var browserJobs []*model.CrawlJob
 	for _, job := range jobs {
-		if !strings.HasPrefix(job.ID, prefix) {
+		if !hasAnyPrefix(job.ID, prefixes) {
 			continue
 		}
 		rules, err := crawler.UnmarshalValidatorRules(job.ValidatorRules)
@@ -709,6 +720,15 @@ func printBrowserImportJob(idx int, job *model.CrawlJob) {
 		stats.Pending, stats.Done, stats.Failed, stats.Skipped,
 		job.CreatedAt.Format("2006-01-02 15:04:05"),
 	)
+}
+
+func hasAnyPrefix(s string, prefixes []string) bool {
+	for _, prefix := range prefixes {
+		if strings.HasPrefix(s, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func nextBrowserImportJobID(baseID string) (string, error) {
