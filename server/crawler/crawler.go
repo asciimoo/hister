@@ -92,7 +92,16 @@ func New(cfg *config.CrawlerConfig, robots *RobotsCache, opts ...Option) (Crawle
 	return newBaseCrawler(f, cfg, robots, o), nil
 }
 
-func newBaseCrawler(f fetcher, cfg *config.CrawlerConfig, robots *RobotsCache, o options) *baseCrawler {
+// crawlerCore holds the shared infrastructure components built from CrawlerConfig.
+type crawlerCore struct {
+	scheduler *Scheduler
+	breaker   *CircuitBreaker
+	budget    *Budget
+	backoff   *Backoff
+	clock     Clock
+}
+
+func newCrawlerCore(cfg *config.CrawlerConfig, robots *RobotsCache) crawlerCore {
 	clock := RealClock{}
 	cooldown := time.Duration(cfg.CircuitBreaker.Cooldown) * time.Second
 	if cooldown == 0 {
@@ -109,16 +118,27 @@ func newBaseCrawler(f fetcher, cfg *config.CrawlerConfig, robots *RobotsCache, o
 	if maxB == 0 {
 		maxB = 30 * time.Second
 	}
+	return crawlerCore{
+		scheduler: scheduler,
+		breaker:   breaker,
+		budget:    budget,
+		backoff:   NewBackoff(initial, maxB),
+		clock:     clock,
+	}
+}
+
+func newBaseCrawler(f fetcher, cfg *config.CrawlerConfig, robots *RobotsCache, o options) *baseCrawler {
+	core := newCrawlerCore(cfg, robots)
 	return &baseCrawler{
 		fetcher:        f,
 		cfg:            cfg,
 		robots:         robots,
 		skipURLChecker: o.skipURLChecker,
-		scheduler:      scheduler,
-		budget:         budget,
-		breaker:        breaker,
-		backoff:        NewBackoff(initial, maxB),
-		clock:          clock,
+		scheduler:      core.scheduler,
+		budget:         core.budget,
+		breaker:        core.breaker,
+		backoff:        core.backoff,
+		clock:          core.clock,
 	}
 }
 

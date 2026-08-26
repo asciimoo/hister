@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-	"time"
 
 	"github.com/rs/zerolog/log"
 
@@ -50,22 +49,7 @@ func NewPersistent(cfg *config.CrawlerConfig, jobID string, robots *RobotsCache,
 		return nil, fmt.Errorf("%s backend: %w", crawlerBackendName(cfg), err)
 	}
 
-	clock := RealClock{}
-	cooldown := time.Duration(cfg.CircuitBreaker.Cooldown) * time.Second
-	if cooldown == 0 {
-		cooldown = 5 * time.Minute
-	}
-	breaker := NewCircuitBreaker(cfg.CircuitBreaker.ConsecutiveFailures, cooldown, clock)
-	budget := NewBudget(cfg.Limits, cfg.Hosts, clock)
-	scheduler := NewScheduler(cfg, breaker, robots, clock)
-	initial := time.Duration(cfg.Retry.InitialBackoff) * time.Second
-	if initial == 0 {
-		initial = time.Second
-	}
-	maxB := time.Duration(cfg.Retry.MaxBackoff) * time.Second
-	if maxB == 0 {
-		maxB = 30 * time.Second
-	}
+	core := newCrawlerCore(cfg, robots)
 
 	return &persistentCrawler{
 		fetcher:        f,
@@ -73,11 +57,11 @@ func NewPersistent(cfg *config.CrawlerConfig, jobID string, robots *RobotsCache,
 		jobID:          jobID,
 		robots:         robots,
 		skipURLChecker: o.skipURLChecker,
-		scheduler:      scheduler,
-		breaker:        breaker,
-		backoff:        NewBackoff(initial, maxB),
-		budget:         budget,
-		clock:          clock,
+		scheduler:      core.scheduler,
+		breaker:        core.breaker,
+		backoff:        core.backoff,
+		budget:         core.budget,
+		clock:          core.clock,
 	}, nil
 }
 
