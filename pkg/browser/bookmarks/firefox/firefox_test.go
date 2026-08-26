@@ -8,6 +8,8 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/asciimoo/hister/pkg/browser/bookmarks"
+
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -117,5 +119,26 @@ func mustExec(t *testing.T, db *sql.DB, q string) {
 	t.Helper()
 	if _, err := db.Exec(q); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestFirefoxDetectMultipleProfiles(t *testing.T) {
+	p1 := "/tmp/a/places.sqlite"
+	p2 := "/tmp/b/places.sqlite"
+	find := func(table, prefix string) []bookmarks.Profile {
+		return []bookmarks.Profile{
+			{Name: "Firefox", Paths: []string{p1}},
+			{Name: "Zen", Paths: []string{p2}},
+		}
+	}
+	got := Source{}.Detect("", find)
+	if len(got) != 2 {
+		t.Fatalf("Detect = %#v, want 2 stores", got)
+	}
+	if got[0].Path != p1 || got[0].Browser != "firefox" {
+		t.Fatalf("first store = %#v, want path %q browser firefox", got[0], p1)
+	}
+	if got[1].Path != p2 || got[1].Browser != "zen" {
+		t.Fatalf("second store = %#v, want path %q browser zen", got[1], p2)
 	}
 }

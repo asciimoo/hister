@@ -63,16 +63,16 @@ func TestBrowserImportJobsFiltersByPrefix(t *testing.T) {
 		t.Fatal(err)
 	}
 	jobs := []*model.CrawlJob{
-		{ID: "browser-import-2026-08-26", ValidatorRules: rules},
-		{ID: "bookmark-import-2026-08-26", ValidatorRules: rules},
-		{ID: "browser-import-other", ValidatorRules: deep},
+		{ID: "browser-history-import-2026-08-26", ValidatorRules: rules},
+		{ID: "browser-bookmark-import-2026-08-26", ValidatorRules: rules},
+		{ID: "browser-history-import-other", ValidatorRules: deep},
 	}
 	got := browserImportJobs(jobs, bookmarkImportJobPrefix)
-	if len(got) != 1 || got[0].ID != "bookmark-import-2026-08-26" {
+	if len(got) != 1 || got[0].ID != "browser-bookmark-import-2026-08-26" {
 		t.Fatalf("bookmark prefix = %#v", jobIDs(got))
 	}
 	got = browserImportJobs(jobs, browserImportJobPrefix)
-	if len(got) != 1 || got[0].ID != "browser-import-2026-08-26" {
+	if len(got) != 1 || got[0].ID != "browser-history-import-2026-08-26" {
 		t.Fatalf("history prefix = %#v", jobIDs(got))
 	}
 }

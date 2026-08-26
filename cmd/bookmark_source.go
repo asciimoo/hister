@@ -85,7 +85,7 @@ func bookmarkSourceByName(name string) bookmarks.Source {
 func bookmarkSourceHasName(src bookmarks.Source, name string) bool {
 	name = strings.ToLower(name)
 	for _, n := range src.Names() {
-		if n == name || strings.HasPrefix(name, n) || strings.HasPrefix(n, name) {
+		if n == name || strings.HasPrefix(n, name) {
 			return true
 		}
 	}

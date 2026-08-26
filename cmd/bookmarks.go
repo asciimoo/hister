@@ -8,10 +8,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"time"
-
-	"github.com/asciimoo/hister/server/crawler"
-	"github.com/asciimoo/hister/server/model"
 
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
@@ -125,48 +121,16 @@ func loadBrowserImportSkipRules() {
 func importURLGroups(cmd *cobra.Command, groups []urlImportGroup, kind string) {
 	chosen := multipleChoiceURLGroups(groups, importChoiceNoun(kind))
 
-	jobPrefix, defaultLabel := browserImportIdentity(kind)
-	defaultJobID := jobPrefix + time.Now().Format("2006-01-02")
-	jobID, resumeExisting, err := chooseBrowserImportJobID(defaultJobID, jobPrefix)
+	job, err := beginBrowserImportJob(cmd, kind)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to select browser import crawl job")
 		return
 	}
-	job := &browserImportJob{
-		id:            jobID,
-		labelOverride: newDocumentLabelOverride(cmd),
-	}
-	job.label = job.labelOverride.resolve("", defaultLabel)
-	if resumeExisting {
-		if err := ensureBrowserImportJob(job, ""); err != nil {
-			log.Error().Err(err).Msg("Failed to resume browser import crawl job")
-			return
-		}
-	}
 
 	for _, group := range chosen {
-		batch := make([]string, 0, 500)
-		for _, u := range group.urls {
-			if err := ensureBrowserImportJob(job, u); err != nil {
-				log.Error().Err(err).Msg("Failed to create browser import crawl job")
-				return
-			}
-			batch = append(batch, u)
-			if len(batch) >= cap(batch) {
-				if err := model.BulkInsertCrawlURLs(job.id, batch, 0); err != nil {
-					log.Error().Err(err).Msg("Failed to add browser URLs to crawl job")
-					return
-				}
-				job.enqueued += len(batch)
-				batch = batch[:0]
-			}
-		}
-		if len(batch) > 0 {
-			if err := model.BulkInsertCrawlURLs(job.id, batch, 0); err != nil {
-				log.Error().Err(err).Msg("Failed to add browser URLs to crawl job")
-				return
-			}
-			job.enqueued += len(batch)
+		if err := enqueueBrowserImportURLs(job, group.urls); err != nil {
+			log.Error().Err(err).Msg("Failed to add browser URLs to crawl job")
+			return
 		}
 		if group.skipped != 0 {
 			log.Info().Msgf("Skipped %d URLs by rules", group.skipped)
@@ -174,60 +138,7 @@ func importURLGroups(cmd *cobra.Command, groups []urlImportGroup, kind string) {
 		log.Info().Str("job_id", job.id).Int("seen", len(group.urls)+group.skipped).Int("total", len(group.urls)).Msg("Browser URLs added to crawl job")
 	}
 
-	if !job.created {
-		exit(1, "No URLs found to import")
-	}
-	storedJob, err := model.GetCrawlJob(job.id)
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to load browser import crawl job")
-		return
-	}
-	if storedJob == nil {
-		log.Error().Str("job_id", job.id).Msg("Browser import crawl job not found")
-		return
-	}
-	hasURLs, err := crawlJobHasURLsToCrawl(storedJob)
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to load browser import crawl job queue")
-		return
-	}
-	if !hasURLs {
-		fmt.Println("No URLs to crawl for job:", job.id)
-		return
-	}
-
-	cliPrintln(cliBoldStyle.Render("IMPORTING"))
-	fmt.Println("Starting crawl job:", job.id)
-
-	cfg.Crawler.UserAgent = UserAgent
-	cr, err := crawler.NewPersistent(&cfg.Crawler, job.id, nil, crawlerSkipOptions(false)...)
-	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to initialize persistent crawler")
-	}
-	defer func() {
-		if err := cr.Close(); err != nil {
-			log.Warn().Err(err).Msg("crawler close error")
-		}
-	}()
-
-	validatorRules := &crawler.ValidatorRules{NoDepth: true}
-	validator, err := crawler.NewValidator(validatorRules)
-	if err != nil {
-		log.Fatal().Err(err).Msg("Invalid browser import crawler rules")
-	}
-	done, err := model.CountCrawlURLsByStatus(job.id, model.CrawlURLDone)
-	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to count done browser import URLs")
-	}
-	failed, err := model.CountCrawlURLsByStatus(job.id, model.CrawlURLFailed)
-	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to count failed browser import URLs")
-	}
-	validator.SetVisited(int(done + failed))
-
-	if err := crawlAndIndex(cmd.Context(), job.id, job.startURL, cr, validator, job.label); err != nil {
-		log.Fatal().Err(err).Msg("Browser import crawl failed")
-	}
+	finishBrowserImportJob(cmd, job)
 }
 
 func multipleChoiceURLGroups(groups []urlImportGroup, noun string) []urlImportGroup {
@@ -244,13 +155,16 @@ func multipleChoiceURLGroups(groups []urlImportGroup, noun string) []urlImportGr
 	print("==> ")
 
 	s, _ := r.ReadString('\n')
-	blacklists := strings.Split(strings.Trim(s, "\n"), " ")
+	tokens := strings.Split(strings.Trim(s, "\n"), " ")
+	return excludeURLGroups(groups, tokens)
+}
 
+func excludeURLGroups(groups []urlImportGroup, tokens []string) []urlImportGroup {
 	var selected []urlImportGroup
 	for i, group := range groups {
 		skip := false
-		for _, blacklist := range blacklists {
-			if strconv.Itoa(i) == blacklist || group.name == blacklist {
+		for _, token := range tokens {
+			if strconv.Itoa(i) == token || group.name == token {
 				skip = true
 				break
 			}
