@@ -198,7 +198,8 @@ func (s *Scheduler) Wait(ctx context.Context, host string) error {
 	}
 
 	hs := s.getHostState(host)
-	hs.bucket.SetRate(s.effectiveRPS(host))
+	effectiveRate := s.effectiveRPS(host)
+	hs.bucket.SetRate(effectiveRate)
 
 	// Per-host cooldown (Retry-After).
 	s.mu.Lock()
@@ -223,10 +224,11 @@ func (s *Scheduler) Wait(ctx context.Context, host string) error {
 
 	// Jitter.
 	if s.cfg.Jitter > 0 {
-		jitterMax := s.cfg.Jitter / s.cfg.PerHostRPS
-		if s.cfg.PerHostRPS <= 0 {
-			jitterMax = s.cfg.Jitter
+		rate := effectiveRate
+		if rate <= 0 {
+			rate = 1
 		}
+		jitterMax := s.cfg.Jitter / rate
 		jitter := time.Duration(randv2.Float64() * jitterMax * float64(time.Second))
 		if jitter > 0 {
 			select {
