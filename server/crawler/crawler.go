@@ -365,6 +365,16 @@ func (c *baseCrawler) bfsCrawl(ctx context.Context, startURL string, v *Validato
 				continue
 			}
 
+			if c.skipURLChecker != nil {
+				skip, err := c.skipURLChecker(item.rawURL)
+				if err != nil {
+					log.Warn().Err(err).Str("url", item.rawURL).Msg("crawler: skipURL checker error")
+				} else if skip {
+					log.Info().Str("url", item.rawURL).Msg("crawler: skipping URL by prefetch skip predicate")
+					continue
+				}
+			}
+
 			parsedU, parseErr := url.Parse(item.rawURL)
 			if parseErr == nil {
 				host := parsedU.Hostname()
