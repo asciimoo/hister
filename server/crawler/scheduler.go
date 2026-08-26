@@ -43,6 +43,15 @@ func newLazyBucket(rps float64, burst int, clock Clock) *lazyBucket {
 	}
 }
 
+func (lb *lazyBucket) SetRate(rps float64) {
+	lb.mu.Lock()
+	defer lb.mu.Unlock()
+	if rps <= 0 {
+		rps = 10
+	}
+	lb.rate = rps
+}
+
 func (lb *lazyBucket) Wait(ctx context.Context) error {
 	for {
 		lb.mu.Lock()
@@ -189,6 +198,7 @@ func (s *Scheduler) Wait(ctx context.Context, host string) error {
 	}
 
 	hs := s.getHostState(host)
+	hs.bucket.SetRate(s.effectiveRPS(host))
 
 	// Per-host cooldown (Retry-After).
 	s.mu.Lock()

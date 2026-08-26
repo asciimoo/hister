@@ -222,6 +222,68 @@ func TestSchedulerHostOverride(t *testing.T) {
 	sched.Release("fast.example.com")
 }
 
+func TestSchedulerRateRefreshAfterRobotsPopulated(t *testing.T) {
+	rc := NewRobotsCache("testbot")
+
+	cfg := &config.CrawlerConfig{
+		Rate: config.CrawlerRate{
+			GlobalRPS:          1000,
+			PerHostRPS:         10, // 100ms between requests
+			GlobalConcurrency:  10,
+			PerHostConcurrency: 1,
+			Jitter:             0,
+		},
+		Robots: config.CrawlerRobots{
+			RespectCrawlDelay: true,
+		},
+	}
+	clock := NewFakeClock(time.Now())
+	breaker := NewCircuitBreaker(5, 5*time.Minute, clock)
+	sched := NewScheduler(cfg, breaker, rc, clock)
+
+	// First Wait passes immediately (bucket pre-filled, no robots entry yet).
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	done := make(chan error, 1)
+	go func() { done <- sched.Wait(ctx, "late.example.com") }()
+	clock.Advance(10 * time.Millisecond)
+	if err := <-done; err != nil {
+		t.Fatalf("first Wait: %v", err)
+	}
+	sched.Release("late.example.com")
+
+	// Now populate robots cache with a 1000s crawl delay.
+	rc.store("https://late.example.com", &robotsEntry{
+		fetchedAt:  clock.Now(),
+		ttl:        24 * time.Hour,
+		allowAll:   true,
+		crawlDelay: 1000 * time.Second,
+	})
+
+	// Second Wait should now be gated by the 1000s crawl delay.
+	ctx2, cancel2 := context.WithCancel(context.Background())
+	defer cancel2()
+
+	done2 := make(chan error, 1)
+	go func() { done2 <- sched.Wait(ctx2, "late.example.com") }()
+
+	// Give goroutine time to start and block.
+	clock.Advance(100 * time.Millisecond)
+	time.Sleep(20 * time.Millisecond)
+
+	select {
+	case err := <-done2:
+		sched.Release("late.example.com")
+		t.Fatalf("second Wait should be blocked by robots 1000s delay, but returned: %v", err)
+	default:
+		// Still blocked - expected.
+	}
+
+	cancel2()
+	<-done2
+}
+
 func TestSchedulerRobotsCrawlDelay(t *testing.T) {
 	// Build a fake RobotsCache with a cached entry for a host.
 	rc := NewRobotsCache("testbot")
