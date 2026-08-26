@@ -41,13 +41,15 @@ func TestLadybirdDetectBothRootsAndProfiles(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	paths := []string{
+	want := []string{
 		filepath.Join(home, ".config", "Ladybird", "Bookmarks.json"),
-		filepath.Join(home, ".config", "Ladybird", "profile-a", "Bookmarks.json"),
+		filepath.Join(home, ".config", "Ladybird", "Profiles", "default", "Bookmarks.json"),
 		filepath.Join(home, ".local", "share", "Ladybird", "Bookmarks.json"),
-		filepath.Join(home, ".local", "share", "Ladybird", "profile-b", "Bookmarks.json"),
+		filepath.Join(home, "Library", "Application Support", "Ladybird", "Profiles", "work", "Bookmarks.json"),
+		filepath.Join(home, ".var", "app", "org.ladybird.Ladybird", "config", "Ladybird", "Profiles", "flat", "Bookmarks.json"),
 	}
-	for _, path := range paths {
+	decoy := filepath.Join(home, ".config", "Ladybird", "not-a-profile", "Bookmarks.json")
+	for _, path := range append(append([]string{}, want...), decoy) {
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -65,9 +67,11 @@ func TestLadybirdDetectBothRootsAndProfiles(t *testing.T) {
 		gotPaths = append(gotPaths, store.Path)
 	}
 	slices.Sort(gotPaths)
-	want := append([]string(nil), paths...)
 	slices.Sort(want)
 	if !slices.Equal(gotPaths, want) {
 		t.Fatalf("Detect paths = %#v, want %#v", gotPaths, want)
+	}
+	if slices.Contains(gotPaths, decoy) {
+		t.Fatalf("Detect included decoy path %q", decoy)
 	}
 }

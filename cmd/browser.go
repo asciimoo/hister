@@ -803,6 +803,7 @@ func getDBPaths() []browserDB {
 				ladybird_table,
 				[]string{
 					filepath.Join(home, "Library", "Application Support", "Ladybird", "History.db"),
+					filepath.Join(home, "Library", "Application Support", "Ladybird", "Profiles", "*", "History.db"),
 				},
 			},
 			{
@@ -961,6 +962,9 @@ func getDBPaths() []browserDB {
 				ladybird_table,
 				[]string{
 					filepath.Join(home, ".local", "share", "Ladybird", "History.db"),
+					filepath.Join(home, ".local", "share", "Ladybird", "Profiles", "*", "History.db"),
+					filepath.Join(home, ".var", "app", "org.ladybird.Ladybird", "data", "Ladybird", "History.db"),
+					filepath.Join(home, ".var", "app", "org.ladybird.Ladybird", "data", "Ladybird", "Profiles", "*", "History.db"),
 				},
 			},
 			{

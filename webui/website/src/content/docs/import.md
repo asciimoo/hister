@@ -164,17 +164,17 @@ Skip rules apply the same way they do for history import. A browser's shipped de
 
 Bookmark documents receive the `bookmarks` label by default. Use `--label LABEL` to replace it. `--start-date` is not supported, because it would drop bookmarks that have never been visited.
 
-Bookmark imports use persistent crawl jobs named `bookmark-import-YYYY-MM-DD`.
+Bookmark imports use persistent crawl jobs named `browser-bookmark-import-YYYY-MM-DD`.
 
 ### Resume and Inspect a Browser Import
 
-Browser imports use persistent crawl jobs named `browser-import-YYYY-MM-DD`. It is safe to interrupt the process and continue it later. Completed URLs remain completed, pending URLs resume, and failed URLs remain recorded for inspection.
+History imports use persistent crawl jobs named `browser-history-import-YYYY-MM-DD`. Older `browser-import-*` history jobs still resume. Bookmark jobs are `browser-bookmark-import-*`. It is safe to interrupt the process and continue it later. Completed URLs remain completed, pending URLs resume, and failed URLs remain recorded for inspection.
 
 ```bash
 hister crawl list
-hister crawl show browser-import-YYYY-MM-DD
-hister crawl errors browser-import-YYYY-MM-DD
-hister crawl urls browser-import-YYYY-MM-DD
+hister crawl show browser-history-import-YYYY-MM-DD
+hister crawl errors browser-history-import-YYYY-MM-DD
+hister crawl urls browser-history-import-YYYY-MM-DD
 ```
 
 Add `--count` to `hister crawl urls` when only the number of tracked URLs is needed. Use

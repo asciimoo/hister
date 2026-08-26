@@ -25,6 +25,7 @@ Usage:
   hister import browser bookmarks --db ~/.mozilla/firefox/example.default/places.sqlite
   hister import browser bookmarks --db ~/.config/google-chrome/Default/Bookmarks
   hister import browser bookmarks --db ~/.config/Ladybird/Bookmarks.json
+  hister import browser bookmarks --db ~/.config/Ladybird/Profiles/default/Bookmarks.json
 
 --browser limits autodetection to a supported browser.
 --db imports a specific bookmark store.

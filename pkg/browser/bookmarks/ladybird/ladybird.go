@@ -60,12 +60,16 @@ func (s Source) Detect(browser string, find bookmarks.FindProfiles) []bookmarks.
 	for _, cand := range []string{
 		filepath.Join(home, ".config", "Ladybird", "Bookmarks.json"),
 		filepath.Join(home, ".local", "share", "Ladybird", "Bookmarks.json"),
+		filepath.Join(home, "Library", "Application Support", "Ladybird", "Bookmarks.json"),
+		filepath.Join(home, ".var", "app", "org.ladybird.Ladybird", "config", "Ladybird", "Bookmarks.json"),
 	} {
 		add(cand)
 	}
 	for _, pattern := range []string{
-		filepath.Join(home, ".config", "Ladybird", "*", "Bookmarks.json"),
-		filepath.Join(home, ".local", "share", "Ladybird", "*", "Bookmarks.json"),
+		filepath.Join(home, ".config", "Ladybird", "Profiles", "*", "Bookmarks.json"),
+		filepath.Join(home, ".local", "share", "Ladybird", "Profiles", "*", "Bookmarks.json"),
+		filepath.Join(home, "Library", "Application Support", "Ladybird", "Profiles", "*", "Bookmarks.json"),
+		filepath.Join(home, ".var", "app", "org.ladybird.Ladybird", "config", "Ladybird", "Profiles", "*", "Bookmarks.json"),
 	} {
 		matches, err := filepath.Glob(pattern)
 		if err != nil {
