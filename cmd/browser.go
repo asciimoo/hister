@@ -267,7 +267,7 @@ func importDB(databases []DBToImport, cmd *cobra.Command, startDate *time.Time, 
 
 	jobPrefix, defaultLabel := browserImportIdentity(kind)
 	defaultJobID := jobPrefix + time.Now().Format("2006-01-02")
-	jobID, resumeExisting, err := chooseBrowserImportJobID(defaultJobID)
+	jobID, resumeExisting, err := chooseBrowserImportJobID(defaultJobID, jobPrefix)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to select browser import crawl job")
 		return
@@ -603,7 +603,7 @@ func ensureBrowserImportJob(job *browserImportJob, startURL string) error {
 	if !existingRules.NoDepth {
 		return fmt.Errorf("crawl job %q already exists and is not a browser import job", job.id)
 	}
-	job.label = job.labelOverride.resolve(existing.Label, "browser")
+	job.label = job.labelOverride.resolve(existing.Label, job.label)
 	if err := model.UpdateCrawlJobStatus(job.id, model.CrawlJobRunning); err != nil {
 		return fmt.Errorf("update crawl job status: %w", err)
 	}
@@ -612,12 +612,12 @@ func ensureBrowserImportJob(job *browserImportJob, startURL string) error {
 	return nil
 }
 
-func chooseBrowserImportJobID(defaultID string) (string, bool, error) {
+func chooseBrowserImportJobID(defaultID, prefix string) (string, bool, error) {
 	jobs, err := model.ListCrawlJobs()
 	if err != nil {
 		return "", false, fmt.Errorf("list crawl jobs: %w", err)
 	}
-	browserJobs := browserImportJobs(jobs)
+	browserJobs := browserImportJobs(jobs, prefix)
 	if len(browserJobs) == 0 {
 		id, err := nextBrowserImportJobID(defaultID)
 		return id, false, err
@@ -629,10 +629,10 @@ func chooseBrowserImportJobID(defaultID string) (string, bool, error) {
 	return id, false, err
 }
 
-func browserImportJobs(jobs []*model.CrawlJob) []*model.CrawlJob {
+func browserImportJobs(jobs []*model.CrawlJob, prefix string) []*model.CrawlJob {
 	var browserJobs []*model.CrawlJob
 	for _, job := range jobs {
-		if !strings.HasPrefix(job.ID, browserImportJobPrefix) {
+		if !strings.HasPrefix(job.ID, prefix) {
 			continue
 		}
 		rules, err := crawler.UnmarshalValidatorRules(job.ValidatorRules)

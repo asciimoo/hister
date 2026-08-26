@@ -127,7 +127,7 @@ func importURLGroups(cmd *cobra.Command, groups []urlImportGroup, kind string) {
 
 	jobPrefix, defaultLabel := browserImportIdentity(kind)
 	defaultJobID := jobPrefix + time.Now().Format("2006-01-02")
-	jobID, resumeExisting, err := chooseBrowserImportJobID(defaultJobID)
+	jobID, resumeExisting, err := chooseBrowserImportJobID(defaultJobID, jobPrefix)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to select browser import crawl job")
 		return
