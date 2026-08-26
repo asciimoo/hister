@@ -181,14 +181,6 @@ func (c *persistentCrawler) persistentBFS(ctx context.Context, startURL string, 
 			}
 			continue
 		}
-		if !c.budget.TryReservePage(host) {
-			log.Info().Str("url", cur.URL).Str("host", host).Msg("crawler: page reservation failed (budget)")
-			if err := model.UpdateCrawlURLStatus(cur.ID, model.CrawlURLSkipped, "budget"); err != nil {
-				log.Warn().Err(err).Msg("failed to mark URL skipped by budget")
-			}
-			continue
-		}
-
 		var hints RequestHints
 		if c.cfg.ConditionalGet {
 			etag, lastMod, ok, lookupErr := model.GetLastFetchedURLMeta(cur.URL)
@@ -224,6 +216,15 @@ func (c *persistentCrawler) persistentBFS(ctx context.Context, startURL string, 
 					log.Warn().Err(err2).Msg("failed to revert URL to pending on scheduler error")
 				}
 				return model.UpdateCrawlJobStatus(c.jobID, model.CrawlJobInterrupted)
+			}
+
+			if !c.budget.TryReservePage(host) {
+				c.scheduler.Release(host)
+				log.Info().Str("url", cur.URL).Str("host", host).Msg("crawler: page reservation failed (budget)")
+				if err := model.UpdateCrawlURLStatus(cur.ID, model.CrawlURLSkipped, "budget"); err != nil {
+					log.Warn().Err(err).Msg("failed to mark URL skipped by budget")
+				}
+				break
 			}
 
 			start := c.clock.Now()

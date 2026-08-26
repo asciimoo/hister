@@ -6,6 +6,7 @@ import (
 	"context"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/asciimoo/hister/config"
 )
@@ -103,6 +104,33 @@ func TestBudgetMaxPagesPerHost(t *testing.T) {
 	// The start URL uses the 1 allowed page for example.com; /a and /b are skipped.
 	if calls != 1 {
 		t.Errorf("expected exactly 1 fetch with MaxPagesPerHost=1, got %d", calls)
+	}
+}
+
+// TestBudgetNoOvercountOnSchedulerError verifies that aborting a crawl via
+// context cancellation (simulating scheduler.Wait returning an error) does not
+// cause the budget page counter to exceed MaxPages.
+func TestBudgetNoOvercountOnSchedulerError(t *testing.T) {
+	clock := NewFakeClock(time.Now())
+	limits := config.CrawlerLimits{MaxPages: 2}
+	budget := NewBudget(limits, nil, clock)
+
+	// Reserve two pages normally.
+	if !budget.TryReservePage("example.com") {
+		t.Fatal("first TryReservePage should succeed")
+	}
+	if !budget.TryReservePage("example.com") {
+		t.Fatal("second TryReservePage should succeed")
+	}
+
+	// A third reservation (simulating the race before the fix) must fail.
+	if budget.TryReservePage("example.com") {
+		t.Error("third TryReservePage should fail when MaxPages=2")
+	}
+
+	// Budget counter must not exceed MaxPages.
+	if got := budget.pages.Load(); got > int64(limits.MaxPages) {
+		t.Errorf("budget pages counter = %d, want <= %d", got, limits.MaxPages)
 	}
 }
 

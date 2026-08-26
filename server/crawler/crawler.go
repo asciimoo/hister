@@ -321,6 +321,12 @@ func (c *baseCrawler) bfsCrawl(ctx context.Context, startURL string, v *Validato
 						goto done
 					}
 
+					if !c.budget.TryReservePage(host) {
+						c.scheduler.Release(host)
+						log.Info().Str("url", item.rawURL).Str("host", host).Msg("crawler: page reservation failed (budget)")
+						goto done
+					}
+
 					start := c.clock.Now()
 					finalURL, body, links, meta, fetchErr := c.fetcher.fetchPage(fetchCtx, item.rawURL, RequestHints{})
 					elapsed := c.clock.Now().Sub(start)
@@ -400,10 +406,6 @@ func (c *baseCrawler) bfsCrawl(ctx context.Context, startURL string, v *Validato
 				host := parsedU.Hostname()
 				if c.budget.HostExhausted(host) {
 					log.Info().Str("url", item.rawURL).Str("host", host).Msg("crawler: per-host budget reached, skipping")
-					continue
-				}
-				if !c.budget.TryReservePage(host) {
-					log.Info().Str("url", item.rawURL).Str("host", host).Msg("crawler: page reservation failed (budget)")
 					continue
 				}
 			}
