@@ -50,8 +50,8 @@ type CrawlURL struct {
 	Status       string    `gorm:"not null;default:pending" json:"status"`
 	Error        string    `json:"error"`
 	ErrorCode    int       `json:"error_code"`
-	ETag         string    `json:"etag"`          // ETag from last successful fetch
-	LastModified string    `json:"last_modified"` // Last-Modified from last successful fetch
+	ETag         string    `gorm:"column:etag" json:"etag"`                   // ETag from last successful fetch. Explicit column name so GORM does not derive "e_tag" from the field name.
+	LastModified string    `gorm:"column:last_modified" json:"last_modified"` // Last-Modified from last successful fetch
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
 }
