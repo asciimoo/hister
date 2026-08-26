@@ -6,7 +6,7 @@ import (
 	"container/list"
 	"context"
 	"math"
-	"math/rand"
+	randv2 "math/rand/v2"
 	"sync"
 	"time"
 
@@ -85,7 +85,6 @@ type Scheduler struct {
 	breaker       *CircuitBreaker
 	robots        *RobotsCache
 	clock         Clock
-	rng           *rand.Rand
 
 	mu      sync.Mutex
 	hosts   map[string]*hostState
@@ -105,7 +104,6 @@ func NewScheduler(cfg *config.CrawlerConfig, breaker *CircuitBreaker, robots *Ro
 		breaker:       breaker,
 		robots:        robots,
 		clock:         clock,
-		rng:           rand.New(rand.NewSource(time.Now().UnixNano())),
 		hosts:         make(map[string]*hostState),
 		lru:           list.New(),
 	}
@@ -217,7 +215,7 @@ func (s *Scheduler) Wait(ctx context.Context, host string) error {
 		if s.cfg.PerHostRPS <= 0 {
 			jitterMax = s.cfg.Jitter
 		}
-		jitter := time.Duration(s.rng.Float64() * jitterMax * float64(time.Second))
+		jitter := time.Duration(randv2.Float64() * jitterMax * float64(time.Second))
 		if jitter > 0 {
 			select {
 			case <-ctx.Done():
