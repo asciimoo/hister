@@ -77,3 +77,4 @@ func TestCreateNamedCrawlJobWithURLsRejectsEmptyQueue(t *testing.T) {
 		t.Fatalf("job count = %d, want 0", len(jobs))
 	}
 }
+

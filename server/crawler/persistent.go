@@ -23,6 +23,10 @@ type persistentCrawler struct {
 	jobID          string
 	robots         *RobotsCache // nil means robots.txt enforcement is disabled
 	skipURLChecker SkipURLChecker
+	scheduler      *Scheduler
+	breaker        *CircuitBreaker
+	backoff        *Backoff
+	clock          Clock
 }
 
 // NewPersistent creates a Crawler that persists its state to the database.
@@ -43,7 +47,34 @@ func NewPersistent(cfg *config.CrawlerConfig, jobID string, robots *RobotsCache,
 	if err != nil {
 		return nil, fmt.Errorf("%s backend: %w", crawlerBackendName(cfg), err)
 	}
-	return &persistentCrawler{fetcher: f, cfg: cfg, jobID: jobID, robots: robots, skipURLChecker: o.skipURLChecker}, nil
+
+	clock := RealClock{}
+	cooldown := time.Duration(cfg.CircuitBreaker.Cooldown) * time.Second
+	if cooldown == 0 {
+		cooldown = 5 * time.Minute
+	}
+	breaker := NewCircuitBreaker(cfg.CircuitBreaker.ConsecutiveFailures, cooldown, clock)
+	scheduler := NewScheduler(cfg, breaker, robots, clock)
+	initial := time.Duration(cfg.Retry.InitialBackoff) * time.Second
+	if initial == 0 {
+		initial = time.Second
+	}
+	maxB := time.Duration(cfg.Retry.MaxBackoff) * time.Second
+	if maxB == 0 {
+		maxB = 30 * time.Second
+	}
+
+	return &persistentCrawler{
+		fetcher:        f,
+		cfg:            cfg,
+		jobID:          jobID,
+		robots:         robots,
+		skipURLChecker: o.skipURLChecker,
+		scheduler:      scheduler,
+		breaker:        breaker,
+		backoff:        NewBackoff(initial, maxB),
+		clock:          clock,
+	}, nil
 }
 
 // Crawl starts (or resumes) the persistent crawl job identified by jobID.
@@ -63,6 +94,7 @@ func (c *persistentCrawler) Crawl(ctx context.Context, startURL string, v *Valid
 
 // Close releases resources held by the underlying fetcher backend.
 func (c *persistentCrawler) Close() error {
+	c.scheduler.Stop()
 	return c.fetcher.close()
 }
 
@@ -75,6 +107,11 @@ func (c *persistentCrawler) persistentBFS(ctx context.Context, startURL string, 
 	// Queue the start URL if this is a new job (nothing pending yet).
 	if err := model.InsertCrawlURLIfNotExists(c.jobID, startURL, 0); err != nil {
 		return fmt.Errorf("insert start URL: %w", err)
+	}
+
+	maxAttempts := c.cfg.Retry.MaxAttempts
+	if maxAttempts < 1 {
+		maxAttempts = 1
 	}
 
 	for {
@@ -142,23 +179,79 @@ func (c *persistentCrawler) persistentBFS(ctx context.Context, startURL string, 
 			}
 		}
 
-		if c.cfg.Delay > 0 {
-			select {
-			case <-time.After(time.Duration(c.cfg.Delay) * time.Second):
-			case <-ctx.Done():
-				if err := model.UpdateCrawlURLStatus(cur.ID, model.CrawlURLPending, ""); err != nil {
-					log.Warn().Err(err).Msg("failed to revert URL to pending on cancel")
+		host := parsedURL.Hostname()
+		var finalURL string
+		var body []byte
+		var links []Link
+		var meta FetchMeta
+		var fetchErr error
+
+		for attempt := 0; attempt < maxAttempts; attempt++ {
+			if attempt > 0 {
+				wait := c.backoff.Duration(attempt)
+				select {
+				case <-ctx.Done():
+					if err := model.UpdateCrawlURLStatus(cur.ID, model.CrawlURLPending, ""); err != nil {
+						log.Warn().Err(err).Msg("failed to revert URL to pending on cancel")
+					}
+					return model.UpdateCrawlJobStatus(c.jobID, model.CrawlJobInterrupted)
+				case <-c.clock.After(wait):
+				}
+			}
+
+			if err := c.scheduler.Wait(ctx, host); err != nil {
+				if err2 := model.UpdateCrawlURLStatus(cur.ID, model.CrawlURLPending, ""); err2 != nil {
+					log.Warn().Err(err2).Msg("failed to revert URL to pending on scheduler error")
 				}
 				return model.UpdateCrawlJobStatus(c.jobID, model.CrawlJobInterrupted)
 			}
+
+			start := c.clock.Now()
+			finalURL, body, links, meta, fetchErr = c.fetcher.fetchPage(ctx, cur.URL, RequestHints{})
+			elapsed := c.clock.Now().Sub(start)
+
+			c.scheduler.Release(host)
+
+			if fetchErr != nil {
+				retryable, retryAfter, statusCode := ClassifyError(fetchErr)
+				log.Warn().
+					Err(fetchErr).
+					Str("url", cur.URL).
+					Str("host", host).
+					Int("status", statusCode).
+					Int("attempt", attempt+1).
+					Int64("duration_ms", elapsed.Milliseconds()).
+					Str("breaker_state", breakerStateName(c.breaker.State(host))).
+					Msg("crawler: fetch error")
+
+				if retryAfter > 0 {
+					c.scheduler.Cooldown(host, retryAfter)
+				}
+				if retryable && attempt < maxAttempts-1 {
+					c.breaker.RecordFailure(host)
+					continue
+				}
+				c.breaker.RecordFailure(host)
+				break
+			}
+
+			log.Info().
+				Str("url", finalURL).
+				Str("host", host).
+				Int("status", meta.StatusCode).
+				Int64("bytes", int64(len(body))).
+				Int64("duration_ms", elapsed.Milliseconds()).
+				Int("attempt", attempt+1).
+				Str("breaker_state", breakerStateName(c.breaker.State(host))).
+				Msg("crawler: fetched page")
+
+			c.breaker.RecordSuccess(host)
+			break
 		}
 
-		// TODO: wire up conditional GET - pass ETag/LastModified from doc store as hints.
-		finalURL, body, links, meta, fetchErr := c.fetcher.fetchPage(ctx, cur.URL, RequestHints{})
 		if fetchErr != nil {
-			log.Warn().Err(fetchErr).Str("url", cur.URL).Msg("crawler: failed to fetch page")
-			if err := model.UpdateCrawlURLStatus(cur.ID, model.CrawlURLFailed, fetchErr.Error()); err != nil {
-				log.Warn().Err(err).Msg("failed to mark URL failed")
+			if err2 := model.UpdateCrawlURLStatus(cur.ID, model.CrawlURLFailed, fetchErr.Error()); err2 != nil {
+				log.Warn().Err(err2).Msg("failed to mark URL failed")
 			}
 			continue
 		}

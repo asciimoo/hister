@@ -11,7 +11,6 @@ import (
 	"net/url"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"golang.org/x/net/html"
@@ -58,63 +57,6 @@ type fetcher interface {
 	close() error
 }
 
-// HostStats tracks per-host counters.
-type HostStats struct {
-	Pages  atomic.Int64
-	Bytes  atomic.Int64
-	Errors atomic.Int64
-}
-
-// CrawlerStatsSnapshot is a point-in-time copy of CrawlerStats.
-type CrawlerStatsSnapshot struct {
-	Pages        int64
-	Bytes        int64
-	Count2xx     int64
-	Count3xx     int64
-	Count4xx     int64
-	Count5xx     int64
-	Retries      int64
-	BreakerTrips int64
-	RobotsDenials int64
-	BudgetStops  int64
-}
-
-// CrawlerStats holds atomic counters for a single crawl.
-type CrawlerStats struct {
-	Pages         atomic.Int64
-	Bytes         atomic.Int64
-	Count2xx      atomic.Int64
-	Count3xx      atomic.Int64
-	Count4xx      atomic.Int64
-	Count5xx      atomic.Int64
-	Retries       atomic.Int64
-	BreakerTrips  atomic.Int64
-	RobotsDenials atomic.Int64
-	BudgetStops   atomic.Int64
-	PerHost       sync.Map // host -> *HostStats
-}
-
-// Snapshot returns a point-in-time copy of the stats.
-func (s *CrawlerStats) Snapshot() CrawlerStatsSnapshot {
-	return CrawlerStatsSnapshot{
-		Pages:         s.Pages.Load(),
-		Bytes:         s.Bytes.Load(),
-		Count2xx:      s.Count2xx.Load(),
-		Count3xx:      s.Count3xx.Load(),
-		Count4xx:      s.Count4xx.Load(),
-		Count5xx:      s.Count5xx.Load(),
-		Retries:       s.Retries.Load(),
-		BreakerTrips:  s.BreakerTrips.Load(),
-		RobotsDenials: s.RobotsDenials.Load(),
-		BudgetStops:   s.BudgetStops.Load(),
-	}
-}
-
-func (s *CrawlerStats) hostStats(host string) *HostStats {
-	v, _ := s.PerHost.LoadOrStore(host, &HostStats{})
-	return v.(*HostStats)
-}
-
 // baseCrawler wraps a fetcher with BFS traversal logic.
 type baseCrawler struct {
 	fetcher        fetcher
@@ -125,7 +67,6 @@ type baseCrawler struct {
 	budget         *Budget
 	breaker        *CircuitBreaker
 	backoff        *Backoff
-	stats          *CrawlerStats
 	clock          Clock
 }
 
@@ -177,7 +118,6 @@ func newBaseCrawler(f fetcher, cfg *config.CrawlerConfig, robots *RobotsCache, o
 		budget:         budget,
 		breaker:        breaker,
 		backoff:        NewBackoff(initial, maxB),
-		stats:          &CrawlerStats{},
 		clock:          clock,
 	}
 }
@@ -346,7 +286,6 @@ func (c *baseCrawler) bfsCrawl(ctx context.Context, startURL string, v *Validato
 
 				for attempt := 0; attempt < maxAttempts; attempt++ {
 					if attempt > 0 {
-						c.stats.Retries.Add(1)
 						wait := c.backoff.Duration(attempt)
 						select {
 						case <-fetchCtx.Done():
@@ -439,14 +378,6 @@ func (c *baseCrawler) bfsCrawl(ctx context.Context, startURL string, v *Validato
 		inFlight--
 
 		if res.err != nil {
-			hs := c.stats.hostStats("")
-			if res.item.rawURL != "" {
-				parsed, pErr := url.Parse(res.item.rawURL)
-				if pErr == nil {
-					hs = c.stats.hostStats(parsed.Hostname())
-				}
-			}
-			hs.Errors.Add(1)
 			dispatch()
 			continue
 		}
@@ -459,26 +390,10 @@ func (c *baseCrawler) bfsCrawl(ctx context.Context, startURL string, v *Validato
 		}
 
 		host := finalParsed.Hostname()
-		hs := c.stats.hostStats(host)
 
-		// Record stats.
+		// Record budget.
 		bodyLen := int64(len(res.body))
-		c.stats.Pages.Add(1)
-		c.stats.Bytes.Add(bodyLen)
-		hs.Pages.Add(1)
-		hs.Bytes.Add(bodyLen)
 		c.budget.AddBytes(host, bodyLen)
-
-		switch {
-		case res.meta.StatusCode >= 200 && res.meta.StatusCode < 300:
-			c.stats.Count2xx.Add(1)
-		case res.meta.StatusCode >= 300 && res.meta.StatusCode < 400:
-			c.stats.Count3xx.Add(1)
-		case res.meta.StatusCode >= 400 && res.meta.StatusCode < 500:
-			c.stats.Count4xx.Add(1)
-		case res.meta.StatusCode >= 500:
-			c.stats.Count5xx.Add(1)
-		}
 
 		log.Info().
 			Str("url", res.finalURL).
@@ -535,7 +450,6 @@ func (c *baseCrawler) bfsCrawl(ctx context.Context, startURL string, v *Validato
 				}
 				switch v.Validate(absParsed, res.item.depth+1) {
 				case URLStop:
-					c.stats.BudgetStops.Add(1)
 					return
 				case URLSkip:
 					continue
@@ -630,19 +544,6 @@ func extractLinks(r io.Reader) []Link {
 			}
 		}
 	}
-}
-
-// activeRegistry holds references to active crawlers for debug inspection.
-var activeRegistry sync.Map // id -> *baseCrawler
-
-// RegisterActive registers c under id for debug inspection.
-func RegisterActive(id string, c *baseCrawler) {
-	activeRegistry.Store(id, c)
-}
-
-// Unregister removes id from the active registry.
-func Unregister(id string) {
-	activeRegistry.Delete(id)
 }
 
 // errResponseTooLarge is returned when a response body exceeds the configured limit.
