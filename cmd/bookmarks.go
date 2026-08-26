@@ -84,12 +84,12 @@ func importBookmarks(cmd *cobra.Command, _ []string) {
 
 	var groups []urlImportGroup
 	for _, store := range stores {
-		urls, err := store.source.ListURLs(store.path)
+		urls, err := store.Source.ListURLs(store.Path)
 		if err != nil {
-			log.Warn().Err(err).Str("file", store.path).Msg("Skipping bookmark store")
+			log.Warn().Err(err).Str("file", store.Path).Msg("Skipping bookmark store")
 			continue
 		}
-		group := urlImportGroup{name: store.browser, path: store.path}
+		group := urlImportGroup{name: store.Browser, path: store.Path}
 		for _, u := range urls {
 			if isSkip(u) {
 				group.skipped++
@@ -98,7 +98,7 @@ func importBookmarks(cmd *cobra.Command, _ []string) {
 			group.urls = append(group.urls, u)
 		}
 		if len(group.urls) == 0 {
-			log.Warn().Str("file", store.path).Msg("Skipping bookmark store with no URLs to import")
+			log.Warn().Str("file", store.Path).Msg("Skipping bookmark store with no URLs to import")
 			continue
 		}
 		groups = append(groups, group)

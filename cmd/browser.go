@@ -107,7 +107,6 @@ const (
 	bookmarkImportJobPrefix    = "bookmark-import-"
 	browserImportKindHistory   = "history"
 	browserImportKindBookmarks = "bookmarks"
-	firefoxBookmarkTable       = "moz_bookmarks"
 )
 
 var errNoBrowserURLs = errors.New("no URLs found to import")
@@ -520,16 +519,6 @@ func browserImportOrderBy(kind string) string {
 }
 
 func browserImportURLQuery(table string, minVisit int, startDate *time.Time) (string, error) {
-	if strings.EqualFold(table, firefoxBookmarkTable) {
-		if startDate != nil {
-			return "", fmt.Errorf("start date filtering is not supported for browser bookmarks")
-		}
-		q := "SELECT DISTINCT p.url FROM moz_bookmarks b JOIN moz_places p ON p.id = b.fk WHERE b.type = 1 AND (p.url LIKE 'http://%' OR p.url LIKE 'https://%')"
-		if minVisit > 1 {
-			q += fmt.Sprintf(" AND p.visit_count >= %d", minVisit)
-		}
-		return q, nil
-	}
 	q := fmt.Sprintf("SELECT DISTINCT url FROM %s WHERE (url LIKE 'http://%%' OR url LIKE 'https://%%')", table)
 	if minVisit > 1 {
 		q += fmt.Sprintf(" AND visit_count >= %d", minVisit)

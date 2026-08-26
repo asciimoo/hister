@@ -4,35 +4,31 @@ package cmd
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
+
+	"github.com/asciimoo/hister/pkg/browser/bookmarks"
+	"github.com/asciimoo/hister/pkg/browser/bookmarks/chromium"
+	"github.com/asciimoo/hister/pkg/browser/bookmarks/firefox"
+	"github.com/asciimoo/hister/pkg/browser/bookmarks/ladybird"
 )
 
-// bookmarkSource is one on-disk bookmark format. Add a new browser by
-// implementing this and appending it to bookmarkSources.
-type bookmarkSource interface {
-	Names() []string
-	Accepts(path string) bool
-	Detect(browser string) []bookmarkStore
-	ListURLs(path string) ([]string, error)
-}
-
-type bookmarkStore struct {
-	browser string
-	path    string
-	source  bookmarkSource
-}
-
-func bookmarkSources() []bookmarkSource {
-	return []bookmarkSource{
-		firefoxBookmarkSource{},
-		chromiumBookmarkSource{},
-		ladybirdBookmarkSource{},
+func bookmarkSources() []bookmarks.Source {
+	return []bookmarks.Source{
+		firefox.Source{},
+		chromium.Source{},
+		ladybird.Source{},
 	}
 }
 
-func resolveBookmarkStores(browser, dbPath string) ([]bookmarkStore, error) {
+func findBookmarkProfiles(table, browserPrefix string) []bookmarks.Profile {
+	var out []bookmarks.Profile
+	for _, db := range historyDBs(table, browserPrefix) {
+		out = append(out, bookmarks.Profile{Name: db.name, Paths: db.paths})
+	}
+	return out
+}
+
+func resolveBookmarkStores(browser, dbPath string) ([]bookmarks.Store, error) {
 	browser = strings.ToLower(strings.TrimSpace(browser))
 	if dbPath != "" {
 		src := bookmarkSourceAccepting(dbPath)
@@ -46,15 +42,15 @@ func resolveBookmarkStores(browser, dbPath string) ([]bookmarkStore, error) {
 		if name == "" {
 			name = src.Names()[0]
 		}
-		return []bookmarkStore{{browser: name, path: dbPath, source: src}}, nil
+		return []bookmarks.Store{{Browser: name, Path: dbPath, Source: src}}, nil
 	}
 
-	var stores []bookmarkStore
+	var stores []bookmarks.Store
 	for _, src := range bookmarkSources() {
 		if browser != "" && !bookmarkSourceHasName(src, browser) {
 			continue
 		}
-		stores = append(stores, src.Detect(browser)...)
+		stores = append(stores, src.Detect(browser, findBookmarkProfiles)...)
 	}
 	if browser != "" && bookmarkSourceByName(browser) == nil {
 		return nil, fmt.Errorf("unknown --browser %s", browser)
@@ -68,7 +64,7 @@ func resolveBookmarkStores(browser, dbPath string) ([]bookmarkStore, error) {
 	return stores, nil
 }
 
-func bookmarkSourceAccepting(path string) bookmarkSource {
+func bookmarkSourceAccepting(path string) bookmarks.Source {
 	for _, src := range bookmarkSources() {
 		if src.Accepts(path) {
 			return src
@@ -77,7 +73,7 @@ func bookmarkSourceAccepting(path string) bookmarkSource {
 	return nil
 }
 
-func bookmarkSourceByName(name string) bookmarkSource {
+func bookmarkSourceByName(name string) bookmarks.Source {
 	for _, src := range bookmarkSources() {
 		if bookmarkSourceHasName(src, name) {
 			return src
@@ -86,7 +82,7 @@ func bookmarkSourceByName(name string) bookmarkSource {
 	return nil
 }
 
-func bookmarkSourceHasName(src bookmarkSource, name string) bool {
+func bookmarkSourceHasName(src bookmarks.Source, name string) bool {
 	name = strings.ToLower(name)
 	for _, n := range src.Names() {
 		if n == name || strings.HasPrefix(name, n) || strings.HasPrefix(n, name) {
@@ -94,35 +90,6 @@ func bookmarkSourceHasName(src bookmarkSource, name string) bool {
 		}
 	}
 	return false
-}
-
-func isHTTPBookmarkURL(u string) bool {
-	return strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "https://")
-}
-
-func uniqueHTTPBookmarkURLs(urls []string) []string {
-	seen := make(map[string]struct{}, len(urls))
-	var out []string
-	for _, u := range urls {
-		if !isHTTPBookmarkURL(u) {
-			continue
-		}
-		if _, ok := seen[u]; ok {
-			continue
-		}
-		seen[u] = struct{}{}
-		out = append(out, u)
-	}
-	return out
-}
-
-func fileExists(path string) bool {
-	st, err := os.Stat(path)
-	return err == nil && !st.IsDir()
-}
-
-func siblingFile(path, name string) string {
-	return filepath.Join(filepath.Dir(path), name)
 }
 
 func historyDBs(table, browserPrefix string) []browserDB {
