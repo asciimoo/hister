@@ -380,7 +380,6 @@ func TestImportCommandHierarchy(t *testing.T) {
 	tests := map[string]*cobra.Command{
 		"file":       importFileCmd,
 		"browser":    importBrowserCmd,
-		"bookmarks":  importBookmarksCmd,
 		"linkding":   importLinkdingCmd,
 		"linkwarden": importLinkwardenCmd,
 		"karakeep":   importKarakeepCmd,
@@ -395,6 +394,18 @@ func TestImportCommandHierarchy(t *testing.T) {
 		}
 		if got != want {
 			t.Fatalf("import %s command = %q, want %q", name, got.Name(), want.Name())
+		}
+	}
+	got, _, err := importCmd.Find([]string{"browser", "bookmarks"})
+	if err != nil {
+		t.Fatalf("import browser bookmarks lookup failed: %v", err)
+	}
+	if got != importBookmarksCmd {
+		t.Fatalf("import browser bookmarks = %q, want bookmarks", got.Name())
+	}
+	for _, cmd := range importCmd.Commands() {
+		if cmd == importBookmarksCmd {
+			t.Fatal("import bookmarks should be nested under import browser")
 		}
 	}
 	for _, cmd := range rootCmd.Commands() {

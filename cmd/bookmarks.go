@@ -15,10 +15,10 @@ var importBookmarksCmd = &cobra.Command{
 	Long: `Import bookmarks from a Firefox-family places.sqlite database.
 
 Usage:
-  hister import bookmarks
-  hister import bookmarks --browser firefox
-  hister import bookmarks --db ~/.mozilla/firefox/example.default/places.sqlite
-  hister import bookmarks --browser firefox --db /path/to/places.sqlite
+  hister import browser bookmarks
+  hister import browser bookmarks --browser firefox
+  hister import browser bookmarks --db ~/.mozilla/firefox/example.default/places.sqlite
+  hister import browser bookmarks --browser firefox --db /path/to/places.sqlite
 
 --browser limits autodetection to firefox, zen, or waterfox.
 --db imports a specific places.sqlite file.

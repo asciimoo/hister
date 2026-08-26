@@ -143,9 +143,9 @@ Browser history documents receive the `browser` label by default. Use `--label L
 Firefox stores bookmarks in the same `places.sqlite` file as history. Bookmark import reads only bookmark rows, then fetches the pages through the same crawl job used by history import.
 
 ```bash
-hister import bookmarks
-hister import bookmarks --browser firefox
-hister import bookmarks --db ~/.mozilla/firefox/example.default/places.sqlite
+hister import browser bookmarks
+hister import browser bookmarks --browser firefox
+hister import browser bookmarks --db ~/.mozilla/firefox/example.default/places.sqlite
 ```
 
 Automatic detection covers Firefox, Firefox Developer Edition, Zen, and Waterfox. Chromium bookmark files are not imported by this command.

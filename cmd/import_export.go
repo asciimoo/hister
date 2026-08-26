@@ -143,8 +143,8 @@ the configured Hister HTTP server.
 The file importer reads and prepares local files before submitting documents
 to the server. The browser importer reads local browser history, keeps its
 resumable crawl state locally, fetches page contents, and submits the prepared
-documents to the server. Bookmark import reads Firefox bookmarks from the same
-places.sqlite file via --browser and --db, and uses the same crawl path.`,
+documents to the server. Bookmark import is import browser bookmarks and
+reads Firefox bookmarks from places.sqlite via --browser and --db.`,
 }
 
 var importFileCmd = &cobra.Command{

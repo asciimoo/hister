@@ -303,7 +303,7 @@ func init() {
 	companionCmd.AddCommand(companionQutebrowserCmd)
 	importCmd.AddCommand(importFileCmd)
 	importCmd.AddCommand(importBrowserCmd)
-	importCmd.AddCommand(importBookmarksCmd)
+	importBrowserCmd.AddCommand(importBookmarksCmd)
 	importCmd.AddCommand(importLinkdingCmd)
 	importCmd.AddCommand(importLinkwardenCmd)
 	importCmd.AddCommand(importKarakeepCmd)
