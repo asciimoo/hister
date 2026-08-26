@@ -167,12 +167,21 @@ func (s *Scheduler) getHostState(host string) *hostState {
 		hs.inflight <- struct{}{}
 	}
 
-	// Evict LRU entry if at cap.
+	// Evict the LRU entry if at cap, skipping any host with in-flight requests
+	// to avoid corrupting concurrency accounting. Try up to 4 candidates.
 	if s.lru.Len() >= hostLRUCap {
-		back := s.lru.Back()
-		if back != nil {
-			s.lru.Remove(back)
-			delete(s.hosts, back.Value.(string))
+		const maxEvictAttempts = 4
+		candidate := s.lru.Back()
+		for i := 0; i < maxEvictAttempts && candidate != nil; i++ {
+			victimHost := candidate.Value.(string)
+			victimState := s.hosts[victimHost]
+			if victimState == nil || len(victimState.inflight) == cap(victimState.inflight) {
+				// No in-flight requests - safe to evict.
+				s.lru.Remove(candidate)
+				delete(s.hosts, victimHost)
+				break
+			}
+			candidate = candidate.Prev()
 		}
 	}
 
