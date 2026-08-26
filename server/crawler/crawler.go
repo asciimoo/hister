@@ -260,6 +260,7 @@ func (c *baseCrawler) bfsCrawl(ctx context.Context, startURL string, v *Validato
 	}
 
 	work := make(chan queueItem, concurrency)
+	defer close(work)
 	results := make(chan result, concurrency)
 	var wg sync.WaitGroup
 
@@ -460,8 +461,6 @@ func (c *baseCrawler) bfsCrawl(ctx context.Context, startURL string, v *Validato
 
 		dispatch()
 	}
-
-	close(work)
 }
 
 func breakerStateName(s BreakerState) string {
