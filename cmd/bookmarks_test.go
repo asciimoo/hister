@@ -4,6 +4,7 @@ package cmd
 
 import (
 	"database/sql"
+	"os"
 	"path/filepath"
 	"slices"
 	"testing"
@@ -157,21 +158,102 @@ func queryStrings(t *testing.T, db *sql.DB, q string) []string {
 	return out
 }
 
-func TestResolveBookmarkImportsUsesNamedDB(t *testing.T) {
-	got, err := resolveBookmarkImports("", "/tmp/profile/places.sqlite")
+func TestResolveBookmarkStoresNamedDB(t *testing.T) {
+	got, err := resolveBookmarkStores("", "/tmp/profile/places.sqlite")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 1 || got[0].databaseFile != "/tmp/profile/places.sqlite" || got[0].table != firefoxBookmarkTable {
-		t.Fatalf("resolveBookmarkImports() = %#v", got)
+	if len(got) != 1 || got[0].path != "/tmp/profile/places.sqlite" {
+		t.Fatalf("firefox store = %#v", got)
+	}
+	if _, ok := got[0].source.(firefoxBookmarkSource); !ok {
+		t.Fatalf("source = %T, want firefoxBookmarkSource", got[0].source)
+	}
+
+	got, err = resolveBookmarkStores("chrome", "/tmp/Default/Bookmarks")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := got[0].source.(chromiumBookmarkSource); !ok {
+		t.Fatalf("source = %T, want chromiumBookmarkSource", got[0].source)
+	}
+
+	got, err = resolveBookmarkStores("", "/tmp/Ladybird/Bookmarks.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := got[0].source.(ladybirdBookmarkSource); !ok {
+		t.Fatalf("source = %T, want ladybirdBookmarkSource", got[0].source)
 	}
 }
 
-func TestResolveBookmarkImportsRejectsUnknownBrowser(t *testing.T) {
-	if _, err := resolveBookmarkImports("chrome", ""); err == nil {
-		t.Fatal("expected chrome to be rejected")
+func TestResolveBookmarkStoresRejectsUnknown(t *testing.T) {
+	if _, err := resolveBookmarkStores("safari", ""); err == nil {
+		t.Fatal("expected safari to be rejected")
 	}
-	if _, err := resolveBookmarkImports("", "/tmp/History"); err == nil {
-		t.Fatal("expected a non-places path to be rejected")
+	if _, err := resolveBookmarkStores("", "/tmp/History"); err == nil {
+		t.Fatal("expected a history path to be rejected")
+	}
+}
+
+func TestChromiumBookmarkSourceListURLs(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "Bookmarks")
+	raw := `{
+	  "roots": {
+	    "bookmark_bar": {
+	      "type": "folder",
+	      "children": [
+	        {"type": "url", "name": "Go Blog", "url": "https://go.dev/blog/"},
+	        {"type": "url", "name": "bookmarklet", "url": "javascript:void(0)"},
+	        {"type": "folder", "name": "more", "children": [
+	          {"type": "url", "name": "hister", "url": "https://github.com/asciimoo/hister"}
+	        ]}
+	      ]
+	    },
+	    "other": {
+	      "type": "folder",
+	      "children": [
+	        {"type": "url", "name": "dup", "url": "https://go.dev/blog/"}
+	      ]
+	    }
+	  }
+	}`
+	if err := os.WriteFile(path, []byte(raw), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := chromiumBookmarkSource{}.ListURLs(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"https://github.com/asciimoo/hister", "https://go.dev/blog/"}
+	slices.Sort(got)
+	if !slices.Equal(got, want) {
+		t.Fatalf("chromium ListURLs = %#v, want %#v", got, want)
+	}
+}
+
+func TestLadybirdBookmarkSourceListURLs(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "Bookmarks.json")
+	raw := `{
+	  "version": 2,
+	  "items": [
+	    {"type": "bookmark", "url": "https://ladybird.org/", "title": "Ladybird"},
+	    {"type": "folder", "title": "dev", "children": [
+	      {"type": "bookmark", "url": "https://github.com/LadybirdBrowser/ladybird", "title": "GitHub"}
+	    ]},
+	    {"type": "bookmark", "url": "about:blank", "title": "blank"}
+	  ]
+	}`
+	if err := os.WriteFile(path, []byte(raw), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := ladybirdBookmarkSource{}.ListURLs(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"https://github.com/LadybirdBrowser/ladybird", "https://ladybird.org/"}
+	slices.Sort(got)
+	if !slices.Equal(got, want) {
+		t.Fatalf("ladybird ListURLs = %#v, want %#v", got, want)
 	}
 }

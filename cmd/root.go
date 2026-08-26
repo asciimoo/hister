@@ -327,8 +327,8 @@ func init() {
 	importBrowserHistoryCmd.Flags().IntP("min-visit", "m", 1, "only import URLs visited at least this many times")
 	importBrowserHistoryCmd.Flags().String("start-date", "", "only import URLs visited on or after this date (YYYY-MM-DD)")
 	addCrawlerBackendFlags(importBrowserHistoryCmd)
-	importBookmarksCmd.Flags().String("browser", "", "limit autodetection to firefox, zen, or waterfox")
-	importBookmarksCmd.Flags().String("db", "", "Firefox places.sqlite path")
+	importBookmarksCmd.Flags().String("browser", "", "limit autodetection to a supported browser")
+	importBookmarksCmd.Flags().String("db", "", "bookmark store path (places.sqlite, Bookmarks, or Bookmarks.json)")
 	addCrawlerBackendFlags(importBookmarksCmd)
 
 	crawlQueueCmd.Flags().BoolP("count", "c", false, "only print the number of queued URLs")

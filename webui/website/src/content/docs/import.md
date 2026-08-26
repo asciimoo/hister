@@ -148,15 +148,17 @@ Browser history documents receive the `browser` label by default. Use `--label L
 
 ## Importing Browser Bookmarks
 
-Firefox stores bookmarks in the same `places.sqlite` file as history. Bookmark import reads only bookmark rows, then fetches the pages through the same crawl job used by history import.
+Bookmark import reads saved bookmarks, then fetches the pages through the same crawl job used by history import.
 
 ```bash
 hister import browser bookmarks
 hister import browser bookmarks --browser firefox
+hister import browser bookmarks --browser chrome
 hister import browser bookmarks --db ~/.mozilla/firefox/example.default/places.sqlite
+hister import browser bookmarks --db ~/.config/google-chrome/Default/Bookmarks
 ```
 
-Automatic detection covers Firefox, Firefox Developer Edition, Zen, and Waterfox. Chromium bookmark files are not imported by this command.
+Automatic detection covers Firefox, Firefox Developer Edition, Zen, Waterfox, Chrome, Chromium, Brave, Edge, Vivaldi, Opera, and Ladybird. Each browser is a separate bookmark source: Firefox-family `places.sqlite`, Chromium-family `Bookmarks` JSON, and Ladybird `Bookmarks.json`.
 
 Skip rules apply the same way they do for history import. A browser's shipped default bookmarks are not filtered out unless they match a skip rule.
 
