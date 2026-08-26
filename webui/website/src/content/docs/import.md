@@ -137,6 +137,25 @@ document timestamp still describes when Hister fetched the page.
 
 Browser history documents receive the `browser` label by default. Use `--label LABEL` to replace it. Resumed browser import jobs reuse their stored label unless this flag is supplied again.
 
+
+## Importing Browser Bookmarks
+
+Firefox stores bookmarks in the same `places.sqlite` file as history. Bookmark import reads only bookmark rows, then fetches the pages through the same crawl job used by history import.
+
+```bash
+hister import bookmarks
+hister import bookmarks firefox
+hister import bookmarks ~/.mozilla/firefox/example.default/places.sqlite
+```
+
+Automatic detection covers Firefox, Firefox Developer Edition, Zen, and Waterfox. Chromium bookmark files are not imported by this command.
+
+Skip rules apply the same way they do for history import. A browser's shipped default bookmarks are not filtered out unless they match a skip rule.
+
+Bookmark documents receive the `bookmarks` label by default. Use `--label LABEL` to replace it. `--start-date` is not supported, because it would drop bookmarks that have never been visited.
+
+Bookmark imports use persistent crawl jobs named `bookmark-import-YYYY-MM-DD`.
+
 ### Resume and Inspect a Browser Import
 
 Browser imports use persistent crawl jobs named `browser-import-YYYY-MM-DD`. It is safe to interrupt the process and continue it later. Completed URLs remain completed, pending URLs resume, and failed URLs remain recorded for inspection.

@@ -303,6 +303,7 @@ func init() {
 	companionCmd.AddCommand(companionQutebrowserCmd)
 	importCmd.AddCommand(importFileCmd)
 	importCmd.AddCommand(importBrowserCmd)
+	importCmd.AddCommand(importBookmarksCmd)
 	importCmd.AddCommand(importLinkdingCmd)
 	importCmd.AddCommand(importLinkwardenCmd)
 	importCmd.AddCommand(importKarakeepCmd)
@@ -320,6 +321,7 @@ func init() {
 	importBrowserCmd.Flags().IntP("min-visit", "m", 1, "only import URLs visited at least this many times")
 	importBrowserCmd.Flags().String("start-date", "", "only import URLs visited on or after this date (YYYY-MM-DD)")
 	addCrawlerBackendFlags(importBrowserCmd)
+	addCrawlerBackendFlags(importBookmarksCmd)
 
 	crawlQueueCmd.Flags().BoolP("count", "c", false, "only print the number of queued URLs")
 	crawlURLsCmd.Flags().String("status", "", "filter URLs by status (pending, failed, done, or skipped)")
