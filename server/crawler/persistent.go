@@ -250,7 +250,15 @@ func (c *persistentCrawler) persistentBFS(ctx context.Context, startURL string, 
 
 			if fetchErr != nil {
 				retryable, retryAfter, statusCode := ClassifyError(fetchErr)
-				log.Warn().
+				// 304 Not Modified is not a fault; the outer handler treats it as success.
+				logEvent := log.Warn()
+				msg := "crawler: fetch error"
+				var httpErr *HTTPStatusError
+				if errors.As(fetchErr, &httpErr) && httpErr.Status == 304 {
+					logEvent = log.Info()
+					msg = "crawler: not modified"
+				}
+				logEvent.
 					Err(fetchErr).
 					Str("url", cur.URL).
 					Str("host", host).
@@ -258,10 +266,15 @@ func (c *persistentCrawler) persistentBFS(ctx context.Context, startURL string, 
 					Int("attempt", attempt+1).
 					Int64("duration_ms", elapsed.Milliseconds()).
 					Str("breaker_state", breakerStateName(c.breaker.State(host))).
-					Msg("crawler: fetch error")
+					Msg(msg)
 
 				if retryAfter > 0 {
 					c.scheduler.Cooldown(host, retryAfter)
+				}
+				if httpErr != nil && httpErr.Status == 304 {
+					// Success path — no retry, no breaker penalty.
+					c.breaker.RecordSuccess(host)
+					break
 				}
 				if retryable && attempt < maxAttempts-1 {
 					c.breaker.RecordFailure(host)
