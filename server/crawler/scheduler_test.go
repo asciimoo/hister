@@ -31,24 +31,24 @@ func TestSchedulerPerHostRateSpacing(t *testing.T) {
 	breaker := NewCircuitBreaker(5, 5*time.Minute, clock)
 	sched := newTestScheduler(cfg, breaker, nil, clock)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// First request should pass immediately.
+	// First request should pass immediately (bucket is pre-filled).
 	done := make(chan error, 1)
 	go func() {
 		done <- sched.Wait(ctx, "example.com")
 	}()
 
-	// Give the goroutine time to start.
-	time.Sleep(10 * time.Millisecond)
+	// Advance clock so any timer-based waits inside the bucket fire.
+	clock.Advance(10 * time.Millisecond)
 
 	select {
 	case err := <-done:
 		if err != nil {
 			t.Fatalf("first Wait error: %v", err)
 		}
-	case <-time.After(100 * time.Millisecond):
+	case <-time.After(500 * time.Millisecond):
 		t.Fatal("first Wait timed out")
 	}
 

@@ -23,9 +23,10 @@ type lazyBucket struct {
 	tokens     float64
 	burst      float64
 	lastRefill time.Time
+	clock      Clock
 }
 
-func newLazyBucket(rps float64, burst int) *lazyBucket {
+func newLazyBucket(rps float64, burst int, clock Clock) *lazyBucket {
 	if rps <= 0 {
 		rps = 10
 	}
@@ -37,14 +38,15 @@ func newLazyBucket(rps float64, burst int) *lazyBucket {
 		rate:       rps,
 		tokens:     b, // pre-filled
 		burst:      b,
-		lastRefill: time.Now(),
+		lastRefill: clock.Now(),
+		clock:      clock,
 	}
 }
 
 func (lb *lazyBucket) Wait(ctx context.Context) error {
 	for {
 		lb.mu.Lock()
-		now := time.Now()
+		now := lb.clock.Now()
 		elapsed := now.Sub(lb.lastRefill).Seconds()
 		lb.tokens = math.Min(lb.burst, lb.tokens+elapsed*lb.rate)
 		lb.lastRefill = now
@@ -62,7 +64,7 @@ func (lb *lazyBucket) Wait(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(wait):
+		case <-lb.clock.After(wait):
 		}
 	}
 }
@@ -100,7 +102,7 @@ func NewScheduler(cfg *config.CrawlerConfig, breaker *CircuitBreaker, robots *Ro
 		cfg:           cfg.Rate,
 		respectDelay:  cfg.Robots.RespectCrawlDelay,
 		hostOverrides: cfg.Hosts,
-		global:        newLazyBucket(cfg.Rate.GlobalRPS, cfg.Rate.GlobalConcurrency),
+		global:        newLazyBucket(cfg.Rate.GlobalRPS, cfg.Rate.GlobalConcurrency, clock),
 		breaker:       breaker,
 		robots:        robots,
 		clock:         clock,
@@ -149,7 +151,7 @@ func (s *Scheduler) getHostState(host string) *hostState {
 		concurrency = 1
 	}
 	hs := &hostState{
-		bucket:   newLazyBucket(rps, 1),
+		bucket:   newLazyBucket(rps, 1, s.clock),
 		inflight: make(chan struct{}, concurrency),
 	}
 	for i := 0; i < concurrency; i++ {
