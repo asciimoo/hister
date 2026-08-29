@@ -301,6 +301,8 @@ func init() {
 	crawlCmd.AddCommand(crawlURLsCmd)
 	crawlCmd.AddCommand(crawlDeleteCmd)
 	companionCmd.AddCommand(companionQutebrowserCmd)
+	companionCmd.AddCommand(companionSafariCmd)
+	addSafariCompanionFlags(companionSafariCmd)
 	importCmd.AddCommand(importFileCmd)
 	importCmd.AddCommand(importBrowserCmd)
 	importCmd.AddCommand(importLinkdingCmd)
