@@ -396,6 +396,24 @@ func TestImportCommandHierarchy(t *testing.T) {
 			t.Fatalf("import %s command = %q, want %q", name, got.Name(), want.Name())
 		}
 	}
+	nested := map[string]*cobra.Command{
+		"bookmarks": importBookmarksCmd,
+		"history":   importBrowserHistoryCmd,
+	}
+	for name, want := range nested {
+		got, _, err := importCmd.Find([]string{"browser", name})
+		if err != nil {
+			t.Fatalf("import browser %s lookup failed: %v", name, err)
+		}
+		if got != want {
+			t.Fatalf("import browser %s = %q, want %q", name, got.Name(), want.Name())
+		}
+	}
+	for _, cmd := range importCmd.Commands() {
+		if cmd == importBookmarksCmd || cmd == importBrowserHistoryCmd {
+			t.Fatal("browser import subcommands should be nested under import browser")
+		}
+	}
 	for _, cmd := range rootCmd.Commands() {
 		if cmd.Name() == "import-browser" {
 			t.Fatal("legacy import-browser command remains registered at the root")
@@ -410,7 +428,7 @@ func TestImportSubcommandFlagOwnership(t *testing.T) {
 	if importCmd.PersistentFlags().Lookup("label") == nil {
 		t.Fatal("import is missing --label")
 	}
-	for _, importCommand := range []*cobra.Command{importFileCmd, importBrowserCmd, importLinkdingCmd, importLinkwardenCmd, importKarakeepCmd, importReadeckCmd, importShaarliCmd, importWallabagCmd} {
+	for _, importCommand := range []*cobra.Command{importFileCmd, importBrowserCmd, importBrowserHistoryCmd, importBookmarksCmd, importLinkdingCmd, importLinkwardenCmd, importKarakeepCmd, importReadeckCmd, importShaarliCmd, importWallabagCmd} {
 		if importCommand.InheritedFlags().Lookup("label") == nil {
 			t.Errorf("import %s does not inherit --label", importCommand.Name())
 		}
@@ -424,6 +442,12 @@ func TestImportSubcommandFlagOwnership(t *testing.T) {
 		if name != "start-date" && importBrowserCmd.Flags().Lookup(name) != nil {
 			t.Errorf("import browser unexpectedly has --%s", name)
 		}
+		if importBookmarksCmd.Flags().Lookup(name) != nil {
+			t.Errorf("import bookmarks unexpectedly has --%s", name)
+		}
+		if name != "start-date" && importBrowserHistoryCmd.Flags().Lookup(name) != nil {
+			t.Errorf("import browser history unexpectedly has --%s", name)
+		}
 	}
 	if importBrowserCmd.Flags().Lookup("start-date") == nil {
 		t.Error("import browser is missing --start-date")
@@ -431,13 +455,37 @@ func TestImportSubcommandFlagOwnership(t *testing.T) {
 	if importBrowserCmd.Flags().Lookup("min-visit") == nil {
 		t.Error("import browser is missing --min-visit")
 	}
+	if importBookmarksCmd.Flags().Lookup("start-date") != nil {
+		t.Error("import bookmarks unexpectedly has --start-date")
+	}
+	if importBookmarksCmd.Flags().Lookup("min-visit") != nil {
+		t.Error("import bookmarks unexpectedly has --min-visit")
+	}
+	if importBookmarksCmd.Flags().Lookup("browser") == nil {
+		t.Error("import bookmarks is missing --browser")
+	}
+	if importBookmarksCmd.Flags().Lookup("db") == nil {
+		t.Error("import bookmarks is missing --db")
+	}
+	if importBrowserHistoryCmd.Flags().Lookup("start-date") == nil {
+		t.Error("import browser history is missing --start-date")
+	}
+	if importBrowserHistoryCmd.Flags().Lookup("min-visit") == nil {
+		t.Error("import browser history is missing --min-visit")
+	}
+	if importBrowserHistoryCmd.Flags().Lookup("browser") == nil {
+		t.Error("import browser history is missing --browser")
+	}
+	if importBrowserHistoryCmd.Flags().Lookup("db") == nil {
+		t.Error("import browser history is missing --db")
+	}
 	for _, name := range []string{"source", "skip-existing", "global", "user-id", "allow-sensitive"} {
 		if importFileCmd.Flags().Lookup(name) == nil {
 			t.Errorf("import file is missing --%s", name)
 		}
 	}
 	for _, name := range []string{"backend", "backend-option", "proxy", "header", "cookie"} {
-		for _, importCommand := range []*cobra.Command{importBrowserCmd, importLinkdingCmd, importLinkwardenCmd, importKarakeepCmd, importReadeckCmd, importShaarliCmd} {
+		for _, importCommand := range []*cobra.Command{importBrowserCmd, importBrowserHistoryCmd, importBookmarksCmd, importLinkdingCmd, importLinkwardenCmd, importKarakeepCmd, importReadeckCmd, importShaarliCmd} {
 			if importCommand.Flags().Lookup(name) == nil {
 				t.Errorf("import %s is missing --%s", importCommand.Name(), name)
 			}

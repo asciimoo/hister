@@ -131,7 +131,7 @@ Use '-' as OUTPUT_FILE to write to stdout.`,
 var importCmd = &cobra.Command{
 	Use:   "import",
 	Short: "Import documents from files, browsers, or services",
-	Long: `Import documents from files, browser history, or external services.
+	Long: `Import documents from files, browser history, browser bookmarks, or external services.
 
 Use one of the available subcommands to select the import source.
 
@@ -143,7 +143,8 @@ the configured Hister HTTP server.
 The file importer reads and prepares local files before submitting documents
 to the server. The browser importer reads local browser history, keeps its
 resumable crawl state locally, fetches page contents, and submits the prepared
-documents to the server.`,
+documents to the server. Bookmark import is import browser bookmarks and
+reads Firefox bookmarks from places.sqlite via --browser and --db.`,
 }
 
 var importFileCmd = &cobra.Command{

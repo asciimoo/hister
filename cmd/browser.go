@@ -27,8 +27,11 @@ import (
 
 var importBrowserCmd = &cobra.Command{
 	Use:   "browser [BROWSER_TYPE] [DB_PATH]",
-	Short: "Import Chrome, Firefox or auto-detect browsing history",
+	Short: "Import browsing history or bookmarks from a supported browser",
 	Long: `Import browsing history from a supported browser.
+
+Use ` + "`hister import browser history`" + ` or ` + "`hister import browser bookmarks`" + ` for named-flag imports.
+The bare ` + "`hister import browser`" + ` command still imports visit history.
 
 Usage:
   hister import browser                        auto-detect all installed browsers
@@ -99,7 +102,13 @@ type browserImportJob struct {
 	enqueued      int
 }
 
-const browserImportJobPrefix = "browser-import-"
+const (
+	browserImportJobPrefix       = "browser-history-import-"
+	bookmarkImportJobPrefix      = "browser-bookmark-import-"
+	legacyBrowserImportJobPrefix = "browser-import-" // pre-#648 history jobs
+	browserImportKindHistory     = "history"
+	browserImportKindBookmarks   = "bookmarks"
+)
 
 var errNoBrowserURLs = errors.New("no URLs found to import")
 
@@ -129,7 +138,7 @@ func importHistory(cmd *cobra.Command, args []string) {
 				})
 			}
 		}
-		importDB(databases, cmd, startDate)
+		importDB(databases, cmd, startDate, browserImportKindHistory)
 
 	case 1, 2:
 		if len(args) == 1 {
@@ -153,7 +162,8 @@ func importHistory(cmd *cobra.Command, args []string) {
 				},
 			},
 				cmd,
-				startDate)
+				startDate,
+				browserImportKindHistory)
 		}
 
 	default:
@@ -175,7 +185,8 @@ func importBrowser(browser string, cmd *cobra.Command, startDate *time.Time) {
 					},
 				},
 					cmd,
-					startDate)
+					startDate,
+					browserImportKindHistory)
 			}
 		}
 	}
@@ -185,15 +196,8 @@ func importBrowser(browser string, cmd *cobra.Command, startDate *time.Time) {
 }
 
 func importHistoryFile(file_path string, cmd *cobra.Command, startDate *time.Time) {
-	var table string
-
-	if strings.HasSuffix(file_path, "places.sqlite") {
-		table = "moz_places"
-	} else if strings.HasSuffix(file_path, "History") {
-		table = "urls"
-	} else if strings.HasSuffix(file_path, "History.db") {
-		table = "History"
-	} else {
+	table, err := historyTableFromPath(file_path)
+	if err != nil {
 		log.Fatal().Str("file", file_path).Msg("Couldn't auto detect table")
 	}
 
@@ -204,10 +208,11 @@ func importHistoryFile(file_path string, cmd *cobra.Command, startDate *time.Tim
 		},
 	},
 		cmd,
-		startDate)
+		startDate,
+		browserImportKindHistory)
 }
 
-func importDB(databases []DBToImport, cmd *cobra.Command, startDate *time.Time) {
+func importDB(databases []DBToImport, cmd *cobra.Command, startDate *time.Time, kind string) {
 	// Fetch skip rules from the server.
 	c := newClient()
 	resp, err := c.FetchRules()
@@ -222,10 +227,16 @@ func importDB(databases []DBToImport, cmd *cobra.Command, startDate *time.Time) 
 		}
 	}
 
-	minVisit, err := cmd.Flags().GetInt("min-visit")
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to read minimum visit count")
-		return
+	minVisit := 1
+	// Every current caller registers min-visit; the nil check is so a future
+	// import path without the flag still defaults to 1.
+	if cmd.Flags().Lookup("min-visit") != nil {
+		var err error
+		minVisit, err = cmd.Flags().GetInt("min-visit")
+		if err != nil {
+			log.Error().Err(err).Msg("Failed to read minimum visit count")
+			return
+		}
 	}
 	dbsToImport, issues := prepareBrowserImports(databases, minVisit, startDate, func(u string) bool {
 		return !cfg.App.UserHandling && cfg.Rules.IsSkip(u)
@@ -254,24 +265,12 @@ func importDB(databases []DBToImport, cmd *cobra.Command, startDate *time.Time) 
 		}()
 	}
 
-	chosen := multipleChoiceImport(dbsToImport)
+	chosen := multipleChoiceImport(dbsToImport, importChoiceNoun(kind))
 
-	defaultJobID := browserImportJobPrefix + time.Now().Format("2006-01-02")
-	jobID, resumeExisting, err := chooseBrowserImportJobID(defaultJobID)
+	job, err := beginBrowserImportJob(cmd, kind)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to select browser import crawl job")
 		return
-	}
-	job := &browserImportJob{
-		id:            jobID,
-		labelOverride: newDocumentLabelOverride(cmd),
-	}
-	job.label = job.labelOverride.resolve("", "browser")
-	if resumeExisting {
-		if err := ensureBrowserImportJob(job, ""); err != nil {
-			log.Error().Err(err).Msg("Failed to resume browser import crawl job")
-			return
-		}
 	}
 
 	for _, database := range chosen {
@@ -279,7 +278,7 @@ func importDB(databases []DBToImport, cmd *cobra.Command, startDate *time.Time) 
 		count := database.count
 		db := database.db
 
-		q += " ORDER BY visit_count DESC"
+		q += browserImportOrderBy(kind)
 
 		rows, err := db.Query(q)
 		if err != nil {
@@ -308,17 +307,12 @@ func importDB(databases []DBToImport, cmd *cobra.Command, startDate *time.Time) 
 				skippedByRules += 1
 				continue
 			}
-			if err := ensureBrowserImportJob(job, u); err != nil {
-				log.Error().Err(err).Msg("Failed to create browser import crawl job")
-				return
-			}
 			batch = append(batch, u)
 			if len(batch) >= cap(batch) {
-				if err := model.BulkInsertCrawlURLs(job.id, batch, 0); err != nil {
+				if err := enqueueBrowserImportURLs(job, batch); err != nil {
 					log.Error().Err(err).Msg("Failed to add browser URLs to crawl job")
 					return
 				}
-				job.enqueued += len(batch)
 				batch = batch[:0]
 			}
 		}
@@ -327,11 +321,10 @@ func importDB(databases []DBToImport, cmd *cobra.Command, startDate *time.Time) 
 			return
 		}
 		if len(batch) > 0 {
-			if err := model.BulkInsertCrawlURLs(job.id, batch, 0); err != nil {
+			if err := enqueueBrowserImportURLs(job, batch); err != nil {
 				log.Error().Err(err).Msg("Failed to add browser URLs to crawl job")
 				return
 			}
-			job.enqueued += len(batch)
 		}
 		if skippedByRules != 0 {
 			log.Info().Msgf("Skipped %d URLs by rules", skippedByRules)
@@ -339,60 +332,7 @@ func importDB(databases []DBToImport, cmd *cobra.Command, startDate *time.Time) 
 		log.Info().Str("job_id", job.id).Int("seen", i).Int("total", count).Msg("Browser URLs added to crawl job")
 	}
 
-	if !job.created {
-		exit(1, "No URLs found to import")
-	}
-	storedJob, err := model.GetCrawlJob(job.id)
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to load browser import crawl job")
-		return
-	}
-	if storedJob == nil {
-		log.Error().Str("job_id", job.id).Msg("Browser import crawl job not found")
-		return
-	}
-	hasURLs, err := crawlJobHasURLsToCrawl(storedJob)
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to load browser import crawl job queue")
-		return
-	}
-	if !hasURLs {
-		fmt.Println("No URLs to crawl for job:", job.id)
-		return
-	}
-
-	cliPrintln(cliBoldStyle.Render("IMPORTING"))
-	fmt.Println("Starting crawl job:", job.id)
-
-	cfg.Crawler.UserAgent = UserAgent
-	cr, err := crawler.NewPersistent(&cfg.Crawler, job.id, nil, crawlerSkipOptions(false)...)
-	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to initialize persistent crawler")
-	}
-	defer func() {
-		if err := cr.Close(); err != nil {
-			log.Warn().Err(err).Msg("crawler close error")
-		}
-	}()
-
-	validatorRules := &crawler.ValidatorRules{NoDepth: true}
-	validator, err := crawler.NewValidator(validatorRules)
-	if err != nil {
-		log.Fatal().Err(err).Msg("Invalid browser import crawler rules")
-	}
-	done, err := model.CountCrawlURLsByStatus(job.id, model.CrawlURLDone)
-	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to count done browser import URLs")
-	}
-	failed, err := model.CountCrawlURLsByStatus(job.id, model.CrawlURLFailed)
-	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to count failed browser import URLs")
-	}
-	validator.SetVisited(int(done + failed))
-
-	if err := crawlAndIndex(cmd.Context(), job.id, job.startURL, cr, validator, job.label); err != nil {
-		log.Fatal().Err(err).Msg("Browser import crawl failed")
-	}
+	finishBrowserImportJob(cmd, job)
 }
 
 type browserHistoryTimestampSchema struct {
@@ -488,6 +428,37 @@ func browserImportStartDate(cmd *cobra.Command) (*time.Time, error) {
 	return &startDate, nil
 }
 
+func browserImportIdentity(kind string) (prefix, label string) {
+	if kind == browserImportKindBookmarks {
+		return bookmarkImportJobPrefix, "bookmarks"
+	}
+	return browserImportJobPrefix, "browser"
+}
+
+// browserImportMatchPrefixes is the set of job ID prefixes resume may offer.
+// History still matches the released browser-import-* name so an upgrade can
+// continue an in-flight import.
+func browserImportMatchPrefixes(kind string) []string {
+	if kind == browserImportKindBookmarks {
+		return []string{bookmarkImportJobPrefix}
+	}
+	return []string{browserImportJobPrefix, legacyBrowserImportJobPrefix}
+}
+
+func importChoiceNoun(kind string) string {
+	if kind == browserImportKindBookmarks {
+		return "Bookmarks"
+	}
+	return "Histories"
+}
+
+func browserImportOrderBy(kind string) string {
+	if kind == browserImportKindBookmarks {
+		return " ORDER BY p.visit_count DESC"
+	}
+	return " ORDER BY visit_count DESC"
+}
+
 func browserImportURLQuery(table string, minVisit int, startDate *time.Time) (string, error) {
 	q := fmt.Sprintf("SELECT DISTINCT url FROM %s WHERE (url LIKE 'http://%%' OR url LIKE 'https://%%')", table)
 	if minVisit > 1 {
@@ -534,6 +505,107 @@ func countBrowserImportURLs(db *sql.DB, query string, isSkip func(string) bool) 
 	return count, skipped, nil
 }
 
+func beginBrowserImportJob(cmd *cobra.Command, kind string) (*browserImportJob, error) {
+	jobPrefix, defaultLabel := browserImportIdentity(kind)
+	defaultJobID := jobPrefix + time.Now().Format("2006-01-02")
+	jobID, resumeExisting, err := chooseBrowserImportJobID(defaultJobID, browserImportMatchPrefixes(kind)...)
+	if err != nil {
+		return nil, err
+	}
+	job := &browserImportJob{
+		id:            jobID,
+		labelOverride: newDocumentLabelOverride(cmd),
+	}
+	job.label = job.labelOverride.resolve("", defaultLabel)
+	if resumeExisting {
+		if err := ensureBrowserImportJob(job, ""); err != nil {
+			return nil, err
+		}
+	}
+	return job, nil
+}
+
+func enqueueBrowserImportURLs(job *browserImportJob, urls []string) error {
+	batch := make([]string, 0, 500)
+	for _, u := range urls {
+		if err := ensureBrowserImportJob(job, u); err != nil {
+			return err
+		}
+		batch = append(batch, u)
+		if len(batch) >= cap(batch) {
+			if err := model.BulkInsertCrawlURLs(job.id, batch, 0); err != nil {
+				return err
+			}
+			job.enqueued += len(batch)
+			batch = batch[:0]
+		}
+	}
+	if len(batch) > 0 {
+		if err := model.BulkInsertCrawlURLs(job.id, batch, 0); err != nil {
+			return err
+		}
+		job.enqueued += len(batch)
+	}
+	return nil
+}
+
+func finishBrowserImportJob(cmd *cobra.Command, job *browserImportJob) {
+	if !job.created {
+		exit(1, "No URLs found to import")
+	}
+	storedJob, err := model.GetCrawlJob(job.id)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to load browser import crawl job")
+		return
+	}
+	if storedJob == nil {
+		log.Error().Str("job_id", job.id).Msg("Browser import crawl job not found")
+		return
+	}
+	hasURLs, err := crawlJobHasURLsToCrawl(storedJob)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to load browser import crawl job queue")
+		return
+	}
+	if !hasURLs {
+		fmt.Println("No URLs to crawl for job:", job.id)
+		return
+	}
+
+	cliPrintln(cliBoldStyle.Render("IMPORTING"))
+	fmt.Println("Starting crawl job:", job.id)
+
+	cfg.Crawler.UserAgent = UserAgent
+	cr, err := crawler.NewPersistent(&cfg.Crawler, job.id, nil, crawlerSkipOptions(false)...)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to initialize persistent crawler")
+	}
+	defer func() {
+		if err := cr.Close(); err != nil {
+			log.Warn().Err(err).Msg("crawler close error")
+		}
+	}()
+
+	validatorRules := &crawler.ValidatorRules{NoDepth: true}
+	validator, err := crawler.NewValidator(validatorRules)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Invalid browser import crawler rules")
+	}
+	done, err := model.CountCrawlURLsByStatus(job.id, model.CrawlURLDone)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to count done browser import URLs")
+	}
+	failed, err := model.CountCrawlURLsByStatus(job.id, model.CrawlURLFailed)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to count failed browser import URLs")
+	}
+	validator.SetVisited(int(done + failed))
+
+	if err := crawlAndIndex(cmd.Context(), job.id, job.startURL, cr, validator, job.label); err != nil {
+		log.Fatal().Err(err).Msg("Browser import crawl failed")
+	}
+}
+
 func ensureBrowserImportJob(job *browserImportJob, startURL string) error {
 	if job.created {
 		return nil
@@ -562,7 +634,7 @@ func ensureBrowserImportJob(job *browserImportJob, startURL string) error {
 	if !existingRules.NoDepth {
 		return fmt.Errorf("crawl job %q already exists and is not a browser import job", job.id)
 	}
-	job.label = job.labelOverride.resolve(existing.Label, "browser")
+	job.label = job.labelOverride.resolve(existing.Label, job.label)
 	if err := model.UpdateCrawlJobStatus(job.id, model.CrawlJobRunning); err != nil {
 		return fmt.Errorf("update crawl job status: %w", err)
 	}
@@ -571,12 +643,12 @@ func ensureBrowserImportJob(job *browserImportJob, startURL string) error {
 	return nil
 }
 
-func chooseBrowserImportJobID(defaultID string) (string, bool, error) {
+func chooseBrowserImportJobID(defaultID string, prefixes ...string) (string, bool, error) {
 	jobs, err := model.ListCrawlJobs()
 	if err != nil {
 		return "", false, fmt.Errorf("list crawl jobs: %w", err)
 	}
-	browserJobs := browserImportJobs(jobs)
+	browserJobs := browserImportJobs(jobs, prefixes...)
 	if len(browserJobs) == 0 {
 		id, err := nextBrowserImportJobID(defaultID)
 		return id, false, err
@@ -588,10 +660,10 @@ func chooseBrowserImportJobID(defaultID string) (string, bool, error) {
 	return id, false, err
 }
 
-func browserImportJobs(jobs []*model.CrawlJob) []*model.CrawlJob {
+func browserImportJobs(jobs []*model.CrawlJob, prefixes ...string) []*model.CrawlJob {
 	var browserJobs []*model.CrawlJob
 	for _, job := range jobs {
-		if !strings.HasPrefix(job.ID, browserImportJobPrefix) {
+		if !hasAnyPrefix(job.ID, prefixes) {
 			continue
 		}
 		rules, err := crawler.UnmarshalValidatorRules(job.ValidatorRules)
@@ -648,6 +720,15 @@ func printBrowserImportJob(idx int, job *model.CrawlJob) {
 		stats.Pending, stats.Done, stats.Failed, stats.Skipped,
 		job.CreatedAt.Format("2006-01-02 15:04:05"),
 	)
+}
+
+func hasAnyPrefix(s string, prefixes []string) bool {
+	for _, prefix := range prefixes {
+		if strings.HasPrefix(s, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func nextBrowserImportJobID(baseID string) (string, error) {
@@ -722,6 +803,7 @@ func getDBPaths() []browserDB {
 				ladybird_table,
 				[]string{
 					filepath.Join(home, "Library", "Application Support", "Ladybird", "History.db"),
+					filepath.Join(home, "Library", "Application Support", "Ladybird", "Profiles", "*", "History.db"),
 				},
 			},
 			{
@@ -880,6 +962,9 @@ func getDBPaths() []browserDB {
 				ladybird_table,
 				[]string{
 					filepath.Join(home, ".local", "share", "Ladybird", "History.db"),
+					filepath.Join(home, ".local", "share", "Ladybird", "Profiles", "*", "History.db"),
+					filepath.Join(home, ".var", "app", "org.ladybird.Ladybird", "data", "Ladybird", "History.db"),
+					filepath.Join(home, ".var", "app", "org.ladybird.Ladybird", "data", "Ladybird", "Profiles", "*", "History.db"),
 				},
 			},
 			{
@@ -963,11 +1048,11 @@ func browserTableName(browser string) string {
 	return ""
 }
 
-func multipleChoiceImport(choices []importHistoryMultipleChoicePrompt) []DBToImport {
+func multipleChoiceImport(choices []importHistoryMultipleChoicePrompt, noun string) []DBToImport {
 	r := bufio.NewReader(os.Stdin)
 	var s string
 	var returnDBs []DBToImport
-	println("----Available Histories----")
+	println("----Available " + noun + "----")
 	for i, choiceData := range choices {
 		prefix := getBrowserType(choiceData.choice)
 		choice := fmt.Sprint(strconv.Itoa(i), "  |  ", prefix, "  ", choiceData.choice, "  urls: ", choiceData.urls)
@@ -984,7 +1069,7 @@ func multipleChoiceImport(choices []importHistoryMultipleChoicePrompt) []DBToImp
 			c:           choiceData.c,
 		})
 	}
-	println("==> Histories to exclude: (eg: \"1 2 3\", browser name or leave empty to to import all)")
+	println("==> " + noun + " to exclude: (eg: \"1 2 3\", browser name or leave empty to to import all)")
 	print("==> ")
 
 	s, _ = r.ReadString('\n')

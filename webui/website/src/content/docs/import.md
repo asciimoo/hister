@@ -107,6 +107,14 @@ hister import browser
 
 Automatic detection supports Firefox, Firefox Developer Edition, Zen, Waterfox, Chrome, Chromium, Brave, Vivaldi, Edge, Opera, and Ladybird.
 
+The same history import is also available with named flags:
+
+```bash
+hister import browser history
+hister import browser history --browser firefox
+hister import browser history --db ~/.mozilla/firefox/example.default/places.sqlite
+```
+
 ### Selecting a Browser or Database
 
 You can provide a browser name, a database path, or both:
@@ -137,15 +145,36 @@ document timestamp still describes when Hister fetched the page.
 
 Browser history documents receive the `browser` label by default. Use `--label LABEL` to replace it. Resumed browser import jobs reuse their stored label unless this flag is supplied again.
 
+
+## Importing Browser Bookmarks
+
+Bookmark import reads saved bookmarks, then fetches the pages through the same crawl job used by history import.
+
+```bash
+hister import browser bookmarks
+hister import browser bookmarks --browser firefox
+hister import browser bookmarks --browser chrome
+hister import browser bookmarks --db ~/.mozilla/firefox/example.default/places.sqlite
+hister import browser bookmarks --db ~/.config/google-chrome/Default/Bookmarks
+```
+
+Automatic detection covers Firefox, Firefox Developer Edition, Zen, Waterfox, Chrome, Chromium, Brave, Edge, Vivaldi, Opera, and Ladybird. Each browser is a separate bookmark source: Firefox-family `places.sqlite`, Chromium-family `Bookmarks` JSON, and Ladybird `Bookmarks.json`.
+
+Skip rules apply the same way they do for history import. A browser's shipped default bookmarks are not filtered out unless they match a skip rule.
+
+Bookmark documents receive the `bookmarks` label by default. Use `--label LABEL` to replace it. `--start-date` is not supported, because it would drop bookmarks that have never been visited.
+
+Bookmark imports use persistent crawl jobs named `browser-bookmark-import-YYYY-MM-DD`.
+
 ### Resume and Inspect a Browser Import
 
-Browser imports use persistent crawl jobs named `browser-import-YYYY-MM-DD`. It is safe to interrupt the process and continue it later. Completed URLs remain completed, pending URLs resume, and failed URLs remain recorded for inspection.
+History imports use persistent crawl jobs named `browser-history-import-YYYY-MM-DD`. Older `browser-import-*` history jobs still resume. Bookmark jobs are `browser-bookmark-import-*`. It is safe to interrupt the process and continue it later. Completed URLs remain completed, pending URLs resume, and failed URLs remain recorded for inspection.
 
 ```bash
 hister crawl list
-hister crawl show browser-import-YYYY-MM-DD
-hister crawl errors browser-import-YYYY-MM-DD
-hister crawl urls browser-import-YYYY-MM-DD
+hister crawl show browser-history-import-YYYY-MM-DD
+hister crawl errors browser-history-import-YYYY-MM-DD
+hister crawl urls browser-history-import-YYYY-MM-DD
 ```
 
 Add `--count` to `hister crawl urls` when only the number of tracked URLs is needed. Use
