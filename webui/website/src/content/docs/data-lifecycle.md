@@ -67,6 +67,33 @@ To reduce growth:
 - Remove completed persistent crawl jobs when their resume data is no longer useful.
 - Monitor the data directory, PostgreSQL database, and backup storage with the tools used for your deployment.
 
+See [Storage by Domain](#storage-by-domain) to find which sites are worth acting on first.
+
+## Storage by Domain
+
+Storage is reported per domain, largest first, in the **Storage** page of the web interface and with the command line client:
+
+```bash
+hister stats domains
+```
+
+Four figures are given for each domain:
+
+| Column  | Meaning                                                  |
+| ------- | -------------------------------------------------------- |
+| Text    | Length of the indexed text                               |
+| HTML    | Size of the stored HTML previews on disk                 |
+| Favicon | Size of the stored favicons on disk                      |
+| Shared  | Stored data the domain references but does not own alone |
+
+HTML and favicon figures are exact compressed sizes on disk. The text figure estimates a domain's share of the search index rather than measuring it, because the index also holds term vectors and postings that belong to no single document.
+
+Stored data is content addressed, so identical content is stored once and can be referenced by several domains. Such files are reported in the Shared column and excluded from a domain's total, because deleting that domain alone does not release them. A domain whose pages are all duplicated elsewhere therefore shows a small total and a large shared figure.
+
+The totals answer one question: how much a domain would release if it were deleted. Once a domain is identified, remove it as described in [Deleting Documents](#deleting-documents).
+
+The report reads every indexed document, so it takes longer on a large index. It never reads the stored HTML files themselves, only their sizes.
+
 ## Updates and Versioning
 
 The document identity is its normalized URL plus its owner. Hister removes URL fragments and common `utm` tracking parameters during normalization. Several submissions can therefore resolve to one current document.

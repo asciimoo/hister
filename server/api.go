@@ -857,6 +857,19 @@ func init() {
 			Description:  "Return index statistics (document count, file count, rule count, recent searches)",
 		},
 		{
+			Name:   "Domain stats",
+			Path:   "/api/stats/domains",
+			Method: GET,
+			// Authenticated even when the server is public: the response is the list of every
+			// site the owner has indexed, which is not something to hand to a stranger.
+			CSRFRequired: true,
+			Handler:      serveDomainStats,
+			Description: "Return storage used per domain (pages, indexed text bytes, stored HTML " +
+				"and favicon bytes), largest first. Stored data is content addressed, so only " +
+				"blobs referenced by a single domain are charged to it — the figures are what " +
+				"deleting that domain would actually release.",
+		},
+		{
 			Name:         "Favicon",
 			Path:         "/api/favicon",
 			Method:       GET,

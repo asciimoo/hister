@@ -1599,6 +1599,30 @@ func endpointMutates(e *Endpoint) bool {
 	return e.Path == "/api/add"
 }
 
+// serveDomainStats reports storage per domain, so a user can see what is worth pruning.
+//
+// Unlike serveStats this is never public. That endpoint degrades gracefully for anonymous callers
+// by stripping a few counts; there is no equivalent here, because the response IS the list of every
+// site the owner has indexed. A partial version would still disclose it.
+func serveDomainStats(c *webContext) {
+	var (
+		stats []indexer.DomainStat
+		err   error
+	)
+	if c.Config.App.UserHandling {
+		stats, err = c.Indexer.DomainStatsByUser(c.UserID)
+	} else {
+		stats, err = c.Indexer.DomainStats()
+	}
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to collect domain stats")
+		c.JSONStatus(http.StatusInternalServerError,
+			map[string]any{"error": "failed to collect domain statistics"})
+		return
+	}
+	c.JSON(map[string]any{"domains": stats})
+}
+
 func serveStats(c *webContext) {
 	var hs []*model.HistoryItem
 	if historyEnabled(c) {

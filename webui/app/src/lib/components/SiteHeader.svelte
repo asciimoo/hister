@@ -30,6 +30,7 @@
   const secondaryItems = [
     { label: 'Help', href: 'help', color: 'var(--hister-indigo)' },
     { label: 'Extractors', href: 'extractors', color: 'var(--hister-cyan)' },
+    { label: 'Storage', href: 'storage', color: 'var(--hister-amber)' },
     { label: 'About', href: 'about', color: 'var(--hister-teal)' },
     { label: 'API', href: 'api-docs', color: 'var(--hister-coral)' },
     {

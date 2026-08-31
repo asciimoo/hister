@@ -58,6 +58,7 @@ func configureCommandScopes() {
 	setCommandScope(crawlDeleteCmd, executionScopeLocal)
 
 	setCommandScope(companionCmd, executionScopeRemote, "client-timeout")
+	setCommandScope(statsDomainsCmd, executionScopeRemote, "client-timeout")
 	setCommandScope(companionQutebrowserCmd, executionScopeRemote, "client-timeout")
 
 	setCommandScope(importFileCmd, executionScopeHybrid)
@@ -73,6 +74,7 @@ func configureCommandScopes() {
 	configureScopeGroups(importCmd)
 	configureScopeGroups(crawlCmd)
 	configureScopeGroups(companionCmd)
+	configureScopeGroups(statsCmd)
 	configureScopedHelp()
 }
 

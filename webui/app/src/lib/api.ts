@@ -172,6 +172,28 @@ export async function apiFetch(url: string, options: ApiFetchOptions = {}): Prom
   return res;
 }
 
+export interface DomainStat {
+  domain: string;
+  pages: number;
+  /** Length of the indexed text: an estimate of this domain's share of the search index. */
+  text_bytes: number;
+  /** Exact sizes on disk, counting only files this domain alone references. */
+  html_bytes: number;
+  favicon_bytes: number;
+  /** Referenced but shared with other domains, so deleting this one releases none of it. */
+  shared_bytes: number;
+  total_bytes: number;
+}
+
+export async function fetchDomainStats(): Promise<DomainStat[]> {
+  const res = await apiFetch('/stats/domains');
+  if (!res.ok) {
+    throw new Error('Failed to fetch domain statistics');
+  }
+  const data = await res.json();
+  return data.domains ?? [];
+}
+
 export async function fetchExtractors(): Promise<ExtractorInfo[]> {
   const res = await apiFetch('/extractors');
   if (!res.ok) {

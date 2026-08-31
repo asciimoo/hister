@@ -79,6 +79,23 @@ To manually index a specific URL:
 For persistent recursive crawls, URL input jobs, custom job names, resume behavior, request
 backends, and every `crawl` subcommand, see [Website Crawler](crawler).
 
+### Reporting Storage by Domain
+
+Show how much storage each domain accounts for, largest first:
+
+```bash
+hister stats domains
+```
+
+Restrict the output to the biggest offenders, or print raw byte counts for scripting:
+
+```bash
+hister stats domains --limit 20
+hister stats domains --bytes
+```
+
+Sizes describe what deleting a domain would release. Content shared with other domains is listed separately and excluded from the totals. See [Storage by Domain](data-lifecycle#storage-by-domain) for what each column means.
+
 ### Updating Document Attributes
 
 Use `hister update` to change attributes on every document selected by the query language:
