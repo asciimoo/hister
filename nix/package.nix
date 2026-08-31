@@ -50,6 +50,7 @@ buildGoModule (finalAttrs: {
   };
 
   vendorHash = "sha256-5weBvVQotKuVaBPqaBWzsK571EDPTnAKpim4i6fpeg0=";
+  goSum = ../go.sum;
   proxyVendor = true;
 
   nativeBuildInputs = [

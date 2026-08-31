@@ -37,10 +37,10 @@ jobs:
         with:
           token: ${{ secrets.FORGEJO_TOKEN }}
           branch: update-nix-hashes
-          commit-message: '[chore] update Nix hashes for Go/NPM changes'
-          title: 'Update Nix hashes'
+          commit-message: '[chore] update Nix vendorHash for Go changes'
+          title: 'Update Nix vendorHash'
           body: |
-            [chore] update nix/package.nix hashes (vendorHash and/or npmDepsHash)
+            [chore] update nix/package.nix vendorHash
 
             Triggered by: ${{ forgejo.repository }}@${{ forgejo.sha }}
           delete-branch: true

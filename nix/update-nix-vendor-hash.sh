@@ -3,53 +3,32 @@
 set -euo pipefail
 
 PACKAGE_FILE="nix/package.nix"
+FAKE_HASH="sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
 
-update_hash() {
-  local output="$1"
-  local attempt="$2"
-  
-  if echo "$output" | grep -q "hash mismatch in fixed-output derivation"; then
-    EXPECTED_HASH=$(echo "$output" | grep "specified:" | sed 's/.*specified: *//')
-    GOT_HASH=$(echo "$output" | grep "got:" | sed 's/.*got: *//')
-    
-    echo "::notice::Attempt $attempt - Expected: $EXPECTED_HASH"
-    echo "::notice::Attempt $attempt - Got:      $GOT_HASH"
-    
-    if echo "$output" | grep -q "go-modules.drv"; then
-      echo "::notice::Updating vendorHash"
-    else
-      echo "::warning::Unknown hash mismatch, updating anyway"
-    fi
+CURRENT_HASH=$(grep -oP 'vendorHash = "\K[^"]+' "$PACKAGE_FILE")
 
-    sed -i.bak "s|$EXPECTED_HASH|$GOT_HASH|g" "$PACKAGE_FILE"
-    rm -f "$PACKAGE_FILE.bak"
-    echo "updated"
-  fi
-}
+# Force nix to compute the correct vendorHash instead of reusing cache.
+sed -i.bak "s|vendorHash = \"$CURRENT_HASH\"|vendorHash = \"$FAKE_HASH\"|" "$PACKAGE_FILE"
+rm -f "$PACKAGE_FILE.bak"
 
-echo "::notice::Running nix build to check for hash mismatches..."
-
-# Attempt 1: typically catches npmDepsHash or vendorHash mismatch
-echo "::group::Build attempt 1"
+echo "::group::Build to determine vendorHash"
 OUTPUT=$(nix build .#hister 2>&1 || true)
 echo "$OUTPUT"
 echo "::endgroup::"
 
-RESULT1=$(update_hash "$OUTPUT" "1")
-
-# Attempt 2: catches the remaining hash if both changed
-echo "::group::Build attempt 2"
-OUTPUT=$(nix build .#hister 2>&1 || true)
-echo "$OUTPUT"
-echo "::endgroup::"
-
-RESULT2=$(update_hash "$OUTPUT" "2")
-
-if [ -n "$RESULT1" ] || [ -n "$RESULT2" ]; then
-  echo "::notice::Updated vendorHash"
+if echo "$OUTPUT" | grep -q "hash mismatch in fixed-output derivation"; then
+  GOT_HASH=$(echo "$OUTPUT" | grep "got:" | sed 's/.*got: *//')
+  echo "::notice::New vendorHash: $GOT_HASH"
+  sed -i.bak "s|vendorHash = \"$FAKE_HASH\"|vendorHash = \"$GOT_HASH\"|" "$PACKAGE_FILE"
+  rm -f "$PACKAGE_FILE.bak"
+else
+  echo "::error::Expected a fixed-output hash mismatch but none was reported; restoring original hash"
+  sed -i.bak "s|vendorHash = \"$FAKE_HASH\"|vendorHash = \"$CURRENT_HASH\"|" "$PACKAGE_FILE"
+  rm -f "$PACKAGE_FILE.bak"
+  exit 1
 fi
 
 echo "::group::Verifying final build"
 nix build .#hister 2>&1 | tail -5
 echo "::endgroup::"
-echo "::notice::Build successful!"
+echo "::notice::Build successful! vendorHash updated to $GOT_HASH"
