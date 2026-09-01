@@ -17,7 +17,7 @@ type countingFetcher struct {
 	links   []Link
 }
 
-func (f *countingFetcher) fetchPage(_ context.Context, rawURL string) (string, []byte, []Link, FetchMeta, error) {
+func (f *countingFetcher) fetchPage(_ context.Context, rawURL string, _ RequestHints) (string, []byte, []Link, FetchMeta, error) {
 	f.calls.Add(1)
 	body := make([]byte, f.bodyLen)
 	return rawURL, body, f.links, FetchMeta{StatusCode: 200}, nil

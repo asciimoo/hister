@@ -23,6 +23,8 @@ type completion struct {
 	err           error
 	skipped       bool
 	skipReason    string
+	etag          string
+	lastModified  string
 	// interrupted is set when the fetch was aborted by context cancellation
 	// (graceful shutdown, grace-period expiry). Persistent queues must reset
 	// the row to pending so a resumed run can retry it, rather than marking
@@ -213,7 +215,7 @@ func (q *sqliteQueue) Complete(ctx context.Context, item *pendingItem, c complet
 	case c.err != nil:
 		completeErr = model.UpdateCrawlURLStatus(id, model.CrawlURLFailed, c.err.Error())
 	default:
-		if err := model.MarkDoneAndEnqueueLinks(id, q.jobID, c.resolvedLinks, item.depth+1); err != nil {
+		if err := model.MarkDoneAndEnqueueLinks(id, q.jobID, c.resolvedLinks, item.depth+1, c.etag, c.lastModified); err != nil {
 			log.Warn().Err(err).Msg("sqliteQueue: MarkDoneAndEnqueueLinks failed")
 		}
 		// Handle redirect: mark the final URL as done if it differs.

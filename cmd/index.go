@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/asciimoo/hister/client"
 	"github.com/asciimoo/hister/server/crawler"
@@ -68,7 +69,8 @@ var indexCmd = &cobra.Command{
 
 		var robotsCache *crawler.RobotsCache
 		if !noRobots && !cfg.Crawler.NoRobots {
-			robotsCache, err = crawler.NewRobotsCacheWithProxy(cfg.Crawler.UserAgent, cfg.Crawler.Proxy)
+			cacheTTL := time.Duration(cfg.Crawler.Robots.CacheTTL) * time.Second
+			robotsCache, err = crawler.NewRobotsCacheWithProxyAndTTL(cfg.Crawler.UserAgent, cfg.Crawler.Proxy, cacheTTL)
 			if err != nil {
 				exit(1, "Failed to configure robots.txt requests: "+err.Error())
 				return

@@ -4,9 +4,11 @@ package crawler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"hash/fnv"
 	"io"
+	"net/http"
 	"net/url"
 	"strings"
 	"sync"
@@ -18,6 +20,7 @@ import (
 
 	"github.com/asciimoo/hister/config"
 	"github.com/asciimoo/hister/server/document"
+	"github.com/asciimoo/hister/server/model"
 )
 
 // Crawler is the public interface for scraping backends.
@@ -49,8 +52,10 @@ func WithSkipURLChecker(skipURLChecker SkipURLChecker) Option {
 }
 
 // fetcher is the internal interface implemented by each scraping backend.
+// fetchPage downloads rawURL and returns the final URL after any redirects,
+// the raw response body, the links found on the page, fetch metadata, and any error.
 type fetcher interface {
-	fetchPage(ctx context.Context, rawURL string) (finalURL string, body []byte, links []Link, meta FetchMeta, err error)
+	fetchPage(ctx context.Context, rawURL string, hints RequestHints) (finalURL string, body []byte, links []Link, meta FetchMeta, err error)
 	close() error
 }
 
@@ -260,6 +265,25 @@ func (c *baseCrawler) fetchOne(fetchCtx, crawlCtx context.Context, item *pending
 		return completion{skipped: true, skipReason: "budget"}
 	}
 
+	// Refresh per-host rate from robots crawl-delay before waiting.
+	if c.robots != nil && c.cfg.Robots.RespectCrawlDelay {
+		if delay := c.robots.CrawlDelayForHost(host); delay > 0 {
+			c.coord.SetHostRate(host, 1.0/delay.Seconds())
+		}
+	}
+
+	// Build conditional-GET hints from the last successful fetch of this URL.
+	var hints RequestHints
+	if c.cfg.ConditionalGet {
+		etag, lastMod, ok, lookupErr := model.GetLastFetchedURLMeta(item.rawURL)
+		if lookupErr != nil {
+			log.Warn().Err(lookupErr).Str("url", item.rawURL).Msg("crawler: failed to look up prior fetch meta")
+		} else if ok {
+			hints.IfNoneMatch = etag
+			hints.IfModifiedSince = lastMod
+		}
+	}
+
 	maxAttempts := c.cfg.Retry.MaxAttempts
 	if maxAttempts < 1 {
 		maxAttempts = 1
@@ -297,7 +321,7 @@ func (c *baseCrawler) fetchOne(fetchCtx, crawlCtx context.Context, item *pending
 		}
 
 		start := time.Now()
-		finalURL, body, links, meta, fetchErr = c.fetcher.fetchPage(fetchCtx, item.rawURL)
+		finalURL, body, links, meta, fetchErr = c.fetcher.fetchPage(fetchCtx, item.rawURL, hints)
 		elapsed := time.Since(start)
 
 		c.coord.Release(host)
@@ -308,6 +332,15 @@ func (c *baseCrawler) fetchOne(fetchCtx, crawlCtx context.Context, item *pending
 			if fetchCtx.Err() != nil {
 				return completion{interrupted: true, err: fetchErr}
 			}
+
+			// 304 Not Modified: resource unchanged - mark done, skip re-index.
+			var httpErr *HTTPStatusError
+			if errors.As(fetchErr, &httpErr) && httpErr.Status == http.StatusNotModified {
+				log.Info().Str("url", item.rawURL).Msg("crawler: not modified (304), skipping re-index")
+				c.coord.RecordSuccess(host)
+				return completion{finalURL: item.rawURL, etag: meta.ETag, lastModified: meta.LastModified}
+			}
+
 			retryable, retryAfter, statusCode := ClassifyError(fetchErr)
 			log.Warn().
 				Err(fetchErr).
@@ -356,21 +389,37 @@ func (c *baseCrawler) fetchOne(fetchCtx, crawlCtx context.Context, item *pending
 	bodyLen := int64(len(body))
 	c.coord.AddBytes(host, bodyLen)
 
-	doc := &document.Document{
-		URL:  finalURL,
-		HTML: string(body),
+	// Determine effective meta-robots directives.
+	effective := meta.MetaRobots
+	if c.cfg.RespectMetaRobots {
+		xr := parseXRobotsTag(meta.XRobotsTag)
+		if xr.NoIndex {
+			effective.NoIndex = true
+		}
+		if xr.NoFollow {
+			effective.NoFollow = true
+		}
 	}
-	select {
-	case ch <- doc:
-	case <-crawlCtx.Done():
-		// Doc was fetched but never delivered downstream; treat as interrupted
-		// so a resumed run refetches and re-emits.
-		return completion{interrupted: true, finalURL: finalURL}
+
+	if !c.cfg.RespectMetaRobots || !effective.NoIndex {
+		doc := &document.Document{
+			URL:          finalURL,
+			HTML:         string(body),
+			ETag:         meta.ETag,
+			LastModified: meta.LastModified,
+		}
+		select {
+		case ch <- doc:
+		case <-crawlCtx.Done():
+			// Doc was fetched but never delivered downstream; treat as interrupted
+			// so a resumed run refetches and re-emits.
+			return completion{interrupted: true, finalURL: finalURL}
+		}
 	}
 
 	// Resolve discovered links. Validator filters here so queue doesn't re-filter.
 	var resolvedLinks []string
-	if !v.Rules().NoDepth {
+	if !v.Rules().NoDepth && !(c.cfg.RespectMetaRobots && effective.NoFollow) {
 		for _, link := range links {
 			if isNofollow(link.Rel) {
 				continue
@@ -379,7 +428,11 @@ func (c *baseCrawler) fetchOne(fetchCtx, crawlCtx context.Context, item *pending
 			if err != nil || abs == "" {
 				continue
 			}
-			absParsed, err := url.Parse(abs)
+			normAbs, nErr := normalizeRawURL(abs)
+			if nErr != nil {
+				normAbs = abs
+			}
+			absParsed, err := url.Parse(normAbs)
 			if err != nil {
 				continue
 			}
@@ -387,15 +440,15 @@ func (c *baseCrawler) fetchOne(fetchCtx, crawlCtx context.Context, item *pending
 			case URLStop:
 				// Signal termination by cancelling crawlCtx via exhaustion logic.
 				// Return immediately with what we have so far.
-				return completion{finalURL: finalURL, resolvedLinks: resolvedLinks}
+				return completion{finalURL: finalURL, resolvedLinks: resolvedLinks, etag: meta.ETag, lastModified: meta.LastModified}
 			case URLSkip:
 				continue
 			}
-			resolvedLinks = append(resolvedLinks, abs)
+			resolvedLinks = append(resolvedLinks, normAbs)
 		}
 	}
 
-	return completion{finalURL: finalURL, resolvedLinks: resolvedLinks}
+	return completion{finalURL: finalURL, resolvedLinks: resolvedLinks, etag: meta.ETag, lastModified: meta.LastModified}
 }
 
 func hashURL(key string) uint64 {
@@ -441,39 +494,98 @@ func resolveURL(base *url.URL, href string) (string, error) {
 	return abs.String(), nil
 }
 
-// extractLinks parses HTML from r and returns the links found in <a> elements.
-func extractLinks(r io.Reader) ([]Link, error) {
+// extractLinks parses HTML from r and returns the links found in <a> elements
+// and the MetaRobots directives from <meta name="robots"> tags.
+// Multi-valued rel is preserved as-is (space-separated); callers can use
+// isNofollow to check individual tokens.
+func extractLinks(r io.Reader) ([]Link, MetaRobots) {
 	var links []Link
+	var meta MetaRobots
 	z := html.NewTokenizer(r)
 	for {
 		tt := z.Next()
 		switch tt {
 		case html.ErrorToken:
-			return links, nil
+			return links, meta
 		case html.StartTagToken, html.SelfClosingTagToken:
 			name, hasAttr := z.TagName()
 			tagName := string(name)
-			if !hasAttr || tagName != "a" {
+			if !hasAttr {
 				continue
 			}
-			var href, rel string
-			for {
-				key, val, more := z.TagAttr()
-				switch string(key) {
-				case "href":
-					href = string(val)
-				case "rel":
-					rel = string(val)
+			switch tagName {
+			case "a":
+				var href, rel string
+				for {
+					key, val, more := z.TagAttr()
+					switch string(key) {
+					case "href":
+						href = string(val)
+					case "rel":
+						rel = string(val)
+					}
+					if !more {
+						break
+					}
 				}
-				if !more {
-					break
+				if href != "" {
+					links = append(links, Link{Href: href, Rel: rel})
 				}
-			}
-			if href != "" {
-				links = append(links, Link{Href: href, Rel: rel})
+			case "meta":
+				var metaName, metaContent string
+				for {
+					key, val, more := z.TagAttr()
+					switch strings.ToLower(string(key)) {
+					case "name":
+						metaName = strings.ToLower(string(val))
+					case "content":
+						metaContent = string(val)
+					}
+					if !more {
+						break
+					}
+				}
+				if metaName == "robots" {
+					mr := parseRobotsContent(metaContent)
+					if mr.NoIndex {
+						meta.NoIndex = true
+					}
+					if mr.NoFollow {
+						meta.NoFollow = true
+					}
+				}
 			}
 		}
 	}
+}
+
+// parseRobotsContent parses a comma-separated robots directive string
+// (from <meta name="robots"> or X-Robots-Tag) and returns a MetaRobots.
+func parseRobotsContent(content string) MetaRobots {
+	var mr MetaRobots
+	for _, token := range strings.Split(content, ",") {
+		switch strings.TrimSpace(strings.ToLower(token)) {
+		case "noindex":
+			mr.NoIndex = true
+		case "nofollow":
+			mr.NoFollow = true
+		}
+	}
+	return mr
+}
+
+// parseXRobotsTag parses the X-Robots-Tag header value.
+func parseXRobotsTag(header string) MetaRobots {
+	return parseRobotsContent(header)
+}
+
+// normalizeRawURL parses and normalizes a raw URL string.
+func normalizeRawURL(rawURL string) (string, error) {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return "", err
+	}
+	return NormalizeURL(u), nil
 }
 
 // errResponseTooLarge is returned when a response body exceeds the configured limit.

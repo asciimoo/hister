@@ -37,6 +37,25 @@ var migrations = []migration{
 			})
 		},
 	},
+	{
+		post: func() error {
+			// An earlier revision of the CrawlURL ETag field lacked an explicit
+			// gorm column tag, so AutoMigrate created an "e_tag" column instead
+			// of "etag". Rename it if present so queries against "etag" work.
+			// AutoMigrate has already added the correctly-named column, so this
+			// step only cleans up the stale one.
+			if !DB.Migrator().HasColumn("crawl_urls", "e_tag") {
+				return nil
+			}
+			// Copy any data across before dropping. In practice the buggy schema
+			// never accepted writes (queries referenced "etag"), but do this
+			// defensively in case some path did populate it.
+			if err := DB.Exec("UPDATE crawl_urls SET etag = e_tag WHERE etag = '' AND e_tag != ''").Error; err != nil {
+				return err
+			}
+			return DB.Exec("ALTER TABLE crawl_urls DROP COLUMN e_tag").Error
+		},
+	},
 }
 
 func migrationVersion() (int64, bool) {

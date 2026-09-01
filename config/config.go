@@ -141,12 +141,14 @@ type CrawlerConfig struct {
 	Headers           map[string]string              `yaml:"headers"            mapstructure:"headers"`
 	Cookies           []CrawlerCookie                `yaml:"cookies"            mapstructure:"cookies"`
 	NoRobots          bool                           `yaml:"no_robots"          mapstructure:"no_robots"`
+	ContactURL        string                         `yaml:"contact_url"        mapstructure:"contact_url"`
 	ConditionalGet    bool                           `yaml:"conditional_get"    mapstructure:"conditional_get"`
 	RespectMetaRobots bool                           `yaml:"respect_meta_robots" mapstructure:"respect_meta_robots"`
 	Rate              CrawlerRate                    `yaml:"rate"               mapstructure:"rate"`
 	Retry             CrawlerRetry                   `yaml:"retry"              mapstructure:"retry"`
 	CircuitBreaker    CrawlerBreaker                 `yaml:"circuit_breaker"    mapstructure:"circuit_breaker"`
 	Limits            CrawlerLimits                  `yaml:"limits"             mapstructure:"limits"`
+	Robots            CrawlerRobots                  `yaml:"robots"             mapstructure:"robots"`
 	Hosts             map[string]CrawlerHostOverride `yaml:"hosts"              mapstructure:"hosts"`
 	ShutdownGrace     int                            `yaml:"shutdown_grace"     mapstructure:"shutdown_grace"`
 }
@@ -185,6 +187,13 @@ type CrawlerLimits struct {
 	MaxPagesPerHost  int   `yaml:"max_pages_per_host" mapstructure:"max_pages_per_host"`
 	MaxBytesPerHost  int64 `yaml:"max_bytes_per_host" mapstructure:"max_bytes_per_host"`
 	MaxDuration      int   `yaml:"max_duration"       mapstructure:"max_duration"`
+}
+
+// CrawlerRobots configures robots.txt handling.
+// CacheTTL is in seconds.
+type CrawlerRobots struct {
+	CacheTTL          int  `yaml:"cache_ttl"           mapstructure:"cache_ttl"`
+	RespectCrawlDelay bool `yaml:"respect_crawl_delay" mapstructure:"respect_crawl_delay"`
 }
 
 // CrawlerHostOverride allows per-host rate and page limit overrides.
@@ -595,6 +604,10 @@ func CreateDefaultConfig() *Config {
 			},
 			Limits: CrawlerLimits{
 				MaxResponseBytes: 10 * 1024 * 1024,
+			},
+			Robots: CrawlerRobots{
+				CacheTTL:          86400,
+				RespectCrawlDelay: true,
 			},
 			ShutdownGrace: 30,
 		},

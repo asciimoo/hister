@@ -81,7 +81,7 @@ func newChromedpFetcher(cfg *config.CrawlerConfig) (*chromedpFetcher, error) {
 	}, nil
 }
 
-func (f *chromedpFetcher) fetchPage(ctx context.Context, rawURL string) (string, []byte, []Link, FetchMeta, error) {
+func (f *chromedpFetcher) fetchPage(ctx context.Context, rawURL string, _ RequestHints) (string, []byte, []Link, FetchMeta, error) {
 	taskCtx, taskCancel := chromedp.NewContext(f.allocCtx)
 	defer taskCancel()
 
@@ -128,7 +128,7 @@ func (f *chromedpFetcher) fetchPage(ctx context.Context, rawURL string) (string,
 	}
 
 	var htmlContent string
-	var linkHrefs []string
+	var linkData [][]string
 	var finalURL string
 
 	actions = append(
@@ -144,8 +144,8 @@ func (f *chromedpFetcher) fetchPage(ctx context.Context, rawURL string) (string,
 		chromedp.Location(&finalURL),
 		chromedp.OuterHTML("html", &htmlContent, chromedp.ByQuery),
 		chromedp.Evaluate(
-			`Array.from(document.querySelectorAll('a[href]')).map(a => a.getAttribute('href'))`,
-			&linkHrefs,
+			`Array.from(document.querySelectorAll('a[href]')).map(a => [a.getAttribute('href'), a.getAttribute('rel') || ''])`,
+			&linkData,
 		),
 	)
 
@@ -157,11 +157,12 @@ func (f *chromedpFetcher) fetchPage(ctx context.Context, rawURL string) (string,
 		finalURL = rawURL
 	}
 
-	links := make([]Link, 0, len(linkHrefs))
-	for _, h := range linkHrefs {
-		if h != "" {
-			links = append(links, Link{Href: h})
+	links := make([]Link, 0, len(linkData))
+	for _, row := range linkData {
+		if len(row) < 2 || row[0] == "" {
+			continue
 		}
+		links = append(links, Link{Href: row[0], Rel: row[1]})
 	}
 
 	return finalURL, []byte(htmlContent), links, FetchMeta{}, nil

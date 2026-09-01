@@ -359,6 +359,12 @@ description: 'Explore every configuration section, option, default value, enviro
       description: 'Disables robots.txt compliance during crawling.',
     },
     {
+      name: 'contact_url',
+      type: 'string',
+      defaultValue: '(none)',
+      description: 'Contact URL advertised in the default User-agent header. When set and user_agent is empty, the crawler sends Hister/<version> (+<contact_url>) so operators of crawled sites can find out who is hitting them.',
+    },
+    {
       name: 'conditional_get',
       type: 'bool',
       defaultValue: 'false',
@@ -399,6 +405,12 @@ description: 'Explore every configuration section, option, default value, enviro
       type: 'object',
       defaultValue: '(see Crawl Limits below)',
       description: 'Response size and crawl budget limits. See Crawl Limits below.',
+    },
+    {
+      name: 'robots',
+      type: 'object',
+      defaultValue: '(see Robots.txt below)',
+      description: 'robots.txt cache and enforcement settings. See Robots.txt below.',
     },
     {
       name: 'hosts',
@@ -567,7 +579,7 @@ description: 'Explore every configuration section, option, default value, enviro
 
   const crawlerRateOptions = [
     { name: 'global_rps',           type: 'float', defaultValue: '10',  description: 'Total requests per second across all hosts.' },
-    { name: 'per_host_rps',         type: 'float', defaultValue: '1',   description: 'Requests per second per host. When 0 or unset, the crawler uses 1 req/s. The effective rate is the minimum of this value and any per-host override.' },
+    { name: 'per_host_rps',         type: 'float', defaultValue: '1',   description: 'Requests per second per host. When 0 or unset, the crawler uses 1 req/s. The effective rate is the minimum of this value, any per-host override, and the robots.txt Crawl-delay for the host.' },
     { name: 'global_concurrency',   type: 'int',   defaultValue: '8',   description: 'Number of worker goroutines that fetch pages concurrently.' },
     { name: 'per_host_concurrency', type: 'int',   defaultValue: '1',   description: 'Maximum concurrent in-flight requests to a single host.' },
     { name: 'jitter',               type: 'float', defaultValue: '0.2', description: 'Randomized wait added between per-host requests, expressed as a fraction of the per-host interval. 0.2 means up to ±20 percent jitter.' },
@@ -592,8 +604,13 @@ description: 'Explore every configuration section, option, default value, enviro
     { name: 'max_duration',       type: 'int', defaultValue: '0',        description: 'Maximum crawl wall-clock time in seconds. 0 means unlimited.' },
   ];
 
+  const crawlerRobotsOptions = [
+    { name: 'cache_ttl',           type: 'int',  defaultValue: '86400', description: "Seconds to cache each host's robots.txt. Default is 24 hours." },
+    { name: 'respect_crawl_delay', type: 'bool', defaultValue: 'true',  description: 'When true, robots.txt Crawl-delay lowers the effective per-host request rate for a host.' },
+  ];
+
   const crawlerHostOverrideOptions = [
-    { name: 'per_host_rps', type: 'float', defaultValue: '(inherit)', description: 'Override rate.per_host_rps for this host.' },
+    { name: 'per_host_rps', type: 'float', defaultValue: '(inherit)', description: 'Override rate.per_host_rps for this host. Effective rate is still the minimum of this value and any Crawl-delay from robots.txt.' },
     { name: 'max_pages',    type: 'int',   defaultValue: '0',         description: 'Override limits.max_pages_per_host for this host. 0 means unlimited.' },
   ];
 
@@ -1135,7 +1152,7 @@ Controls how aggressively the crawler makes requests. All values apply per crawl
 
 <ConfigReference items={crawlerRateOptions} />
 
-The effective per-host request rate is the minimum of `rate.per_host_rps` and any override in `hosts.<host>.per_host_rps`.
+The effective per-host request rate is the minimum of `rate.per_host_rps`, any override in `hosts.<host>.per_host_rps`, and the robots.txt `Crawl-delay` for that host (when `robots.respect_crawl_delay` is true).
 
 ### Retry
 
@@ -1154,6 +1171,12 @@ Protects hosts that are struggling by pausing requests to them after repeated fa
 Response size and budget guardrails that stop a crawl before it runs away.
 
 <ConfigReference items={crawlerLimitsOptions} />
+
+### Robots.txt
+
+<ConfigReference items={crawlerRobotsOptions} />
+
+Beyond these settings, the crawler follows [RFC 9309](https://www.rfc-editor.org/rfc/rfc9309.html): 404 for robots.txt means allow-all, 5xx means deny-all, and network errors default to allow-all with a short retry TTL.
 
 ### Per-Host Overrides
 
@@ -1258,6 +1281,7 @@ crawler:
   backend: 'http'
   proxy: 'http://127.0.0.1:8080'
   timeout: 10
+  contact_url: 'https://example.org/hister-bot'
   rate:
     per_host_rps: 0.5
     per_host_concurrency: 1
@@ -1269,6 +1293,8 @@ crawler:
   limits:
     max_response_bytes: 5242880
     max_pages_per_host: 200
+  robots:
+    respect_crawl_delay: true
   hosts:
     slow.example.com:
       per_host_rps: 0.1

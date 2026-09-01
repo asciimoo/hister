@@ -273,7 +273,7 @@ func (f *bidiFetcher) readLoop() {
 	}
 }
 
-func (f *bidiFetcher) fetchPage(ctx context.Context, rawURL string) (string, []byte, []Link, FetchMeta, error) {
+func (f *bidiFetcher) fetchPage(ctx context.Context, rawURL string, _ RequestHints) (string, []byte, []Link, FetchMeta, error) {
 	timeoutCtx, cancel := context.WithTimeout(ctx, f.timeout)
 	defer cancel()
 
@@ -340,24 +340,17 @@ func (f *bidiFetcher) fetchPage(ctx context.Context, rawURL string) (string, []b
 		return "", nil, nil, FetchMeta{}, fmt.Errorf("bidi: failed to get page HTML from %s: %w", rawURL, err)
 	}
 
-	// Extract link hrefs.
-	linkHrefs, err := f.evaluateStringArray(
+	// Extract link hrefs and rel attributes.
+	linkData, err := f.evaluateLinkArray(
 		timeoutCtx, contextID,
-		`Array.from(document.querySelectorAll('a[href]')).map(a => a.getAttribute('href'))`,
+		`Array.from(document.querySelectorAll('a[href]')).map(a => [a.getAttribute('href'), a.getAttribute('rel') || ''])`,
 	)
 	if err != nil {
 		log.Debug().Err(err).Str("url", rawURL).Msg("bidi: failed to extract links")
-		linkHrefs = nil
+		linkData = nil
 	}
 
-	links := make([]Link, 0, len(linkHrefs))
-	for _, h := range linkHrefs {
-		if h != "" {
-			links = append(links, Link{Href: h})
-		}
-	}
-
-	return finalURL, []byte(htmlContent), links, FetchMeta{}, nil
+	return finalURL, []byte(htmlContent), linkData, FetchMeta{}, nil
 }
 
 // evaluateString runs a JS expression and returns the string result.
@@ -392,8 +385,9 @@ func (f *bidiFetcher) evaluateString(ctx context.Context, contextID, expression 
 	return res.Result.Value, nil
 }
 
-// evaluateStringArray runs a JS expression and returns a []string result.
-func (f *bidiFetcher) evaluateStringArray(ctx context.Context, contextID, expression string) ([]string, error) {
+// evaluateLinkArray runs a JS expression that returns [[href, rel], ...] and
+// maps the results to []Link.
+func (f *bidiFetcher) evaluateLinkArray(ctx context.Context, contextID, expression string) ([]Link, error) {
 	data, err := f.call(ctx, "script.evaluate", map[string]any{
 		"expression":      expression,
 		"target":          map[string]any{"context": contextID},
@@ -410,12 +404,15 @@ func (f *bidiFetcher) evaluateStringArray(ctx context.Context, contextID, expres
 			Type  string `json:"type"`
 			Value []struct {
 				Type  string `json:"type"`
-				Value string `json:"value"`
+				Value []struct {
+					Type  string `json:"type"`
+					Value string `json:"value"`
+				} `json:"value"`
 			} `json:"value"`
 		} `json:"result"`
 	}
 	if err := json.Unmarshal(data, &res); err != nil {
-		return nil, fmt.Errorf("bidi: failed to parse array result: %w", err)
+		return nil, fmt.Errorf("bidi: failed to parse link array result: %w", err)
 	}
 	if res.Type == "exception" {
 		return nil, fmt.Errorf("bidi: script exception: %s", string(data))
@@ -424,13 +421,18 @@ func (f *bidiFetcher) evaluateStringArray(ctx context.Context, contextID, expres
 		return nil, fmt.Errorf("bidi: expected array result, got %q", res.Result.Type)
 	}
 
-	out := make([]string, 0, len(res.Result.Value))
+	links := make([]Link, 0, len(res.Result.Value))
 	for _, item := range res.Result.Value {
-		if item.Type == "string" {
-			out = append(out, item.Value)
+		if item.Type != "array" || len(item.Value) < 2 {
+			continue
+		}
+		href := item.Value[0].Value
+		rel := item.Value[1].Value
+		if href != "" {
+			links = append(links, Link{Href: href, Rel: rel})
 		}
 	}
-	return out, nil
+	return links, nil
 }
 
 func (f *bidiFetcher) close() error {

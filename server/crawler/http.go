@@ -65,6 +65,13 @@ func newHTTPFetcher(cfg *config.CrawlerConfig) (*httpFetcher, error) {
 	}
 
 	ua := cfg.UserAgent
+	if ua == "" {
+		contactURL := cfg.ContactURL
+		if contactURL == "" {
+			contactURL = "https://hister.info"
+		}
+		ua = fmt.Sprintf("Hister/dev (+%s)", contactURL)
+	}
 
 	maxBytes := cfg.Limits.MaxResponseBytes
 	if maxBytes == 0 {
@@ -83,7 +90,7 @@ func newHTTPFetcher(cfg *config.CrawlerConfig) (*httpFetcher, error) {
 	}, nil
 }
 
-func (f *httpFetcher) fetchPage(ctx context.Context, rawURL string) (string, []byte, []Link, FetchMeta, error) {
+func (f *httpFetcher) fetchPage(ctx context.Context, rawURL string, hints RequestHints) (string, []byte, []Link, FetchMeta, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
 		return "", nil, nil, FetchMeta{}, err
@@ -97,6 +104,13 @@ func (f *httpFetcher) fetchPage(ctx context.Context, rawURL string) (string, []b
 	for k, v := range f.headers {
 		req.Header.Set(k, v)
 	}
+	if hints.IfNoneMatch != "" {
+		req.Header.Set("If-None-Match", hints.IfNoneMatch)
+	}
+	if hints.IfModifiedSince != "" {
+		req.Header.Set("If-Modified-Since", hints.IfModifiedSince)
+	}
+
 	resp, err := f.client.Do(req)
 	if err != nil {
 		return "", nil, nil, FetchMeta{}, err
@@ -108,7 +122,14 @@ func (f *httpFetcher) fetchPage(ctx context.Context, rawURL string) (string, []b
 	}()
 
 	meta := FetchMeta{
-		StatusCode: resp.StatusCode,
+		StatusCode:   resp.StatusCode,
+		ETag:         resp.Header.Get("ETag"),
+		LastModified: resp.Header.Get("Last-Modified"),
+		XRobotsTag:   resp.Header.Get("X-Robots-Tag"),
+	}
+
+	if resp.StatusCode == http.StatusNotModified {
+		return "", nil, nil, meta, &HTTPStatusError{Status: http.StatusNotModified}
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -137,7 +158,8 @@ func (f *httpFetcher) fetchPage(ctx context.Context, rawURL string) (string, []b
 	}
 
 	finalURL := resp.Request.URL.String()
-	links, _ := extractLinks(bytes.NewReader(body))
+	links, metaRobots := extractLinks(bytes.NewReader(body))
+	meta.MetaRobots = metaRobots
 	return finalURL, body, links, meta, nil
 }
 

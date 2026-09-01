@@ -20,7 +20,7 @@ type hangingFetcher struct {
 	started chan struct{} // signals the moment the first fetch begins
 }
 
-func (f *hangingFetcher) fetchPage(ctx context.Context, rawURL string) (string, []byte, []Link, FetchMeta, error) {
+func (f *hangingFetcher) fetchPage(ctx context.Context, rawURL string, _ RequestHints) (string, []byte, []Link, FetchMeta, error) {
 	f.calls.Add(1)
 	select {
 	case f.started <- struct{}{}:
@@ -35,7 +35,7 @@ func (f *hangingFetcher) close() error { return nil }
 // succeedingFetcher returns immediately with a small HTML body and no links.
 type succeedingFetcher struct{ calls atomic.Int64 }
 
-func (f *succeedingFetcher) fetchPage(_ context.Context, rawURL string) (string, []byte, []Link, FetchMeta, error) {
+func (f *succeedingFetcher) fetchPage(_ context.Context, rawURL string, _ RequestHints) (string, []byte, []Link, FetchMeta, error) {
 	f.calls.Add(1)
 	return rawURL, []byte("<html></html>"), nil, FetchMeta{StatusCode: 200}, nil
 }

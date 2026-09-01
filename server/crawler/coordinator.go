@@ -27,9 +27,10 @@ const (
 )
 
 type hostEntry struct {
-	limiter    *rate.Limiter
-	inflightCh chan struct{} // semaphore, cap = per-host concurrency
-	coolUntil  time.Time
+	limiter     *rate.Limiter
+	inflightCh  chan struct{} // semaphore, cap = per-host concurrency
+	coolUntil   time.Time
+	overrideRPS float64 // set by SetHostRate (e.g. from robots crawl-delay); 0 means unset
 	// breaker
 	breakerState BreakerState
 	failures     int
@@ -91,6 +92,8 @@ func NewCoordinator(cfg *config.CrawlerConfig) *Coordinator {
 	}
 }
 
+// effectiveRPS returns the per-host rate limit, taking into account config
+// overrides and any runtime override set by SetHostRate.
 func (c *Coordinator) effectiveRPS(host string) float64 {
 	rps := c.cfg.Rate.PerHostRPS
 	if rps <= 0 {
@@ -100,6 +103,29 @@ func (c *Coordinator) effectiveRPS(host string) float64 {
 		rps = ov.PerHostRPS
 	}
 	return rps
+}
+
+// effectiveRPSLocked returns the per-host rate, applying any runtime override
+// set via SetHostRate (e.g. from a robots crawl-delay). The override only
+// lowers the rate, never raises it. Must be called with c.mu held.
+func (c *Coordinator) effectiveRPSLocked(host string, he *hostEntry) float64 {
+	rps := c.effectiveRPS(host)
+	if he.overrideRPS > 0 && he.overrideRPS < rps {
+		rps = he.overrideRPS
+	}
+	return rps
+}
+
+// SetHostRate updates the per-host rate limiter to reflect a new RPS value
+// (e.g. derived from a robots.txt Crawl-delay). The override only takes effect
+// if it is lower than the configured rate.
+func (c *Coordinator) SetHostRate(host string, rps float64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	he := c.getHostEntryLocked(host)
+	he.overrideRPS = rps
+	effective := c.effectiveRPSLocked(host, he)
+	he.limiter.SetLimit(rate.Limit(effective))
 }
 
 func (c *Coordinator) getHostEntry(host string) *hostEntry {
@@ -122,15 +148,14 @@ func (c *Coordinator) Wait(ctx context.Context, host string) error {
 		return err
 	}
 
-	he := c.getHostEntry(host)
-	effectiveRate := c.effectiveRPS(host)
-	he.limiter.SetLimit(rate.Limit(effectiveRate))
-
-	// Per-host cooldown (Retry-After).
 	c.mu.Lock()
+	he := c.getHostEntryLocked(host)
+	effectiveRate := c.effectiveRPSLocked(host, he)
+	he.limiter.SetLimit(rate.Limit(effectiveRate))
 	coolUntil := he.coolUntil
 	c.mu.Unlock()
 
+	// Per-host cooldown (Retry-After).
 	if !coolUntil.IsZero() {
 		remaining := time.Until(coolUntil)
 		if remaining > 0 {
