@@ -27,7 +27,7 @@ type bidiFetcher struct {
 
 	// Command-response bookkeeping.
 	nextID  atomic.Uint64
-	pending sync.Map // id → chan bidiResult
+	pending sync.Map // id -> chan bidiResult
 
 	// Set after session.new succeeds; used to send session.end on close.
 	ownsSession bool
@@ -273,7 +273,7 @@ func (f *bidiFetcher) readLoop() {
 	}
 }
 
-func (f *bidiFetcher) fetchPage(ctx context.Context, rawURL string) (string, string, []string, error) {
+func (f *bidiFetcher) fetchPage(ctx context.Context, rawURL string) (string, []byte, []Link, FetchMeta, error) {
 	timeoutCtx, cancel := context.WithTimeout(ctx, f.timeout)
 	defer cancel()
 
@@ -282,14 +282,14 @@ func (f *bidiFetcher) fetchPage(ctx context.Context, rawURL string) (string, str
 		"type": "tab",
 	})
 	if err != nil {
-		return "", "", nil, fmt.Errorf("bidi: failed to create tab: %w", err)
+		return "", nil, nil, FetchMeta{}, fmt.Errorf("bidi: failed to create tab: %w", err)
 	}
 
 	var bc struct {
 		Context string `json:"context"`
 	}
 	if err := json.Unmarshal(bcData, &bc); err != nil {
-		return "", "", nil, fmt.Errorf("bidi: failed to parse browsingContext.create result: %w", err)
+		return "", nil, nil, FetchMeta{}, fmt.Errorf("bidi: failed to parse browsingContext.create result: %w", err)
 	}
 
 	contextID := bc.Context
@@ -310,7 +310,7 @@ func (f *bidiFetcher) fetchPage(ctx context.Context, rawURL string) (string, str
 		"wait":    "complete",
 	})
 	if err != nil {
-		return "", "", nil, fmt.Errorf("bidi: navigation to %s failed: %w", rawURL, err)
+		return "", nil, nil, FetchMeta{}, fmt.Errorf("bidi: navigation to %s failed: %w", rawURL, err)
 	}
 
 	var nav struct {
@@ -330,14 +330,14 @@ func (f *bidiFetcher) fetchPage(ctx context.Context, rawURL string) (string, str
 		select {
 		case <-time.After(f.captureDelay):
 		case <-timeoutCtx.Done():
-			return "", "", nil, fmt.Errorf("bidi: capture delay interrupted: %w", timeoutCtx.Err())
+			return "", nil, nil, FetchMeta{}, fmt.Errorf("bidi: capture delay interrupted: %w", timeoutCtx.Err())
 		}
 	}
 
 	// Extract the full page HTML using script.evaluate.
 	htmlContent, err := f.evaluateString(timeoutCtx, contextID, `document.documentElement.outerHTML`)
 	if err != nil {
-		return "", "", nil, fmt.Errorf("bidi: failed to get page HTML from %s: %w", rawURL, err)
+		return "", nil, nil, FetchMeta{}, fmt.Errorf("bidi: failed to get page HTML from %s: %w", rawURL, err)
 	}
 
 	// Extract link hrefs.
@@ -350,7 +350,14 @@ func (f *bidiFetcher) fetchPage(ctx context.Context, rawURL string) (string, str
 		linkHrefs = nil
 	}
 
-	return finalURL, htmlContent, linkHrefs, nil
+	links := make([]Link, 0, len(linkHrefs))
+	for _, h := range linkHrefs {
+		if h != "" {
+			links = append(links, Link{Href: h})
+		}
+	}
+
+	return finalURL, []byte(htmlContent), links, FetchMeta{}, nil
 }
 
 // evaluateString runs a JS expression and returns the string result.
