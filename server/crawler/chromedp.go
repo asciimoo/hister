@@ -81,12 +81,21 @@ func newChromedpFetcher(cfg *config.CrawlerConfig) (*chromedpFetcher, error) {
 	}, nil
 }
 
-func (f *chromedpFetcher) fetchPage(ctx context.Context, rawURL string) (string, string, []string, error) {
+func (f *chromedpFetcher) fetchPage(ctx context.Context, rawURL string) (string, []byte, []Link, FetchMeta, error) {
 	taskCtx, taskCancel := chromedp.NewContext(f.allocCtx)
 	defer taskCancel()
 
 	timeoutCtx, timeoutCancel := context.WithTimeout(taskCtx, f.timeout)
 	defer timeoutCancel()
+
+	// Also honour the caller's context for graceful shutdown.
+	go func() {
+		select {
+		case <-ctx.Done():
+			timeoutCancel()
+		case <-timeoutCtx.Done():
+		}
+	}()
 
 	var actions []chromedp.Action
 
@@ -141,13 +150,21 @@ func (f *chromedpFetcher) fetchPage(ctx context.Context, rawURL string) (string,
 	)
 
 	if err := chromedp.Run(timeoutCtx, actions...); err != nil {
-		return "", "", nil, err
+		return "", nil, nil, FetchMeta{}, err
 	}
 
 	if finalURL == "" {
 		finalURL = rawURL
 	}
-	return finalURL, htmlContent, linkHrefs, nil
+
+	links := make([]Link, 0, len(linkHrefs))
+	for _, h := range linkHrefs {
+		if h != "" {
+			links = append(links, Link{Href: h})
+		}
+	}
+
+	return finalURL, []byte(htmlContent), links, FetchMeta{}, nil
 }
 
 func (f *chromedpFetcher) close() error {

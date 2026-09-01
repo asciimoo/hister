@@ -63,11 +63,27 @@ func initDatabase(c *config.Config, accessMode AccessMode) error {
 	case config.Sqlite:
 		if accessMode == ReadOnly {
 			path := (&url.URL{Path: filepath.ToSlash(dsn)}).EscapedPath()
-			dsn = "file:" + path + "?mode=ro&nolock=1"
+			// nolock=1 is deliberately omitted: a WAL database needs the
+			// -shm index, which locking-disabled connections cannot attach.
+			// WAL readers do not block on writers anyway.
+			dsn = "file:" + path + "?mode=ro&_busy_timeout=5000"
 		}
 		DB, err = gorm.Open(sqlite.Open(dsn), dbCfg)
 		if err != nil {
 			return err
+		}
+		// WAL needs the -wal/-shm sidecars, which a read-only connection
+		// cannot create.
+		if accessMode != ReadOnly {
+			for _, pragma := range []string{
+				"PRAGMA journal_mode=WAL",
+				"PRAGMA busy_timeout=5000",
+				"PRAGMA synchronous=NORMAL",
+			} {
+				if err := DB.Exec(pragma).Error; err != nil {
+					return fmt.Errorf("sqlite pragma %q: %w", pragma, err)
+				}
+			}
 		}
 	default:
 		return ErrDBType
