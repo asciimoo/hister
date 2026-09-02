@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+### New Features
+
+#### Background service install
+
+`hister service install` writes a user-level LaunchAgent on macOS or a systemd
+user unit on Linux, then starts `hister listen` so the server can run
+without an open terminal. Start, stop, restart, status, and uninstall are
+included. `hister service status` exits 0 when running, 3 when stopped, and
+4 when not installed. Install fails if unpersisted `HISTER__*` or
+`HISTER_PORT` environment variables are set. The command does not change Nix,
+Docker, or the example system unit in `contrib/systemd`. Windows is not
+supported yet.
+
+---
+
 ## v0.18.0
 
 ### New Features

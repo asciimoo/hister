@@ -69,6 +69,8 @@ func configureCommandScopes() {
 	setCommandScope(importShaarliCmd, executionScopeRemote)
 	setCommandScope(importWallabagCmd, executionScopeRemote)
 
+	configureServiceScopes()
+
 	configureScopeGroups(rootCmd)
 	configureScopeGroups(importCmd)
 	configureScopeGroups(crawlCmd)
@@ -174,6 +176,10 @@ func applicableGlobalFlags(cmd *cobra.Command) (map[string]bool, bool) {
 	}
 	result := make(map[string]bool)
 	for name := range strings.SplitSeq(raw, ",") {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
 		result[name] = true
 	}
 	return result, true

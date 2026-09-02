@@ -33,6 +33,7 @@ import (
 
 type Config struct {
 	fname                    string
+	sourcePath               string
 	App                      App                   `yaml:"app" mapstructure:"app"`
 	Server                   Server                `yaml:"server" mapstructure:"server"`
 	Indexer                  Indexer               `yaml:"indexer" mapstructure:"indexer"`
@@ -530,6 +531,13 @@ func Load(filename string) (*Config, error) {
 	}
 
 	c.fname = fn
+	if fn != "" {
+		sourcePath, absErr := filepath.Abs(fn)
+		if absErr != nil {
+			return nil, fmt.Errorf("resolve config source path: %w", absErr)
+		}
+		c.sourcePath = sourcePath
+	}
 	return c, c.init()
 }
 
@@ -880,6 +888,15 @@ func (c *Config) Filename() string {
 		return "*Default Config*"
 	}
 	return c.FullPath(c.fname)
+}
+
+// SourcePath returns the absolute path of the config file that was actually
+// read. ok is false when Hister is using built-in defaults (no file).
+func (c *Config) SourcePath() (path string, ok bool) {
+	if c.sourcePath == "" {
+		return "", false
+	}
+	return c.sourcePath, true
 }
 
 func (c *Config) SaveTUIConfig() error {

@@ -29,6 +29,14 @@ Just make sure not to close the terminal that the above command was run on, as d
 (The server can also be closed normally by pressing <kbd>Ctrl</kbd>+<kbd>C</kbd>.)
 It is fine to close and/or reopen the server at any time, but it **must** be running for the clients to be able to index any pages; you will get errors otherwise.
 
+On macOS and systemd Linux, install a user-level background service instead of leaving the terminal open:
+
+```bash
+./hister service install
+```
+
+This uses the binary in the current directory. If you have moved Hister to a directory on `PATH`, use `hister service install` instead. See [Running in the background](installing#running-in-the-background). Windows still uses `hister.exe listen` in a terminal.
+
 More advanced setups are described in the "Advanced Server Setup" documentation.
 To change storage, logging, interface, database, or authentication settings, review the [`app`](configuration#app-section) and [`server`](configuration#server-section) configuration sections.
 

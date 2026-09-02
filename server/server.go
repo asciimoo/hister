@@ -141,7 +141,7 @@ func recParseStaticFiles(entries []iofs.DirEntry, dir, baseDir string) error {
 	return nil
 }
 
-func Listen(cfg *config.Config, idx *indexer.Indexer) {
+func Listen(cfg *config.Config, idx *indexer.Indexer) error {
 	sessionStore = newSessionStore(cfg.SecretKey(), cfg.BaseURL(""), sessionMaxAge)
 
 	// This is an ugly hack required to set the base path dynamically in svelte files.
@@ -159,10 +159,7 @@ func Listen(cfg *config.Config, idx *indexer.Indexer) {
 	handler = withLogging(handler)
 
 	log.Info().Str("Address", cfg.Server.Address).Str("Version", Version).Str("URL", cfg.BaseURL("/")).Msg("Starting webserver")
-	err := http.ListenAndServe(cfg.Server.Address, handler)
-	if err != nil {
-		log.Error().Err(err).Msg("Webserver failed to listen on " + cfg.Server.Address)
-	}
+	return http.ListenAndServe(cfg.Server.Address, handler)
 }
 
 func createHandler(cfg *config.Config, idx *indexer.Indexer, h func(*webContext)) func(w http.ResponseWriter, r *http.Request) {

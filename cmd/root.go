@@ -152,28 +152,28 @@ var rootCmd = &cobra.Command{
 	Short:   "Your own search engine",
 	Long:    "Hister - your own search engine",
 	Version: Version,
-	//Run: func(_ *cobra.Command, _ []string) {
-	//},
 }
 
 var listenCmd = &cobra.Command{
 	Use:   "listen",
 	Short: "Start the Hister HTTP server",
 	Long:  `Start the Hister HTTP server and watch configured directories for file changes.`,
-	PreRun: func(cmd *cobra.Command, _ []string) {
+	PreRunE: func(cmd *cobra.Command, _ []string) error {
 		if public, _ := cmd.Flags().GetBool("public"); public {
 			cfg.App.Public = true
 		}
 		if err := cfg.ValidatePublicMode(); err != nil {
-			exit(1, "Failed to initialize config: "+err.Error())
+			return fmt.Errorf("failed to initialize config: %w", err)
 		}
+		return nil
 	},
-	Run: func(cmd *cobra.Command, _ []string) {
+	RunE: func(cmd *cobra.Command, _ []string) error {
+		cmd.SilenceUsage = true
 		idx := initIndex()
 		defer idx.Close()
 		if a, err := cmd.Flags().GetString("address"); err == nil && cmd.Flags().Changed("address") {
 			if err := cfg.UpdateListenAddress(a); err != nil {
-				exit(1, `Failed to set server address: `+err.Error())
+				return fmt.Errorf("failed to set server address: %w", err)
 			}
 		}
 		if (cfg.App.AccessToken != "" || cfg.App.UserHandling) && strings.HasPrefix(cfg.BaseURL(""), "http://") {
@@ -206,7 +206,7 @@ var listenCmd = &cobra.Command{
 			}()
 		}
 		server.Version = Version
-		server.Listen(cfg, idx)
+		return server.Listen(cfg, idx)
 	},
 }
 
@@ -268,6 +268,7 @@ func requireUserHandlingAndInitDB(_ *cobra.Command, _ []string) {
 
 func init() {
 	dcfg := config.CreateDefaultConfig()
+	rootCmd.PersistentPreRunE = persistentPreRun
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "config.yml", "config file (default paths: ./config.yml or $HOME/.histerrc or $HOME/.config/hister/config.yml)")
 	rootCmd.PersistentFlags().StringP("log-level", "l", "info", "set log level (possible options: error, warning, info, debug, trace)")
 	rootCmd.PersistentFlags().StringP("search-url", "s", dcfg.App.SearchURL, "set default search engine url")
@@ -276,6 +277,7 @@ func init() {
 	rootCmd.PersistentFlags().Int("client-timeout", 0, "HTTP client timeout in seconds (default 10; explicitly set 0 to disable the timeout)")
 
 	rootCmd.AddCommand(listenCmd)
+	registerServiceCommand()
 	rootCmd.AddCommand(createConfigCmd)
 	rootCmd.AddCommand(listURLsCmd)
 	rootCmd.AddCommand(listFilesCmd)
@@ -367,8 +369,6 @@ func init() {
 	searchCmd.Flags().String("sort", "relevance", "result order: relevance, date, domain, or visits")
 	configureCommandScopes()
 
-	cobra.OnInitialize(initialize)
-
 	zerolog.CallerMarshalFunc = func(_ uintptr, file string, line int) string {
 		dir, fn := filepath.Split(file)
 		if dir == "" {
@@ -414,54 +414,6 @@ func newConsoleWriter(out io.Writer, noColor bool) zerolog.ConsoleWriter {
 			}
 			return fmt.Sprintf("| %s |", lipgloss.NewStyle().Foreground(color).Bold(true).Render(level))
 		},
-	}
-}
-
-func initialize() {
-	if ll := os.Getenv("HISTER__APP__LOG_LEVEL"); ll != "debug" {
-		zerolog.SetGlobalLevel(zerolog.InfoLevel)
-	} else {
-		zerolog.SetGlobalLevel(zerolog.DebugLevel)
-	}
-	initConfig()
-	if cfg.Crawler.UserAgent != "" {
-		UserAgent = cfg.Crawler.UserAgent
-	}
-	initLog()
-	log.Debug().Str("filename", cfg.Filename()).Msg("Config initialization complete")
-	log.Debug().Msg("Logging initialization complete")
-}
-
-func initConfig() {
-	var err error
-
-	if !rootCmd.PersistentFlags().Changed("config") {
-		if envConfig := os.Getenv("HISTER_CONFIG"); envConfig != "" {
-			cfgFile = envConfig
-		}
-	}
-
-	cfg, err = config.Load(cfgFile)
-	if err != nil {
-		exit(1, "Failed to initialize config: "+err.Error())
-	}
-
-	if v, _ := rootCmd.PersistentFlags().GetString("log-level"); v != "" && (rootCmd.Flags().Changed("log-level") || cfg.App.LogLevel == "") {
-		cfg.App.LogLevel = v
-	}
-	if v, _ := rootCmd.PersistentFlags().GetString("search-url"); v != "" && (rootCmd.Flags().Changed("search-url") || cfg.App.SearchURL == "") {
-		cfg.App.SearchURL = v
-	}
-	if v, _ := rootCmd.PersistentFlags().GetString("server-url"); v != "" && rootCmd.Flags().Changed("server-url") {
-		if err := cfg.UpdateBaseURL(v); err != nil {
-			exit(1, "Failed to initialize config: "+err.Error())
-		}
-	}
-	if v, _ := rootCmd.PersistentFlags().GetString("token"); rootCmd.PersistentFlags().Changed("token") {
-		cfg.App.AccessToken = v
-	}
-	if err := cfg.ValidatePublicMode(); err != nil {
-		exit(1, "Failed to initialize config: "+err.Error())
 	}
 }
 
