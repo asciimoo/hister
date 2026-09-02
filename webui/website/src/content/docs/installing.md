@@ -39,11 +39,46 @@ If someone else already operates the Hister server you use and you only search t
 
    On Windows, run `hister.exe listen` instead.
 
+   On macOS and systemd Linux you can install a user-level background service instead of leaving a terminal open. From the download directory, use `./hister service install`. See [Running in the background](#running-in-the-background).
+
 6. Open <http://127.0.0.1:4433> in your browser, then continue with the [quickstart](quickstart) to install the browser extension and begin indexing.
 
 Release pages also contain a checksums file that can be used to verify the download. Development snapshots are available from the [rolling release](https://github.com/asciimoo/hister/releases/tag/rolling), but stable releases are recommended for new users.
 
-You may optionally move the binary to a directory on your `PATH`, such as `/usr/local/bin` or `~/.local/bin`.
+You may optionally move the binary to a directory on your `PATH`, such as `/usr/local/bin` or `~/.local/bin`. Use a path that stays the same after upgrades (Homebrew’s `$(brew --prefix)/bin/hister`, not a Cellar path).
+
+## Running in the background
+
+`hister listen` runs in the foreground. On macOS and systemd Linux, a downloaded binary can install a user-level service that starts `hister listen` for you. If the binary is still in the current directory and has not been added to `PATH`, include `./`:
+
+```bash
+./hister service install
+```
+
+That writes a native definition (a LaunchAgent on macOS, a systemd user unit on Linux), starts it unless you pass `--no-start`, and does not require `sudo`.
+
+```bash
+./hister service install [--force] [--no-start]
+./hister service uninstall
+./hister service start
+./hister service stop
+./hister service restart
+./hister service status
+```
+
+After moving the binary to a stable directory on `PATH`, you can omit `./` and use `hister` from any directory. The service records the absolute path of the binary you use; it does not move the binary or modify your shell configuration.
+
+- **macOS:** the LaunchAgent starts at login and restarts after a crash. `hister service stop` keeps it down for the rest of the session.
+- **Linux:** the systemd user unit runs with your user session. It survives logout and starts at boot only if you enable lingering yourself (`loginctl enable-linger`). Hister never runs that command.
+- **Windows:** `hister service` is not supported on Windows yet. Keep using `hister.exe listen`.
+- **Nix / Home Manager:** keep using the Hister modules. `hister service` refuses to change a unit or plist that it did not write (including symlinks). `nix run` is not supported because the store path changes.
+- **`--force`:** replaces a definition previously installed by `hister service`. It will not overwrite a foreign or Nix-managed file.
+- **Uninstall:** removes the service definition only. Indexed data stays on disk.
+- **`--config`:** if you pass `--config`, the file must already exist and be readable. The absolute path is stored in the service. `--log-level` is not written into the unit; the running server uses `config.yml`.
+- **Environment:** `hister service install` fails if unpersisted `HISTER__*` or `HISTER_PORT` variables are set. Put those settings in `config.yml` instead.
+- **Status exit codes:** `hister service status` exits 0 when running, 3 when stopped, and 4 when not installed.
+
+A machine-wide systemd example remains in `contrib/systemd/hister.service` for administrators who manage the service themselves.
 
 ## Building from source
 

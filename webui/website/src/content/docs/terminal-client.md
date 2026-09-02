@@ -33,7 +33,7 @@ Root help groups Hister operations by scope, and each operation help page identi
 command operates:
 
 **Local** commands use configured files or local Hister data directly and do not contact the
-configured Hister HTTP server. Examples include `hister crawl list`, `hister list-files`, and most
+configured Hister HTTP server. Examples include `hister crawl list`, `hister list-files`, `hister service`, and most
 user administration commands.
 
 **Remote** commands use the configured Hister HTTP server without opening the local Hister
@@ -67,6 +67,19 @@ available. It also provides a link to the release. When Hister is current, the c
 that it is up to date.
 
 This check requires internet access. It does not download or install the update.
+
+### Background service
+
+On macOS and systemd Linux, keep the server running without an open terminal:
+
+```bash
+./hister service install
+./hister service status
+./hister service stop
+./hister service uninstall
+```
+
+`hister service` is a local command. Use `./hister` when the binary is in the current directory and has not been added to `PATH`; otherwise use `hister`. `install` needs a readable `--config` file when you pass that flag; `start`, `stop`, `restart`, `status`, and `uninstall` still work if `config.yml` is broken. Details are in [Running in the background](installing#running-in-the-background).
 
 ### Index a URL Manually
 

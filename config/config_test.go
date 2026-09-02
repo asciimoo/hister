@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"path/filepath"
 	"regexp"
 	"testing"
 
@@ -672,5 +673,55 @@ func TestSemanticSearchEmbeddingFingerprint(t *testing.T) {
 	disabledConfig.Enable = false
 	if fingerprint := disabledConfig.EmbeddingFingerprint(); fingerprint != "" {
 		t.Fatalf("disabled semantic search fingerprint = %q, want empty", fingerprint)
+	}
+}
+
+func isolateConfigHome(t *testing.T) {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_STATE_HOME", filepath.Join(home, ".local/state"))
+	t.Setenv("HISTER_DATA_DIR", filepath.Join(home, "data"))
+	t.Setenv("HISTER_CONFIG", "")
+}
+
+func TestSourcePathMissingFile(t *testing.T) {
+	isolateConfigHome(t)
+	cfg, err := Load(filepath.Join(t.TempDir(), "missing.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := cfg.SourcePath(); ok {
+		t.Fatal("SourcePath() ok=true, want false when no config file is read")
+	}
+	if cfg.Filename() == "" {
+		t.Fatal("Filename() is empty")
+	}
+}
+
+func TestSourcePathAbsoluteOfReadFile(t *testing.T) {
+	isolateConfigHome(t)
+	dir := t.TempDir()
+	t.Chdir(dir)
+	name := "mine.yml"
+	if err := os.WriteFile(name, []byte("app:\n  title: sourced\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load("./" + name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, ok := cfg.SourcePath()
+	if !ok {
+		t.Fatal("SourcePath() ok=false, want true")
+	}
+	want, err := filepath.Abs(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != want {
+		t.Fatalf("SourcePath() = %q, want cwd-absolute %q", got, want)
 	}
 }

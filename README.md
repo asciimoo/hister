@@ -26,6 +26,12 @@ Hister is a private search engine for the pages you visit and the files you keep
 
    On Windows, run `.\hister.exe listen` in PowerShell.
 
+   To keep Hister running after you close the terminal on macOS or systemd Linux:
+
+   ```bash
+   ./hister service install
+   ```
+
 4. Open <http://127.0.0.1:4433> and install the browser extension for [Firefox](https://addons.mozilla.org/en-US/firefox/addon/hister/) or [Chrome](https://chromewebstore.google.com/detail/hister/cciilamhchpmbdnniabclekddabkifhb).
 
 No configuration is required for a local personal setup. See the [complete quickstart](https://hister.org/docs/quickstart) to import existing browser history and choose what Hister indexes.

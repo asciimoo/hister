@@ -15,6 +15,13 @@ If all else fails, you can try asking for help&mdash;see the Community links in 
 
 - Check if port 4433 (or whatever was configured instead) is already in use
 - Verify the configuration file syntax
+- If you installed a background service, run `hister service status` and check the logs:
+  - macOS: `~/Library/Logs/hister.log` and `~/Library/Logs/hister-error.log`
+  - Linux: `journalctl --user -u hister`
+- If your shell says `hister: command not found`, run `./hister service status` from the directory containing the binary, or move the binary to a stable directory on `PATH`. The service can still be running because launchd/systemd uses the recorded absolute binary path.
+- `hister service install` refuses Homebrew Cellar and `/nix/store` binaries, Nix-managed units, a missing or unreadable `--config` file, and unpersisted `HISTER__*` or `HISTER_PORT` environment variables. Move the binary to a stable path (for example `$(brew --prefix)/bin/hister`) or use the Nix module instead.
+- systemd user services stop at logout unless lingering is enabled (`loginctl enable-linger`). Hister does not enable lingering for you.
+- `hister service` is not supported on Windows yet; run `hister.exe listen` in a terminal.
 
 ### Web interface loads, but looks broken
 
