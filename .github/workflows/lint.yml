@@ -7,6 +7,9 @@ jobs:
   golangci-lint:
     name: golangci-lint
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -43,9 +46,20 @@ jobs:
         if: steps.changes.outputs.skip != 'true'
         uses: golangci/golangci-lint-action@v9.3.0
 
+      - name: Offer auto-format on failure
+        if: failure() && steps.changes.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: .github/scripts/offer-format.sh
+
   npm-format:
     name: NPM formatting
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -84,6 +98,14 @@ jobs:
             git diff
             exit 1
           fi
+
+      - name: Offer auto-format on failure
+        if: failure() && steps.changes.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: .github/scripts/offer-format.sh
 
   no-merge-commits:
     name: No merge commits
