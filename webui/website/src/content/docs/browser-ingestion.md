@@ -15,7 +15,7 @@ Hister can collect browsing data in two different ways. The browser extension ca
 | Capture pages behind a login                      | [Browser extension](browser-extension)                      | It sees the page already rendered in your signed in browser tab             |
 | Bring in existing browser history                 | [`hister import browser`](import#importing-browser-history) | It reads qualifying URLs from the browser history database                  |
 | Index an entire public site                       | [Website crawler](crawler)                                  | It follows permitted links instead of relying on your visit history         |
-| Keep a browser database continuously synchronized | No direct option                                            | Browser history import is an explicit import, not a continuous sync service |
+| Keep a browser database continuously synchronized | No direct option, except Safari                             | Browser history import is an explicit import, not a continuous sync service. `hister companion safari` follows Safari's history database, but indexes fetched pages rather than captured ones |
 
 ## Browser Extension Capture
 

@@ -43,6 +43,7 @@ The Hister browser extension is the primary way to automatically index your brow
 - **Chrome / Chromium / Edge**: [Install from Chrome Web Store](https://chromewebstore.google.com/detail/hister/cciilamhchpmbdnniabclekddabkifhb)
 - **Firefox**: [Install from Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/hister/) (also works on Firefox for Android)
 - **qutebrowser**: Use the built in `hister companion qutebrowser` command as described below.
+- **Safari**: Use the built in `hister companion safari` command as described below.
 
 After installing, click the extension icon in your browser toolbar to open the popup and verify the server URL is correct.
 
@@ -93,6 +94,35 @@ thirty seconds for continuously changing pages.
 Remote debugging provides complete access to open browser pages. The companion
 accepts only a localhost or loopback IP DevTools endpoint. Never expose the Qt
 WebEngine debugging port to a network.
+
+
+### Safari
+
+Safari has no Hister extension. The `hister companion safari` command keeps the
+index current instead, by following the history database Safari maintains
+anyway and indexing pages as they are visited:
+
+```bash
+hister companion safari
+```
+
+**It is not equivalent to the extension.** Safari's history records addresses,
+not page content, so the companion asks Hister's crawler to fetch each page. A
+page behind a login is indexed as an anonymous visitor sees it, and a page built
+by JavaScript may index as an empty shell. Where the extension captures what you
+saw, this records where you went and fetches what is there now.
+
+Reading the history requires Full Disk Access for the terminal or application
+running Hister, granted under System Settings > Privacy & Security > Full Disk
+Access. The requirement is checked at startup.
+
+The first run indexes visits from the moment it starts. Existing history belongs
+to [`hister import browser`](import#importing-browser-history); use `--catch-up` to index it
+here instead. Use `--poll-interval`, `--batch-size`, `--state-path`, or
+`--label` to change its behaviour, and `--help` for every option.
+
+Pages already in the index are not fetched again, so revisiting a site costs
+nothing.
 
 ## Features
 
