@@ -566,6 +566,16 @@
   let facetsLoading = $state(false);
   let filtersDropdownOpen = $state(false);
   let actionsDropdownOpen = $state(false);
+  // Auto-open the Actions dropdown when a search returns no results so the
+  // similarity threshold slider (and other actions) are reachable to recover
+  // or refine the query. We latch the user's manual close so we don't fight
+  // them, and reset the latch on each fresh search (see renderResults).
+  let userClosedActions = $state(false);
+  function handleActionsOpenChange(open: boolean) {
+    if (!open) {
+      userClosedActions = true;
+    }
+  }
   let sortDropdownOpen = $state(false);
   // Maps facet name (e.g. "domains", "languages") to the requested top-N size.
   let facetSizes = $state(new Map<string, number>());
@@ -850,6 +860,15 @@
       autocomplete = (query && res.query_suggestion) || '';
       highlightIdx = 0;
       if (!isComposing) resultsShown = true;
+      userClosedActions = false; // reset latch on each fresh search
+      // Guard against out-of-order WebSocket responses: only auto-open if this
+      // response is for the query that's currently in the input. Stale responses
+      // (for a query the user has already moved past) must not open Actions.
+      // SearchResults.query is echoed back as { text }, so compare against
+      // query?.text (a fresh-search response always sets lastResults to itself).
+      if (query && !hasResults && !userClosedActions && lastResults?.query?.text === query) {
+        actionsDropdownOpen = true;
+      }
     }
     hasMore = !!res.page_key;
     pageKey = res.page_key ?? '';
@@ -2019,6 +2038,140 @@
                 >
               </div>
             {/if}
+            <div class="flex min-w-0 flex-wrap items-center justify-end gap-2 px-1 py-2">
+              <DropdownMenu.Root bind:open={actionsDropdownOpen} onOpenChange={handleActionsOpenChange}>
+                <DropdownMenu.Trigger>
+                  {#snippet child({ props })}
+                    <Button
+                      {...props}
+                      variant="ghost"
+                      size="sm"
+                      class="font-inter gap-1 text-xs {actionsDropdownOpen
+                        ? 'text-hister-indigo'
+                        : 'text-text-brand-muted hover:text-hister-indigo'}"
+                    >
+                      <SlidersHorizontal class="size-3" />
+                      Actions
+                      <ChevronDown
+                        class="size-3 transition-transform duration-200 {actionsDropdownOpen
+                          ? 'rotate-180'
+                          : ''}"
+                      />
+                    </Button>
+                  {/snippet}
+                </DropdownMenu.Trigger>
+                <DropdownMenu.Content
+                  class="border-brutal-border bg-card-surface w-80 rounded-none border-[3px] p-3 shadow-[4px_4px_0_var(--brutal-shadow)]"
+                >
+                  <div class="space-y-3">
+                    {#if config.semanticEnabled && semanticOn}
+                      <div class="space-y-2">
+                        <p
+                          class="font-inter text-text-brand-muted flex items-center gap-1.5 text-xs font-semibold"
+                        >
+                          <Sparkles class="size-3" />
+                          Semantic Search
+                        </p>
+                        <label
+                          class="font-inter text-text-brand-secondary flex flex-col gap-1 text-xs"
+                        >
+                          <span
+                            >Similarity threshold: <span class="font-fira text-hister-indigo"
+                              >{similarityThreshold.toFixed(2)}</span
+                            ></span
+                          >
+                          <input
+                            type="range"
+                            min="0"
+                            max="1"
+                            step="0.002"
+                            bind:value={similarityThreshold}
+                            class="accent-hister-indigo w-full cursor-pointer"
+                          />
+                        </label>
+                        <label
+                          class="font-inter text-text-brand-secondary flex flex-col gap-1 text-xs"
+                        >
+                          <span
+                            >Semantic weight: <span class="font-fira text-hister-indigo"
+                              >{semanticWeight.toFixed(2)}</span
+                            ></span
+                          >
+                          <input
+                            type="range"
+                            min="0"
+                            max="1"
+                            step="0.05"
+                            bind:value={semanticWeight}
+                            class="accent-hister-indigo w-full cursor-pointer"
+                          />
+                        </label>
+                      </div>
+                      <Separator class="bg-border-brand-muted" />
+                    {/if}
+                    <div class="space-y-2">
+                      <p
+                        class="font-inter text-text-brand-muted flex items-center gap-1.5 text-xs font-semibold"
+                      >
+                        <Download class="size-3" />
+                        Export Results
+                      </p>
+                      <div class="flex flex-wrap gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          class="border-hister-indigo text-hister-indigo hover:bg-hister-indigo/10 h-7 border-[2px] text-xs"
+                          onclick={() =>
+                            exportJSON({ ...lastResults!, documents: accumulatedDocs })}
+                        >
+                          JSON
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          class="border-hister-indigo text-hister-indigo hover:bg-hister-indigo/10 h-7 border-[2px] text-xs"
+                          onclick={() =>
+                            exportCSV({ ...lastResults!, documents: accumulatedDocs }, query)}
+                        >
+                          CSV
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          class="border-hister-indigo text-hister-indigo hover:bg-hister-indigo/10 h-7 border-[2px] text-xs"
+                          onclick={() =>
+                            exportRSS({ ...lastResults!, documents: accumulatedDocs }, query)}
+                        >
+                          RSS
+                        </Button>
+                      </div>
+                    </div>
+                    {#if config.canWrite}
+                      <Separator class="bg-border-brand-muted" />
+                      <div class="space-y-2">
+                        <p
+                          class="font-inter text-hister-rose flex items-center gap-1.5 text-xs font-semibold"
+                        >
+                          <Trash2 class="size-3" />
+                          Danger Zone
+                        </p>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          class="border-hister-rose text-hister-rose hover:bg-hister-rose/10 h-7 w-full border-[2px] text-xs"
+                          onclick={() => {
+                            showDeleteAllConfirm = true;
+                          }}
+                        >
+                          <Trash2 class="size-3" />
+                          Delete all matching results
+                        </Button>
+                      </div>
+                    {/if}
+                  </div>
+                </DropdownMenu.Content>
+              </DropdownMenu.Root>
+            </div>
             {#if hasResults}
               <div
                 class="results-toolbar flex min-w-0 flex-wrap items-center justify-between gap-2 px-1 py-2"
@@ -2218,138 +2371,6 @@
                       </DropdownMenu.Content>
                     </DropdownMenu.Root>
                   {/if}
-                  <DropdownMenu.Root bind:open={actionsDropdownOpen}>
-                    <DropdownMenu.Trigger>
-                      {#snippet child({ props })}
-                        <Button
-                          {...props}
-                          variant="ghost"
-                          size="sm"
-                          class="font-inter gap-1 text-xs {actionsDropdownOpen
-                            ? 'text-hister-indigo'
-                            : 'text-text-brand-muted hover:text-hister-indigo'}"
-                        >
-                          <SlidersHorizontal class="size-3" />
-                          Actions
-                          <ChevronDown
-                            class="size-3 transition-transform duration-200 {actionsDropdownOpen
-                              ? 'rotate-180'
-                              : ''}"
-                          />
-                        </Button>
-                      {/snippet}
-                    </DropdownMenu.Trigger>
-                    <DropdownMenu.Content
-                      class="border-brutal-border bg-card-surface w-80 rounded-none border-[3px] p-3 shadow-[4px_4px_0_var(--brutal-shadow)]"
-                    >
-                      <div class="space-y-3">
-                        {#if config.semanticEnabled && semanticOn}
-                          <div class="space-y-2">
-                            <p
-                              class="font-inter text-text-brand-muted flex items-center gap-1.5 text-xs font-semibold"
-                            >
-                              <Sparkles class="size-3" />
-                              Semantic Search
-                            </p>
-                            <label
-                              class="font-inter text-text-brand-secondary flex flex-col gap-1 text-xs"
-                            >
-                              <span
-                                >Similarity threshold: <span class="font-fira text-hister-indigo"
-                                  >{similarityThreshold.toFixed(2)}</span
-                                ></span
-                              >
-                              <input
-                                type="range"
-                                min="0"
-                                max="1"
-                                step="0.002"
-                                bind:value={similarityThreshold}
-                                class="accent-hister-indigo w-full cursor-pointer"
-                              />
-                            </label>
-                            <label
-                              class="font-inter text-text-brand-secondary flex flex-col gap-1 text-xs"
-                            >
-                              <span
-                                >Semantic weight: <span class="font-fira text-hister-indigo"
-                                  >{semanticWeight.toFixed(2)}</span
-                                ></span
-                              >
-                              <input
-                                type="range"
-                                min="0"
-                                max="1"
-                                step="0.05"
-                                bind:value={semanticWeight}
-                                class="accent-hister-indigo w-full cursor-pointer"
-                              />
-                            </label>
-                          </div>
-                          <Separator class="bg-border-brand-muted" />
-                        {/if}
-                        <div class="space-y-2">
-                          <p
-                            class="font-inter text-text-brand-muted flex items-center gap-1.5 text-xs font-semibold"
-                          >
-                            <Download class="size-3" />
-                            Export Results
-                          </p>
-                          <div class="flex flex-wrap gap-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              class="border-hister-indigo text-hister-indigo hover:bg-hister-indigo/10 h-7 border-[2px] text-xs"
-                              onclick={() =>
-                                exportJSON({ ...lastResults!, documents: accumulatedDocs })}
-                            >
-                              JSON
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              class="border-hister-indigo text-hister-indigo hover:bg-hister-indigo/10 h-7 border-[2px] text-xs"
-                              onclick={() =>
-                                exportCSV({ ...lastResults!, documents: accumulatedDocs }, query)}
-                            >
-                              CSV
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              class="border-hister-indigo text-hister-indigo hover:bg-hister-indigo/10 h-7 border-[2px] text-xs"
-                              onclick={() =>
-                                exportRSS({ ...lastResults!, documents: accumulatedDocs }, query)}
-                            >
-                              RSS
-                            </Button>
-                          </div>
-                        </div>
-                        {#if config.canWrite}
-                          <Separator class="bg-border-brand-muted" />
-                          <div class="space-y-2">
-                            <p
-                              class="font-inter text-hister-rose flex items-center gap-1.5 text-xs font-semibold"
-                            >
-                              <Trash2 class="size-3" />
-                              Danger Zone
-                            </p>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              class="border-hister-rose text-hister-rose hover:bg-hister-rose/10 h-7 w-full border-[2px] text-xs"
-                              onclick={() => {
-                                showDeleteAllConfirm = true;
-                              }}
-                            >
-                              <Trash2 class="size-3" />
-                              Delete all matching results
-                            </Button>
-                          </div>
-                        {/if}
-                      </div>
-                    </DropdownMenu.Content>
-                  </DropdownMenu.Root>
                   <DropdownMenu.Root bind:open={sortDropdownOpen}>
                     <DropdownMenu.Trigger>
                       {#snippet child({ props })}
