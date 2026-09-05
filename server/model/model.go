@@ -45,6 +45,15 @@ func Init(c *config.Config) error {
 		if err != nil {
 			return err
 		}
+		for _, pragma := range []string{
+			"PRAGMA journal_mode=WAL",
+			"PRAGMA busy_timeout=5000",
+			"PRAGMA synchronous=NORMAL",
+		} {
+			if err := DB.Exec(pragma).Error; err != nil {
+				return fmt.Errorf("sqlite pragma %q: %w", pragma, err)
+			}
+		}
 	default:
 		return ErrDBType
 	}

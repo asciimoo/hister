@@ -236,6 +236,34 @@ func NextPendingCrawlURL(jobID string) (*CrawlURL, error) {
 	return &cu, nil
 }
 
+// ClaimNextPendingCrawlURL atomically selects the oldest pending URL for the
+// job and marks it in_progress in a single transaction. With WAL enabled and
+// busy_timeout set, this is safe for concurrent callers - SQLite serializes
+// write transactions so no two callers can claim the same row.
+// Returns (nil, nil) when no pending URLs remain.
+func ClaimNextPendingCrawlURL(jobID string) (*CrawlURL, error) {
+	var result *CrawlURL
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		var cu CrawlURL
+		if err := tx.Where("job_id = ? AND status = ?", jobID, CrawlURLPending).
+			Order("id ASC").
+			First(&cu).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil
+			}
+			return err
+		}
+		if err := tx.Model(&CrawlURL{}).Where("id = ?", cu.ID).
+			Updates(map[string]any{"status": CrawlURLInProgress, "error": "", "error_code": 0}).Error; err != nil {
+			return err
+		}
+		cu.Status = CrawlURLInProgress
+		result = &cu
+		return nil
+	})
+	return result, err
+}
+
 // UpdateCrawlURLStatus sets the status and optional error message on a URL row.
 func UpdateCrawlURLStatus(id uint, status, errMsg string) error {
 	return DB.Model(&CrawlURL{}).Where("id = ?", id).
