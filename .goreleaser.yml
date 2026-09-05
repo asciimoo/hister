@@ -46,4 +46,19 @@ builds:
           - CC=oa64-clang
 
 archives:
-  - formats: ['binary']
+  - formats: ['tar.gz', 'binary']
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+brews:
+  - name: hister
+    repository:
+      owner: asciimoo
+      name: homebrew-tap
+      token: "{{ .Env.GORELEASER_TOKEN }}"
+    description: "Your own search engine"
+    homepage: "https://github.com/asciimoo/hister"
+    license: "AGPL-3.0-or-later"
+    install: |
+      bin.install "hister"
+    test: |
+      system "#{bin}/hister", "--version"
