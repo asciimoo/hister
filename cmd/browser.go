@@ -48,7 +48,7 @@ recorded visit is on or after the given date.
 `,
 	Args: cobra.RangeArgs(0, 2),
 	PreRun: func(_ *cobra.Command, _ []string) {
-		initDB()
+		initDB(model.ReadWrite)
 		initExtractor()
 	},
 	Run: importHistory,

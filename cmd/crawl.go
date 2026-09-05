@@ -30,7 +30,7 @@ var crawlListCmd = &cobra.Command{
 	Long:  "Display all persistent crawl jobs with their status and URL counts",
 	Args:  cobra.NoArgs,
 	PreRun: func(_ *cobra.Command, _ []string) {
-		initDB()
+		initDB(model.ReadOnly)
 	},
 	Run: func(cmd *cobra.Command, args []string) {
 		jobs, err := model.ListCrawlJobs()
@@ -65,7 +65,7 @@ var crawlShowCmd = &cobra.Command{
 	Long:  "Display detailed information about a persistent crawl job and its queued URL state",
 	Args:  cobra.ExactArgs(1),
 	PreRun: func(_ *cobra.Command, _ []string) {
-		initDB()
+		initDB(model.ReadOnly)
 	},
 	Run: func(cmd *cobra.Command, args []string) {
 		showCrawlJob(args[0])
@@ -78,7 +78,7 @@ var crawlErrorsCmd = &cobra.Command{
 	Long:  "List failed crawl URL error codes and URLs for a persistent crawl job",
 	Args:  cobra.ExactArgs(1),
 	PreRun: func(_ *cobra.Command, _ []string) {
-		initDB()
+		initDB(model.ReadOnly)
 	},
 	Run: func(cmd *cobra.Command, args []string) {
 		showCrawlJobErrors(args[0])
@@ -91,7 +91,7 @@ var crawlQueueCmd = &cobra.Command{
 	Long:  "List crawl URL status, depth, and URL rows for a persistent crawl job",
 	Args:  cobra.ExactArgs(1),
 	PreRun: func(_ *cobra.Command, _ []string) {
-		initDB()
+		initDB(model.ReadOnly)
 	},
 	Run: func(cmd *cobra.Command, args []string) {
 		countOnly, _ := cmd.Flags().GetBool("count")
@@ -105,7 +105,7 @@ var crawlURLsCmd = &cobra.Command{
 	Long:  "List crawl job URL status, depth, and URL rows, optionally filtered by status",
 	Args:  validateCrawlURLsArgs,
 	PreRun: func(_ *cobra.Command, _ []string) {
-		initDB()
+		initDB(model.ReadOnly)
 	},
 	Run: func(cmd *cobra.Command, args []string) {
 		status, _ := cmd.Flags().GetString("status")
@@ -120,7 +120,7 @@ var crawlDeleteCmd = &cobra.Command{
 	Long:  "Delete a crawl job and all its associated URL tracking data",
 	Args:  cobra.ExactArgs(1),
 	PreRun: func(_ *cobra.Command, _ []string) {
-		initDB()
+		initDB(model.ReadWrite)
 	},
 	Run: func(cmd *cobra.Command, args []string) {
 		jobID := args[0]

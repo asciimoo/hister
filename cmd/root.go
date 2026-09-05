@@ -169,7 +169,7 @@ var listenCmd = &cobra.Command{
 		}
 	},
 	Run: func(cmd *cobra.Command, _ []string) {
-		idx := initIndex()
+		idx := initIndex(model.ReadWrite)
 		defer idx.Close()
 		if a, err := cmd.Flags().GetString("address"); err == nil && cmd.Flags().Changed("address") {
 			if err := cfg.UpdateListenAddress(a); err != nil {
@@ -259,11 +259,13 @@ func parseDateRangeFlags(cmd *cobra.Command) (dateRangeFlags, error) {
 	return r, nil
 }
 
-func requireUserHandlingAndInitDB(_ *cobra.Command, _ []string) {
-	if !cfg.App.UserHandling {
-		exit(1, "user_handling is not enabled in configuration")
+func requireUserHandlingAndInitDB(accessMode model.AccessMode) func(*cobra.Command, []string) {
+	return func(_ *cobra.Command, _ []string) {
+		if !cfg.App.UserHandling {
+			exit(1, "user_handling is not enabled in configuration")
+		}
+		initDB(accessMode)
 	}
-	initDB()
 }
 
 func init() {
@@ -505,8 +507,12 @@ func initLog() {
 	}
 }
 
-func initDB() {
-	err := model.Init(cfg)
+func initDB(accessMode model.AccessMode) {
+	initialize := model.Init
+	if accessMode == model.ReadOnly {
+		initialize = model.InitReadOnly
+	}
+	err := initialize(cfg)
 	if err != nil {
 		exit(1, err.Error())
 	}
@@ -535,10 +541,18 @@ func embeddingConfigWarning(storedFingerprint, activeFingerprint string) string 
 	return "The semantic search embedding configuration differs from the indexed configuration. Run `hister reindex` to update your embeddings."
 }
 
-func initIndex() *indexer.Indexer {
-	initDB()
+func initIndex(accessMode model.AccessMode) *indexer.Indexer {
+	initDB(accessMode)
 	initExtractor()
-	idx, err := indexer.New(cfg)
+	indexCfg := cfg
+	if accessMode == model.ReadOnly {
+		// Offline URL listing does not need a vector store or embedding workers
+		// that write to the SQL database.
+		copy := *cfg
+		copy.SemanticSearch.Enable = false
+		indexCfg = &copy
+	}
+	idx, err := indexer.New(indexCfg)
 	if err != nil {
 		exit(1, "Indexer initialization error: "+err.Error())
 	}

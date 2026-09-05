@@ -9,6 +9,7 @@ import (
 	"github.com/asciimoo/hister/files"
 	"github.com/asciimoo/hister/server/document"
 	"github.com/asciimoo/hister/server/indexer"
+	"github.com/asciimoo/hister/server/model"
 
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
@@ -21,7 +22,7 @@ var listURLsCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, _ []string) {
 		offline, _ := cmd.Flags().GetBool("offline")
 		if offline {
-			idx := initIndex()
+			idx := initIndex(model.ReadOnly)
 			defer idx.Close()
 			idx.Iterate(func(doc *document.Document) {
 				fmt.Println(doc.URL)

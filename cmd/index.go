@@ -28,7 +28,7 @@ var indexCmd = &cobra.Command{
 		jobID, _ := cmd.Flags().GetString("job-id")
 		input, _ := indexInput(cmd)
 		if recursive || jobID != "" || input != "" {
-			initDB()
+			initDB(model.ReadWrite)
 		}
 	},
 	Run: func(cmd *cobra.Command, args []string) {
