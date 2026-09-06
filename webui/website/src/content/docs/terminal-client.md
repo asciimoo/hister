@@ -90,7 +90,8 @@ hister search 'domain:example.com' --format jsonl --fields url,text
 hister search 'label:research' --format csv --fields title,url > research.csv
 ```
 
-Search, crawl inspection commands, and file and service import summaries share `--format` / `-f`:
+Search, indexing summaries, crawl inspection commands, and file and service import summaries
+share `--format` / `-f`:
 
 | Format  | Output                                                                             |
 | ------- | ---------------------------------------------------------------------------------- |
@@ -117,6 +118,43 @@ hister import linkding https://bookmarks.example.com --format jsonl
 These formats apply to file imports and the Linkding, Linkwarden, Karakeep, Readeck, Shaarli, and
 wallabag importers. Browser import retains its interactive output. See [Website Crawler](crawler)
 for structured crawl inspection.
+
+### Indexing Results And Exit Status
+
+Indexing reports `indexed`, `skipped`, and `failed` counts. Already indexed URLs and URLs excluded
+by robots.txt count as skipped. Individual URL failures do not stop the remaining URLs:
+
+```bash
+hister index https://example.com/one https://example.com/two --format json
+hister index --input urls.txt --failed-urls failed-urls.txt
+```
+
+The exit statuses for `index`, `import file`, and service imports are:
+
+| Status | Meaning |
+| ------ | ------- |
+| `0` | Processing finished without reported item errors. Skipped items are allowed. |
+| `1` | A setup, source, cancellation, output, or other execution error prevented completion. |
+| `2` | Processing finished with item errors, including when every item failed. |
+
+File and service imports retain their `imported`, `skipped`, and `errors` summary fields. A service
+import also prints its accumulated counts if fetching a later source page fails, then exits with
+status `1`. Content extraction errors can count toward `errors` even if bookmark metadata was
+successfully imported. Optional favicon download failures remain diagnostic messages.
+
+The `index --failed-urls PATH` option writes one failed URL per line and replaces the file's
+contents. It creates an empty file when there are no failed URLs. An unusable report path fails
+before indexing starts. Retry the saved URLs with:
+
+```bash
+hister index --force --input failed-urls.txt --failed-urls still-failed.txt
+```
+
+Persistent indexing summaries include `job_id` and `pending`. Their counts describe the entire
+stored job, including earlier runs and redirect tracking URLs, rather than only the current run.
+The retry file likewise contains all URLs currently marked failed in that job. A completed job
+with stored failures continues to return status `2` when resumed without more pending work.
+Stopping at a configured crawl limit can leave pending URLs without being an error.
 
 ### Updating Document Attributes
 

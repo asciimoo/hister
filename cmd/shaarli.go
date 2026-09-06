@@ -71,15 +71,16 @@ The global --token flag remains the access token for the destination Hister serv
 	PreRun: func(_ *cobra.Command, _ []string) {
 		initExtractor()
 	},
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
+		cmd.SilenceUsage = true
 		secret := serviceAPIToken(cmd, shaarliSecretEnv)
 		if secret == "" {
-			exit(1, "Shaarli API secret is required; set "+shaarliSecretEnv+" or use --api-token")
+			return fmt.Errorf("Shaarli API secret is required; set %s or use --api-token", shaarliSecretEnv)
 		}
 
 		runtime, err := newServiceImportRuntime(cmd)
 		if err != nil {
-			exit(1, err.Error())
+			return err
 		}
 		defer func() {
 			if err := runtime.Close(); err != nil {
@@ -88,11 +89,11 @@ The global --token flag remains the access token for the destination Hister serv
 		}()
 		source, err := newShaarliClient(args[0], secret, nil)
 		if err != nil {
-			exit(1, err.Error())
+			return err
 		}
 		updatedAfter, err := latestServiceUpdated(runtime.target, shaarliSourceMetadataValue)
 		if err != nil {
-			exit(1, "Failed to find the latest Shaarli import: "+err.Error())
+			return fmt.Errorf("Failed to find the latest Shaarli import: %w", err)
 		}
 		source.updatedAfter = updatedAfter
 
@@ -105,9 +106,9 @@ The global --token flag remains the access token for the destination Hister serv
 			runtime.options,
 		)
 		if err != nil {
-			exit(1, "Shaarli import failed: "+err.Error())
+			err = fmt.Errorf("Shaarli import failed: %w", err)
 		}
-		printImportSummary(cmd, stats.Imported, stats.Skipped, stats.Errors)
+		return finishImport(cmd, stats, err)
 	},
 }
 

@@ -112,14 +112,15 @@ The global --token flag remains the access token for the destination Hister serv
 	PreRun: func(_ *cobra.Command, _ []string) {
 		initExtractor()
 	},
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
+		cmd.SilenceUsage = true
 		token := serviceAPIToken(cmd, karakeepTokenEnv)
 		if token == "" {
-			exit(1, "Karakeep API token is required; set "+karakeepTokenEnv+" or use --api-token")
+			return fmt.Errorf("Karakeep API token is required; set %s or use --api-token", karakeepTokenEnv)
 		}
 		runtime, err := newServiceImportRuntime(cmd)
 		if err != nil {
-			exit(1, err.Error())
+			return err
 		}
 		defer func() {
 			if err := runtime.Close(); err != nil {
@@ -128,11 +129,11 @@ The global --token flag remains the access token for the destination Hister serv
 		}()
 		source, err := newKarakeepClient(args[0], token, nil)
 		if err != nil {
-			exit(1, err.Error())
+			return err
 		}
 		updatedAfter, err := latestServiceUpdated(runtime.target, karakeepSourceMetadataValue)
 		if err != nil {
-			exit(1, "Failed to find the latest Karakeep import: "+err.Error())
+			return fmt.Errorf("Failed to find the latest Karakeep import: %w", err)
 		}
 		source.updatedAfter = updatedAfter
 
@@ -145,9 +146,9 @@ The global --token flag remains the access token for the destination Hister serv
 			runtime.options,
 		)
 		if err != nil {
-			exit(1, "Karakeep import failed: "+err.Error())
+			err = fmt.Errorf("Karakeep import failed: %w", err)
 		}
-		printImportSummary(cmd, stats.Imported, stats.Skipped, stats.Errors)
+		return finishImport(cmd, stats, err)
 	},
 }
 

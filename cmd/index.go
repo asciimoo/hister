@@ -31,14 +31,24 @@ var indexCmd = &cobra.Command{
 			initDB(model.ReadWrite)
 		}
 	},
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) (resultErr error) {
 		resolvedArgs, err := resolveIndexURLs(cmd, args)
 		if err != nil {
-			exit(1, err.Error())
-			return
+			return err
 		}
 		args = resolvedArgs
 		input, _ := indexInput(cmd)
+		reportPath, _ := cmd.Flags().GetString("failed-urls")
+		report, err := newFailedURLReport(reportPath)
+		if err != nil {
+			return err
+		}
+		defer func() {
+			if err := report.Close(); err != nil {
+				resultErr = err
+			}
+		}()
+		cmd.SilenceUsage = true
 
 		global, _ := cmd.Flags().GetBool("global")
 		clientOpts := targetUserIDClientOptions(cmd, global)
@@ -70,8 +80,7 @@ var indexCmd = &cobra.Command{
 		if !noRobots && !cfg.Crawler.NoRobots {
 			robotsCache, err = crawler.NewRobotsCacheWithProxy(cfg.Crawler.UserAgent, cfg.Crawler.Proxy)
 			if err != nil {
-				exit(1, "Failed to configure robots.txt requests: "+err.Error())
-				return
+				return fmt.Errorf("failed to configure robots.txt requests: %w", err)
 			}
 		}
 
@@ -82,21 +91,17 @@ var indexCmd = &cobra.Command{
 			}
 			rulesJSON, err := crawler.MarshalValidatorRules(validatorRules)
 			if err != nil {
-				exit(1, "Failed to serialize validator rules: "+err.Error())
-				return
+				return fmt.Errorf("failed to serialize validator rules: %w", err)
 			}
 			jobID, err = model.CreateNamedCrawlJobWithURLs(
 				indexInputJobName(input), args[0], rulesJSON, label, args,
 			)
 			if err != nil {
-				exit(1, "Failed to create URL input crawl job: "+err.Error())
-				return
+				return fmt.Errorf("failed to create URL input crawl job: %w", err)
 			}
-			fmt.Println("Starting crawl job:", jobID)
-			if err := runPersistentIndexJob(cmd.Context(), jobID, args[0], validatorRules, label, robotsCache, force, clientOpts...); err != nil {
-				exit(1, "Crawl failed: "+err.Error())
-			}
-			return
+			fmt.Fprintln(cmd.ErrOrStderr(), "Starting crawl job:", jobID)
+			err = runPersistentIndexJob(cmd.Context(), jobID, args[0], validatorRules, label, robotsCache, force, clientOpts...)
+			return finishPersistentIndex(cmd, jobID, report, err)
 		}
 
 		if recursive {
@@ -112,22 +117,19 @@ var indexCmd = &cobra.Command{
 				var err error
 				jobID, err = model.GenerateCrawlJobID()
 				if err != nil {
-					exit(1, "Failed to generate crawl job ID: "+err.Error())
-					return
+					return fmt.Errorf("failed to generate crawl job ID: %w", err)
 				}
 			}
 
 			existingJob, err := model.GetCrawlJob(jobID)
 			if err != nil {
-				exit(1, "Failed to load crawl job: "+err.Error())
-				return
+				return fmt.Errorf("failed to load crawl job: %w", err)
 			}
 
 			if existingJob == nil {
 				// New job: require at least one URL.
 				if len(args) == 0 {
-					exit(1, "at least one URL is required to start a new crawl job")
-					return
+					return errors.New("at least one URL is required to start a new crawl job")
 				}
 				startURL = args[0]
 
@@ -135,94 +137,78 @@ var indexCmd = &cobra.Command{
 
 				rulesJSON, err := crawler.MarshalValidatorRules(validatorRules)
 				if err != nil {
-					exit(1, "Failed to serialize validator rules: "+err.Error())
-					return
+					return fmt.Errorf("failed to serialize validator rules: %w", err)
 				}
 				if err := model.CreateCrawlJob(jobID, startURL, rulesJSON, label); err != nil {
-					exit(1, "Failed to create crawl job: "+err.Error())
-					return
+					return fmt.Errorf("failed to create crawl job: %w", err)
 				}
-				fmt.Println("Starting crawl job:", jobID)
+				fmt.Fprintln(cmd.ErrOrStderr(), "Starting crawl job:", jobID)
 			} else {
 				// Resume existing job.
 				hasURLs, err := crawlJobHasURLsToCrawl(existingJob)
 				if err != nil {
-					exit(1, "Failed to load crawl job queue: "+err.Error())
-					return
+					return fmt.Errorf("failed to load crawl job queue: %w", err)
 				}
 				if !hasURLs {
-					fmt.Println("No URLs to crawl for job:", jobID)
-					return
+					return finishPersistentIndex(cmd, jobID, report, nil)
 				}
 				startURL = existingJob.StartURL
 				validatorRules, err = crawler.UnmarshalValidatorRules(existingJob.ValidatorRules)
 				if err != nil {
-					exit(1, "Failed to restore validator rules: "+err.Error())
-					return
+					return fmt.Errorf("failed to restore validator rules: %w", err)
 				}
 				// Use stored label unless --label was explicitly overridden.
 				if !cmd.Flags().Changed("label") {
 					label = existingJob.Label
 				}
-				fmt.Println("Resuming crawl job:", jobID)
+				fmt.Fprintln(cmd.ErrOrStderr(), "Resuming crawl job:", jobID)
 			}
 
-			if err := runPersistentIndexJob(cmd.Context(), jobID, startURL, validatorRules, label, robotsCache, force, clientOpts...); err != nil {
-				exit(1, "Crawl failed: "+err.Error())
-			}
-			return
+			err = runPersistentIndexJob(cmd.Context(), jobID, startURL, validatorRules, label, robotsCache, force, clientOpts...)
+			return finishPersistentIndex(cmd, jobID, report, err)
 		}
 
 		// Resume an existing job by ID without --recursive.
 		if jobID != "" {
 			existingJob, err := model.GetCrawlJob(jobID)
 			if err != nil {
-				exit(1, "Failed to load crawl job: "+err.Error())
-				return
+				return fmt.Errorf("failed to load crawl job: %w", err)
 			}
 			if existingJob == nil {
-				exit(1, "Crawl job not found: "+jobID+". Use --recursive to start a new job.")
-				return
+				return fmt.Errorf("crawl job not found: %s. Use --recursive to start a new job", jobID)
 			}
 			hasURLs, err := crawlJobHasURLsToCrawl(existingJob)
 			if err != nil {
-				exit(1, "Failed to load crawl job queue: "+err.Error())
-				return
+				return fmt.Errorf("failed to load crawl job queue: %w", err)
 			}
 			if !hasURLs {
-				fmt.Println("No URLs to crawl for job:", jobID)
-				return
+				return finishPersistentIndex(cmd, jobID, report, nil)
 			}
 
 			validatorRules, err := crawler.UnmarshalValidatorRules(existingJob.ValidatorRules)
 			if err != nil {
-				exit(1, "Failed to restore validator rules: "+err.Error())
-				return
+				return fmt.Errorf("failed to restore validator rules: %w", err)
 			}
 			// Use stored label unless --label was explicitly overridden.
 			if !cmd.Flags().Changed("label") {
 				label = existingJob.Label
 			}
-			fmt.Println("Resuming crawl job:", jobID)
+			fmt.Fprintln(cmd.ErrOrStderr(), "Resuming crawl job:", jobID)
 
-			if err := runPersistentIndexJob(cmd.Context(), jobID, existingJob.StartURL, validatorRules, label, robotsCache, force, clientOpts...); err != nil {
-				exit(1, "Crawl failed: "+err.Error())
-			}
-			return
+			err = runPersistentIndexJob(cmd.Context(), jobID, existingJob.StartURL, validatorRules, label, robotsCache, force, clientOpts...)
+			return finishPersistentIndex(cmd, jobID, report, err)
 		}
 
 		// Plain index mode (no crawling).
 		if len(args) == 0 {
-			exit(1, "at least one URL is required")
-			return
+			return errors.New("at least one URL is required")
 		}
 
 		// Create the crawler once so the bidi backend reuses its
 		// WebSocket connection and session across all URLs.
-		cr, err := crawler.New(&cfg.Crawler, robotsCache)
+		cr, err := crawler.New(&cfg.Crawler, nil)
 		if err != nil {
-			exit(1, "Failed to create crawler: "+err.Error())
-			return
+			return fmt.Errorf("failed to create crawler: %w", err)
 		}
 		defer func() {
 			if err := cr.Close(); err != nil {
@@ -231,21 +217,51 @@ var indexCmd = &cobra.Command{
 		}()
 
 		c := newClient(clientOpts...)
-		for _, u := range args {
+		result, err := indexURLs(cmd.Context(), args, report, func(ctx context.Context, rawURL string) (bool, error) {
 			if !force {
-				exists, err := c.DocumentExists(u)
+				exists, err := c.DocumentExists(rawURL)
 				if err != nil {
-					log.Warn().Err(err).Str("URL", u).Msg("Failed to check if URL is already indexed")
+					log.Warn().Err(err).Str("URL", rawURL).Msg("Failed to check if URL is already indexed")
 				} else if exists {
-					log.Info().Str("URL", u).Msg("URL already indexed, skipping (use --force to reindex)")
-					continue
+					log.Info().Str("URL", rawURL).Msg("URL already indexed, skipping (use --force to reindex)")
+					return true, nil
 				}
 			}
-			if err := indexURL(cmd.Context(), cr, u, label, clientOpts...); err != nil {
-				log.Warn().Err(err).Str("URL", u).Msg("Failed to index URL")
+			if robotsCache != nil && !robotsCache.Allowed(ctx, rawURL) {
+				log.Info().Str("URL", rawURL).Msg("Skipping URL disallowed by robots.txt")
+				return true, nil
 			}
-		}
+			return false, indexURL(ctx, cr, rawURL, label, clientOpts...)
+		})
+		return result.finish(cmd, err)
 	},
+}
+
+// indexURLs keeps processing after individual failures and records each outcome.
+func indexURLs(ctx context.Context, urls []string, report *failedURLReport, index func(context.Context, string) (bool, error)) (indexResult, error) {
+	var result indexResult
+	for _, rawURL := range urls {
+		if err := ctx.Err(); err != nil {
+			return result, err
+		}
+		skipped, err := index(ctx, rawURL)
+		if ctx.Err() != nil {
+			return result, ctx.Err()
+		}
+		switch {
+		case err != nil:
+			result.Failed++
+			log.Warn().Err(err).Str("URL", rawURL).Msg("Failed to index URL")
+			if err := report.Write(rawURL); err != nil {
+				return result, err
+			}
+		case skipped:
+			result.Skipped++
+		default:
+			result.Indexed++
+		}
+	}
+	return result, nil
 }
 
 func crawlJobHasURLsToCrawl(job *model.CrawlJob) (bool, error) {
@@ -397,6 +413,8 @@ func runPersistentIndexJob(
 }
 
 func init() {
+	addOutputFormatFlag(indexCmd)
+	indexCmd.Flags().String("failed-urls", "", "Write failed URLs to this file, one per line, replacing its contents")
 	indexCmd.Flags().String("label", "", "Label to attach to all indexed documents")
 	indexCmd.Flags().Bool("force", false, "Reindex URLs even if they are already in the index. Already indexed URLs are skipped otherwise")
 	indexCmd.Flags().BoolP("recursive", "r", false, "Recursively crawl linked pages")
@@ -424,8 +442,7 @@ func init() {
 
 func indexURL(ctx context.Context, cr crawler.Crawler, u string, label string, clientOpts ...client.Option) error {
 	if u == "" {
-		log.Warn().Msg("URL must not be empty")
-		return nil
+		return errors.New("URL must not be empty")
 	}
 	v, err := crawler.NewValidator(&crawler.ValidatorRules{MaxLinks: 1})
 	if err != nil {
@@ -436,6 +453,9 @@ func indexURL(ctx context.Context, cr crawler.Crawler, u string, label string, c
 		return fmt.Errorf("failed to fetch %s: %w", u, err)
 	}
 	d, ok := <-ch
+	// Wait for the single URL crawl to finish before reusing or closing its backend.
+	for range ch {
+	}
 	if !ok {
 		return fmt.Errorf("failed to fetch %s: no response", u)
 	}
@@ -461,10 +481,15 @@ func crawlAndIndex(ctx context.Context, jobID string, startURL string, cr crawle
 		return err
 	}
 	c := newClient(clientOpts...)
+	var failed int64
+	var runErr error
 	for doc := range ch {
+		// Processing can normalize the URL. Keep the queue URL for failure records.
+		rawURL, _, _ := strings.Cut(doc.URL, "#")
 		if err := doc.ProcessContext(ctx, nil, extractor.ExtractContext); err != nil {
 			log.Warn().Err(err).Str("url", doc.URL).Msg("failed to process crawled document")
-			markPersistentIndexFailure(jobID, doc.URL, err)
+			failed++
+			runErr = errors.Join(runErr, markPersistentIndexFailure(jobID, rawURL, err))
 			continue
 		}
 		if doc.Favicon == "" {
@@ -475,23 +500,34 @@ func crawlAndIndex(ctx context.Context, jobID string, startURL string, cr crawle
 		doc.Label = label
 		if err := c.AddDocumentJSON(doc); err != nil {
 			log.Warn().Err(err).Str("url", doc.URL).Msg("failed to index crawled document")
-			markPersistentIndexFailure(jobID, doc.URL, err)
+			failed++
+			runErr = errors.Join(runErr, markPersistentIndexFailure(jobID, rawURL, err))
 		}
+	}
+	if reporter, ok := cr.(crawler.ErrorReporter); ok {
+		runErr = errors.Join(runErr, reporter.Err())
+	}
+	if runErr = errors.Join(runErr, ctx.Err()); runErr != nil {
+		return runErr
+	}
+	if failed > 0 {
+		return &partialFailure{count: failed}
 	}
 	return nil
 }
 
-func markPersistentIndexFailure(jobID, rawURL string, err error) {
+func markPersistentIndexFailure(jobID, rawURL string, err error) error {
 	if jobID == "" || rawURL == "" || err == nil {
-		return
+		return nil
 	}
 	errCode := 0
 	if httpErr, ok := errors.AsType[*client.HTTPError](err); ok {
 		errCode = httpErr.StatusCode
 	}
 	if dbErr := model.MarkCrawlURLFailed(jobID, rawURL, errCode, err.Error()); dbErr != nil {
-		log.Warn().Err(dbErr).Str("url", rawURL).Msg("failed to record persistent crawl indexing error")
+		return fmt.Errorf("record indexing failure for %s: %w", rawURL, dbErr)
 	}
+	return nil
 }
 
 func crawlerSkipOptions(force bool, clientOpts ...client.Option) []crawler.Option {

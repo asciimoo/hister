@@ -184,23 +184,24 @@ changes.
 Use --start-date and --end-date (format: YYYY-MM-DD) to only import
 documents whose "added" timestamp falls within the given date range.`,
 	Args: cobra.ArbitraryArgs,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
+		cmd.SilenceUsage = true
 		skip, _ := cmd.Flags().GetBool("skip-existing")
 		global, _ := cmd.Flags().GetBool("global")
 		source, _ := cmd.Flags().GetString("source")
 		normalizedSource, err := normalizeRemoteFileSource(source)
 		if err != nil {
-			exit(1, err.Error())
+			return err
 		}
 		batchSize, _ := cmd.Flags().GetInt("batch-size")
 		labelOverride := newDocumentLabelOverride(cmd)
 		if batchSize < 1 || batchSize > maxImportBatchSize {
-			exit(1, fmt.Sprintf("--batch-size must be between 1 and %d", maxImportBatchSize))
+			return fmt.Errorf("--batch-size must be between 1 and %d", maxImportBatchSize)
 		}
 
 		dateRange, err := parseDateRangeFlags(cmd)
 		if err != nil {
-			exit(1, err.Error())
+			return err
 		}
 
 		clientOpts := append([]client.Option{client.WithTimeout(0)}, targetUserIDClientOptions(cmd, global)...)
@@ -214,7 +215,7 @@ documents whose "added" timestamp falls within the given date range.`,
 
 		inputFiles, err := expandImportInputs(args, cfg.Indexer.Directories)
 		if err != nil {
-			exit(1, err.Error())
+			return err
 		}
 
 		maxFileSize := cfg.Indexer.MaxFileSize << 20
@@ -246,7 +247,7 @@ documents whose "added" timestamp falls within the given date range.`,
 			errCount += e
 		}
 
-		printImportSummary(cmd, imported, skipped, errCount)
+		return finishImport(cmd, serviceImportStats{Imported: imported, Skipped: skipped, Errors: errCount}, nil)
 	},
 }
 
@@ -298,10 +299,17 @@ func addDocumentImportFlags(cmd *cobra.Command) {
 	cmd.Flags().Bool("allow-sensitive", false, "Skip sensitive content checks, allowing matching documents to be indexed")
 }
 
-func printImportSummary(cmd *cobra.Command, imported, skipped, errCount int) {
-	if err := writeImportSummary(cmd.OutOrStdout(), commandOutputFormat(cmd), imported, skipped, errCount); err != nil {
-		exit(1, "Failed to write import summary: "+err.Error())
+func finishImport(cmd *cobra.Command, stats serviceImportStats, runErr error) error {
+	if err := writeImportSummary(cmd.OutOrStdout(), commandOutputFormat(cmd), stats.Imported, stats.Skipped, stats.Errors); err != nil {
+		return fmt.Errorf("write import summary: %w", err)
 	}
+	if runErr != nil {
+		return runErr
+	}
+	if stats.Errors > 0 {
+		return &partialFailure{count: int64(stats.Errors)}
+	}
+	return nil
 }
 
 func writeImportSummary(out io.Writer, format string, imported, skipped, errCount int) error {
