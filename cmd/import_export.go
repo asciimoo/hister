@@ -18,6 +18,7 @@ import (
 	"github.com/asciimoo/hister/server/document"
 	"github.com/asciimoo/hister/server/indexer"
 
+	"charm.land/lipgloss/v2"
 	"github.com/bodgit/sevenzip"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
@@ -245,7 +246,7 @@ documents whose "added" timestamp falls within the given date range.`,
 			errCount += e
 		}
 
-		printImportSummary(imported, skipped, errCount)
+		printImportSummary(cmd, imported, skipped, errCount)
 	},
 }
 
@@ -286,6 +287,7 @@ func (o documentLabelOverride) resolve(existing, fallback string) string {
 }
 
 func addDocumentImportFlags(cmd *cobra.Command) {
+	addOutputFormatFlag(cmd)
 	cmd.Flags().String("start-date", "", "only import documents added on or after this date (YYYY-MM-DD)")
 	cmd.Flags().String("end-date", "", "only import documents added on or before this date (YYYY-MM-DD)")
 	cmd.Flags().Int("batch-size", defaultImportBatchSize, "number of documents submitted per bulk request (maximum 100)")
@@ -296,15 +298,32 @@ func addDocumentImportFlags(cmd *cobra.Command) {
 	cmd.Flags().Bool("allow-sensitive", false, "Skip sensitive content checks, allowing matching documents to be indexed")
 }
 
-func printImportSummary(imported, skipped, errCount int) {
-	msg := fmt.Sprintf("%s Imported %d document(s)", cliSuccessStyle.Render("✓"), imported)
-	if skipped > 0 {
-		msg += fmt.Sprintf(" (%d skipped)", skipped)
+func printImportSummary(cmd *cobra.Command, imported, skipped, errCount int) {
+	if err := writeImportSummary(cmd.OutOrStdout(), commandOutputFormat(cmd), imported, skipped, errCount); err != nil {
+		exit(1, "Failed to write import summary: "+err.Error())
 	}
-	if errCount > 0 {
-		msg += fmt.Sprintf(" (%d errors)", errCount)
+}
+
+func writeImportSummary(out io.Writer, format string, imported, skipped, errCount int) error {
+	w, err := newRecordWriter(out, format, []string{"imported", "skipped", "errors"})
+	if err != nil {
+		return err
 	}
-	cliPrintln(msg)
+	record := map[string]any{"imported": imported, "skipped": skipped, "errors": errCount}
+	if err := w.Write(record, func(out io.Writer) error {
+		msg := fmt.Sprintf("%s Imported %d document(s)", cliSuccessStyle.Render("✓"), imported)
+		if skipped > 0 {
+			msg += fmt.Sprintf(" (%d skipped)", skipped)
+		}
+		if errCount > 0 {
+			msg += fmt.Sprintf(" (%d errors)", errCount)
+		}
+		_, err := lipgloss.Fprintln(out, msg)
+		return err
+	}); err != nil {
+		return err
+	}
+	return w.Close()
 }
 
 func isHisterJSONExport(inputFile string) (bool, error) {

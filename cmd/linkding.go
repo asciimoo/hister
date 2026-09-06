@@ -108,7 +108,7 @@ The global --token flag remains the access token for the destination Hister serv
 		if err != nil {
 			exit(1, "Linkding import failed: "+err.Error())
 		}
-		printImportSummary(stats.Imported, stats.Skipped, stats.Errors)
+		printImportSummary(cmd, stats.Imported, stats.Skipped, stats.Errors)
 	},
 }
 

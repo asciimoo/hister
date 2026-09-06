@@ -212,7 +212,7 @@ var listenCmd = &cobra.Command{
 
 func exit(errno int, msg string) {
 	if errno != 0 {
-		cliPrintln(cliErrorStyle.Render("Error!") + " " + msg)
+		_, _ = lipgloss.Fprintln(os.Stderr, cliErrorStyle.Render("Error!")+" "+msg)
 	} else {
 		cliPrintln(msg)
 	}
@@ -326,6 +326,9 @@ func init() {
 	crawlQueueCmd.Flags().BoolP("count", "c", false, "only print the number of queued URLs")
 	crawlURLsCmd.Flags().String("status", "", "filter URLs by status (pending, failed, done, or skipped)")
 	crawlURLsCmd.Flags().BoolP("count", "c", false, "only print the number of matching URLs")
+	for _, cmd := range []*cobra.Command{crawlListCmd, crawlShowCmd, crawlErrorsCmd, crawlQueueCmd, crawlURLsCmd} {
+		addOutputFormatFlag(cmd)
+	}
 
 	addDocumentImportFlags(importFileCmd)
 	addServiceImportFlags(importLinkdingCmd, "Linkding", linkdingTokenEnv)
@@ -363,7 +366,7 @@ func init() {
 
 	reindexCmd.Flags().BoolP("exclude-sensitive", "x", false, "skip sensitive content checks during reindexing, allowing matching documents to be indexed")
 
-	searchCmd.Flags().StringP("format", "f", "text", "output format: text, json, csv")
+	addOutputFormatFlag(searchCmd)
 	searchCmd.Flags().StringP("fields", "F", "", "comma-separated list of document fields to display (id, url, title, domain, score, added, updated, language, type, text, favicon, favicon_key, user_id, html)")
 	searchCmd.Flags().IntP("limit", "L", 0, "maximum number of results to display (0 means no limit)")
 	searchCmd.Flags().String("sort", "relevance", "result order: relevance, date, domain, or visits")

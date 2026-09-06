@@ -79,6 +79,45 @@ To manually index a specific URL:
 For persistent recursive crawls, URL input jobs, custom job names, resume behavior, request
 backends, and every `crawl` subcommand, see [Website Crawler](crawler).
 
+### Search Output And Scripting
+
+Provide search terms to print results. Use `--fields` to select fields and `--limit` to stop
+after a given number of documents:
+
+```bash
+hister search 'language:en' --format json --fields title,url --limit 20
+hister search 'domain:example.com' --format jsonl --fields url,text
+hister search 'label:research' --format csv --fields title,url > research.csv
+```
+
+Search, crawl inspection commands, and file and service import summaries share `--format` / `-f`:
+
+| Format  | Output                                                                             |
+| ------- | ---------------------------------------------------------------------------------- |
+| `text`  | The default human readable output for each command.                                |
+| `json`  | A JSON array of records, including an empty array when there are no results.       |
+| `jsonl` | One JSON object per line, with no surrounding array. No results produce no output. |
+| `csv`   | A header followed by records. Commas, quotes, and newlines in values are escaped.  |
+
+JSON always uses an array, including commands that return one job, count, or import summary.
+Unknown format names are rejected. Search preserves the selected field order in CSV and text.
+Structured records contain plain data without terminal styling.
+
+Command errors are written to stderr. Search results stream as pages arrive, so a failed request
+can leave partial output. Check the exit status before treating a result as complete. JSON arrays
+are closed only when the search succeeds; JSONL retains complete records from earlier pages.
+
+File and service imports can emit a summary with numeric `imported`, `skipped`, and `errors` fields:
+
+```bash
+hister import file backup.json --format json
+hister import linkding https://bookmarks.example.com --format jsonl
+```
+
+These formats apply to file imports and the Linkding, Linkwarden, Karakeep, Readeck, Shaarli, and
+wallabag importers. Browser import retains its interactive output. See [Website Crawler](crawler)
+for structured crawl inspection.
+
 ### Updating Document Attributes
 
 Use `hister update` to change attributes on every document selected by the query language:

@@ -291,6 +291,29 @@ Use `--force` when starting a fresh recursive job over pages already present in 
 
 ## Inspect Jobs With `hister crawl`
 
+The `list`, `show`, `urls`, `queue`, and `errors` commands accept `--format` / `-f` with
+`text` (the default), `json`, `jsonl`, or `csv`:
+
+```bash
+hister crawl list --format json
+hister crawl show example-docs --format json
+hister crawl urls example-docs --status failed --format jsonl
+hister crawl errors example-docs --format csv > failures.csv
+hister crawl urls example-docs --status pending --count --format json
+```
+
+JSON output is always an array, including a single job or count. JSONL emits one object per line.
+CSV includes a header. With `--count`, structured output contains a single `count` field.
+
+Job records contain `id`, `status`, `start_url`, `label`, `created_at`, `updated_at`, and counts named
+`pending`, `in_progress`, `done`, `failed`, and `skipped`. Timestamps include the time zone. The
+`show` command also includes the saved `rules` object. If stored rules cannot be decoded, that
+field contains the original string and a warning is logged.
+
+URL records contain `status`, `depth`, and `url`. Error records contain `error_code`, `url`, and
+`error`. Structured error messages preserve their original tabs and newlines; text output replaces
+those characters with spaces to keep each failure on one line.
+
 ### List Jobs
 
 ```bash
