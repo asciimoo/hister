@@ -114,7 +114,7 @@ The global --token flag remains the access token for the destination Hister serv
 		cmd.SilenceUsage = true
 		token := serviceAPIToken(cmd, readeckTokenEnv)
 		if token == "" {
-			return fmt.Errorf("Readeck API token is required; set %s or use --api-token", readeckTokenEnv)
+			return fmt.Errorf("missing Readeck API token; set %s or use --api-token", readeckTokenEnv)
 		}
 
 		runtime, err := newServiceImportRuntime(cmd)
@@ -133,7 +133,7 @@ The global --token flag remains the access token for the destination Hister serv
 		}
 		updatedAfter, err := latestServiceUpdated(runtime.target, readeckSourceMetadataValue)
 		if err != nil {
-			return fmt.Errorf("Failed to find the latest Readeck import: %w", err)
+			return fmt.Errorf("failed to find the latest Readeck import: %w", err)
 		}
 		source.updatedAfter = updatedAfter
 
@@ -146,7 +146,7 @@ The global --token flag remains the access token for the destination Hister serv
 			runtime.options,
 		)
 		if err != nil {
-			err = fmt.Errorf("Readeck import failed: %w", err)
+			err = fmt.Errorf("import from Readeck failed: %w", err)
 		}
 		return finishImport(cmd, stats, err)
 	},

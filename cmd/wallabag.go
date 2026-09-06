@@ -148,7 +148,7 @@ The global --token flag remains the access token for the destination Hister serv
 
 		updatedAfter, err := latestServiceUpdated(runtime.target, wallabagSourceMetadataValue)
 		if err != nil {
-			return fmt.Errorf("Failed to find the latest wallabag import: %w", err)
+			return fmt.Errorf("failed to find the latest wallabag import: %w", err)
 		}
 		source.updatedAfter = updatedAfter
 

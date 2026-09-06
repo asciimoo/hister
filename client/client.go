@@ -1,6 +1,7 @@
 package client
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -95,11 +96,15 @@ func New(baseURL string, opts ...Option) *Client {
 // FetchConfig retrieves capabilities from the server the client is connected
 // to. This avoids assuming that local configuration describes a remote server.
 func (c *Client) FetchConfig() (_ *ServerConfig, err error) {
+	return c.FetchConfigContext(context.Background())
+}
+
+func (c *Client) FetchConfigContext(ctx context.Context) (_ *ServerConfig, err error) {
 	req, err := c.newRequest(http.MethodGet, "/api/config", nil)
 	if err != nil {
 		return nil, err
 	}
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.httpClient.Do(req.WithContext(ctx))
 	if err != nil {
 		return nil, err
 	}

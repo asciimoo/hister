@@ -75,7 +75,7 @@ The global --token flag remains the access token for the destination Hister serv
 		cmd.SilenceUsage = true
 		secret := serviceAPIToken(cmd, shaarliSecretEnv)
 		if secret == "" {
-			return fmt.Errorf("Shaarli API secret is required; set %s or use --api-token", shaarliSecretEnv)
+			return fmt.Errorf("missing Shaarli API secret; set %s or use --api-token", shaarliSecretEnv)
 		}
 
 		runtime, err := newServiceImportRuntime(cmd)
@@ -93,7 +93,7 @@ The global --token flag remains the access token for the destination Hister serv
 		}
 		updatedAfter, err := latestServiceUpdated(runtime.target, shaarliSourceMetadataValue)
 		if err != nil {
-			return fmt.Errorf("Failed to find the latest Shaarli import: %w", err)
+			return fmt.Errorf("failed to find the latest Shaarli import: %w", err)
 		}
 		source.updatedAfter = updatedAfter
 
@@ -106,7 +106,7 @@ The global --token flag remains the access token for the destination Hister serv
 			runtime.options,
 		)
 		if err != nil {
-			err = fmt.Errorf("Shaarli import failed: %w", err)
+			err = fmt.Errorf("import from Shaarli failed: %w", err)
 		}
 		return finishImport(cmd, stats, err)
 	},

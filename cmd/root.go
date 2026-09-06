@@ -279,6 +279,9 @@ func init() {
 
 	rootCmd.AddCommand(listenCmd)
 	rootCmd.AddCommand(createConfigCmd)
+	rootCmd.AddCommand(configCmd, doctorCmd)
+	configCmd.AddCommand(configCreateCmd, configPathCmd, configShowCmd, configValidateCmd)
+	addOutputFormatFlag(doctorCmd)
 	rootCmd.AddCommand(listURLsCmd)
 	rootCmd.AddCommand(listFilesCmd)
 	rootCmd.AddCommand(indexCmd)
@@ -372,7 +375,7 @@ func init() {
 	searchCmd.Flags().String("sort", "relevance", "result order: relevance, date, domain, or visits")
 	configureCommandScopes()
 
-	cobra.OnInitialize(initialize)
+	rootCmd.PersistentPreRun = func(_ *cobra.Command, _ []string) { initialize() }
 
 	zerolog.CallerMarshalFunc = func(_ uintptr, file string, line int) string {
 		dir, fn := filepath.Split(file)
@@ -609,16 +612,20 @@ func initIndex(accessMode model.AccessMode) *indexer.Indexer {
 }
 
 func newClient(extraOpts ...client.Option) *client.Client {
+	return newClientForConfig(cfg, extraOpts...)
+}
+
+func newClientForConfig(c *config.Config, extraOpts ...client.Option) *client.Client {
 	opts := []client.Option{client.WithUserAgent(UserAgent)}
-	if cfg.App.AccessToken != "" {
-		opts = append(opts, client.WithAccessToken(cfg.App.AccessToken))
+	if c.App.AccessToken != "" {
+		opts = append(opts, client.WithAccessToken(c.App.AccessToken))
 	}
 	if rootCmd.PersistentFlags().Changed("client-timeout") {
 		t, _ := rootCmd.PersistentFlags().GetInt("client-timeout")
 		opts = append(opts, client.WithTimeout(time.Duration(t)*time.Second))
 	}
 	opts = append(opts, extraOpts...)
-	return client.New(cfg.BaseURL(""), opts...)
+	return client.New(c.BaseURL(""), opts...)
 }
 
 func Execute() error {

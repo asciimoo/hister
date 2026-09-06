@@ -99,7 +99,7 @@ var indexCmd = &cobra.Command{
 			if err != nil {
 				return fmt.Errorf("failed to create URL input crawl job: %w", err)
 			}
-			fmt.Fprintln(cmd.ErrOrStderr(), "Starting crawl job:", jobID)
+			cmd.PrintErrln("Starting crawl job:", jobID)
 			err = runPersistentIndexJob(cmd.Context(), jobID, args[0], validatorRules, label, robotsCache, force, clientOpts...)
 			return finishPersistentIndex(cmd, jobID, report, err)
 		}
@@ -142,7 +142,7 @@ var indexCmd = &cobra.Command{
 				if err := model.CreateCrawlJob(jobID, startURL, rulesJSON, label); err != nil {
 					return fmt.Errorf("failed to create crawl job: %w", err)
 				}
-				fmt.Fprintln(cmd.ErrOrStderr(), "Starting crawl job:", jobID)
+				cmd.PrintErrln("Starting crawl job:", jobID)
 			} else {
 				// Resume existing job.
 				hasURLs, err := crawlJobHasURLsToCrawl(existingJob)
@@ -161,7 +161,7 @@ var indexCmd = &cobra.Command{
 				if !cmd.Flags().Changed("label") {
 					label = existingJob.Label
 				}
-				fmt.Fprintln(cmd.ErrOrStderr(), "Resuming crawl job:", jobID)
+				cmd.PrintErrln("Resuming crawl job:", jobID)
 			}
 
 			err = runPersistentIndexJob(cmd.Context(), jobID, startURL, validatorRules, label, robotsCache, force, clientOpts...)
@@ -193,7 +193,7 @@ var indexCmd = &cobra.Command{
 			if !cmd.Flags().Changed("label") {
 				label = existingJob.Label
 			}
-			fmt.Fprintln(cmd.ErrOrStderr(), "Resuming crawl job:", jobID)
+			cmd.PrintErrln("Resuming crawl job:", jobID)
 
 			err = runPersistentIndexJob(cmd.Context(), jobID, existingJob.StartURL, validatorRules, label, robotsCache, force, clientOpts...)
 			return finishPersistentIndex(cmd, jobID, report, err)

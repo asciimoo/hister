@@ -75,7 +75,7 @@ The global --token flag remains the access token for the destination Hister serv
 		cmd.SilenceUsage = true
 		token := serviceAPIToken(cmd, linkdingTokenEnv)
 		if token == "" {
-			return fmt.Errorf("Linkding API token is required; set %s or use --api-token", linkdingTokenEnv)
+			return fmt.Errorf("missing Linkding API token; set %s or use --api-token", linkdingTokenEnv)
 		}
 
 		runtime, err := newServiceImportRuntime(cmd)
@@ -94,7 +94,7 @@ The global --token flag remains the access token for the destination Hister serv
 		}
 		updatedAfter, err := latestServiceUpdated(runtime.target, linkdingSourceMetadataValue)
 		if err != nil {
-			return fmt.Errorf("Failed to find the latest Linkding import: %w", err)
+			return fmt.Errorf("failed to find the latest Linkding import: %w", err)
 		}
 		source.updatedAfter = updatedAfter
 
@@ -107,7 +107,7 @@ The global --token flag remains the access token for the destination Hister serv
 			runtime.options,
 		)
 		if err != nil {
-			err = fmt.Errorf("Linkding import failed: %w", err)
+			err = fmt.Errorf("import from Linkding failed: %w", err)
 		}
 		return finishImport(cmd, stats, err)
 	},

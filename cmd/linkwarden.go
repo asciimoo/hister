@@ -87,7 +87,7 @@ The global --token flag remains the access token for the destination Hister serv
 		cmd.SilenceUsage = true
 		token := linkwardenAPIToken(cmd)
 		if token == "" {
-			return fmt.Errorf("Linkwarden API token is required; set %s or use --api-token", linkwardenTokenEnv)
+			return fmt.Errorf("missing Linkwarden API token; set %s or use --api-token", linkwardenTokenEnv)
 		}
 
 		runtime, err := newServiceImportRuntime(cmd)
@@ -106,7 +106,7 @@ The global --token flag remains the access token for the destination Hister serv
 
 		updatedAfter, err := latestLinkwardenUpdated(runtime.target)
 		if err != nil {
-			return fmt.Errorf("Failed to find the latest Linkwarden import: %w", err)
+			return fmt.Errorf("failed to find the latest Linkwarden import: %w", err)
 		}
 		source.updatedAfter = updatedAfter
 
@@ -119,7 +119,7 @@ The global --token flag remains the access token for the destination Hister serv
 			runtime.options,
 		)
 		if err != nil {
-			err = fmt.Errorf("Linkwarden import failed: %w", err)
+			err = fmt.Errorf("import from Linkwarden failed: %w", err)
 		}
 		return finishImport(cmd, stats, err)
 	},

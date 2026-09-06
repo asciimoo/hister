@@ -275,15 +275,15 @@ hister index --recursive \
 
 These flags control how fetched documents are added to Hister:
 
-| Flag                | Behavior                                                                            |
-| ------------------- | ----------------------------------------------------------------------------------- |
-| `--label VALUE`     | Attach a label to documents indexed by this run.                                    |
-| `--force`           | Fetch and reindex URLs even when they already exist.                                |
-| `--allow-sensitive` | Bypass sensitive content checks for the indexed documents.                          |
-| `--global`          | Make documents available to all users. Requires an administrator in multiuser mode. |
-| `--user-id ID`      | Index documents for a specific user. Requires an administrator in multiuser mode.   |
-| `--format FORMAT`  | Print the indexing summary as `text`, `json`, `jsonl`, or `csv`. |
-| `--failed-urls PATH` | Save failed URLs, one per line, replacing the file's contents. |
+| Flag                 | Behavior                                                                            |
+| -------------------- | ----------------------------------------------------------------------------------- |
+| `--label VALUE`      | Attach a label to documents indexed by this run.                                    |
+| `--force`            | Fetch and reindex URLs even when they already exist.                                |
+| `--allow-sensitive`  | Bypass sensitive content checks for the indexed documents.                          |
+| `--global`           | Make documents available to all users. Requires an administrator in multiuser mode. |
+| `--user-id ID`       | Index documents for a specific user. Requires an administrator in multiuser mode.   |
+| `--format FORMAT`    | Print the indexing summary as `text`, `json`, `jsonl`, or `csv`.                    |
+| `--failed-urls PATH` | Save failed URLs, one per line, replacing the file's contents.                      |
 
 `--global` and `--user-id` cannot be used together.
 

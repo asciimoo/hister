@@ -68,6 +68,51 @@ that it is up to date.
 
 This check requires internet access. It does not download or install the update.
 
+### Configuration and Diagnostics
+
+```bash
+hister config create ~/.config/hister/config.yml
+hister config path
+hister config show
+hister --config /etc/hister/config.yml config validate
+hister doctor
+hister --server-url https://hister.example.com --token "$HISTER_TOKEN" doctor --format json
+```
+
+`config create [FILENAME]` writes default configuration to a new file, or prints YAML when no
+filename is given. It refuses to overwrite existing files. The deprecated `create-config` alias
+still works and prints a migration notice to stderr.
+
+`config path` prints the absolute path of the selected main config file, or `(defaults)` when
+no file is found. It works even when the file contains invalid YAML. `config show` prints
+effective YAML after applying defaults, environment variables, and global flags. It redacts
+credentials, header and cookie values, URL credentials and query values, PostgreSQL connection
+strings, and extractor extra arguments. Separate `rules.json` and `tui.yaml` files are not included.
+
+`config validate` checks main configuration keys and value types, supported settings, hotkeys,
+OAuth, public mode, semantic search settings, and extractor names and options. It exits with
+status `1` on an error and `0` on success. It does not test network access or executable availability.
+
+These inspection commands do not create data directories, secret keys, rules, TUI files, or log
+files. They follow the normal config search order. An explicit `--config` or `HISTER_CONFIG`
+path must exist, and unreadable files are reported instead of silently falling back to defaults.
+
+`doctor` checks local configuration and enabled extractor executables, then verifies server
+connectivity and authentication. The server checks its own index version, analyzer and embedding
+configuration fingerprints, and extractor executables. This supports remote deployments without
+opening a local index. Currently, yt-dlp is the extractor that requires an external executable.
+The executable is located without running it. Doctor does not repair data or call an embedding provider.
+
+Server checks use `GET /api/diagnostics`. Token authentication is required when configured, including
+in public mode. Multi user deployments require an admin token. Older servers report a warning when
+diagnostics are unavailable. Use `--client-timeout` to control the HTTP timeout for each request.
+
+Doctor supports `--format` / `-f` with `text`, `json`, `jsonl`, or `csv`. Each record contains
+`name`, `status`, and `message`. Status is `ok`, `warning`, or `error`; check names use `local.`
+or `server.` prefixes where applicable. Exit status is `1` if any check fails, and `0` when all
+completed checks pass or only warnings remain. JSON output remains a complete array when a
+diagnostic check reports an error.
+
 ### Index a URL Manually
 
 To manually index a specific URL:
@@ -90,7 +135,7 @@ hister search 'domain:example.com' --format jsonl --fields url,text
 hister search 'label:research' --format csv --fields title,url > research.csv
 ```
 
-Search, indexing summaries, crawl inspection commands, and file and service import summaries
+Search, indexing summaries, crawl inspection commands, doctor, and file and service import summaries
 share `--format` / `-f`:
 
 | Format  | Output                                                                             |
@@ -131,11 +176,11 @@ hister index --input urls.txt --failed-urls failed-urls.txt
 
 The exit statuses for `index`, `import file`, and service imports are:
 
-| Status | Meaning |
-| ------ | ------- |
-| `0` | Processing finished without reported item errors. Skipped items are allowed. |
-| `1` | A setup, source, cancellation, output, or other execution error prevented completion. |
-| `2` | Processing finished with item errors, including when every item failed. |
+| Status | Meaning                                                                               |
+| ------ | ------------------------------------------------------------------------------------- |
+| `0`    | Processing finished without reported item errors. Skipped items are allowed.          |
+| `1`    | A setup, source, cancellation, output, or other execution error prevented completion. |
+| `2`    | Processing finished with item errors, including when every item failed.               |
 
 File and service imports retain their `imported`, `skipped`, and `errors` summary fields. A service
 import also prints its accumulated counts if fetching a later source page fails, then exits with

@@ -36,7 +36,10 @@ type PreviewResponse struct {
 // ServerConfig contains the search capabilities advertised by /api/config
 // that command-line clients need at runtime.
 type ServerConfig struct {
-	SemanticEnabled     bool    `json:"semanticEnabled"`
-	SemanticWeight      float64 `json:"semanticWeight"`
-	SimilarityThreshold float64 `json:"similarityThreshold"`
+	AuthMode             string  `json:"authMode"`
+	Authenticated        bool    `json:"authenticated"`
+	DiagnosticsAvailable bool    `json:"diagnosticsAvailable"`
+	SemanticEnabled      bool    `json:"semanticEnabled"`
+	SemanticWeight       float64 `json:"semanticWeight"`
+	SimilarityThreshold  float64 `json:"similarityThreshold"`
 }

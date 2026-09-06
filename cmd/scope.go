@@ -33,6 +33,12 @@ var scopedGlobalFlagNames = []string{
 func configureCommandScopes() {
 	setCommandScope(listenCmd, executionScopeLocal, "server-url", "token", "search-url")
 	setCommandScope(createConfigCmd, executionScopeLocal)
+	setCommandScope(configCmd, executionScopeLocal, "server-url", "token", "search-url")
+	setCommandScope(configCreateCmd, executionScopeLocal)
+	setCommandScope(configPathCmd, executionScopeLocal)
+	setCommandScope(configShowCmd, executionScopeLocal, "server-url", "token", "search-url")
+	setCommandScope(configValidateCmd, executionScopeLocal, "server-url", "token", "search-url")
+	setCommandScope(doctorCmd, executionScopeHybrid, "client-timeout", "search-url")
 	setCommandScope(listURLsCmd, executionScopeHybrid)
 	setCommandScope(listFilesCmd, executionScopeLocal)
 	setCommandScope(indexCmd, executionScopeHybrid, "client-timeout")
@@ -73,6 +79,7 @@ func configureCommandScopes() {
 	configureScopeGroups(importCmd)
 	configureScopeGroups(crawlCmd)
 	configureScopeGroups(companionCmd)
+	configureScopeGroups(configCmd)
 	configureScopedHelp()
 }
 

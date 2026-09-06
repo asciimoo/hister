@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/asciimoo/hister/server/model"
+
 	"github.com/spf13/cobra"
 )
 

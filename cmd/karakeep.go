@@ -116,7 +116,7 @@ The global --token flag remains the access token for the destination Hister serv
 		cmd.SilenceUsage = true
 		token := serviceAPIToken(cmd, karakeepTokenEnv)
 		if token == "" {
-			return fmt.Errorf("Karakeep API token is required; set %s or use --api-token", karakeepTokenEnv)
+			return fmt.Errorf("missing Karakeep API token; set %s or use --api-token", karakeepTokenEnv)
 		}
 		runtime, err := newServiceImportRuntime(cmd)
 		if err != nil {
@@ -133,7 +133,7 @@ The global --token flag remains the access token for the destination Hister serv
 		}
 		updatedAfter, err := latestServiceUpdated(runtime.target, karakeepSourceMetadataValue)
 		if err != nil {
-			return fmt.Errorf("Failed to find the latest Karakeep import: %w", err)
+			return fmt.Errorf("failed to find the latest Karakeep import: %w", err)
 		}
 		source.updatedAfter = updatedAfter
 
@@ -146,7 +146,7 @@ The global --token flag remains the access token for the destination Hister serv
 			runtime.options,
 		)
 		if err != nil {
-			err = fmt.Errorf("Karakeep import failed: %w", err)
+			err = fmt.Errorf("import from Karakeep failed: %w", err)
 		}
 		return finishImport(cmd, stats, err)
 	},
