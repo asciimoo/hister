@@ -19,6 +19,7 @@ var fileTypeHandlers = []fileTypeHandler{
 	docxFileType{},
 	markdownFileType{},
 	orgFileType{},
+	emailFileType{},
 	plainTextFileType{},
 }
 

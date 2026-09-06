@@ -197,7 +197,7 @@ func TestRegisteredExtractorCapabilities(t *testing.T) {
 			if !caps.Enrich || caps.Extract || caps.Preview {
 				t.Errorf("%s capabilities = %+v, want enrichment only", candidate.Name(), caps)
 			}
-		case "Markdown", "OrgMode", "GoDoc":
+		case "Markdown", "OrgMode", "Email", "GoDoc":
 			if caps.Enrich || caps.Extract || !caps.Preview {
 				t.Errorf("%s capabilities = %+v, want preview only", candidate.Name(), caps)
 			}
@@ -229,6 +229,7 @@ func TestDefaultRegistryOrder(t *testing.T) {
 		"Notion",
 		"Ytdlp",
 		"ChatGPT",
+		"Email",
 		"Readability",
 		"Basic",
 	}

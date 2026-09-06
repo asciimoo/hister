@@ -12,6 +12,7 @@ import (
 	"github.com/asciimoo/hister/server/extractor/extractors/bluesky"
 	"github.com/asciimoo/hister/server/extractor/extractors/chatgpt"
 	"github.com/asciimoo/hister/server/extractor/extractors/discourse"
+	"github.com/asciimoo/hister/server/extractor/extractors/email"
 	"github.com/asciimoo/hister/server/extractor/extractors/embeddedvideo"
 	"github.com/asciimoo/hister/server/extractor/extractors/github"
 	"github.com/asciimoo/hister/server/extractor/extractors/godoc"
@@ -73,6 +74,7 @@ func DefaultExtractors() []Extractor {
 		&notion.NotionExtractor{},
 		&ytdlp.YtdlpExtractor{},
 		&chatgpt.ChatGPTExtractor{},
+		&email.EmailExtractor{},
 		&readabilityExtractor{},
 		&basicExtractor{},
 	}
