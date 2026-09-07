@@ -27,6 +27,12 @@ type Crawler interface {
 	Close() error
 }
 
+// ErrorReporter exposes failures from a background crawl. Err must be read
+// after its document channel closes and before starting another crawl.
+type ErrorReporter interface {
+	Err() error
+}
+
 // SkipURLChecker decides whether rawURL should be skipped before delay and fetch.
 type SkipURLChecker func(rawURL string) (bool, error)
 

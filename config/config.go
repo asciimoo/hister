@@ -614,27 +614,31 @@ func parseConfig(rawConfig []byte) (*Config, error) {
 	if err := v.Unmarshal(&c); err != nil {
 		return nil, err
 	}
+	return c, c.validateBasic()
+}
+
+func (c *Config) validateBasic() error {
 	maxBatchBodySize := int64(^uint64(0)>>1) >> 20
 	if c.Server.MaxBatchBodySize < 1 || c.Server.MaxBatchBodySize > maxBatchBodySize {
-		return nil, fmt.Errorf("server.max_batch_body_size must be between 1 and %d", maxBatchBodySize)
+		return fmt.Errorf("server.max_batch_body_size must be between 1 and %d", maxBatchBodySize)
 	}
 	switch c.App.ColorScheme {
 	case "automatic", "dark", "light":
 	default:
-		return nil, errors.New("app.color_scheme must be one of automatic, dark, or light")
+		return errors.New("app.color_scheme must be one of automatic, dark, or light")
 	}
 
 	if c.Server.BaseURL != "" {
 		pu, err := url.Parse(c.Server.BaseURL)
 		if err != nil || pu.Scheme == "" || pu.Host == "" {
-			return nil, errors.New("invalid Server.BaseURL - use 'https://domain.tld/xy/' format")
+			return errors.New("invalid server.base_url: use 'https://domain.tld/xy/' format")
 		}
 		c.Server.BaseURL = strings.TrimSuffix(c.Server.BaseURL, "/")
 	}
-	return c, nil
+	return nil
 }
 
-func (c *Config) init() error {
+func (c *Config) normalize() error {
 	if dataDir := os.Getenv("HISTER_DATA_DIR"); dataDir != "" {
 		c.App.Directory = dataDir
 	}
@@ -647,14 +651,22 @@ func (c *Config) init() error {
 		c.Server.Address = net.JoinHostPort(host, envPort)
 	}
 
-	if err := c.UpdateBaseURL(c.Server.BaseURL); err != nil {
+	if strings.HasPrefix(c.App.Directory, "~/") {
+		u, err := user.Current()
+		if err != nil {
+			return fmt.Errorf("resolve home directory: %w", err)
+		}
+		c.App.Directory = filepath.Join(u.HomeDir, c.App.Directory[2:])
+	}
+	return nil
+}
+
+func (c *Config) init() error {
+	if err := c.normalize(); err != nil {
 		return err
 	}
-
-	if strings.HasPrefix(c.App.Directory, "~/") {
-		u, _ := user.Current()
-		dir := u.HomeDir
-		c.App.Directory = filepath.Join(dir, c.App.Directory[2:])
+	if err := c.UpdateBaseURL(c.Server.BaseURL); err != nil {
+		return err
 	}
 	if err := os.MkdirAll(c.App.Directory, 0o750); err != nil {
 		isPermissionErr := errors.Is(err, os.ErrPermission) ||
@@ -711,7 +723,7 @@ func (c *Config) validateOAuth() error {
 		if !validOAuthProviders[name] {
 			return fmt.Errorf("unknown oauth provider %q: valid providers are github, google, oidc", name)
 		}
-		if entry.ClientID == "" {
+		if entry == nil || entry.ClientID == "" {
 			return fmt.Errorf("oauth provider %q: client_id is required", name)
 		}
 		if entry.ClientSecret == "" {

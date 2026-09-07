@@ -169,7 +169,7 @@ var listenCmd = &cobra.Command{
 		}
 	},
 	Run: func(cmd *cobra.Command, _ []string) {
-		idx := initIndex()
+		idx := initIndex(model.ReadWrite)
 		defer idx.Close()
 		if a, err := cmd.Flags().GetString("address"); err == nil && cmd.Flags().Changed("address") {
 			if err := cfg.UpdateListenAddress(a); err != nil {
@@ -212,7 +212,7 @@ var listenCmd = &cobra.Command{
 
 func exit(errno int, msg string) {
 	if errno != 0 {
-		cliPrintln(cliErrorStyle.Render("Error!") + " " + msg)
+		_, _ = lipgloss.Fprintln(os.Stderr, cliErrorStyle.Render("Error!")+" "+msg)
 	} else {
 		cliPrintln(msg)
 	}
@@ -259,11 +259,13 @@ func parseDateRangeFlags(cmd *cobra.Command) (dateRangeFlags, error) {
 	return r, nil
 }
 
-func requireUserHandlingAndInitDB(_ *cobra.Command, _ []string) {
-	if !cfg.App.UserHandling {
-		exit(1, "user_handling is not enabled in configuration")
+func requireUserHandlingAndInitDB(accessMode model.AccessMode) func(*cobra.Command, []string) {
+	return func(_ *cobra.Command, _ []string) {
+		if !cfg.App.UserHandling {
+			exit(1, "user_handling is not enabled in configuration")
+		}
+		initDB(accessMode)
 	}
-	initDB()
 }
 
 func init() {
@@ -277,6 +279,9 @@ func init() {
 
 	rootCmd.AddCommand(listenCmd)
 	rootCmd.AddCommand(createConfigCmd)
+	rootCmd.AddCommand(configCmd, doctorCmd)
+	configCmd.AddCommand(configCreateCmd, configPathCmd, configShowCmd, configValidateCmd)
+	addOutputFormatFlag(doctorCmd)
 	rootCmd.AddCommand(listURLsCmd)
 	rootCmd.AddCommand(listFilesCmd)
 	rootCmd.AddCommand(indexCmd)
@@ -324,6 +329,9 @@ func init() {
 	crawlQueueCmd.Flags().BoolP("count", "c", false, "only print the number of queued URLs")
 	crawlURLsCmd.Flags().String("status", "", "filter URLs by status (pending, failed, done, or skipped)")
 	crawlURLsCmd.Flags().BoolP("count", "c", false, "only print the number of matching URLs")
+	for _, cmd := range []*cobra.Command{crawlListCmd, crawlShowCmd, crawlErrorsCmd, crawlQueueCmd, crawlURLsCmd} {
+		addOutputFormatFlag(cmd)
+	}
 
 	addDocumentImportFlags(importFileCmd)
 	addServiceImportFlags(importLinkdingCmd, "Linkding", linkdingTokenEnv)
@@ -361,13 +369,13 @@ func init() {
 
 	reindexCmd.Flags().BoolP("exclude-sensitive", "x", false, "skip sensitive content checks during reindexing, allowing matching documents to be indexed")
 
-	searchCmd.Flags().StringP("format", "f", "text", "output format: text, json, csv")
+	addOutputFormatFlag(searchCmd)
 	searchCmd.Flags().StringP("fields", "F", "", "comma-separated list of document fields to display (id, url, title, domain, score, added, updated, language, type, text, favicon, favicon_key, user_id, html)")
 	searchCmd.Flags().IntP("limit", "L", 0, "maximum number of results to display (0 means no limit)")
 	searchCmd.Flags().String("sort", "relevance", "result order: relevance, date, domain, or visits")
 	configureCommandScopes()
 
-	cobra.OnInitialize(initialize)
+	rootCmd.PersistentPreRun = func(_ *cobra.Command, _ []string) { initialize() }
 
 	zerolog.CallerMarshalFunc = func(_ uintptr, file string, line int) string {
 		dir, fn := filepath.Split(file)
@@ -505,8 +513,12 @@ func initLog() {
 	}
 }
 
-func initDB() {
-	err := model.Init(cfg)
+func initDB(accessMode model.AccessMode) {
+	initialize := model.Init
+	if accessMode == model.ReadOnly {
+		initialize = model.InitReadOnly
+	}
+	err := initialize(cfg)
 	if err != nil {
 		exit(1, err.Error())
 	}
@@ -535,10 +547,18 @@ func embeddingConfigWarning(storedFingerprint, activeFingerprint string) string 
 	return "The semantic search embedding configuration differs from the indexed configuration. Run `hister reindex` to update your embeddings."
 }
 
-func initIndex() *indexer.Indexer {
-	initDB()
+func initIndex(accessMode model.AccessMode) *indexer.Indexer {
+	initDB(accessMode)
 	initExtractor()
-	idx, err := indexer.New(cfg)
+	indexCfg := cfg
+	if accessMode == model.ReadOnly {
+		// Offline URL listing does not need a vector store or embedding workers
+		// that write to the SQL database.
+		copy := *cfg
+		copy.SemanticSearch.Enable = false
+		indexCfg = &copy
+	}
+	idx, err := indexer.New(indexCfg)
 	if err != nil {
 		exit(1, "Indexer initialization error: "+err.Error())
 	}
@@ -592,16 +612,20 @@ func initIndex() *indexer.Indexer {
 }
 
 func newClient(extraOpts ...client.Option) *client.Client {
+	return newClientForConfig(cfg, extraOpts...)
+}
+
+func newClientForConfig(c *config.Config, extraOpts ...client.Option) *client.Client {
 	opts := []client.Option{client.WithUserAgent(UserAgent)}
-	if cfg.App.AccessToken != "" {
-		opts = append(opts, client.WithAccessToken(cfg.App.AccessToken))
+	if c.App.AccessToken != "" {
+		opts = append(opts, client.WithAccessToken(c.App.AccessToken))
 	}
 	if rootCmd.PersistentFlags().Changed("client-timeout") {
 		t, _ := rootCmd.PersistentFlags().GetInt("client-timeout")
 		opts = append(opts, client.WithTimeout(time.Duration(t)*time.Second))
 	}
 	opts = append(opts, extraOpts...)
-	return client.New(cfg.BaseURL(""), opts...)
+	return client.New(c.BaseURL(""), opts...)
 }
 
 func Execute() error {

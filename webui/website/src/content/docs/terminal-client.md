@@ -68,6 +68,51 @@ that it is up to date.
 
 This check requires internet access. It does not download or install the update.
 
+### Configuration and Diagnostics
+
+```bash
+hister config create ~/.config/hister/config.yml
+hister config path
+hister config show
+hister --config /etc/hister/config.yml config validate
+hister doctor
+hister --server-url https://hister.example.com --token "$HISTER_TOKEN" doctor --format json
+```
+
+`config create [FILENAME]` writes default configuration to a new file, or prints YAML when no
+filename is given. It refuses to overwrite existing files. The deprecated `create-config` alias
+still works and prints a migration notice to stderr.
+
+`config path` prints the absolute path of the selected main config file, or `(defaults)` when
+no file is found. It works even when the file contains invalid YAML. `config show` prints
+effective YAML after applying defaults, environment variables, and global flags. It redacts
+credentials, header and cookie values, URL credentials and query values, PostgreSQL connection
+strings, and extractor extra arguments. Separate `rules.json` and `tui.yaml` files are not included.
+
+`config validate` checks main configuration keys and value types, supported settings, hotkeys,
+OAuth, public mode, semantic search settings, and extractor names and options. It exits with
+status `1` on an error and `0` on success. It does not test network access or executable availability.
+
+These inspection commands do not create data directories, secret keys, rules, TUI files, or log
+files. They follow the normal config search order. An explicit `--config` or `HISTER_CONFIG`
+path must exist, and unreadable files are reported instead of silently falling back to defaults.
+
+`doctor` checks local configuration and enabled extractor executables, then verifies server
+connectivity and authentication. The server checks its own index version, analyzer and embedding
+configuration fingerprints, and extractor executables. This supports remote deployments without
+opening a local index. Currently, yt-dlp is the extractor that requires an external executable.
+The executable is located without running it. Doctor does not repair data or call an embedding provider.
+
+Server checks use `GET /api/diagnostics`. Token authentication is required when configured, including
+in public mode. Multi user deployments require an admin token. Older servers report a warning when
+diagnostics are unavailable. Use `--client-timeout` to control the HTTP timeout for each request.
+
+Doctor supports `--format` / `-f` with `text`, `json`, `jsonl`, or `csv`. Each record contains
+`name`, `status`, and `message`. Status is `ok`, `warning`, or `error`; check names use `local.`
+or `server.` prefixes where applicable. Exit status is `1` if any check fails, and `0` when all
+completed checks pass or only warnings remain. JSON output remains a complete array when a
+diagnostic check reports an error.
+
 ### Index a URL Manually
 
 To manually index a specific URL:
@@ -78,6 +123,83 @@ To manually index a specific URL:
 
 For persistent recursive crawls, URL input jobs, custom job names, resume behavior, request
 backends, and every `crawl` subcommand, see [Website Crawler](crawler).
+
+### Search Output And Scripting
+
+Provide search terms to print results. Use `--fields` to select fields and `--limit` to stop
+after a given number of documents:
+
+```bash
+hister search 'language:en' --format json --fields title,url --limit 20
+hister search 'domain:example.com' --format jsonl --fields url,text
+hister search 'label:research' --format csv --fields title,url > research.csv
+```
+
+Search, indexing summaries, crawl inspection commands, doctor, and file and service import summaries
+share `--format` / `-f`:
+
+| Format  | Output                                                                             |
+| ------- | ---------------------------------------------------------------------------------- |
+| `text`  | The default human readable output for each command.                                |
+| `json`  | A JSON array of records, including an empty array when there are no results.       |
+| `jsonl` | One JSON object per line, with no surrounding array. No results produce no output. |
+| `csv`   | A header followed by records. Commas, quotes, and newlines in values are escaped.  |
+
+JSON always uses an array, including commands that return one job, count, or import summary.
+Unknown format names are rejected. Search preserves the selected field order in CSV and text.
+Structured records contain plain data without terminal styling.
+
+Command errors are written to stderr. Search results stream as pages arrive, so a failed request
+can leave partial output. Check the exit status before treating a result as complete. JSON arrays
+are closed only when the search succeeds; JSONL retains complete records from earlier pages.
+
+File and service imports can emit a summary with numeric `imported`, `skipped`, and `errors` fields:
+
+```bash
+hister import file backup.json --format json
+hister import linkding https://bookmarks.example.com --format jsonl
+```
+
+These formats apply to file imports and the Linkding, Linkwarden, Karakeep, Readeck, Shaarli, and
+wallabag importers. Browser import retains its interactive output. See [Website Crawler](crawler)
+for structured crawl inspection.
+
+### Indexing Results And Exit Status
+
+Indexing reports `indexed`, `skipped`, and `failed` counts. Already indexed URLs and URLs excluded
+by robots.txt count as skipped. Individual URL failures do not stop the remaining URLs:
+
+```bash
+hister index https://example.com/one https://example.com/two --format json
+hister index --input urls.txt --failed-urls failed-urls.txt
+```
+
+The exit statuses for `index`, `import file`, and service imports are:
+
+| Status | Meaning                                                                               |
+| ------ | ------------------------------------------------------------------------------------- |
+| `0`    | Processing finished without reported item errors. Skipped items are allowed.          |
+| `1`    | A setup, source, cancellation, output, or other execution error prevented completion. |
+| `2`    | Processing finished with item errors, including when every item failed.               |
+
+File and service imports retain their `imported`, `skipped`, and `errors` summary fields. A service
+import also prints its accumulated counts if fetching a later source page fails, then exits with
+status `1`. Content extraction errors can count toward `errors` even if bookmark metadata was
+successfully imported. Optional favicon download failures remain diagnostic messages.
+
+The `index --failed-urls PATH` option writes one failed URL per line and replaces the file's
+contents. It creates an empty file when there are no failed URLs. An unusable report path fails
+before indexing starts. Retry the saved URLs with:
+
+```bash
+hister index --force --input failed-urls.txt --failed-urls still-failed.txt
+```
+
+Persistent indexing summaries include `job_id` and `pending`. Their counts describe the entire
+stored job, including earlier runs and redirect tracking URLs, rather than only the current run.
+The retry file likewise contains all URLs currently marked failed in that job. A completed job
+with stored failures continues to return status `2` when resumed without more pending work.
+Stopping at a configured crawl limit can leave pending URLs without being an error.
 
 ### Updating Document Attributes
 

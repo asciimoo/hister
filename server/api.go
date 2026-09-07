@@ -81,6 +81,14 @@ func documentMetadataSchema() *JSONSchemaField {
 func init() {
 	Endpoints = []*Endpoint{
 		{
+			Name:        "Diagnostics",
+			Path:        "/api/diagnostics",
+			Method:      GET,
+			AdminOnly:   true,
+			Handler:     serveDiagnostics,
+			Description: "Inspect index compatibility and enabled extractor dependencies without modifying server data. Requires admin access in multi user mode. Returns checks with name, status (ok or error), and message fields.",
+		},
+		{
 			Name:         "Config",
 			Path:         "/api/config",
 			Method:       GET,

@@ -374,30 +374,31 @@ func serveGenerateToken(c *webContext) {
 // serveConfig returns app configuration as JSON and refreshes CSRF token.
 func serveConfig(c *webContext) {
 	type configResponse struct {
-		BaseURL             string                    `json:"baseUrl"`
-		BasePath            string                    `json:"basePath"`
-		WsURL               string                    `json:"wsUrl"`
-		Title               string                    `json:"title"`
-		Subtitle            string                    `json:"subtitle"`
-		ColorScheme         string                    `json:"colorScheme"`
-		SearchURL           string                    `json:"searchUrl"`
-		OpenResultsOnNewTab bool                      `json:"openResultsOnNewTab"`
-		Hotkeys             map[string]string         `json:"hotkeys"`
-		AuthMode            string                    `json:"authMode"`
-		Authenticated       bool                      `json:"authenticated"`
-		Public              bool                      `json:"public"`
-		CanWrite            bool                      `json:"canWrite"`
-		HistoryEnabled      bool                      `json:"historyEnabled"`
-		Username            string                    `json:"username,omitempty"`
-		UserID              uint                      `json:"userId,omitempty"`
-		SemanticEnabled     bool                      `json:"semanticEnabled"`
-		SemanticWeight      float64                   `json:"semanticWeight,omitempty"`
-		SimilarityThreshold float64                   `json:"similarityThreshold,omitempty"`
-		OAuthProviders      []string                  `json:"oauthProviders,omitempty"`
-		OAuthOnly           bool                      `json:"oauthOnly,omitempty"`
-		DisablePreviews     bool                      `json:"disablePreviews,omitempty"`
-		MaxBatchBodyBytes   int64                     `json:"maxBatchBodyBytes"`
-		Search              searchschema.Capabilities `json:"search"`
+		BaseURL              string                    `json:"baseUrl"`
+		BasePath             string                    `json:"basePath"`
+		WsURL                string                    `json:"wsUrl"`
+		Title                string                    `json:"title"`
+		Subtitle             string                    `json:"subtitle"`
+		ColorScheme          string                    `json:"colorScheme"`
+		SearchURL            string                    `json:"searchUrl"`
+		OpenResultsOnNewTab  bool                      `json:"openResultsOnNewTab"`
+		Hotkeys              map[string]string         `json:"hotkeys"`
+		AuthMode             string                    `json:"authMode"`
+		Authenticated        bool                      `json:"authenticated"`
+		DiagnosticsAvailable bool                      `json:"diagnosticsAvailable"`
+		Public               bool                      `json:"public"`
+		CanWrite             bool                      `json:"canWrite"`
+		HistoryEnabled       bool                      `json:"historyEnabled"`
+		Username             string                    `json:"username,omitempty"`
+		UserID               uint                      `json:"userId,omitempty"`
+		SemanticEnabled      bool                      `json:"semanticEnabled"`
+		SemanticWeight       float64                   `json:"semanticWeight,omitempty"`
+		SimilarityThreshold  float64                   `json:"similarityThreshold,omitempty"`
+		OAuthProviders       []string                  `json:"oauthProviders,omitempty"`
+		OAuthOnly            bool                      `json:"oauthOnly,omitempty"`
+		DisablePreviews      bool                      `json:"disablePreviews,omitempty"`
+		MaxBatchBodyBytes    int64                     `json:"maxBatchBodyBytes"`
+		Search               searchschema.Capabilities `json:"search"`
 	}
 	authMode := "none"
 	authenticated := true
@@ -417,30 +418,31 @@ func serveConfig(c *webContext) {
 		oauthProviders = append(oauthProviders, name)
 	}
 	c.JSON(configResponse{
-		BaseURL:             c.Config.BaseURL(""),
-		BasePath:            c.Config.BasePathPrefix(),
-		WsURL:               c.Config.WebSocketURL(),
-		Title:               c.Config.App.Title,
-		Subtitle:            c.Config.App.Subtitle,
-		ColorScheme:         c.Config.App.ColorScheme,
-		SearchURL:           c.Config.App.SearchURL,
-		OpenResultsOnNewTab: c.Config.App.OpenResultsOnNewTab,
-		Hotkeys:             hotkeys,
-		AuthMode:            authMode,
-		Authenticated:       authenticated,
-		Public:              c.Config.App.Public,
-		CanWrite:            canWrite(c),
-		HistoryEnabled:      historyEnabled(c),
-		Username:            c.Username,
-		UserID:              c.UserID,
-		SemanticEnabled:     c.Indexer != nil && c.Indexer.SemanticSearchEnabled(),
-		SemanticWeight:      c.Config.SemanticSearch.SemanticWeight,
-		SimilarityThreshold: c.Config.SemanticSearch.SimilarityThreshold,
-		OAuthProviders:      oauthProviders,
-		OAuthOnly:           c.Config.Server.OAuthOnly,
-		DisablePreviews:     c.Config.App.DisablePreviews,
-		MaxBatchBodyBytes:   c.Config.Server.MaxBatchBodyBytes(),
-		Search:              searchschema.CapabilitiesDefinition(),
+		BaseURL:              c.Config.BaseURL(""),
+		BasePath:             c.Config.BasePathPrefix(),
+		WsURL:                c.Config.WebSocketURL(),
+		Title:                c.Config.App.Title,
+		Subtitle:             c.Config.App.Subtitle,
+		ColorScheme:          c.Config.App.ColorScheme,
+		SearchURL:            c.Config.App.SearchURL,
+		OpenResultsOnNewTab:  c.Config.App.OpenResultsOnNewTab,
+		Hotkeys:              hotkeys,
+		AuthMode:             authMode,
+		Authenticated:        authenticated,
+		DiagnosticsAvailable: true,
+		Public:               c.Config.App.Public,
+		CanWrite:             canWrite(c),
+		HistoryEnabled:       historyEnabled(c),
+		Username:             c.Username,
+		UserID:               c.UserID,
+		SemanticEnabled:      c.Indexer != nil && c.Indexer.SemanticSearchEnabled(),
+		SemanticWeight:       c.Config.SemanticSearch.SemanticWeight,
+		SimilarityThreshold:  c.Config.SemanticSearch.SimilarityThreshold,
+		OAuthProviders:       oauthProviders,
+		OAuthOnly:            c.Config.Server.OAuthOnly,
+		DisablePreviews:      c.Config.App.DisablePreviews,
+		MaxBatchBodyBytes:    c.Config.Server.MaxBatchBodyBytes(),
+		Search:               searchschema.CapabilitiesDefinition(),
 	})
 }
 

@@ -131,7 +131,7 @@ This command starts the Hister server so it can receive data from the browser ex
 **Creating a configuration file:**
 
 ```bash
-hister create-config ~/.config/hister/config.yml
+hister config create ~/.config/hister/config.yml
 ```
 
 This generates a configuration file with default settings that you can then customize with your preferences.

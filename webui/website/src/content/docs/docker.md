@@ -19,7 +19,7 @@ This is the **recommended approach for containerized environments** (Docker, Kub
 If you prefer using a configuration file instead of environment variables, you can generate a default one using Docker:
 
 ```bash
-docker run --rm ghcr.io/asciimoo/hister:latest create-config > config.yml
+docker run --rm ghcr.io/asciimoo/hister:latest config create > config.yml
 ```
 
 ### Basic Docker Compose

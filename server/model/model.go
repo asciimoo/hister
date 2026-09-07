@@ -7,6 +7,8 @@ package model
 import (
 	"errors"
 	"fmt"
+	"net/url"
+	"path/filepath"
 	"time"
 
 	"github.com/asciimoo/hister/config"
@@ -24,8 +26,26 @@ var ErrDBType = errors.New("unknown database type")
 // DB is the global database instance.
 var DB *gorm.DB
 
+// AccessMode controls database access and schema migration behavior.
+type AccessMode uint8
+
+const (
+	ReadWrite AccessMode = iota
+	ReadOnly
+)
+
 // Init initializes the database connection and runs migrations.
 func Init(c *config.Config) error {
+	return initDatabase(c, ReadWrite)
+}
+
+// InitReadOnly opens an existing database without running migrations.
+// SQLite connections use read only access without file locking.
+func InitReadOnly(c *config.Config) error {
+	return initDatabase(c, ReadOnly)
+}
+
+func initDatabase(c *config.Config, accessMode AccessMode) error {
 	dbCfg := &gorm.Config{}
 	if c.App.DebugSQL {
 		dbCfg.Logger = logger.Default.LogMode(logger.Info)
@@ -41,12 +61,22 @@ func Init(c *config.Config) error {
 			return err
 		}
 	case config.Sqlite:
+		if accessMode == ReadOnly {
+			path := (&url.URL{Path: filepath.ToSlash(dsn)}).EscapedPath()
+			dsn = "file:" + path + "?mode=ro&nolock=1"
+		}
 		DB, err = gorm.Open(sqlite.Open(dsn), dbCfg)
 		if err != nil {
 			return err
 		}
 	default:
 		return ErrDBType
+	}
+	if err = DB.SetupJoinTable(&History{}, "Links", &HistoryLink{}); err != nil {
+		return fmt.Errorf("failed to setup join table for URL history: %w", err)
+	}
+	if accessMode == ReadOnly {
+		return nil
 	}
 	dbVer, initialized := migrationVersion()
 	if initialized {
@@ -56,9 +86,6 @@ func Init(c *config.Config) error {
 	}
 	if err = automigrate(); err != nil {
 		return fmt.Errorf("auto migration of database '%s' has failed: %w", dsn, err)
-	}
-	if err = DB.SetupJoinTable(&History{}, "Links", &HistoryLink{}); err != nil {
-		return fmt.Errorf("failed to setup join table for URL history: %w", err)
 	}
 	if initialized {
 		if err = migratePost(dbVer); err != nil {

@@ -21,7 +21,7 @@ var createUserCmd = &cobra.Command{
 	Short:  "Create a new user",
 	Long:   "Create a new user account (requires user_handling to be enabled)",
 	Args:   cobra.ExactArgs(1),
-	PreRun: requireUserHandlingAndInitDB,
+	PreRun: requireUserHandlingAndInitDB(model.ReadWrite),
 	Run: func(cmd *cobra.Command, args []string) {
 		username := args[0]
 		password, err := promptConfirmedPassword("Password: ", "Confirm password: ")
@@ -41,7 +41,7 @@ var deleteUserCmd = &cobra.Command{
 	Short:  "Delete a user",
 	Long:   "Delete a user account (requires user_handling to be enabled). Use --purge to also remove all indexed documents belonging to the user.",
 	Args:   cobra.ExactArgs(1),
-	PreRun: requireUserHandlingAndInitDB,
+	PreRun: requireUserHandlingAndInitDB(model.ReadWrite),
 	Run: func(cmd *cobra.Command, args []string) {
 		username := args[0]
 		u, err := model.GetUser(username)
@@ -76,7 +76,7 @@ var showUserCmd = &cobra.Command{
 	Short:  "Show user information",
 	Long:   "Display information about a user account (requires user_handling to be enabled)",
 	Args:   cobra.ExactArgs(1),
-	PreRun: requireUserHandlingAndInitDB,
+	PreRun: requireUserHandlingAndInitDB(model.ReadOnly),
 	Run: func(cmd *cobra.Command, args []string) {
 		u, err := model.GetUser(args[0])
 		if err != nil {
@@ -102,7 +102,7 @@ var updateUserCmd = &cobra.Command{
 	Short:  "Update a user",
 	Long:   "Update a user account (requires user_handling to be enabled). Use flags to change username or password, regenerate token, or toggle admin status.",
 	Args:   cobra.ExactArgs(1),
-	PreRun: requireUserHandlingAndInitDB,
+	PreRun: requireUserHandlingAndInitDB(model.ReadWrite),
 	Run: func(cmd *cobra.Command, args []string) {
 		username := args[0]
 		changed := false

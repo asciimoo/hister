@@ -23,6 +23,7 @@ type persistentCrawler struct {
 	jobID          string
 	robots         *RobotsCache // nil means robots.txt enforcement is disabled
 	skipURLChecker SkipURLChecker
+	err            error
 }
 
 // NewPersistent creates a Crawler that persists its state to the database.
@@ -54,11 +55,17 @@ func (c *persistentCrawler) Crawl(ctx context.Context, startURL string, v *Valid
 	ch := make(chan *document.Document)
 	go func() {
 		defer close(ch)
-		if err := c.persistentBFS(ctx, startURL, v, ch); err != nil {
-			log.Error().Err(err).Str("job_id", c.jobID).Msg("persistent crawl failed")
+		c.err = c.persistentBFS(ctx, startURL, v, ch)
+		if c.err != nil {
+			log.Error().Err(c.err).Str("job_id", c.jobID).Msg("persistent crawl failed")
 		}
 	}()
 	return ch, nil
+}
+
+// Err returns the background crawl error after the document channel closes.
+func (c *persistentCrawler) Err() error {
+	return c.err
 }
 
 // Close releases resources held by the underlying fetcher backend.
@@ -101,7 +108,7 @@ func (c *persistentCrawler) persistentBFS(ctx context.Context, startURL string, 
 		parsedURL, err := url.Parse(cur.URL)
 		if err != nil {
 			if err2 := model.UpdateCrawlURLStatus(cur.ID, model.CrawlURLFailed, err.Error()); err2 != nil {
-				log.Warn().Err(err2).Msg("failed to update URL status")
+				return fmt.Errorf("record invalid crawl URL: %w", err2)
 			}
 			continue
 		}
@@ -110,13 +117,13 @@ func (c *persistentCrawler) persistentBFS(ctx context.Context, startURL string, 
 		case URLStop:
 			// Put the URL back so a resumed job can pick it up with higher limits.
 			if err := model.UpdateCrawlURLStatus(cur.ID, model.CrawlURLPending, ""); err != nil {
-				log.Warn().Err(err).Msg("failed to revert URL to pending on URLStop")
+				return fmt.Errorf("failed to revert URL to pending on URLStop: %w", err)
 			}
 			return model.UpdateCrawlJobStatus(c.jobID, model.CrawlJobInterrupted)
 		case URLSkip:
 			log.Info().Str("url", cur.URL).Int("depth", cur.Depth).Msg("crawler: skipping URL by crawler rules")
 			if err := model.UpdateCrawlURLStatus(cur.ID, model.CrawlURLSkipped, ""); err != nil {
-				log.Warn().Err(err).Msg("failed to mark URL skipped")
+				return fmt.Errorf("failed to mark URL skipped: %w", err)
 			}
 			continue
 		}
@@ -124,7 +131,7 @@ func (c *persistentCrawler) persistentBFS(ctx context.Context, startURL string, 
 		if c.robots != nil && !c.robots.Allowed(ctx, cur.URL) {
 			log.Info().Str("url", cur.URL).Msg("crawler: skipping URL disallowed by robots.txt")
 			if err := model.UpdateCrawlURLStatus(cur.ID, model.CrawlURLSkipped, "robots.txt"); err != nil {
-				log.Warn().Err(err).Msg("failed to mark URL skipped by robots.txt")
+				return fmt.Errorf("failed to mark URL skipped by robots.txt: %w", err)
 			}
 			continue
 		}
@@ -136,7 +143,7 @@ func (c *persistentCrawler) persistentBFS(ctx context.Context, startURL string, 
 			} else if skip {
 				log.Info().Str("url", cur.URL).Msg("crawler: skipping URL by prefetch skip predicate")
 				if err := model.UpdateCrawlURLStatus(cur.ID, model.CrawlURLSkipped, "prefetch skip"); err != nil {
-					log.Warn().Err(err).Msg("failed to mark URL skipped by prefetch predicate")
+					return fmt.Errorf("failed to mark URL skipped by prefetch predicate: %w", err)
 				}
 				continue
 			}
@@ -147,7 +154,7 @@ func (c *persistentCrawler) persistentBFS(ctx context.Context, startURL string, 
 			case <-time.After(time.Duration(c.cfg.Delay) * time.Second):
 			case <-ctx.Done():
 				if err := model.UpdateCrawlURLStatus(cur.ID, model.CrawlURLPending, ""); err != nil {
-					log.Warn().Err(err).Msg("failed to revert URL to pending on cancel")
+					return fmt.Errorf("failed to revert URL to pending on cancel: %w", err)
 				}
 				return model.UpdateCrawlJobStatus(c.jobID, model.CrawlJobInterrupted)
 			}
@@ -157,7 +164,7 @@ func (c *persistentCrawler) persistentBFS(ctx context.Context, startURL string, 
 		if fetchErr != nil {
 			log.Warn().Err(fetchErr).Str("url", cur.URL).Msg("crawler: failed to fetch page")
 			if err := model.UpdateCrawlURLStatus(cur.ID, model.CrawlURLFailed, fetchErr.Error()); err != nil {
-				log.Warn().Err(err).Msg("failed to mark URL failed")
+				return fmt.Errorf("failed to mark URL failed: %w", err)
 			}
 			continue
 		}
@@ -169,14 +176,14 @@ func (c *persistentCrawler) persistentBFS(ctx context.Context, startURL string, 
 				finalParsedURL.Fragment = ""
 				cleanFinal := finalParsedURL.String()
 				if err := model.InsertCrawlURLDone(c.jobID, cleanFinal, cur.Depth); err != nil {
-					log.Warn().Err(err).Str("url", cleanFinal).Msg("failed to insert redirect target as done")
+					return fmt.Errorf("record redirect target %s: %w", cleanFinal, err)
 				}
 			}
 		}
 
 		if v.Rules().NoDepth {
 			if err := model.UpdateCrawlURLStatus(cur.ID, model.CrawlURLDone, ""); err != nil {
-				log.Warn().Err(err).Msg("failed to mark URL done")
+				return fmt.Errorf("failed to mark URL done: %w", err)
 			}
 		} else {
 			// Resolve all discovered links first, then enqueue them together with
@@ -197,7 +204,7 @@ func (c *persistentCrawler) persistentBFS(ctx context.Context, startURL string, 
 			}
 
 			if err := model.MarkDoneAndEnqueueLinks(cur.ID, c.jobID, resolved, cur.Depth+1); err != nil {
-				log.Warn().Err(err).Msg("failed to mark URL done and enqueue links")
+				return fmt.Errorf("failed to mark URL done and enqueue links: %w", err)
 			}
 		}
 

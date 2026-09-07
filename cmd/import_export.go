@@ -18,6 +18,7 @@ import (
 	"github.com/asciimoo/hister/server/document"
 	"github.com/asciimoo/hister/server/indexer"
 
+	"charm.land/lipgloss/v2"
 	"github.com/bodgit/sevenzip"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
@@ -183,23 +184,24 @@ changes.
 Use --start-date and --end-date (format: YYYY-MM-DD) to only import
 documents whose "added" timestamp falls within the given date range.`,
 	Args: cobra.ArbitraryArgs,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
+		cmd.SilenceUsage = true
 		skip, _ := cmd.Flags().GetBool("skip-existing")
 		global, _ := cmd.Flags().GetBool("global")
 		source, _ := cmd.Flags().GetString("source")
 		normalizedSource, err := normalizeRemoteFileSource(source)
 		if err != nil {
-			exit(1, err.Error())
+			return err
 		}
 		batchSize, _ := cmd.Flags().GetInt("batch-size")
 		labelOverride := newDocumentLabelOverride(cmd)
 		if batchSize < 1 || batchSize > maxImportBatchSize {
-			exit(1, fmt.Sprintf("--batch-size must be between 1 and %d", maxImportBatchSize))
+			return fmt.Errorf("--batch-size must be between 1 and %d", maxImportBatchSize)
 		}
 
 		dateRange, err := parseDateRangeFlags(cmd)
 		if err != nil {
-			exit(1, err.Error())
+			return err
 		}
 
 		clientOpts := append([]client.Option{client.WithTimeout(0)}, targetUserIDClientOptions(cmd, global)...)
@@ -213,7 +215,7 @@ documents whose "added" timestamp falls within the given date range.`,
 
 		inputFiles, err := expandImportInputs(args, cfg.Indexer.Directories)
 		if err != nil {
-			exit(1, err.Error())
+			return err
 		}
 
 		maxFileSize := cfg.Indexer.MaxFileSize << 20
@@ -245,7 +247,7 @@ documents whose "added" timestamp falls within the given date range.`,
 			errCount += e
 		}
 
-		printImportSummary(imported, skipped, errCount)
+		return finishImport(cmd, serviceImportStats{Imported: imported, Skipped: skipped, Errors: errCount}, nil)
 	},
 }
 
@@ -286,6 +288,7 @@ func (o documentLabelOverride) resolve(existing, fallback string) string {
 }
 
 func addDocumentImportFlags(cmd *cobra.Command) {
+	addOutputFormatFlag(cmd)
 	cmd.Flags().String("start-date", "", "only import documents added on or after this date (YYYY-MM-DD)")
 	cmd.Flags().String("end-date", "", "only import documents added on or before this date (YYYY-MM-DD)")
 	cmd.Flags().Int("batch-size", defaultImportBatchSize, "number of documents submitted per bulk request (maximum 100)")
@@ -296,15 +299,39 @@ func addDocumentImportFlags(cmd *cobra.Command) {
 	cmd.Flags().Bool("allow-sensitive", false, "Skip sensitive content checks, allowing matching documents to be indexed")
 }
 
-func printImportSummary(imported, skipped, errCount int) {
-	msg := fmt.Sprintf("%s Imported %d document(s)", cliSuccessStyle.Render("✓"), imported)
-	if skipped > 0 {
-		msg += fmt.Sprintf(" (%d skipped)", skipped)
+func finishImport(cmd *cobra.Command, stats serviceImportStats, runErr error) error {
+	if err := writeImportSummary(cmd.OutOrStdout(), commandOutputFormat(cmd), stats.Imported, stats.Skipped, stats.Errors); err != nil {
+		return fmt.Errorf("write import summary: %w", err)
 	}
-	if errCount > 0 {
-		msg += fmt.Sprintf(" (%d errors)", errCount)
+	if runErr != nil {
+		return runErr
 	}
-	cliPrintln(msg)
+	if stats.Errors > 0 {
+		return &partialFailure{count: int64(stats.Errors)}
+	}
+	return nil
+}
+
+func writeImportSummary(out io.Writer, format string, imported, skipped, errCount int) error {
+	w, err := newRecordWriter(out, format, []string{"imported", "skipped", "errors"})
+	if err != nil {
+		return err
+	}
+	record := map[string]any{"imported": imported, "skipped": skipped, "errors": errCount}
+	if err := w.Write(record, func(out io.Writer) error {
+		msg := fmt.Sprintf("%s Imported %d document(s)", cliSuccessStyle.Render("✓"), imported)
+		if skipped > 0 {
+			msg += fmt.Sprintf(" (%d skipped)", skipped)
+		}
+		if errCount > 0 {
+			msg += fmt.Sprintf(" (%d errors)", errCount)
+		}
+		_, err := lipgloss.Fprintln(out, msg)
+		return err
+	}); err != nil {
+		return err
+	}
+	return w.Close()
 }
 
 func isHisterJSONExport(inputFile string) (bool, error) {

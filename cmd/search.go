@@ -1,10 +1,8 @@
 package cmd
 
 import (
-	"encoding/csv"
-	"encoding/json"
 	"fmt"
-	"os"
+	"io"
 	"strings"
 
 	"github.com/asciimoo/hister/cmd/tui"
@@ -50,12 +48,9 @@ var searchCmd = &cobra.Command{
 	Short: "Search indexed documents",
 	Long:  "Search indexed documents using the running server.\nRun without search terms to open the terminal interface, or provide terms to print results to standard output.",
 	Args:  cobra.MinimumNArgs(0),
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 {
-			if err := tui.SearchTUI(cfg); err != nil {
-				exit(1, err.Error())
-			}
-			return
+			return tui.SearchTUI(cfg)
 		}
 		qs := strings.Join(args, " ")
 		format, _ := cmd.Flags().GetString("format")
@@ -66,7 +61,7 @@ var searchCmd = &cobra.Command{
 			sortMode = ""
 		case "date", "domain", "visits":
 		default:
-			exit(1, "Unknown sort order: "+sortMode+" (valid values: relevance, date, domain, visits)")
+			return fmt.Errorf("unknown sort order: %s (valid values: relevance, date, domain, visits)", sortMode)
 		}
 
 		// Parse and validate --fields.
@@ -84,7 +79,7 @@ var searchCmd = &cobra.Command{
 					continue
 				}
 				if !validFields[f] {
-					exit(1, "Unknown field: "+f+" (valid fields: id, url, title, domain, score, added, updated, language, type, text, favicon, favicon_key, user_id, html)")
+					return fmt.Errorf("unknown field: %s (valid fields: id, url, title, domain, score, added, updated, language, type, text, favicon, favicon_key, user_id, html)", f)
 				}
 				fields = append(fields, f)
 				if f == "html" {
@@ -93,93 +88,55 @@ var searchCmd = &cobra.Command{
 			}
 		}
 
-		// CSV column order: use --fields if given, else a sensible default.
-		csvFields := fields
-		if format == "csv" && len(csvFields) == 0 {
-			csvFields = []string{"title", "url", "domain", "score", "added", "updated", "language", "text"}
-		}
-
-		// printDoc emits a single document in the requested format.
-		var csvWriter *csv.Writer
-		printDoc := func(d *document.Document) {
-			m := searchFilterMap(searchDocToMap(d), fields)
-			switch format {
-			case "json":
-				b, err := json.Marshal(m)
-				if err != nil {
-					exit(1, "Failed to encode JSON: "+err.Error())
-				}
-				fmt.Printf("%s,\n", b)
-			case "csv":
-				row := make([]string, 0, len(csvFields))
-				for _, f := range csvFields {
-					row = append(row, fmt.Sprintf("%v", m[f]))
-				}
-				if err := csvWriter.Write(row); err != nil {
-					exit(1, "Failed to write CSV row: "+err.Error())
-				}
-			default:
-				if len(fields) == 0 {
-					fmt.Printf("%s\n%s\n\n", d.Title, d.URL)
-				} else {
-					parts := make([]string, 0, len(fields))
-					for _, f := range fields {
-						parts = append(parts, fmt.Sprintf("%v", m[f]))
-					}
-					fmt.Println(strings.Join(parts, "\n"))
-					if len(fields) > 1 {
-						fmt.Println()
-					}
-				}
-			}
-		}
-
-		// Format-specific initialisation.
-		switch format {
-		case "json":
-			fmt.Println("[")
-		case "csv":
-			csvWriter = csv.NewWriter(os.Stdout)
-			if err := csvWriter.Write(csvFields); err != nil {
-				exit(1, "Failed to write CSV header: "+err.Error())
-			}
-		}
-
-		// Page through all results, streaming output directly.
 		c := newClient()
-		var (
-			pageKey string
-			total   int
-			done    bool
-		)
-		for !done {
-			res, err := c.Search(&indexer.Query{Text: qs, IncludeHTML: includeHTML, PageKey: pageKey, Sort: sortMode})
-			if err != nil {
-				exit(1, "Search failed: "+err.Error())
-			}
-			for _, d := range res.Documents {
-				printDoc(d)
-				total++
-				if limit > 0 && total >= limit {
-					done = true
-					break
-				}
-			}
-			if res.PageKey == "" || len(res.Documents) == 0 {
-				done = true
-			}
-			pageKey = res.PageKey
-		}
-
-		// Format-specific teardown.
-		switch format {
-		case "json":
-			fmt.Println("]")
-		case "csv":
-			csvWriter.Flush()
-			if err := csvWriter.Error(); err != nil {
-				exit(1, "Failed to write CSV: "+err.Error())
-			}
-		}
+		return writeSearchResults(cmd.OutOrStdout(), format, fields, limit,
+			indexer.Query{Text: qs, IncludeHTML: includeHTML, Sort: sortMode}, c.Search)
 	},
+}
+
+func writeSearchResults(out io.Writer, format string, fields []string, limit int, query indexer.Query, search func(*indexer.Query) (*indexer.Results, error)) error {
+	csvFields := fields
+	if len(csvFields) == 0 {
+		csvFields = []string{"title", "url", "domain", "score", "added", "updated", "language", "text"}
+	}
+	w, err := newRecordWriter(out, format, csvFields)
+	if err != nil {
+		return err
+	}
+	total := 0
+	for {
+		res, err := search(&query)
+		if err != nil {
+			return fmt.Errorf("search failed: %w", err)
+		}
+		for _, d := range res.Documents {
+			record := searchFilterMap(searchDocToMap(d), fields)
+			if err := w.Write(record, func(out io.Writer) error {
+				if len(fields) == 0 {
+					_, err := fmt.Fprintf(out, "%s\n%s\n\n", d.Title, d.URL)
+					return err
+				}
+				parts := make([]string, 0, len(fields))
+				for _, field := range fields {
+					parts = append(parts, fmt.Sprint(record[field]))
+				}
+				text := strings.Join(parts, "\n") + "\n"
+				if len(fields) > 1 {
+					text += "\n"
+				}
+				_, err := io.WriteString(out, text)
+				return err
+			}); err != nil {
+				return fmt.Errorf("write search result: %w", err)
+			}
+			total++
+			if limit > 0 && total >= limit {
+				return w.Close()
+			}
+		}
+		if res.PageKey == "" || len(res.Documents) == 0 {
+			return w.Close()
+		}
+		query.PageKey = res.PageKey
+	}
 }

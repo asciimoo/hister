@@ -275,13 +275,15 @@ hister index --recursive \
 
 These flags control how fetched documents are added to Hister:
 
-| Flag                | Behavior                                                                            |
-| ------------------- | ----------------------------------------------------------------------------------- |
-| `--label VALUE`     | Attach a label to documents indexed by this run.                                    |
-| `--force`           | Fetch and reindex URLs even when they already exist.                                |
-| `--allow-sensitive` | Bypass sensitive content checks for the indexed documents.                          |
-| `--global`          | Make documents available to all users. Requires an administrator in multiuser mode. |
-| `--user-id ID`      | Index documents for a specific user. Requires an administrator in multiuser mode.   |
+| Flag                 | Behavior                                                                            |
+| -------------------- | ----------------------------------------------------------------------------------- |
+| `--label VALUE`      | Attach a label to documents indexed by this run.                                    |
+| `--force`            | Fetch and reindex URLs even when they already exist.                                |
+| `--allow-sensitive`  | Bypass sensitive content checks for the indexed documents.                          |
+| `--global`           | Make documents available to all users. Requires an administrator in multiuser mode. |
+| `--user-id ID`       | Index documents for a specific user. Requires an administrator in multiuser mode.   |
+| `--format FORMAT`    | Print the indexing summary as `text`, `json`, `jsonl`, or `csv`.                    |
+| `--failed-urls PATH` | Save failed URLs, one per line, replacing the file's contents.                      |
 
 `--global` and `--user-id` cannot be used together.
 
@@ -289,7 +291,49 @@ Without `--force`, a persistent crawl marks already indexed pending URLs as skip
 fetching them. Since skipped pages are not fetched, Hister cannot discover new links from them.
 Use `--force` when starting a fresh recursive job over pages already present in the index.
 
+Indexing prints indexed, skipped, and failed counts. Persistent jobs also report their job ID
+and pending count. These are cumulative stored job counts, including previous runs and redirect
+tracking URLs. Job progress messages go to stderr so stdout contains only the selected summary.
+
+An indexing run exits with status `2` if it finishes with failed URLs, including failures already
+stored in a resumed job. Setup, output, and background crawl errors return status `1`. A configured
+crawl limit can leave pending URLs without causing an error. See
+[Indexing Results And Exit Status](terminal-client#indexing-results-and-exit-status) for details.
+
+Save a retry list directly from plain indexing, an input job, or a recursive job:
+
+```bash
+hister index --input urls.txt --failed-urls failed-urls.txt --format json
+hister index --force --input failed-urls.txt --failed-urls still-failed.txt
+```
+
+The output file is created before indexing and is empty when no URLs failed. For persistent jobs,
+it lists every URL currently marked failed, including failures from previous runs.
+
 ## Inspect Jobs With `hister crawl`
+
+The `list`, `show`, `urls`, `queue`, and `errors` commands accept `--format` / `-f` with
+`text` (the default), `json`, `jsonl`, or `csv`:
+
+```bash
+hister crawl list --format json
+hister crawl show example-docs --format json
+hister crawl urls example-docs --status failed --format jsonl
+hister crawl errors example-docs --format csv > failures.csv
+hister crawl urls example-docs --status pending --count --format json
+```
+
+JSON output is always an array, including a single job or count. JSONL emits one object per line.
+CSV includes a header. With `--count`, structured output contains a single `count` field.
+
+Job records contain `id`, `status`, `start_url`, `label`, `created_at`, `updated_at`, and counts named
+`pending`, `in_progress`, `done`, `failed`, and `skipped`. Timestamps include the time zone. The
+`show` command also includes the saved `rules` object. If stored rules cannot be decoded, that
+field contains the original string and a warning is logged.
+
+URL records contain `status`, `depth`, and `url`. Error records contain `error_code`, `url`, and
+`error`. Structured error messages preserve their original tabs and newlines; text output replaces
+those characters with spaces to keep each failure on one line.
 
 ### List Jobs
 
