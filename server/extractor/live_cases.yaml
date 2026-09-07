@@ -124,6 +124,20 @@ cases:
         - orgpaper/README.org
       min_preview_length: 500
 
+  - name: eml_test_message_http
+    url: https://gist.githubusercontent.com/johndrinkwater/20db0648b7667354b39faa7ca6126006/raw/
+    document_url: file:///mail.eml
+    backend: http
+    extractor: Email
+    timeout: 20
+    extract_decision: fallback
+    run_chain: false
+    expect:
+      preview_contains:
+        - John Drinkwater
+        - juicy bit
+      min_preview_length: 500
+
   - name: embedded_video_w3schools_http
     url: https://en.wikipedia.org/wiki/Big_Buck_Bunny
     backend: http

@@ -22,6 +22,8 @@ func TestFileTypeHandlerForPath(t *testing.T) {
 		{path: "notes.md", want: markdownFileType{}},
 		{path: "notes.markdown", want: markdownFileType{}},
 		{path: "notes.org", want: orgFileType{}},
+		{path: "mail.eml", want: emailFileType{}},
+		{path: "mail.EML", want: emailFileType{}},
 		{path: "notes.txt", want: plainTextFileType{}},
 	}
 
