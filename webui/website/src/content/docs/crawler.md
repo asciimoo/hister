@@ -125,6 +125,11 @@ left with `in_progress` status is moved back to `pending`. URLs already marked `
 A process stopped abruptly can leave the job status as `running`. This does not mean its queue was
 lost. Use `hister crawl show NAME` to check the queue counts, then resume it normally.
 
+One job is crawled by one process at a time. A run takes a lease on the job while it works, so
+starting the same job again elsewhere fails with the name of the process that holds it. The lease is
+renewed while the run is alive and expires about a minute after it stops being renewed, so a job
+whose process was killed can be resumed shortly afterwards without any cleanup step.
+
 ### Saved Settings and Runtime Settings
 
 The settings that define crawl scope are stored when a job is created:

@@ -161,3 +161,83 @@ func findRowByURL(jobID, rawURL string) (*model.CrawlURL, error) {
 	}
 	return &row, nil
 }
+
+// TestPersistentCrawlRefusesConcurrentRun verifies the job lease: a second run
+// cannot start while another owns the job, and the job frees up once that run
+// finishes. Without it, the second run's ResetInProgressCrawlURLs would hand
+// the first run's in-flight URLs to itself.
+func TestPersistentCrawlRefusesConcurrentRun(t *testing.T) {
+	initTestDB(t)
+
+	jobID := "lease-conflict-test"
+	startURL := "http://example.com/leased"
+	if err := model.CreateCrawlJob(jobID, startURL, "", "test"); err != nil {
+		t.Fatalf("CreateCrawlJob: %v", err)
+	}
+
+	baseCfg := func() *config.CrawlerConfig {
+		return &config.CrawlerConfig{
+			Rate: config.CrawlerRate{
+				GlobalRPS:          1000,
+				PerHostRPS:         1000,
+				GlobalConcurrency:  1,
+				PerHostConcurrency: 1,
+			},
+			ShutdownGrace: 1,
+		}
+	}
+	newRun := func(f fetcher) *persistentCrawler {
+		return &persistentCrawler{
+			baseCrawler: &baseCrawler{
+				fetcher: f,
+				cfg:     baseCfg(),
+				coord:   NewCoordinator(baseCfg()),
+				backoff: NewBackoff(time.Second, 30*time.Second),
+			},
+			jobID: jobID,
+		}
+	}
+
+	v, err := NewValidator(&ValidatorRules{})
+	if err != nil {
+		t.Fatalf("NewValidator: %v", err)
+	}
+
+	hang := &hangingFetcher{started: make(chan struct{}, 1)}
+	first := newRun(hang)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	ch, err := first.Crawl(ctx, startURL, v)
+	if err != nil {
+		t.Fatalf("first Crawl: %v", err)
+	}
+	select {
+	case <-hang.started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("first run never started fetching")
+	}
+
+	ok := &succeedingFetcher{}
+	second := newRun(ok)
+	if _, err := second.Crawl(context.Background(), startURL, v); err == nil {
+		t.Fatal("second run started while the first still owns the job")
+	}
+	if got := ok.calls.Load(); got != 0 {
+		t.Errorf("blocked run fetched %d pages, want 0", got)
+	}
+
+	cancel()
+	for range ch {
+	}
+
+	// The finished run released the job, so a resume can take it.
+	ch2, err := second.Crawl(context.Background(), startURL, v)
+	if err != nil {
+		t.Fatalf("resume after release: %v", err)
+	}
+	for range ch2 {
+	}
+	if got := ok.calls.Load(); got != 1 {
+		t.Errorf("resumed run fetched %d pages, want 1", got)
+	}
+}
