@@ -23,8 +23,10 @@ import (
 // Crawler is the public interface for scraping backends.
 // Crawl performs a BFS traversal starting from startURL, sending discovered
 // documents to the returned channel. The channel is closed when crawling
-// finishes or ctx is cancelled. Close must be called when the Crawler is no
-// longer needed to release backend resources.
+// finishes or ctx is cancelled. Callers must read the channel until it closes,
+// or cancel ctx: a caller that abandons it blocks a crawl worker on its send.
+// Close must be called when the Crawler is no longer needed to release backend
+// resources.
 type Crawler interface {
 	Crawl(ctx context.Context, startURL string, v *Validator) (<-chan *document.Document, error)
 	Close() error
@@ -149,8 +151,8 @@ func applyOptions(opts ...Option) options {
 
 // Crawl starts a BFS crawl from startURL using an in-memory queue.
 func (c *baseCrawler) Crawl(ctx context.Context, startURL string, v *Validator) (<-chan *document.Document, error) {
-	if _, err := url.Parse(startURL); err != nil {
-		return nil, fmt.Errorf("invalid start URL: %w", err)
+	if err := checkStartURL(startURL, v); err != nil {
+		return nil, err
 	}
 	ch := make(chan *document.Document)
 	q := newMemoryQueue()
@@ -166,6 +168,20 @@ func (c *baseCrawler) Crawl(ctx context.Context, startURL string, v *Validator) 
 // Close releases resources held by the underlying backend.
 func (c *baseCrawler) Close() error {
 	return c.fetcher.close()
+}
+
+// checkStartURL parses startURL and runs it through the traversal filters. The
+// start URL is subject to the same domain and pattern rules as discovered
+// links, and a rejected one is an error rather than an empty crawl.
+func checkStartURL(startURL string, v *Validator) error {
+	parsed, err := url.Parse(startURL)
+	if err != nil {
+		return fmt.Errorf("invalid start URL: %w", err)
+	}
+	if v.Validate(parsed, 0) != URLAllow {
+		return fmt.Errorf("start URL rejected by crawl rules: %s", startURL)
+	}
+	return nil
 }
 
 // run is the unified crawl driver shared by both in-memory and sqlite backends.
@@ -219,7 +235,7 @@ func (c *baseCrawler) run(ctx context.Context, q CrawlQueue, startURL string, v 
 				if cerr := q.Complete(context.Background(), item, comp); cerr != nil {
 					log.Warn().Err(cerr).Msg("crawler: queue Complete failed")
 				}
-				if c.coord.Exhausted() {
+				if comp.stop || c.coord.Exhausted() {
 					crawlCancel()
 					return
 				}
@@ -236,7 +252,7 @@ func (c *baseCrawler) run(ctx context.Context, q CrawlQueue, startURL string, v 
 
 // fetchOne performs all pre-fetch checks, the actual fetch with retry/backoff,
 // link resolution, and document emission. It returns a completion for the queue.
-func (c *baseCrawler) fetchOne(fetchCtx, crawlCtx context.Context, item *pendingItem, v *Validator, ch chan<- *document.Document) completion {
+func (c *baseCrawler) fetchOne(fetchCtx, crawlCtx context.Context, item *pendingItem, v *Validator, ch chan<- *document.Document) (comp completion) {
 	parsedURL, err := url.Parse(item.rawURL)
 	if err != nil {
 		return completion{err: err}
@@ -265,6 +281,18 @@ func (c *baseCrawler) fetchOne(fetchCtx, crawlCtx context.Context, item *pending
 		log.Info().Str("url", item.rawURL).Str("host", host).Msg("crawler: per-host budget reached, skipping")
 		return completion{skipped: true, skipReason: "budget"}
 	}
+
+	// MaxLinks is charged here rather than at link discovery so that the queue
+	// has already deduplicated, and so that the start URL counts too.
+	if !v.TryVisit() {
+		log.Info().Str("url", item.rawURL).Msg("crawler: max links reached, stopping crawl")
+		return completion{stop: true}
+	}
+	defer func() {
+		if comp.interrupted || comp.skipped {
+			v.ReleaseVisit()
+		}
+	}()
 
 	maxAttempts := c.cfg.Retry.MaxAttempts
 	if maxAttempts < 1 {
@@ -389,12 +417,7 @@ func (c *baseCrawler) fetchOne(fetchCtx, crawlCtx context.Context, item *pending
 			if err != nil {
 				continue
 			}
-			switch v.Validate(absParsed, item.depth+1) {
-			case URLStop:
-				// Signal termination by cancelling crawlCtx via exhaustion logic.
-				// Return immediately with what we have so far.
-				return completion{finalURL: finalURL, resolvedLinks: resolvedLinks}
-			case URLSkip:
+			if v.Validate(absParsed, item.depth+1) == URLSkip {
 				continue
 			}
 			resolvedLinks = append(resolvedLinks, abs)
@@ -484,4 +507,3 @@ func extractLinks(r io.Reader) ([]Link, error) {
 
 // errResponseTooLarge is returned when a response body exceeds the configured limit.
 var errResponseTooLarge = fmt.Errorf("response body exceeds size limit")
-

@@ -12,7 +12,7 @@ import (
 )
 
 type pendingItem struct {
-	id     any    // opaque: crawl_urls.ID for sqlite, nil for memory
+	id     any // opaque: crawl_urls.ID for sqlite, nil for memory
 	rawURL string
 	depth  int
 }
@@ -28,6 +28,10 @@ type completion struct {
 	// the row to pending so a resumed run can retry it, rather than marking
 	// it failed and silently dropping it.
 	interrupted bool
+	// stop is set when the item was not fetched because the MaxLinks budget is
+	// exhausted. Like interrupted, the item stays pending so a later run with a
+	// larger budget can pick it up; the driver cancels the crawl.
+	stop bool
 }
 
 // CrawlQueue is the interface that both in-memory and sqlite crawl queues implement.
@@ -115,7 +119,10 @@ func (q *memoryQueue) Complete(_ context.Context, item *pendingItem, c completio
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	q.inFlight--
-	if !c.skipped && c.err == nil {
+	if !c.skipped && !c.stop && !c.interrupted && c.err == nil {
+		if c.finalURL != "" {
+			q.seen[hashURL(c.finalURL)] = struct{}{}
+		}
 		for _, link := range c.resolvedLinks {
 			h := hashURL(link)
 			if _, exists := q.seen[h]; exists {
@@ -129,7 +136,7 @@ func (q *memoryQueue) Complete(_ context.Context, item *pendingItem, c completio
 	return nil
 }
 
-func (q *memoryQueue) Close() error              { return nil }
+func (q *memoryQueue) Close() error                   { return nil }
 func (q *memoryQueue) OnStop(_ context.Context) error { return nil }
 func (q *memoryQueue) OnDone(_ context.Context) error { return nil }
 
@@ -200,7 +207,7 @@ func (q *sqliteQueue) Complete(ctx context.Context, item *pendingItem, c complet
 
 	var completeErr error
 	switch {
-	case c.interrupted:
+	case c.interrupted, c.stop:
 		// Revert to pending so a resumed run picks it up. Do NOT mark failed:
 		// this URL was never actually attempted-to-completion.
 		completeErr = model.UpdateCrawlURLStatus(id, model.CrawlURLPending, "")
@@ -241,4 +248,3 @@ func (q *sqliteQueue) OnStop(_ context.Context) error {
 func (q *sqliteQueue) OnDone(_ context.Context) error {
 	return model.UpdateCrawlJobStatus(q.jobID, model.CrawlJobCompleted)
 }
-

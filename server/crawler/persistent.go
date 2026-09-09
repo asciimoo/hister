@@ -64,6 +64,10 @@ func NewPersistent(cfg *config.CrawlerConfig, jobID string, robots *RobotsCache,
 
 // Crawl starts (or resumes) the persistent crawl job identified by jobID.
 func (c *persistentCrawler) Crawl(ctx context.Context, startURL string, v *Validator) (<-chan *document.Document, error) {
+	if err := checkStartURL(startURL, v); err != nil {
+		return nil, err
+	}
+
 	// Restore any URLs left in_progress from a previous run.
 	if err := model.ResetInProgressCrawlURLs(c.jobID); err != nil {
 		return nil, fmt.Errorf("reset in_progress URLs: %w", err)

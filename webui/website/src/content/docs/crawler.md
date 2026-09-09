@@ -209,14 +209,14 @@ Traversal flags apply when a persistent job is created and are then stored with 
 | -------------------------- | ------------------------------------------------------------------------------------ |
 | `--recursive`, `-r`        | Follow discovered links. Without it, only explicitly queued URLs are fetched.        |
 | `--max-depth N`            | Visit links up to depth `N`. The starting URL has depth zero. Zero means unlimited.  |
-| `--max-links N`            | Stop after allowing `N` pages. Zero means unlimited.                                 |
+| `--max-links N`            | Stop after fetching `N` pages, including the starting URL. Zero means unlimited.     |
 | `--allowed-domain DOMAIN`  | Allow this domain and its subdomains. Repeatable. An empty list allows every domain. |
 | `--exclude-domain DOMAIN`  | Skip this domain and its subdomains. Repeatable.                                     |
 | `--allowed-pattern REGEXP` | Fetch URLs matching at least one allowed regular expression. Repeatable.             |
 | `--exclude-pattern REGEXP` | Skip URLs matching any excluded regular expression. Repeatable.                      |
 
 Domain and pattern checks apply to the starting URL too. Make sure an allowed pattern includes the
-seed URL.
+seed URL: a starting URL rejected by its own rules fails the command instead of crawling nothing.
 
 This example crawls at most 500 pages from two documentation domains while excluding sign in pages:
 
