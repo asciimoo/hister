@@ -223,6 +223,9 @@ func (c *baseCrawler) run(ctx context.Context, q CrawlQueue, startURL string, v 
 			for {
 				item, ok, err := q.Pop(crawlCtx)
 				if err != nil {
+					if crawlCtx.Err() == nil {
+						log.Warn().Err(err).Msg("crawler: queue Pop failed, worker stopping")
+					}
 					return
 				}
 				if !ok {

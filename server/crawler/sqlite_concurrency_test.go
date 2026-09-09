@@ -65,7 +65,12 @@ func TestSQLiteQueueNoConcurrentDoubleFetch(t *testing.T) {
 			defer wg.Done()
 			for {
 				item, ok, err := q.Pop(ctx)
-				if err != nil || !ok {
+				if err != nil {
+					// A claim that loses a race must retry, not kill the worker.
+					t.Errorf("Pop failed: %v", err)
+					return
+				}
+				if !ok {
 					return
 				}
 				claimedMu.Lock()
