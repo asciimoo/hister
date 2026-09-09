@@ -6,6 +6,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
+	"sync"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -251,5 +253,105 @@ func TestCoordinatorHostOverride(t *testing.T) {
 			t.Fatalf("Wait on non-overridden host: %v", err)
 		}
 		coord.Release("fast.example.com")
+	})
+}
+
+// TestCoordinatorCooldownAppliesToWaitingWorkers covers a Retry-After that
+// arrives while other workers are already queued for the same host. A worker
+// that checked the cooldown before blocking for a rate token must not fetch on
+// the strength of that stale check.
+func TestCoordinatorCooldownAppliesToWaitingWorkers(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		coord := newTestCoordinator(config.CrawlerRate{
+			GlobalRPS:          100,
+			PerHostRPS:         1,
+			GlobalConcurrency:  10,
+			PerHostConcurrency: 2,
+		})
+		ctx := context.Background()
+
+		// The first caller takes the only token, so the second one waits.
+		if err := coord.Wait(ctx, "example.com"); err != nil {
+			t.Fatalf("first Wait: %v", err)
+		}
+
+		start := time.Now()
+		second := make(chan error, 1)
+		go func() {
+			second <- coord.Wait(ctx, "example.com")
+		}()
+		synctest.Wait()
+
+		// The in-flight response carries Retry-After.
+		coord.Cooldown("example.com", time.Minute)
+		coord.Release("example.com")
+
+		if err := <-second; err != nil {
+			t.Fatalf("second Wait: %v", err)
+		}
+		if waited := time.Since(start); waited < time.Minute {
+			t.Errorf("queued worker proceeded after %s, want to serve the full %s cooldown", waited, time.Minute)
+		}
+		coord.Release("example.com")
+	})
+}
+
+// TestCoordinatorPacesFetchStarts checks that the rate limit paces the moment a
+// request actually starts. Taking a token before queueing for a concurrency
+// slot banks it: workers released together then fetch back to back regardless
+// of the configured rate.
+func TestCoordinatorPacesFetchStarts(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		coord := newTestCoordinator(config.CrawlerRate{
+			GlobalRPS:          100,
+			PerHostRPS:         1,
+			GlobalConcurrency:  10,
+			PerHostConcurrency: 2,
+		})
+		ctx := context.Background()
+
+		// Durations are handed out in acquisition order and chosen so the first
+		// two requests finish together, freeing both slots at the same instant.
+		fetchDurations := []time.Duration{
+			30 * time.Second,
+			29 * time.Second,
+			5 * time.Second,
+			5 * time.Second,
+			5 * time.Second,
+		}
+		workers := len(fetchDurations)
+		origin := time.Now()
+
+		var mu sync.Mutex
+		var starts []time.Duration
+
+		var wg sync.WaitGroup
+		for i := 0; i < workers; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				if err := coord.Wait(ctx, "example.com"); err != nil {
+					t.Errorf("Wait: %v", err)
+					return
+				}
+				mu.Lock()
+				fetchDuration := fetchDurations[len(starts)]
+				starts = append(starts, time.Since(origin))
+				mu.Unlock()
+				time.Sleep(fetchDuration)
+				coord.Release("example.com")
+			}()
+		}
+		wg.Wait()
+
+		if len(starts) != workers {
+			t.Fatalf("recorded %d starts, want %d", len(starts), workers)
+		}
+		slices.Sort(starts)
+		for i := 1; i < len(starts); i++ {
+			if gap := starts[i] - starts[i-1]; gap < time.Second {
+				t.Errorf("request %d started %s after the previous one, want at least 1s at 1 rps", i, gap)
+			}
+		}
 	})
 }

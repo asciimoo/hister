@@ -108,65 +108,25 @@ func (c *Coordinator) getHostEntry(host string) *hostEntry {
 	return c.getHostEntryLocked(host)
 }
 
-// Wait blocks until it is safe to fetch from host. Checks circuit breaker,
-// global limiter, per-host limiter, cooldown, jitter, then acquires the
-// in-flight semaphore.
+// Wait blocks until it is safe to fetch from host, and on success the caller
+// owns an in-flight slot that Release must return. It checks the circuit
+// breaker, takes the slot, then serves any cooldown and spends rate tokens.
+//
+// The slot is taken before the tokens on purpose. A caller that spends its
+// token first and then queues for a slot banks that token for however long the
+// queue takes, so callers released together fetch back to back no matter what
+// rate is configured. Pacing has to be measured where the request actually
+// starts. For the same reason the cooldown is rechecked after every blocking
+// step: a Retry-After can arrive from another response while this caller waits.
 func (c *Coordinator) Wait(ctx context.Context, host string) error {
 	// Circuit breaker check.
 	if !c.breakerAllow(host) {
 		return &errBreakerOpen{host: host}
 	}
 
-	// Global rate limit.
-	if err := c.globalLimiter.Wait(ctx); err != nil {
-		return err
-	}
-
 	he := c.getHostEntry(host)
 	effectiveRate := c.effectiveRPS(host)
 	he.limiter.SetLimit(rate.Limit(effectiveRate))
-
-	// Per-host cooldown (Retry-After).
-	c.mu.Lock()
-	coolUntil := he.coolUntil
-	c.mu.Unlock()
-
-	if !coolUntil.IsZero() {
-		remaining := time.Until(coolUntil)
-		if remaining > 0 {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-time.After(remaining):
-			}
-		}
-	}
-
-	// Per-host token bucket.
-	if err := he.limiter.Wait(ctx); err != nil {
-		return err
-	}
-
-	// Jitter.
-	if c.cfg.Rate.Jitter > 0 {
-		const maxJitter = 30 * time.Second
-		r := effectiveRate
-		if r <= 0 {
-			r = 1
-		}
-		jitterMax := c.cfg.Rate.Jitter / r
-		jitter := time.Duration(rand.Float64() * jitterMax * float64(time.Second))
-		if jitter > maxJitter {
-			jitter = maxJitter
-		}
-		if jitter > 0 {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-time.After(jitter):
-			}
-		}
-	}
 
 	// Per-host in-flight semaphore.
 	select {
@@ -175,12 +135,102 @@ func (c *Coordinator) Wait(ctx context.Context, host string) error {
 	case <-he.inflightCh:
 	}
 
-	return nil
+	admitted := false
+	defer func() {
+		if !admitted {
+			c.releaseSlot(he)
+		}
+	}()
+
+	for {
+		// Per-host cooldown (Retry-After).
+		if err := c.waitCooldown(ctx, he); err != nil {
+			return err
+		}
+
+		// Global rate limit.
+		if err := c.globalLimiter.Wait(ctx); err != nil {
+			return err
+		}
+
+		// Per-host token bucket.
+		if err := he.limiter.Wait(ctx); err != nil {
+			return err
+		}
+
+		if err := c.waitJitter(ctx, effectiveRate); err != nil {
+			return err
+		}
+
+		// Waiting for tokens and jitter takes time, during which another
+		// response may have installed a cooldown. Serve it before fetching.
+		if c.coolingDown(he) {
+			continue
+		}
+
+		admitted = true
+		return nil
+	}
+}
+
+// coolingDown reports whether host is currently in a Retry-After cooldown.
+func (c *Coordinator) coolingDown(he *hostEntry) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return time.Now().Before(he.coolUntil)
+}
+
+// waitCooldown blocks for the remainder of an active Retry-After cooldown.
+func (c *Coordinator) waitCooldown(ctx context.Context, he *hostEntry) error {
+	for {
+		c.mu.Lock()
+		coolUntil := he.coolUntil
+		c.mu.Unlock()
+
+		remaining := time.Until(coolUntil)
+		if remaining <= 0 {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(remaining):
+			// A cooldown extended while sleeping is picked up by the next pass.
+		}
+	}
+}
+
+func (c *Coordinator) waitJitter(ctx context.Context, effectiveRate float64) error {
+	if c.cfg.Rate.Jitter <= 0 {
+		return nil
+	}
+	const maxJitter = 30 * time.Second
+	r := effectiveRate
+	if r <= 0 {
+		r = 1
+	}
+	jitterMax := c.cfg.Rate.Jitter / r
+	jitter := time.Duration(rand.Float64() * jitterMax * float64(time.Second))
+	if jitter > maxJitter {
+		jitter = maxJitter
+	}
+	if jitter <= 0 {
+		return nil
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(jitter):
+		return nil
+	}
 }
 
 // Release returns the in-flight slot for host after a fetch completes.
 func (c *Coordinator) Release(host string) {
-	he := c.getHostEntry(host)
+	c.releaseSlot(c.getHostEntry(host))
+}
+
+func (c *Coordinator) releaseSlot(he *hostEntry) {
 	he.inflightCh <- struct{}{}
 }
 
