@@ -264,10 +264,11 @@ func indexURLs(ctx context.Context, urls []string, report *failedURLReport, inde
 	return result, nil
 }
 
+// crawlJobHasURLsToCrawl reports whether a job still has work queued. It asks
+// the queue rather than the job status: a job that an older build stopped on a
+// budget was marked completed while URLs were still pending, and those are
+// exactly the jobs a resume has to pick up.
 func crawlJobHasURLsToCrawl(job *model.CrawlJob) (bool, error) {
-	if job.Status == model.CrawlJobCompleted {
-		return false, nil
-	}
 	stats, err := model.GetCrawlJobStats(job.ID)
 	if err != nil {
 		return false, err

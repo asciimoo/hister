@@ -247,7 +247,11 @@ func (c *baseCrawler) run(ctx context.Context, q CrawlQueue, startURL string, v 
 	}
 	wg.Wait()
 
-	if ctx.Err() != nil {
+	// crawlCtx is cancelled either by the caller or by a limit stopping the
+	// crawl from inside. Both leave URLs pending, so the queue must record the
+	// run as stopped: reporting it as done marks the job completed and the CLI
+	// then refuses to resume it. Only a drained queue reaches OnDone.
+	if crawlCtx.Err() != nil {
 		return q.OnStop(context.Background())
 	}
 	return q.OnDone(context.Background())

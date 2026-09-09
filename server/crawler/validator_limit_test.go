@@ -306,11 +306,46 @@ func TestPersistentMaxLinksLeavesRemainderPending(t *testing.T) {
 		t.Errorf("failed URLs = %d, want 0", failed)
 	}
 
+	// A job stopped by its budget still has work queued, so it must not be
+	// reported as completed: the CLI refuses to resume completed jobs.
 	job, err := model.GetCrawlJob(jobID)
 	if err != nil {
 		t.Fatal(err)
 	}
+	if job.Status != model.CrawlJobInterrupted {
+		t.Errorf("job status = %q, want %q", job.Status, model.CrawlJobInterrupted)
+	}
+
+	// Resuming with a larger budget picks the remaining URLs up.
+	resumeFetcher := &graphFetcher{graph: map[string][]string{}}
+	resume := &persistentCrawler{
+		baseCrawler: &baseCrawler{
+			fetcher: resumeFetcher,
+			cfg:     cfg,
+			coord:   NewCoordinator(cfg),
+			backoff: NewBackoff(time.Second, 30*time.Second),
+		},
+		jobID: jobID,
+	}
+	resumeValidator, err := NewValidator(&ValidatorRules{MaxLinks: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resumeValidator.SetVisited(int(done))
+
+	ch2, err := resume.Crawl(context.Background(), start, resumeValidator)
+	if err != nil {
+		t.Fatalf("resume: %v", err)
+	}
+	if docs := drain(t, ch2); docs != 2 {
+		t.Errorf("resume emitted %d documents, want 2", docs)
+	}
+
+	job, err = model.GetCrawlJob(jobID)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if job.Status != model.CrawlJobCompleted {
-		t.Errorf("job status = %q, want %q", job.Status, model.CrawlJobCompleted)
+		t.Errorf("after resume: job status = %q, want %q", job.Status, model.CrawlJobCompleted)
 	}
 }

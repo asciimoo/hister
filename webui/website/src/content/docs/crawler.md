@@ -349,7 +349,9 @@ hister crawl list
 Each entry includes its ID, stored status, starting URL, creation time, and counts for pending,
 done, failed, and skipped URLs. The displayed job status values are `unfinished`, `completed`, and
 `interrupted`. `unfinished` means the job was started but has not recorded completion. It does not
-mean that a crawler process is currently executing it.
+mean that a crawler process is currently executing it. A run that stops on `--max-links` or a
+configured crawler limit is recorded as `interrupted` rather than `completed`, because its queue
+still holds URLs; `completed` means the queue was drained.
 
 ### Show One Job
 
