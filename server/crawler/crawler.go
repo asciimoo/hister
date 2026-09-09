@@ -4,6 +4,7 @@ package crawler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"hash/fnv"
 	"io"
@@ -242,6 +243,13 @@ func (c *baseCrawler) run(ctx context.Context, q CrawlQueue, startURL string, v 
 					crawlCancel()
 					return
 				}
+				if comp.deferred && comp.deferFor > 0 {
+					select {
+					case <-crawlCtx.Done():
+						return
+					case <-time.After(comp.deferFor):
+					}
+				}
 			}
 		}()
 	}
@@ -296,7 +304,7 @@ func (c *baseCrawler) fetchOne(fetchCtx, crawlCtx context.Context, item *pending
 		return completion{stop: true}
 	}
 	defer func() {
-		if comp.interrupted || comp.skipped {
+		if comp.interrupted || comp.skipped || comp.deferred {
 			v.ReleaseVisit()
 		}
 	}()
@@ -323,10 +331,22 @@ func (c *baseCrawler) fetchOne(fetchCtx, crawlCtx context.Context, item *pending
 		}
 
 		if err := c.coord.Wait(crawlCtx, host); err != nil {
-			// crawlCtx cancellation and breaker-open both surface here; the
-			// former is an interruption the persistent queue should retry.
 			if crawlCtx.Err() != nil {
 				return completion{interrupted: true, err: err}
+			}
+			var breakerOpen *errBreakerOpen
+			if errors.As(err, &breakerOpen) {
+				// The host is down as a whole and this URL was never attempted.
+				// Recording it as failed would drain the rest of the host's
+				// queue into permanent failures during an outage, so leave it
+				// queued and hold off until the breaker probes again.
+				wait := c.coord.BreakerRetryIn(host)
+				log.Info().
+					Str("url", item.rawURL).
+					Str("host", host).
+					Dur("retry_in", wait).
+					Msg("crawler: circuit breaker open, deferring URL")
+				return completion{deferred: true, deferFor: wait}
 			}
 			return completion{err: err}
 		}

@@ -242,6 +242,31 @@ func (c *Coordinator) Cooldown(host string, d time.Duration) {
 	he.coolUntil = time.Now().Add(d)
 }
 
+// breakerProbeWait is how long to hold off when the breaker is half-open and
+// another worker is already probing: just long enough to let that probe finish.
+const breakerProbeWait = time.Second
+
+// BreakerRetryIn returns how long to wait before host is worth trying again.
+// Zero means the breaker is not blocking requests.
+func (c *Coordinator) BreakerRetryIn(host string) time.Duration {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	he := c.getHostEntryLocked(host)
+	switch he.breakerState {
+	case BreakerOpen:
+		if remaining := c.cooldown - time.Since(he.lastFailure); remaining > 0 {
+			return remaining
+		}
+		return 0
+	case BreakerHalfOpen:
+		if he.probing {
+			return breakerProbeWait
+		}
+	}
+	return 0
+}
+
 // breakerAllow returns true if a request to host is permitted by the circuit breaker.
 func (c *Coordinator) breakerAllow(host string) bool {
 	c.mu.Lock()

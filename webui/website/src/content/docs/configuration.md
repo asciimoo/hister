@@ -1237,6 +1237,10 @@ Non-retryable errors (most 4xx status codes, permanent DNS failures, TLS errors)
 
 Protects hosts that are struggling by pausing requests to them after repeated failures.
 
+While a host's breaker is open, its queued URLs are left pending instead of being recorded as
+failures: they were never requested, so a persistent job resumed after the host recovers still
+fetches them.
+
 <ConfigReference items={crawlerBreakerOptions} />
 
 ### Crawl Limits

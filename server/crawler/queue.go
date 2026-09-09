@@ -5,6 +5,7 @@ package crawler
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/rs/zerolog/log"
 
@@ -32,6 +33,12 @@ type completion struct {
 	// exhausted. Like interrupted, the item stays pending so a later run with a
 	// larger budget can pick it up; the driver cancels the crawl.
 	stop bool
+	// deferred is set when the host is not accepting requests right now - its
+	// circuit breaker is open. The URL was never attempted, so it stays queued
+	// instead of being recorded as a failure, and the worker holds off for
+	// deferFor before taking more work.
+	deferred bool
+	deferFor time.Duration
 }
 
 // CrawlQueue is the interface that both in-memory and sqlite crawl queues implement.
@@ -119,6 +126,13 @@ func (q *memoryQueue) Complete(_ context.Context, item *pendingItem, c completio
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	q.inFlight--
+	if c.deferred {
+		// Requeue behind the work already waiting, so one unreachable host does
+		// not keep the workers busy re-reading the same URL.
+		q.items = append(q.items, *item)
+		q.cond.Broadcast()
+		return nil
+	}
 	if !c.skipped && !c.stop && !c.interrupted && c.err == nil {
 		if c.finalURL != "" {
 			q.seen[hashURL(c.finalURL)] = struct{}{}
@@ -207,7 +221,7 @@ func (q *sqliteQueue) Complete(ctx context.Context, item *pendingItem, c complet
 
 	var completeErr error
 	switch {
-	case c.interrupted, c.stop:
+	case c.interrupted, c.stop, c.deferred:
 		// Revert to pending so a resumed run picks it up. Do NOT mark failed:
 		// this URL was never actually attempted-to-completion.
 		completeErr = model.UpdateCrawlURLStatus(id, model.CrawlURLPending, "")
