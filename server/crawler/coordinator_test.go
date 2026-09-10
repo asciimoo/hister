@@ -355,3 +355,46 @@ func TestCoordinatorPacesFetchStarts(t *testing.T) {
 		}
 	})
 }
+
+// TestCoordinatorAbandonedProbeDoesNotStrandHost covers a worker admitted as
+// the half-open probe that never gets to make its request. The breaker hands
+// out one probe permit at a time, so a permit that is never returned refuses
+// every later request to that host for the rest of the crawl.
+func TestCoordinatorAbandonedProbeDoesNotStrandHost(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		coord := newTestCoordinator(config.CrawlerRate{
+			GlobalRPS:          100,
+			PerHostRPS:         100,
+			GlobalConcurrency:  10,
+			PerHostConcurrency: 1,
+		})
+		const host = "flaky.example.com"
+
+		// Trip the breaker, then let its cooldown run out so the next caller
+		// is admitted as the probe.
+		for i := 0; i < 5; i++ {
+			coord.RecordFailure(host)
+		}
+		time.Sleep(6 * time.Minute)
+
+		// The probe is admitted, then blocked by a Retry-After and given up on.
+		coord.Cooldown(host, time.Hour)
+		ctx, cancel := context.WithCancel(context.Background())
+		probe := make(chan error, 1)
+		go func() {
+			probe <- coord.Wait(ctx, host)
+		}()
+		synctest.Wait()
+		cancel()
+		if err := <-probe; err == nil {
+			t.Fatal("Wait should have failed once its context was cancelled")
+		}
+
+		// The host is reachable again: clear the Retry-After and try once more.
+		coord.Cooldown(host, -time.Hour)
+		if err := coord.Wait(context.Background(), host); err != nil {
+			t.Fatalf("host is stranded after an abandoned probe: %v", err)
+		}
+		coord.Release(host)
+	})
+}

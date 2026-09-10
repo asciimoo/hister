@@ -139,6 +139,9 @@ func (c *Coordinator) Wait(ctx context.Context, host string) error {
 	defer func() {
 		if !admitted {
 			c.releaseSlot(he)
+			// The breaker may have handed this caller the half-open probe
+			// permit. Giving up without making a request must return it.
+			c.abandonProbe(he)
 		}
 	}()
 
@@ -265,6 +268,22 @@ func (c *Coordinator) BreakerRetryIn(host string) time.Duration {
 		}
 	}
 	return 0
+}
+
+// AbandonProbe returns the half-open probe permit for host. Callers that were
+// admitted by Wait but end up making no request must call it: the breaker
+// otherwise waits forever for the outcome of a probe that never ran, and every
+// later request to that host is refused for the rest of the crawl.
+func (c *Coordinator) AbandonProbe(host string) {
+	c.abandonProbe(c.getHostEntry(host))
+}
+
+func (c *Coordinator) abandonProbe(he *hostEntry) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if he.breakerState == BreakerHalfOpen {
+		he.probing = false
+	}
 }
 
 // breakerAllow returns true if a request to host is permitted by the circuit breaker.

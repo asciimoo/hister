@@ -353,6 +353,7 @@ func (c *baseCrawler) fetchOne(fetchCtx, crawlCtx context.Context, item *pending
 
 		if !c.coord.TryReservePage(host) {
 			c.coord.Release(host)
+			c.coord.AbandonProbe(host)
 			log.Info().Str("url", item.rawURL).Str("host", host).Msg("crawler: page reservation failed (budget)")
 			return completion{skipped: true, skipReason: "budget"}
 		}
