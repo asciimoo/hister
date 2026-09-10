@@ -614,8 +614,8 @@ description: 'Explore every configuration section, option, default value, enviro
 
   const crawlerLimitsOptions = [
     { name: 'max_response_bytes', type: 'int', defaultValue: '10485760', description: 'Response body size cap in bytes. Fetches exceeding this size are rejected. Default is 10 MB.' },
-    { name: 'max_pages',          type: 'int', defaultValue: '0',        description: 'Global crawl budget: total pages a crawl may fetch. 0 means unlimited.' },
-    { name: 'max_pages_per_host', type: 'int', defaultValue: '0',        description: 'Per-host page cap. 0 means unlimited.' },
+    { name: 'max_pages',          type: 'int', defaultValue: '0',        description: 'Global crawl budget: total pages a run may fetch. Reaching it stops the run and leaves the remaining URLs queued for a resume. 0 means unlimited.' },
+    { name: 'max_pages_per_host', type: 'int', defaultValue: '0',        description: 'Per-host page cap. URLs a persistent job cannot fetch within it are recorded as skipped and are not retried by a resume, unlike the global budget. 0 means unlimited.' },
     { name: 'max_bytes_per_host', type: 'int', defaultValue: '0',        description: 'Per-host byte cap. 0 means unlimited.' },
     { name: 'max_duration',       type: 'int', defaultValue: '0',        description: 'Maximum crawl wall-clock time in seconds. 0 means unlimited.' },
   ];

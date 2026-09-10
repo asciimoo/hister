@@ -354,7 +354,15 @@ func (c *baseCrawler) fetchOne(fetchCtx, crawlCtx context.Context, item *pending
 		if !c.coord.TryReservePage(host) {
 			c.coord.Release(host)
 			c.coord.AbandonProbe(host)
-			log.Info().Str("url", item.rawURL).Str("host", host).Msg("crawler: page reservation failed (budget)")
+			if c.coord.Exhausted() {
+				// The crawl-wide budget is spent rather than this host's. The
+				// URL was never fetched, so leave it queued: the driver stops
+				// the run and a resume with budget left picks it up. Recording
+				// it as skipped would retire it for good.
+				log.Info().Str("url", item.rawURL).Msg("crawler: crawl budget reached, stopping crawl")
+				return completion{stop: true}
+			}
+			log.Info().Str("url", item.rawURL).Str("host", host).Msg("crawler: per-host page budget reached, skipping")
 			return completion{skipped: true, skipReason: "budget"}
 		}
 
