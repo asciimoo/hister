@@ -398,3 +398,28 @@ func TestCoordinatorAbandonedProbeDoesNotStrandHost(t *testing.T) {
 		coord.Release(host)
 	})
 }
+
+// TestCoordinatorReleaseNeverBlocks pins the invariant that returning an
+// in-flight slot cannot stall a worker. An entry evicted from the host LRU
+// while its fetch is running is replaced by a fresh one with a full set of
+// slots, and the in-flight fetch then returns its slot to that replacement.
+func TestCoordinatorReleaseNeverBlocks(t *testing.T) {
+	coord := newTestCoordinator(config.CrawlerRate{
+		GlobalRPS:          100,
+		PerHostRPS:         100,
+		GlobalConcurrency:  10,
+		PerHostConcurrency: 1,
+	})
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		coord.Release("example.com")
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Release blocked returning a slot to an entry that already has all of them")
+	}
+}

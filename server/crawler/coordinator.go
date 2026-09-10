@@ -234,7 +234,14 @@ func (c *Coordinator) Release(host string) {
 }
 
 func (c *Coordinator) releaseSlot(he *hostEntry) {
-	he.inflightCh <- struct{}{}
+	select {
+	case he.inflightCh <- struct{}{}:
+	default:
+		// The entry was evicted from the host LRU while this fetch was in
+		// flight, so the slot belongs to an entry nobody reads any more. The
+		// replacement entry starts with a full set of slots and is already
+		// correct, so drop the token rather than block on it forever.
+	}
 }
 
 // Cooldown marks host as cooling down until now+d, based on a Retry-After header.
