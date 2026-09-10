@@ -237,7 +237,7 @@ func (c *baseCrawler) run(ctx context.Context, q CrawlQueue, startURL string, v 
 				// been cancelled: persistent queues need the DB write to reset
 				// the row to pending (interrupted) or record the outcome.
 				if cerr := q.Complete(context.Background(), item, comp); cerr != nil {
-					log.Warn().Err(cerr).Msg("crawler: queue Complete failed")
+					log.Error().Err(cerr).Str("url", item.rawURL).Msg("crawler: recording the crawl result failed")
 				}
 				if comp.stop || c.coord.Exhausted() {
 					crawlCancel()

@@ -101,3 +101,39 @@ func TestSQLiteQueueNoConcurrentDoubleFetch(t *testing.T) {
 		}
 	}
 }
+
+// TestSQLiteQueueCompleteReportsWriteFailure pins that a failed result write is
+// reported rather than logged and dropped. The row is left in_progress with its
+// discovered links unrecorded, so a run that swallows the error reports a page
+// as crawled that the job has no record of.
+func TestSQLiteQueueCompleteReportsWriteFailure(t *testing.T) {
+	initTestDB(t)
+
+	jobID := "complete-write-failure"
+	rawURL := "http://example.com/page"
+	if err := model.CreateCrawlJob(jobID, rawURL, "", "test"); err != nil {
+		t.Fatalf("CreateCrawlJob: %v", err)
+	}
+	if err := model.InsertCrawlURLIfNotExists(jobID, rawURL, 0); err != nil {
+		t.Fatalf("InsertCrawlURLIfNotExists: %v", err)
+	}
+	claimed, err := model.ClaimNextPendingCrawlURL(jobID)
+	if err != nil || claimed == nil {
+		t.Fatalf("ClaimNextPendingCrawlURL: %v, %v", claimed, err)
+	}
+
+	sqlDB, err := model.DB.DB()
+	if err != nil {
+		t.Fatalf("DB handle: %v", err)
+	}
+	if err := sqlDB.Close(); err != nil {
+		t.Fatalf("closing the database: %v", err)
+	}
+
+	q := newSQLiteQueue(jobID)
+	q.inflight = 1
+	item := &pendingItem{id: claimed.ID, rawURL: claimed.URL, depth: claimed.Depth}
+	if err := q.Complete(context.Background(), item, completion{finalURL: rawURL}); err == nil {
+		t.Error("Complete returned nil after the result write failed")
+	}
+}

@@ -4,10 +4,10 @@ package crawler
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"sync"
 	"time"
-
-	"github.com/rs/zerolog/log"
 
 	"github.com/asciimoo/hister/server/model"
 )
@@ -234,13 +234,17 @@ func (q *sqliteQueue) Complete(ctx context.Context, item *pendingItem, c complet
 	case c.err != nil:
 		completeErr = model.UpdateCrawlURLStatus(id, model.CrawlURLFailed, c.err.Error())
 	default:
+		// A failure here leaves the row in_progress with its links unrecorded
+		// while the run reports the page as crawled. Report it so the driver
+		// logs it and the resume path is the one that repairs the row, rather
+		// than a warning nobody acts on.
 		if err := model.MarkDoneAndEnqueueLinks(id, q.jobID, c.resolvedLinks, item.depth+1); err != nil {
-			log.Warn().Err(err).Msg("sqliteQueue: MarkDoneAndEnqueueLinks failed")
+			completeErr = fmt.Errorf("record %s as done: %w", item.rawURL, err)
 		}
 		// Handle redirect: mark the final URL as done if it differs.
 		if c.finalURL != "" && c.finalURL != item.rawURL {
 			if err := model.InsertCrawlURLDone(q.jobID, c.finalURL, item.depth); err != nil {
-				log.Warn().Err(err).Str("url", c.finalURL).Msg("sqliteQueue: InsertCrawlURLDone failed")
+				completeErr = errors.Join(completeErr, fmt.Errorf("record redirect target %s as done: %w", c.finalURL, err))
 			}
 		}
 	}
