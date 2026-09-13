@@ -125,6 +125,11 @@ left with `in_progress` status is moved back to `pending`. URLs already marked `
 A process stopped abruptly can leave the job status as `running`. This does not mean its queue was
 lost. Use `hister crawl show NAME` to check the queue counts, then resume it normally.
 
+One job is crawled by one process at a time. A run takes a lease on the job while it works, so
+starting the same job again elsewhere fails with the name of the process that holds it. The lease is
+renewed while the run is alive and expires about a minute after it stops being renewed, so a job
+whose process was killed can be resumed shortly afterwards without any cleanup step.
+
 ### Saved Settings and Runtime Settings
 
 The settings that define crawl scope are stored when a job is created:
@@ -209,14 +214,14 @@ Traversal flags apply when a persistent job is created and are then stored with 
 | -------------------------- | ------------------------------------------------------------------------------------ |
 | `--recursive`, `-r`        | Follow discovered links. Without it, only explicitly queued URLs are fetched.        |
 | `--max-depth N`            | Visit links up to depth `N`. The starting URL has depth zero. Zero means unlimited.  |
-| `--max-links N`            | Stop after allowing `N` pages. Zero means unlimited.                                 |
+| `--max-links N`            | Stop after fetching `N` pages, including the starting URL. Zero means unlimited.     |
 | `--allowed-domain DOMAIN`  | Allow this domain and its subdomains. Repeatable. An empty list allows every domain. |
 | `--exclude-domain DOMAIN`  | Skip this domain and its subdomains. Repeatable.                                     |
 | `--allowed-pattern REGEXP` | Fetch URLs matching at least one allowed regular expression. Repeatable.             |
 | `--exclude-pattern REGEXP` | Skip URLs matching any excluded regular expression. Repeatable.                      |
 
 Domain and pattern checks apply to the starting URL too. Make sure an allowed pattern includes the
-seed URL.
+seed URL: a starting URL rejected by its own rules fails the command instead of crawling nothing.
 
 This example crawls at most 500 pages from two documentation domains while excluding sign in pages:
 
@@ -344,7 +349,9 @@ hister crawl list
 Each entry includes its ID, stored status, starting URL, creation time, and counts for pending,
 done, failed, and skipped URLs. The displayed job status values are `unfinished`, `completed`, and
 `interrupted`. `unfinished` means the job was started but has not recorded completion. It does not
-mean that a crawler process is currently executing it.
+mean that a crawler process is currently executing it. A run that stops on `--max-links` or a
+configured crawler limit is recorded as `interrupted` rather than `completed`, because its queue
+still holds URLs; `completed` means the queue was drained.
 
 ### Show One Job
 

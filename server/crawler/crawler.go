@@ -4,9 +4,13 @@ package crawler
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"hash/fnv"
+	"io"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/net/html"
@@ -20,8 +24,10 @@ import (
 // Crawler is the public interface for scraping backends.
 // Crawl performs a BFS traversal starting from startURL, sending discovered
 // documents to the returned channel. The channel is closed when crawling
-// finishes or ctx is cancelled. Close must be called when the Crawler is no
-// longer needed to release backend resources.
+// finishes or ctx is cancelled. Callers must read the channel until it closes,
+// or cancel ctx: a caller that abandons it blocks a crawl worker on its send.
+// Close must be called when the Crawler is no longer needed to release backend
+// resources.
 type Crawler interface {
 	Crawl(ctx context.Context, startURL string, v *Validator) (<-chan *document.Document, error)
 	Close() error
@@ -52,11 +58,8 @@ func WithSkipURLChecker(skipURLChecker SkipURLChecker) Option {
 }
 
 // fetcher is the internal interface implemented by each scraping backend.
-// fetchPage downloads rawURL and returns the final URL after any redirects,
-// its HTML content together with the raw href values of all anchor tags found
-// on the page.
 type fetcher interface {
-	fetchPage(ctx context.Context, rawURL string) (finalURL string, htmlContent string, links []string, err error)
+	fetchPage(ctx context.Context, rawURL string) (finalURL string, body []byte, links []Link, meta FetchMeta, err error)
 	close() error
 }
 
@@ -64,14 +67,15 @@ type fetcher interface {
 type baseCrawler struct {
 	fetcher        fetcher
 	cfg            *config.CrawlerConfig
-	robots         *RobotsCache // nil means robots.txt enforcement is disabled
+	robots         *RobotsCache
 	skipURLChecker SkipURLChecker
+	coord          *Coordinator
+	backoff        *Backoff
 }
 
 // New creates a Crawler backed by the backend specified in cfg.Backend.
-// Accepted values are "chromedp" and "http" (default).
-// Pass a non-nil RobotsCache to enforce robots.txt rules during crawling;
-// pass nil to disable robots.txt checks entirely.
+// Accepted values are "chromedp", "bidi", and "http" (default).
+// Pass a non-nil RobotsCache to enforce robots.txt rules; pass nil to disable.
 func New(cfg *config.CrawlerConfig, robots *RobotsCache, opts ...Option) (Crawler, error) {
 	o := applyOptions(opts...)
 	var f fetcher
@@ -87,7 +91,26 @@ func New(cfg *config.CrawlerConfig, robots *RobotsCache, opts ...Option) (Crawle
 	if err != nil {
 		return nil, fmt.Errorf("%s backend: %w", crawlerBackendName(cfg), err)
 	}
-	return &baseCrawler{fetcher: f, cfg: cfg, robots: robots, skipURLChecker: o.skipURLChecker}, nil
+	return newBaseCrawler(f, cfg, robots, o), nil
+}
+
+func newBaseCrawler(f fetcher, cfg *config.CrawlerConfig, robots *RobotsCache, o options) *baseCrawler {
+	initial := time.Duration(cfg.Retry.InitialBackoff) * time.Second
+	if initial == 0 {
+		initial = time.Second
+	}
+	maxB := time.Duration(cfg.Retry.MaxBackoff) * time.Second
+	if maxB == 0 {
+		maxB = 30 * time.Second
+	}
+	return &baseCrawler{
+		fetcher:        f,
+		cfg:            cfg,
+		robots:         robots,
+		skipURLChecker: o.skipURLChecker,
+		coord:          NewCoordinator(cfg),
+		backoff:        NewBackoff(initial, maxB),
+	}
 }
 
 func crawlerBackendName(cfg *config.CrawlerConfig) string {
@@ -127,17 +150,18 @@ func applyOptions(opts ...Option) options {
 	return o
 }
 
-// Crawl starts a BFS crawl from startURL. It returns a channel on which
-// *document.Document values are sent (URL and HTML fields populated) for every
-// successfully fetched page. The channel is closed when the crawl ends.
+// Crawl starts a BFS crawl from startURL using an in-memory queue.
 func (c *baseCrawler) Crawl(ctx context.Context, startURL string, v *Validator) (<-chan *document.Document, error) {
-	if _, err := url.Parse(startURL); err != nil {
-		return nil, fmt.Errorf("invalid start URL: %w", err)
+	if err := checkStartURL(startURL, v); err != nil {
+		return nil, err
 	}
 	ch := make(chan *document.Document)
+	q := newMemoryQueue()
 	go func() {
 		defer close(ch)
-		c.bfsCrawl(ctx, startURL, v, ch)
+		if err := c.run(ctx, q, startURL, v, ch); err != nil {
+			log.Error().Err(err).Msg("crawler: crawl failed")
+		}
 	}()
 	return ch, nil
 }
@@ -147,100 +171,324 @@ func (c *baseCrawler) Close() error {
 	return c.fetcher.close()
 }
 
-type queueItem struct {
-	rawURL string
-	depth  int
+// checkStartURL parses startURL and runs it through the traversal filters. The
+// start URL is subject to the same domain and pattern rules as discovered
+// links, and a rejected one is an error rather than an empty crawl.
+func checkStartURL(startURL string, v *Validator) error {
+	parsed, err := url.Parse(startURL)
+	if err != nil {
+		return fmt.Errorf("invalid start URL: %w", err)
+	}
+	if v.Validate(parsed, 0) != URLAllow {
+		return fmt.Errorf("start URL rejected by crawl rules: %s", startURL)
+	}
+	return nil
 }
 
-func (c *baseCrawler) bfsCrawl(ctx context.Context, startURL string, v *Validator, ch chan<- *document.Document) {
-	queue := []queueItem{{startURL, 0}}
-	seen := map[string]struct{}{startURL: {}}
+// run is the unified crawl driver shared by both in-memory and sqlite backends.
+func (c *baseCrawler) run(ctx context.Context, q CrawlQueue, startURL string, v *Validator, ch chan<- *document.Document) error {
+	grace := time.Duration(c.cfg.ShutdownGrace) * time.Second
+	if grace == 0 {
+		grace = 30 * time.Second
+	}
 
-	for len(queue) > 0 {
+	crawlCtx, crawlCancel := context.WithCancel(ctx)
+	defer crawlCancel()
+
+	fetchCtx, fetchCancel := context.WithCancel(context.Background())
+	defer fetchCancel()
+
+	go func() {
+		<-crawlCtx.Done()
 		select {
-		case <-ctx.Done():
-			return
-		default:
+		case <-time.After(grace):
+		case <-fetchCtx.Done():
 		}
+		fetchCancel()
+	}()
 
-		cur := queue[0]
-		queue = queue[1:]
+	if err := q.Seed(crawlCtx, startURL); err != nil {
+		return fmt.Errorf("seed queue: %w", err)
+	}
 
-		parsedURL, err := url.Parse(cur.rawURL)
+	concurrency := c.cfg.Rate.GlobalConcurrency
+	if concurrency < 1 {
+		concurrency = 1
+	}
+
+	var wg sync.WaitGroup
+	for i := 0; i < concurrency; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				item, ok, err := q.Pop(crawlCtx)
+				if err != nil {
+					if crawlCtx.Err() == nil {
+						log.Warn().Err(err).Msg("crawler: queue Pop failed, worker stopping")
+					}
+					return
+				}
+				if !ok {
+					return
+				}
+				comp := c.fetchOne(fetchCtx, crawlCtx, item, v, ch)
+				// Complete must run to completion even if the crawl context has
+				// been cancelled: persistent queues need the DB write to reset
+				// the row to pending (interrupted) or record the outcome.
+				if cerr := q.Complete(context.Background(), item, comp); cerr != nil {
+					log.Error().Err(cerr).Str("url", item.rawURL).Msg("crawler: recording the crawl result failed")
+				}
+				if comp.stop || c.coord.Exhausted() {
+					crawlCancel()
+					return
+				}
+				if comp.deferred && comp.deferFor > 0 {
+					select {
+					case <-crawlCtx.Done():
+						return
+					case <-time.After(comp.deferFor):
+					}
+				}
+			}
+		}()
+	}
+	wg.Wait()
+
+	// crawlCtx is cancelled either by the caller or by a limit stopping the
+	// crawl from inside. Both leave URLs pending, so the queue must record the
+	// run as stopped: reporting it as done marks the job completed and the CLI
+	// then refuses to resume it. Only a drained queue reaches OnDone.
+	if crawlCtx.Err() != nil {
+		return q.OnStop(context.Background())
+	}
+	return q.OnDone(context.Background())
+}
+
+// fetchOne performs all pre-fetch checks, the actual fetch with retry/backoff,
+// link resolution, and document emission. It returns a completion for the queue.
+func (c *baseCrawler) fetchOne(fetchCtx, crawlCtx context.Context, item *pendingItem, v *Validator, ch chan<- *document.Document) (comp completion) {
+	parsedURL, err := url.Parse(item.rawURL)
+	if err != nil {
+		return completion{err: err}
+	}
+	host := parsedURL.Hostname()
+
+	// Pre-fetch: robots check.
+	if c.robots != nil && !c.robots.Allowed(crawlCtx, item.rawURL) {
+		log.Info().Str("url", item.rawURL).Msg("crawler: skipping URL disallowed by robots.txt")
+		return completion{skipped: true, skipReason: "robots.txt"}
+	}
+
+	// Pre-fetch: skipURLChecker.
+	if c.skipURLChecker != nil {
+		skip, err := c.skipURLChecker(item.rawURL)
 		if err != nil {
-			continue
+			log.Warn().Err(err).Str("url", item.rawURL).Msg("crawler: skipURL checker error")
+		} else if skip {
+			log.Info().Str("url", item.rawURL).Msg("crawler: skipping URL by prefetch skip predicate")
+			return completion{skipped: true, skipReason: "prefetch skip"}
+		}
+	}
+
+	// Pre-fetch: per-host budget.
+	if c.coord.HostExhausted(host) {
+		log.Info().Str("url", item.rawURL).Str("host", host).Msg("crawler: per-host budget reached, skipping")
+		return completion{skipped: true, skipReason: "budget"}
+	}
+
+	// MaxLinks is charged here rather than at link discovery so that the queue
+	// has already deduplicated, and so that the start URL counts too.
+	if !v.TryVisit() {
+		log.Info().Str("url", item.rawURL).Msg("crawler: max links reached, stopping crawl")
+		return completion{stop: true}
+	}
+	defer func() {
+		if comp.interrupted || comp.skipped || comp.deferred {
+			v.ReleaseVisit()
+		}
+	}()
+
+	maxAttempts := c.cfg.Retry.MaxAttempts
+	if maxAttempts < 1 {
+		maxAttempts = 1
+	}
+
+	var finalURL string
+	var body []byte
+	var links []Link
+	var meta FetchMeta
+	var fetchErr error
+
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		if attempt > 0 {
+			wait := c.backoff.Duration(attempt)
+			select {
+			case <-fetchCtx.Done():
+				return completion{interrupted: true, err: fetchCtx.Err()}
+			case <-time.After(wait):
+			}
 		}
 
-		switch v.Validate(parsedURL, cur.depth) {
-		case URLStop:
-			return
-		case URLSkip:
-			log.Info().Str("url", cur.rawURL).Int("depth", cur.depth).Msg("crawler: skipping URL by crawler rules")
-			continue
+		if err := c.coord.Wait(crawlCtx, host); err != nil {
+			if crawlCtx.Err() != nil {
+				return completion{interrupted: true, err: err}
+			}
+			var breakerOpen *errBreakerOpen
+			if errors.As(err, &breakerOpen) {
+				// The host is down as a whole and this URL was never attempted.
+				// Recording it as failed would drain the rest of the host's
+				// queue into permanent failures during an outage, so leave it
+				// queued and hold off until the breaker probes again.
+				wait := c.coord.BreakerRetryIn(host)
+				log.Info().
+					Str("url", item.rawURL).
+					Str("host", host).
+					Dur("retry_in", wait).
+					Msg("crawler: circuit breaker open, deferring URL")
+				return completion{deferred: true, deferFor: wait}
+			}
+			return completion{err: err}
 		}
 
-		if c.robots != nil && !c.robots.Allowed(ctx, cur.rawURL) {
-			log.Info().Str("url", cur.rawURL).Msg("crawler: skipping URL disallowed by robots.txt")
-			continue
+		if !c.coord.TryReservePage(host) {
+			c.coord.Release(host)
+			c.coord.AbandonProbe(host)
+			if c.coord.Exhausted() {
+				// The crawl-wide budget is spent rather than this host's. The
+				// URL was never fetched, so leave it queued: the driver stops
+				// the run and a resume with budget left picks it up. Recording
+				// it as skipped would retire it for good.
+				log.Info().Str("url", item.rawURL).Msg("crawler: crawl budget reached, stopping crawl")
+				return completion{stop: true}
+			}
+			log.Info().Str("url", item.rawURL).Str("host", host).Msg("crawler: per-host page budget reached, skipping")
+			return completion{skipped: true, skipReason: "budget"}
 		}
 
-		if c.skipURLChecker != nil {
-			skip, err := c.skipURLChecker(cur.rawURL)
-			if err != nil {
-				log.Warn().Err(err).Str("url", cur.rawURL).Msg("crawler: failed to check whether URL should be skipped")
-			} else if skip {
-				log.Info().Str("url", cur.rawURL).Msg("crawler: skipping URL by prefetch skip predicate")
+		start := time.Now()
+		finalURL, body, links, meta, fetchErr = c.fetcher.fetchPage(fetchCtx, item.rawURL)
+		elapsed := time.Since(start)
+
+		c.coord.Release(host)
+
+		if fetchErr != nil {
+			// A context cancellation surfacing as fetch error is an interruption,
+			// not a permanent failure; the persistent queue should reset the row.
+			if fetchCtx.Err() != nil {
+				return completion{interrupted: true, err: fetchErr}
+			}
+			retryable, retryAfter, statusCode := ClassifyError(fetchErr)
+			log.Warn().
+				Err(fetchErr).
+				Str("url", item.rawURL).
+				Str("host", host).
+				Int("status", statusCode).
+				Int("attempt", attempt+1).
+				Int64("duration_ms", elapsed.Milliseconds()).
+				Str("breaker_state", breakerStateName(c.coord.HostBreakerState(host))).
+				Msg("crawler: fetch error")
+
+			if retryAfter > 0 {
+				c.coord.Cooldown(host, retryAfter)
+			}
+			if retryable && attempt < maxAttempts-1 {
+				c.coord.RecordFailure(host)
 				continue
 			}
+			c.coord.RecordFailure(host)
+			return completion{err: fetchErr}
 		}
 
-		if c.cfg.Delay > 0 {
-			select {
-			case <-time.After(time.Duration(c.cfg.Delay) * time.Second):
-			case <-ctx.Done():
-				return
-			}
-		}
+		log.Info().
+			Str("url", finalURL).
+			Str("host", host).
+			Int("status", meta.StatusCode).
+			Int64("bytes", int64(len(body))).
+			Int64("duration_ms", elapsed.Milliseconds()).
+			Int("attempt", attempt+1).
+			Str("breaker_state", breakerStateName(c.coord.HostBreakerState(host))).
+			Msg("crawler: fetched page")
 
-		finalURL, htmlContent, links, err := c.fetcher.fetchPage(ctx, cur.rawURL)
-		if err != nil {
-			log.Warn().Err(err).Str("url", cur.rawURL).Msg("crawler: failed to fetch page")
-			continue
-		}
+		c.coord.RecordSuccess(host)
+		break
+	}
 
-		// If the server redirected to a different URL, mark it seen so it
-		// won't be queued again (e.g. /path/ -> /path). Use the final URL
-		// for the document and as the base for link resolution.
-		if finalURL != cur.rawURL {
-			seen[finalURL] = struct{}{}
-		}
-		finalParsed, err := url.Parse(finalURL)
-		if err != nil {
-			finalParsed = parsedURL
-		}
+	if fetchErr != nil {
+		return completion{err: fetchErr}
+	}
 
-		doc := &document.Document{
-			URL:  finalURL,
-			HTML: htmlContent,
-		}
+	finalParsed, err := url.Parse(finalURL)
+	if err != nil {
+		finalParsed = parsedURL
+	}
+	finalParsed.Fragment = ""
+	bodyLen := int64(len(body))
+	c.coord.AddBytes(host, bodyLen)
 
-		select {
-		case ch <- doc:
-		case <-ctx.Done():
-			return
-		}
+	doc := &document.Document{
+		URL:  finalURL,
+		HTML: string(body),
+	}
+	select {
+	case ch <- doc:
+	case <-crawlCtx.Done():
+		// Doc was fetched but never delivered downstream; treat as interrupted
+		// so a resumed run refetches and re-emits.
+		return completion{interrupted: true, finalURL: finalURL}
+	}
 
+	// Resolve discovered links. Validator filters here so queue doesn't re-filter.
+	var resolvedLinks []string
+	if !v.Rules().NoDepth {
 		for _, link := range links {
-			abs, err := resolveURL(finalParsed, link)
+			if isNofollow(link.Rel) {
+				continue
+			}
+			abs, err := resolveURL(finalParsed, link.Href)
 			if err != nil || abs == "" {
 				continue
 			}
-			if _, exists := seen[abs]; !exists {
-				seen[abs] = struct{}{}
-				queue = append(queue, queueItem{abs, cur.depth + 1})
+			absParsed, err := url.Parse(abs)
+			if err != nil {
+				continue
 			}
+			if v.Validate(absParsed, item.depth+1) == URLSkip {
+				continue
+			}
+			resolvedLinks = append(resolvedLinks, abs)
 		}
 	}
+
+	return completion{finalURL: finalURL, resolvedLinks: resolvedLinks}
+}
+
+func hashURL(key string) uint64 {
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(key))
+	return h.Sum64()
+}
+
+func breakerStateName(s BreakerState) string {
+	switch s {
+	case BreakerClosed:
+		return "closed"
+	case BreakerOpen:
+		return "open"
+	case BreakerHalfOpen:
+		return "half_open"
+	}
+	return "unknown"
+}
+
+// isNofollow returns true if the rel string contains "nofollow" as a token.
+func isNofollow(rel string) bool {
+	for _, token := range strings.Fields(rel) {
+		if strings.EqualFold(token, "nofollow") {
+			return true
+		}
+	}
+	return false
 }
 
 // resolveURL turns a potentially relative href into an absolute http(s) URL
@@ -258,28 +506,40 @@ func resolveURL(base *url.URL, href string) (string, error) {
 	return abs.String(), nil
 }
 
-// extractLinks parses htmlContent and returns the raw href attribute values
-// of all <a> elements.
-func extractLinks(htmlContent string) []string {
-	doc, err := html.Parse(strings.NewReader(htmlContent))
-	if err != nil {
-		return nil
-	}
-	var links []string
-	var walk func(*html.Node)
-	walk = func(n *html.Node) {
-		if n.Type == html.ElementNode && n.Data == "a" {
-			for _, attr := range n.Attr {
-				if attr.Key == "href" {
-					links = append(links, attr.Val)
+// extractLinks parses HTML from r and returns the links found in <a> elements.
+func extractLinks(r io.Reader) ([]Link, error) {
+	var links []Link
+	z := html.NewTokenizer(r)
+	for {
+		tt := z.Next()
+		switch tt {
+		case html.ErrorToken:
+			return links, nil
+		case html.StartTagToken, html.SelfClosingTagToken:
+			name, hasAttr := z.TagName()
+			tagName := string(name)
+			if !hasAttr || tagName != "a" {
+				continue
+			}
+			var href, rel string
+			for {
+				key, val, more := z.TagAttr()
+				switch string(key) {
+				case "href":
+					href = string(val)
+				case "rel":
+					rel = string(val)
+				}
+				if !more {
 					break
 				}
 			}
-		}
-		for c := n.FirstChild; c != nil; c = c.NextSibling {
-			walk(c)
+			if href != "" {
+				links = append(links, Link{Href: href, Rel: rel})
+			}
 		}
 	}
-	walk(doc)
-	return links
 }
+
+// errResponseTooLarge is returned when a response body exceeds the configured limit.
+var errResponseTooLarge = fmt.Errorf("response body exceeds size limit")

@@ -4,8 +4,10 @@ package crawler
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"net/url"
+	"os"
+	"sync/atomic"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -15,15 +17,44 @@ import (
 	"github.com/asciimoo/hister/server/model"
 )
 
-// persistentCrawler wraps a fetcher with DB-backed BFS so crawl jobs can be
-// interrupted and resumed.
+// jobLeaseTTL is how long a crawl job stays owned by a run without a renewal.
+// A run that dies without releasing its lease blocks a resume for this long.
+// jobLeaseRenewInterval must stay well below it so a slow database write does
+// not cost a live run its lease.
+const (
+	jobLeaseTTL           = time.Minute
+	jobLeaseRenewInterval = 20 * time.Second
+)
+
+// errLeaseLost is reported by Err when another run took the job over.
+var errLeaseLost = errors.New("crawl job lease lost to another run")
+
+// persistentCrawler wraps baseCrawler with a DB-backed queue so crawl jobs can
+// be interrupted and resumed.
 type persistentCrawler struct {
-	fetcher        fetcher
-	cfg            *config.CrawlerConfig
-	jobID          string
-	robots         *RobotsCache // nil means robots.txt enforcement is disabled
-	skipURLChecker SkipURLChecker
-	err            error
+	*baseCrawler
+	jobID     string
+	owner     string
+	leaseLost atomic.Bool
+	err       error
+}
+
+// newLeaseOwner builds a human-readable owner ID so a blocked resume can say
+// which process holds the job.
+func newLeaseOwner(jobID string) string {
+	suffix, err := model.GenerateCrawlJobID()
+	if err != nil {
+		// The suffix only disambiguates two runs of the same pid on the same
+		// host, which cannot overlap; the pid alone is still unique enough.
+		log.Debug().Err(err).Msg("crawler: falling back to pid-only lease owner")
+		suffix = jobID
+	}
+	host, err := os.Hostname()
+	if err != nil {
+		log.Debug().Err(err).Msg("crawler: hostname unavailable for lease owner")
+		host = "unknown"
+	}
+	return fmt.Sprintf("%s/%d/%s", host, os.Getpid(), suffix)
 }
 
 // NewPersistent creates a Crawler that persists its state to the database.
@@ -44,18 +75,74 @@ func NewPersistent(cfg *config.CrawlerConfig, jobID string, robots *RobotsCache,
 	if err != nil {
 		return nil, fmt.Errorf("%s backend: %w", crawlerBackendName(cfg), err)
 	}
-	return &persistentCrawler{fetcher: f, cfg: cfg, jobID: jobID, robots: robots, skipURLChecker: o.skipURLChecker}, nil
+
+	initial := time.Duration(cfg.Retry.InitialBackoff) * time.Second
+	if initial == 0 {
+		initial = time.Second
+	}
+	maxB := time.Duration(cfg.Retry.MaxBackoff) * time.Second
+	if maxB == 0 {
+		maxB = 30 * time.Second
+	}
+
+	bc := &baseCrawler{
+		fetcher:        f,
+		cfg:            cfg,
+		robots:         robots,
+		skipURLChecker: o.skipURLChecker,
+		coord:          NewCoordinator(cfg),
+		backoff:        NewBackoff(initial, maxB),
+	}
+
+	return &persistentCrawler{baseCrawler: bc, jobID: jobID, owner: newLeaseOwner(jobID)}, nil
 }
 
 // Crawl starts (or resumes) the persistent crawl job identified by jobID.
-// startURL and v are only used when creating a new job; on resume the stored
-// start URL and validator rules take precedence (the caller is responsible for
-// passing the correct v with a pre-seeded visited counter).
+// Only one run may own a job at a time: Crawl takes the job lease and fails
+// when another live run holds it.
 func (c *persistentCrawler) Crawl(ctx context.Context, startURL string, v *Validator) (<-chan *document.Document, error) {
+	if err := checkStartURL(startURL, v); err != nil {
+		return nil, err
+	}
+
+	if c.owner == "" {
+		c.owner = newLeaseOwner(c.jobID)
+	}
+	acquired, holder, err := model.AcquireCrawlJobLease(c.jobID, c.owner, jobLeaseTTL)
+	if err != nil {
+		return nil, fmt.Errorf("acquire crawl job lease: %w", err)
+	}
+	if !acquired {
+		return nil, fmt.Errorf("crawl job %s is already running as %s (lease expires %s)",
+			c.jobID, holder.LockedBy, holder.LockExpiresAt.Format(time.RFC3339))
+	}
+
+	// Restore any URLs left in_progress from a previous run. The lease makes
+	// this safe: no other run can be fetching them.
+	if err := model.ResetInProgressCrawlURLs(c.jobID); err != nil {
+		c.releaseLease()
+		return nil, fmt.Errorf("reset in_progress URLs: %w", err)
+	}
+
+	runCtx, cancelRun := context.WithCancel(ctx)
+
+	q := newSQLiteQueue(c.jobID)
 	ch := make(chan *document.Document)
 	go func() {
 		defer close(ch)
-		c.err = c.persistentBFS(ctx, startURL, v, ch)
+		defer c.releaseLease()
+		defer cancelRun()
+
+		heartbeatDone := make(chan struct{})
+		go c.renewLease(runCtx, cancelRun, heartbeatDone)
+
+		c.err = c.run(runCtx, q, startURL, v, ch)
+		cancelRun()
+		<-heartbeatDone
+
+		if c.leaseLost.Load() {
+			c.err = errors.Join(c.err, errLeaseLost)
+		}
 		if c.err != nil {
 			log.Error().Err(c.err).Str("job_id", c.jobID).Msg("persistent crawl failed")
 		}
@@ -63,162 +150,42 @@ func (c *persistentCrawler) Crawl(ctx context.Context, startURL string, v *Valid
 	return ch, nil
 }
 
-// Err returns the background crawl error after the document channel closes.
-func (c *persistentCrawler) Err() error {
-	return c.err
-}
-
-// Close releases resources held by the underlying fetcher backend.
-func (c *persistentCrawler) Close() error {
-	return c.fetcher.close()
-}
-
-func (c *persistentCrawler) persistentBFS(ctx context.Context, startURL string, v *Validator, ch chan<- *document.Document) error {
-	// Restore any URLs that were left in_progress from a previous run.
-	if err := model.ResetInProgressCrawlURLs(c.jobID); err != nil {
-		return fmt.Errorf("reset in_progress URLs: %w", err)
-	}
-
-	// Queue the start URL if this is a new job (nothing pending yet).
-	if err := model.InsertCrawlURLIfNotExists(c.jobID, startURL, 0); err != nil {
-		return fmt.Errorf("insert start URL: %w", err)
-	}
-
+// renewLease keeps the job lease alive while the crawl runs. Losing it means
+// another run has taken the job over, so the crawl stops rather than compete
+// for the same URLs.
+func (c *persistentCrawler) renewLease(ctx context.Context, onLost func(), done chan<- struct{}) {
+	defer close(done)
+	ticker := time.NewTicker(jobLeaseRenewInterval)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
-			return model.UpdateCrawlJobStatus(c.jobID, model.CrawlJobInterrupted)
-		default:
-		}
-
-		cur, err := model.NextPendingCrawlURL(c.jobID)
-		if err != nil {
-			return fmt.Errorf("next pending URL: %w", err)
-		}
-		if cur == nil {
-			// No more pending URLs; crawl is complete.
-			break
-		}
-
-		// Mark as in_progress.
-		if err := model.UpdateCrawlURLStatus(cur.ID, model.CrawlURLInProgress, ""); err != nil {
-			return fmt.Errorf("mark in_progress: %w", err)
-		}
-
-		parsedURL, err := url.Parse(cur.URL)
-		if err != nil {
-			if err2 := model.UpdateCrawlURLStatus(cur.ID, model.CrawlURLFailed, err.Error()); err2 != nil {
-				return fmt.Errorf("record invalid crawl URL: %w", err2)
-			}
-			continue
-		}
-
-		switch v.Validate(parsedURL, cur.Depth) {
-		case URLStop:
-			// Put the URL back so a resumed job can pick it up with higher limits.
-			if err := model.UpdateCrawlURLStatus(cur.ID, model.CrawlURLPending, ""); err != nil {
-				return fmt.Errorf("failed to revert URL to pending on URLStop: %w", err)
-			}
-			return model.UpdateCrawlJobStatus(c.jobID, model.CrawlJobInterrupted)
-		case URLSkip:
-			log.Info().Str("url", cur.URL).Int("depth", cur.Depth).Msg("crawler: skipping URL by crawler rules")
-			if err := model.UpdateCrawlURLStatus(cur.ID, model.CrawlURLSkipped, ""); err != nil {
-				return fmt.Errorf("failed to mark URL skipped: %w", err)
-			}
-			continue
-		}
-
-		if c.robots != nil && !c.robots.Allowed(ctx, cur.URL) {
-			log.Info().Str("url", cur.URL).Msg("crawler: skipping URL disallowed by robots.txt")
-			if err := model.UpdateCrawlURLStatus(cur.ID, model.CrawlURLSkipped, "robots.txt"); err != nil {
-				return fmt.Errorf("failed to mark URL skipped by robots.txt: %w", err)
-			}
-			continue
-		}
-
-		if c.skipURLChecker != nil {
-			skip, err := c.skipURLChecker(cur.URL)
+			return
+		case <-ticker.C:
+			ok, err := model.RenewCrawlJobLease(c.jobID, c.owner, jobLeaseTTL)
 			if err != nil {
-				log.Warn().Err(err).Str("url", cur.URL).Msg("crawler: failed to check whether URL should be skipped")
-			} else if skip {
-				log.Info().Str("url", cur.URL).Msg("crawler: skipping URL by prefetch skip predicate")
-				if err := model.UpdateCrawlURLStatus(cur.ID, model.CrawlURLSkipped, "prefetch skip"); err != nil {
-					return fmt.Errorf("failed to mark URL skipped by prefetch predicate: %w", err)
-				}
+				// Transient database trouble: keep trying until the lease runs
+				// out, at which point a renewal reports it as lost.
+				log.Warn().Err(err).Str("job_id", c.jobID).Msg("crawler: crawl job lease renewal failed")
 				continue
 			}
-		}
-
-		if c.cfg.Delay > 0 {
-			select {
-			case <-time.After(time.Duration(c.cfg.Delay) * time.Second):
-			case <-ctx.Done():
-				if err := model.UpdateCrawlURLStatus(cur.ID, model.CrawlURLPending, ""); err != nil {
-					return fmt.Errorf("failed to revert URL to pending on cancel: %w", err)
-				}
-				return model.UpdateCrawlJobStatus(c.jobID, model.CrawlJobInterrupted)
+			if !ok {
+				log.Error().Str("job_id", c.jobID).Str("owner", c.owner).Msg("crawler: crawl job lease lost, stopping run")
+				c.leaseLost.Store(true)
+				onLost()
+				return
 			}
-		}
-
-		finalURL, htmlContent, links, fetchErr := c.fetcher.fetchPage(ctx, cur.URL)
-		if fetchErr != nil {
-			log.Warn().Err(fetchErr).Str("url", cur.URL).Msg("crawler: failed to fetch page")
-			if err := model.UpdateCrawlURLStatus(cur.ID, model.CrawlURLFailed, fetchErr.Error()); err != nil {
-				return fmt.Errorf("failed to mark URL failed: %w", err)
-			}
-			continue
-		}
-
-		// Handle redirects: insert the final URL as done so it won't be fetched again.
-		if finalURL != cur.URL {
-			finalParsedURL, fErr := url.Parse(finalURL)
-			if fErr == nil {
-				finalParsedURL.Fragment = ""
-				cleanFinal := finalParsedURL.String()
-				if err := model.InsertCrawlURLDone(c.jobID, cleanFinal, cur.Depth); err != nil {
-					return fmt.Errorf("record redirect target %s: %w", cleanFinal, err)
-				}
-			}
-		}
-
-		if v.Rules().NoDepth {
-			if err := model.UpdateCrawlURLStatus(cur.ID, model.CrawlURLDone, ""); err != nil {
-				return fmt.Errorf("failed to mark URL done: %w", err)
-			}
-		} else {
-			// Resolve all discovered links first, then enqueue them together with
-			// the mark-done update in a single transaction.
-			finalParsed, err := url.Parse(finalURL)
-			if err != nil {
-				finalParsed = parsedURL
-			}
-			finalParsed.Fragment = ""
-
-			resolved := make([]string, 0, len(links))
-			for _, link := range links {
-				abs, err := resolveURL(finalParsed, link)
-				if err != nil || abs == "" {
-					continue
-				}
-				resolved = append(resolved, abs)
-			}
-
-			if err := model.MarkDoneAndEnqueueLinks(cur.ID, c.jobID, resolved, cur.Depth+1); err != nil {
-				return fmt.Errorf("failed to mark URL done and enqueue links: %w", err)
-			}
-		}
-
-		doc := &document.Document{
-			URL:  finalURL,
-			HTML: htmlContent,
-		}
-
-		select {
-		case ch <- doc:
-		case <-ctx.Done():
-			return model.UpdateCrawlJobStatus(c.jobID, model.CrawlJobInterrupted)
 		}
 	}
+}
 
-	return model.UpdateCrawlJobStatus(c.jobID, model.CrawlJobCompleted)
+func (c *persistentCrawler) releaseLease() {
+	if err := model.ReleaseCrawlJobLease(c.jobID, c.owner); err != nil {
+		log.Warn().Err(err).Str("job_id", c.jobID).Msg("crawler: releasing crawl job lease failed")
+	}
+}
+
+// Err returns the background crawl error after the document channel closes.
+func (c *persistentCrawler) Err() error {
+	return c.err
 }
