@@ -72,17 +72,16 @@ function isSupportedContentType(contentType: string): boolean {
   return supportedContentTypes.has(normalizeContentType(contentType));
 }
 
-function extract(sendResponse, actionType, force) {
+// Unsuccessful HTTP responses are filtered out by the background script, which
+// tracks main frame response statuses via chrome.webRequest. The content script
+// cannot do it itself: PerformanceNavigationTiming.responseStatus is only
+// implemented by Chromium.
+function extract(sendResponse?, actionType?) {
   if (!isContextValid()) return;
   if (!isSupportedContentType(document.contentType)) {
     if (typeof sendResponse === 'function') {
       sendResponse({ status: 'unsupported_content_type', content_type: document.contentType });
     }
-    return;
-  }
-  const navEntry = window.performance.getEntries().find((e) => e.entryType === 'navigation') as
-    PerformanceNavigationTiming | undefined;
-  if (navEntry && navEntry.responseStatus > 299 && !force) {
     return;
   }
   registerResultExtractor(window, (r) => {
@@ -157,7 +156,7 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
     return;
   }
   if (request.action == 'reindex') {
-    extract(sendResponse, 'reindex', true);
+    extract(sendResponse, 'reindex');
     return true;
   }
   console.log('message received', request);

@@ -107,7 +107,92 @@ const tabSensitiveState = new Map<number, string>();
 
 chrome.tabs.onRemoved.addListener((tabId) => {
   tabSensitiveState.delete(tabId);
+  forgetNavigationStatus(tabId);
 });
+
+// --- Main frame HTTP status tracking ---
+
+// `PerformanceNavigationTiming.responseStatus` is only implemented by Chromium,
+// so the content script cannot tell an error page from a successful one on
+// Firefox. Capture the status of main frame navigations here instead and gate
+// document submission on it.
+
+type NavigationStatus = { url: string; statusCode: number };
+
+// Maps tabId → status of the last main frame response of that tab. Mirrored in
+// chrome.storage.session (when available) so the state survives a suspended
+// MV3 background script.
+const tabNavigationStatus = new Map<number, NavigationStatus>();
+
+// `chrome.storage.session` requires Chrome >= 102 / Firefox >= 115.
+const sessionStore = chrome.storage.session;
+
+function navigationStatusKey(tabId: number): string {
+  return `navStatus:${tabId}`;
+}
+
+// The content script strips the fragment from the submitted URL, and
+// webRequest URLs never carry one.
+function normalizeNavigationURL(url: string): string {
+  const i = url.indexOf('#');
+  return i === -1 ? url : url.slice(0, i);
+}
+
+// Redirects (3xx) are followed by the browser and overwritten by the status of
+// the redirect target, and 304 responses render a perfectly valid cached page,
+// so only 4xx/5xx are treated as unsuccessful.
+function isErrorStatus(statusCode: number): boolean {
+  return statusCode >= 400;
+}
+
+function recordNavigationStatus(tabId: number, url: string, statusCode: number) {
+  const entry: NavigationStatus = { url: normalizeNavigationURL(url), statusCode };
+  tabNavigationStatus.set(tabId, entry);
+  if (sessionStore) {
+    void sessionStore.set({ [navigationStatusKey(tabId)]: entry }).catch(() => {});
+  }
+}
+
+function forgetNavigationStatus(tabId: number) {
+  tabNavigationStatus.delete(tabId);
+  if (sessionStore) {
+    void sessionStore.remove(navigationStatusKey(tabId)).catch(() => {});
+  }
+}
+
+async function readNavigationStatus(tabId: number): Promise<NavigationStatus | undefined> {
+  const cached = tabNavigationStatus.get(tabId);
+  if (cached || !sessionStore) {
+    return cached;
+  }
+  try {
+    const key = navigationStatusKey(tabId);
+    return (await sessionStore.get(key))[key] as NavigationStatus | undefined;
+  } catch (_) {
+    return undefined;
+  }
+}
+
+// Returns the HTTP status of the main frame response that produced `url` in
+// `tabId`, or undefined when it is unknown (e.g. SPA history navigation, or a
+// page loaded before the extension started).
+async function getNavigationStatus(tabId: number, url: string): Promise<number | undefined> {
+  const entry = await readNavigationStatus(tabId);
+  if (!entry || entry.url !== normalizeNavigationURL(url)) {
+    return undefined;
+  }
+  return entry.statusCode;
+}
+
+// `chrome.webRequest` is undefined when the permission is not granted; in that
+// case the status stays unknown and documents are submitted as before.
+chrome.webRequest?.onHeadersReceived.addListener(
+  (details) => {
+    if (details.tabId < 0) return;
+    recordNavigationStatus(details.tabId, details.url, details.statusCode);
+  },
+  { urls: ['<all_urls>'], types: ['main_frame'] },
+);
 
 // --- Skip rules cache ---
 
@@ -469,6 +554,53 @@ chrome.commands?.onCommand?.addListener((command) => {
   }
 });
 
+// --- Document submission ---
+
+function applySubmissionStatus(status: number, sender, showIndexedBadge: boolean) {
+  const tabId = sender.tab?.id;
+  if (tabId === undefined) return;
+  if (status === 201) {
+    setNormalIcon(tabId);
+    if (showIndexedBadge) {
+      setPreviouslyIndexedBadge(tabId);
+    } else {
+      clearBadge(tabId);
+    }
+  } else if (status === 406) {
+    // URL matched a server-side skip rule; invalidate cache and grey out
+    skipRulesCache = null;
+    setGreyIcon(tabId);
+  } else if (status === 422) {
+    // Document rejected due to sensitive content; not an error
+    tabSensitiveState.set(tabId, sender.tab.url ?? '');
+    setGreyIcon(tabId);
+  } else {
+    setErrorBadge(tabId);
+  }
+}
+
+async function submitPageData(baseURL: string, request, sender, data): Promise<IndexingResult> {
+  const force = request.action === 'reindex';
+  const tabId = sender.tab?.id;
+  if (!force && tabId !== undefined) {
+    const statusCode = await getNavigationStatus(tabId, request.pageData.url);
+    if (statusCode !== undefined && isErrorStatus(statusCode)) {
+      return { status: 'http_error', status_code: statusCode };
+    }
+  }
+  const labelData = await chrome.storage.local.get(['histerLabel']);
+  const pageData = { ...request.pageData };
+  if (force) {
+    pageData.metadata = { ...pageData.metadata, ignore_skip_rules: true };
+  }
+  if (labelData['histerLabel']) {
+    pageData.label = labelData['histerLabel'];
+  }
+  const r = await sendPageData(baseURL + 'api/add', pageData, getDocumentSubmissionHeaders(data));
+  applySubmissionStatus(r.status, sender, data['showIndexedBadge'] === true);
+  return { status: 'ok', status_code: r.status };
+}
+
 // --- Message handler ---
 
 // TODO check source
@@ -491,7 +623,6 @@ function cjsMsgHandler(request, sender, sendResponse) {
     .then((data) => {
       let u = data['histerURL'] || '';
       const indexingEnabled = data['indexingEnabled'] !== false;
-      const showIndexedBadge = data['showIndexedBadge'] === true;
       const customHeaders = getCustomHeaders(data);
 
       if (request.action === 'getTabState') {
@@ -545,41 +676,12 @@ function cjsMsgHandler(request, sender, sendResponse) {
           sendResponse({ status: 'disabled' });
           return;
         }
-        chrome.storage.local.get(['histerLabel']).then((labelData) => {
-          const pageData = { ...request.pageData };
-          if (request.action === 'reindex') {
-            pageData.metadata = { ...pageData.metadata, ignore_skip_rules: true };
-          }
-          if (labelData['histerLabel']) {
-            pageData.label = labelData['histerLabel'];
-          }
-          sendPageData(u + 'api/add', pageData, getDocumentSubmissionHeaders(data))
-            .then((r) => {
-              if (r.status === 201) {
-                setNormalIcon(sender.tab.id);
-                if (showIndexedBadge) {
-                  setPreviouslyIndexedBadge(sender.tab.id);
-                } else {
-                  clearBadge(sender.tab.id);
-                }
-              } else if (r.status === 406) {
-                // URL matched a server-side skip rule; invalidate cache and grey out
-                skipRulesCache = null;
-                setGreyIcon(sender.tab.id);
-              } else if (r.status === 422) {
-                // Document rejected due to sensitive content; not an error
-                tabSensitiveState.set(sender.tab.id, sender.tab.url ?? '');
-                setGreyIcon(sender.tab.id);
-              } else {
-                setErrorBadge(sender.tab.id);
-              }
-              sendResponse({ status: 'ok', status_code: r.status });
-            })
-            .catch((err) => {
-              setErrorBadge(sender.tab.id);
-              sendResponse({ error: err.message });
-            });
-        });
+        submitPageData(u, request, sender, data)
+          .then(sendResponse)
+          .catch((err) => {
+            if (sender.tab?.id !== undefined) setErrorBadge(sender.tab.id);
+            sendResponse({ error: err.message });
+          });
         return true;
       }
       if (request.resultData) {
