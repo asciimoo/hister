@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -60,6 +61,28 @@ func writeContextSizeError(w http.ResponseWriter, promptTokens, contextLength in
 			"n_ctx":           contextLength,
 		},
 	})
+}
+
+func writePhysicalBatchSizeError(w http.ResponseWriter, promptTokens, batchSize int) {
+	w.WriteHeader(http.StatusInternalServerError)
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"error": map[string]any{
+			"code":    http.StatusInternalServerError,
+			"message": fmt.Sprintf("input (%d tokens) is too large to process. increase the physical batch size (current batch size: %d)", promptTokens, batchSize),
+			"type":    "server_error",
+		},
+	})
+}
+
+func TestEmbeddingContextErrorDetailsPhysicalBatchSize(t *testing.T) {
+	err := &embeddingStatusError{
+		statusCode: http.StatusInternalServerError,
+		body:       `{"error":{"code":500,"message":"input (553 tokens) is too large to process. increase the physical batch size (current batch size: 512)","type":"server_error"}}`,
+	}
+	promptTokens, contextLength, ok := embeddingContextErrorDetails(err)
+	if !ok || promptTokens != 553 || contextLength != 512 {
+		t.Fatalf("context error details = (%d, %d, %v), want (553, 512, true)", promptTokens, contextLength, ok)
+	}
 }
 
 func TestContextLengthWithHeadroom(t *testing.T) {
@@ -291,6 +314,18 @@ func TestEmbedBatchHonorsConfiguredMaximum(t *testing.T) {
 }
 
 func TestChunkAndEmbedRechunksAfterEndpointContextOverflow(t *testing.T) {
+	for name, writeError := range map[string]func(http.ResponseWriter, int, int){
+		"context size":        writeContextSizeError,
+		"physical batch size": writePhysicalBatchSizeError,
+	} {
+		t.Run(name, func(t *testing.T) {
+			testChunkAndEmbedRechunks(t, writeError)
+		})
+	}
+}
+
+func testChunkAndEmbedRechunks(t *testing.T, writeError func(http.ResponseWriter, int, int)) {
+	t.Helper()
 	const endpointContextLength = 64
 	var rejected atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -304,7 +339,7 @@ func TestChunkAndEmbedRechunksAfterEndpointContextOverflow(t *testing.T) {
 		for _, input := range request.Input {
 			if actualTokens := len([]rune(input)); actualTokens > endpointContextLength {
 				rejected.Add(1)
-				writeContextSizeError(w, actualTokens, endpointContextLength)
+				writeError(w, actualTokens, endpointContextLength)
 				return
 			}
 		}
@@ -336,10 +371,19 @@ func TestChunkAndEmbedRechunksAfterEndpointContextOverflow(t *testing.T) {
 }
 
 func TestEmbedRetriesTransientStatus(t *testing.T) {
+	for _, status := range []int{http.StatusInternalServerError, http.StatusServiceUnavailable} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			testEmbedRetriesTransientStatus(t, status)
+		})
+	}
+}
+
+func testEmbedRetriesTransientStatus(t *testing.T, status int) {
+	t.Helper()
 	var attempts atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if attempts.Add(1) == 1 {
-			http.Error(w, "warming up", http.StatusServiceUnavailable)
+			http.Error(w, "warming up", status)
 			return
 		}
 		writeEmbeddingResponse(w)
@@ -359,10 +403,26 @@ func TestEmbedRetriesTransientStatus(t *testing.T) {
 }
 
 func TestEmbedDoesNotRetryNonTransientStatus(t *testing.T) {
+	for name, writeError := range map[string]func(http.ResponseWriter){
+		"bad request": func(w http.ResponseWriter) {
+			http.Error(w, "bad input", http.StatusBadRequest)
+		},
+		"physical batch size": func(w http.ResponseWriter) {
+			writePhysicalBatchSizeError(w, 553, 512)
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			testEmbedDoesNotRetryNonTransientStatus(t, writeError)
+		})
+	}
+}
+
+func testEmbedDoesNotRetryNonTransientStatus(t *testing.T, writeError func(http.ResponseWriter)) {
+	t.Helper()
 	var attempts atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		attempts.Add(1)
-		http.Error(w, "bad input", http.StatusBadRequest)
+		writeError(w)
 	}))
 	defer srv.Close()
 

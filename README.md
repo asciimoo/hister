@@ -26,9 +26,17 @@ Hister is a private search engine for the pages you visit and the files you keep
 
    On Windows, run `.\hister.exe listen` in PowerShell.
 
+   Keep this terminal open while using Hister. The server must be running to index pages and search them.
+
 4. Open <http://127.0.0.1:4433> and install the browser extension for [Firefox](https://addons.mozilla.org/en-US/firefox/addon/hister/) or [Chrome](https://chromewebstore.google.com/detail/hister/cciilamhchpmbdnniabclekddabkifhb).
 
-No configuration is required for a local personal setup. See the [complete quickstart](https://hister.org/docs/quickstart) to import existing browser history and choose what Hister indexes.
+5. Visit a web page with the extension enabled, then return to Hister and search for a phrase from that page to find your first indexed result.
+
+No configuration is required for a local personal setup. See the [complete quickstart](https://hister.org/docs/quickstart) to choose what Hister indexes.
+
+To search existing content, [import browser history](https://hister.org/docs/import#importing-browser-history), [index local directories](https://hister.org/docs/configuration#local-directory-indexing), or [import files](https://hister.org/docs/import#importing-files).
+
+Alternative installation methods include Homebrew (`brew install hister`), Docker, and Nix. See the [installation guide](https://hister.org/docs/installing) for instructions.
 
 ## Features
 
@@ -48,6 +56,10 @@ No configuration is required for a local personal setup. See the [complete quick
 By default, Hister has no telemetry and no cloud sync. The browser extension sends indexed page content only to the Hister server you configure, apart from downloading page favicons. The server stores documents and search indexes on that server.
 
 Optional semantic search sends document text to the embeddings endpoint you choose. Review the [privacy overview](https://hister.org/docs/intro#privacy) and [semantic search configuration](https://hister.org/docs/configuration#semantic-search) before enabling remote integrations.
+
+## Why Hister?
+
+Unlike traditional search engines, Hister builds a personal search index from the web pages and files you choose to keep. Your content stays on your Hister server, making it useful for finding information you've already encountered without relying on a third-party search provider.
 
 ## Development
 

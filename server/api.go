@@ -81,6 +81,14 @@ func documentMetadataSchema() *JSONSchemaField {
 func init() {
 	Endpoints = []*Endpoint{
 		{
+			Name:        "Metrics",
+			Path:        "/metrics",
+			Method:      GET,
+			AdminOnly:   true,
+			Handler:     serveMetrics,
+			Description: "Prometheus metrics endpoint for server monitoring. Returns metrics in Prometheus exposition format. Enabled via the server.metrics configuration toggle.",
+		},
+		{
 			Name:        "Diagnostics",
 			Path:        "/api/diagnostics",
 			Method:      GET,

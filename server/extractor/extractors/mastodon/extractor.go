@@ -73,9 +73,10 @@ func (e *MastodonExtractor) Extract(d *sdk.Document) sdk.ExtractResult {
 			log.Debug().Msg("Failed to extract HTML for toot")
 			return
 		}
-		statusURL := urlutil.ResolveURL(pu, u)
+		// Keep the supplied permalink: status IDs are local to each instance,
+		// and an account's domain may differ from its server's hostname.
 		td := &sdk.Document{
-			URL:    originalStatusURL(statusURL),
+			URL:    urlutil.ResolveURL(pu, u),
 			Title:  "Mastodon toot: " + s.Find(".display-name").Text(),
 			Text:   c.Text(),
 			HTML:   h,
@@ -88,52 +89,6 @@ func (e *MastodonExtractor) Extract(d *sdk.Document) sdk.ExtractResult {
 	})
 
 	return sdk.Extracted()
-}
-
-func originalStatusURL(rawURL string) string {
-	statusURL, err := url.Parse(rawURL)
-	if err != nil || (statusURL.Scheme != "http" && statusURL.Scheme != "https") {
-		return rawURL
-	}
-
-	parts := strings.Split(strings.Trim(statusURL.EscapedPath(), "/"), "/")
-	if len(parts) != 2 {
-		return rawURL
-	}
-
-	account, err := url.PathUnescape(parts[0])
-	if err != nil || !strings.HasPrefix(account, "@") {
-		return rawURL
-	}
-
-	separator := strings.LastIndex(account, "@")
-	if separator <= 1 || separator == len(account)-1 {
-		return rawURL
-	}
-
-	username := account[1:separator]
-	remoteHost := account[separator+1:]
-	statusID, err := url.PathUnescape(parts[1])
-	if err != nil || strings.ContainsAny(username+statusID, "/?#") {
-		return rawURL
-	}
-
-	remoteURL, err := url.Parse("https://" + remoteHost)
-	if err != nil ||
-		remoteURL.Hostname() == "" ||
-		remoteURL.User != nil ||
-		remoteURL.Host != remoteHost ||
-		remoteURL.Path != "" ||
-		remoteURL.RawQuery != "" ||
-		remoteURL.Fragment != "" {
-		return rawURL
-	}
-
-	return (&url.URL{
-		Scheme: "https",
-		Host:   remoteURL.Host,
-		Path:   "/@" + username + "/" + statusID,
-	}).String()
 }
 
 func (e *MastodonExtractor) Preview(d *sdk.Document) sdk.PreviewResult {

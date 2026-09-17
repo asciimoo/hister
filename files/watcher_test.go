@@ -258,3 +258,29 @@ func TestWatcherSetupFailurePolicy(t *testing.T) {
 		t.Fatal("server watcher did not observe its accessible directory")
 	}
 }
+
+// TestWatcherSymlinkDirectoryRootSubdirectory covers a nested directory under a
+// symbolically linked root. WalkDir does not descend a symbolic link, so the
+// scan that registers watches stopped at the link and nothing below the root
+// was ever observed.
+func TestWatcherSymlinkDirectoryRootSubdirectory(t *testing.T) {
+	target := t.TempDir()
+	root := filepath.Join(t.TempDir(), "notes")
+	if err := os.Symlink(target, root); err != nil {
+		t.Skipf("cannot create symbolic link: %v", err)
+	}
+	nested := filepath.Join(target, "chapters")
+	if err := os.Mkdir(nested, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(nested, "note.txt")
+	if err := os.WriteFile(path, []byte("initial"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	changed, _, _ := startTestWatcher(t, []*config.Directory{{Path: root}}, nil)
+	if err := os.WriteFile(path, []byte("updated"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	waitForFileEvent(t, changed, filepath.Join(root, "chapters", "note.txt"))
+}

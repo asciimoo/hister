@@ -790,7 +790,7 @@ func printBrowserImportJob(idx int, job *model.CrawlJob) {
 	fmt.Printf(
 		"   pending: %d  done: %d  failed: %d  skipped: %d  created: %s\n",
 		stats.Pending, stats.Done, stats.Failed, stats.Skipped,
-		job.CreatedAt.Format("2006-01-02 15:04:05"),
+		formatLocalTimestamp(job.CreatedAt),
 	)
 }
 

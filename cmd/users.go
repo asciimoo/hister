@@ -92,8 +92,8 @@ var showUserCmd = &cobra.Command{
 		if showToken, _ := cmd.Flags().GetBool("token"); showToken {
 			cliPrintln(cliInfoStyle.Render("Token:      ") + u.Token)
 		}
-		cliPrintln(cliInfoStyle.Render("Created at: ") + u.CreatedAt.Format("2006-01-02 15:04:05"))
-		cliPrintln(cliInfoStyle.Render("Updated at: ") + u.UpdatedAt.Format("2006-01-02 15:04:05"))
+		cliPrintln(cliInfoStyle.Render("Created at: ") + formatLocalTimestamp(u.CreatedAt))
+		cliPrintln(cliInfoStyle.Render("Updated at: ") + formatLocalTimestamp(u.UpdatedAt))
 	},
 }
 

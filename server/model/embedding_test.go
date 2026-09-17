@@ -153,7 +153,7 @@ func TestEmbeddingJobClaimsByAvailabilityBeforeCreation(t *testing.T) {
 		t.Fatalf("enqueue new job: %v", err)
 	}
 
-	now := time.Now()
+	now := time.Now().UTC()
 	if err := model.DB.Model(&model.EmbeddingJob{}).
 		Where("doc_id = ?", oldDoc).
 		Update("available_at", now.Add(-time.Minute)).Error; err != nil {

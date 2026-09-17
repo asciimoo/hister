@@ -52,7 +52,7 @@ func EnqueueEmbeddingJob(docID string) error {
 	if err != nil {
 		return err
 	}
-	now := time.Now()
+	now := time.Now().UTC()
 	job := EmbeddingJob{
 		DocID:       docID,
 		Status:      EmbeddingJobPending,
@@ -95,7 +95,7 @@ func ClaimNextEmbeddingJob() (*EmbeddingJob, error) {
 	}
 	for {
 		var job EmbeddingJob
-		now := time.Now()
+		now := time.Now().UTC()
 		err := db.Where("status = ? AND available_at <= ?", EmbeddingJobPending, now).
 			Order("available_at ASC").
 			Order("created_at ASC").
@@ -144,7 +144,7 @@ func CompleteEmbeddingJob(docID string) (retry bool, err error) {
 	if result.RowsAffected == 1 {
 		return false, nil
 	}
-	now := time.Now()
+	now := time.Now().UTC()
 	result = db.Model(&EmbeddingJob{}).
 		Where("doc_id = ? AND status = ? AND dirty = ?", docID, EmbeddingJobInProgress, true).
 		Updates(map[string]any{
@@ -168,7 +168,8 @@ func RetryEmbeddingJob(docID string, retryAt time.Time, lastError string) error 
 	if err != nil {
 		return err
 	}
-	now := time.Now()
+	retryAt = retryAt.UTC()
+	now := time.Now().UTC()
 	return db.Model(&EmbeddingJob{}).
 		Where("doc_id = ? AND status = ?", docID, EmbeddingJobInProgress).
 		Updates(map[string]any{
@@ -195,7 +196,7 @@ func FailEmbeddingJob(docID string, lastError string) (retry bool, err error) {
 	if err != nil {
 		return false, err
 	}
-	now := time.Now()
+	now := time.Now().UTC()
 	result := db.Model(&EmbeddingJob{}).
 		Where("doc_id = ? AND status = ? AND dirty = ?", docID, EmbeddingJobInProgress, false).
 		Updates(map[string]any{
@@ -232,7 +233,7 @@ func ReleaseEmbeddingJob(docID string) error {
 	if err != nil {
 		return err
 	}
-	now := time.Now()
+	now := time.Now().UTC()
 	return db.Model(&EmbeddingJob{}).
 		Where("doc_id = ? AND status = ?", docID, EmbeddingJobInProgress).
 		Updates(map[string]any{
@@ -274,7 +275,7 @@ func ResetInProgressEmbeddingJobs() error {
 	if err != nil {
 		return err
 	}
-	now := time.Now()
+	now := time.Now().UTC()
 	return db.Model(&EmbeddingJob{}).
 		Where("status = ?", EmbeddingJobInProgress).
 		Updates(map[string]any{

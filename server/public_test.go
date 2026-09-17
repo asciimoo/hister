@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"github.com/asciimoo/hister/config"
 	"github.com/asciimoo/hister/server/indexer"
 	"github.com/asciimoo/hister/server/indexer/searchschema"
+	"github.com/asciimoo/hister/server/metrics"
 	"github.com/asciimoo/hister/server/model"
 	"github.com/asciimoo/hister/server/testutil"
 	"github.com/asciimoo/hister/server/timeline"
@@ -101,6 +103,81 @@ func TestPublicModeConfigResponse(t *testing.T) {
 	if len(body.Search.Facets) == 0 || len(body.Search.Sort.Options) == 0 {
 		t.Fatal("search schema is missing facets or sort options")
 	}
+}
+
+func TestMetricsRequiresTokenAndHonorsBasePath(t *testing.T) {
+	cfg := testutil.Config(t)
+	cfg.App.AccessToken = "secret"
+	cfg.Server.Metrics = true
+	cfg.Server.Database = "file::memory:"
+	if err := cfg.UpdateBaseURL("http://127.0.0.1:4433/hister"); err != nil {
+		t.Fatal(err)
+	}
+	if err := cfg.SaveRules(); err != nil {
+		t.Fatal(err)
+	}
+	testutil.InitModelWithConfig(t, cfg)
+	sessionStore = newSessionStore([]byte(strings.Repeat("x", 32)), cfg.BaseURL(""), sessionMaxAge)
+
+	idx := newServerTestIndexer(t, cfg)
+	m := metrics.New(context.Background(), idx)
+	idx.SetMetrics(m)
+	t.Cleanup(m.Stop)
+	handler := registerEndpoints(cfg, idx)
+
+	for _, tc := range []struct {
+		name   string
+		target string
+		token  string
+		status int
+	}{
+		{name: "unprefixed", target: "/metrics", status: http.StatusNotFound},
+		{name: "anonymous", target: "/hister/metrics", status: http.StatusForbidden},
+		{name: "authenticated", target: "/hister/metrics", token: "secret", status: http.StatusOK},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			headers := map[string]string{}
+			if tc.token != "" {
+				headers["Authorization"] = "Bearer " + tc.token
+			}
+			rec := testutil.ServeHTTP(t, handler, http.MethodGet, tc.target, nil, headers)
+			if rec.Code != tc.status {
+				t.Fatalf("GET %s status = %d, want %d; body=%s", tc.target, rec.Code, tc.status, rec.Body)
+			}
+		})
+	}
+
+	docs := testutil.ServeHTTP(t, handler, http.MethodGet, "/hister/api", nil, map[string]string{"Authorization": "Bearer secret"})
+	if !apiDocsContain(t, docs.Body.Bytes(), "Metrics") {
+		t.Fatal("API documentation does not include enabled Metrics endpoint")
+	}
+}
+
+func TestAPIDocsHideDisabledMetrics(t *testing.T) {
+	_, handler := newPublicTokenTestServer(t)
+	rec := testutil.ServeHTTP(t, handler, http.MethodGet, "/api", nil, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /api status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if apiDocsContain(t, rec.Body.Bytes(), "Metrics") {
+		t.Fatal("API documentation includes disabled Metrics endpoint")
+	}
+}
+
+func apiDocsContain(t *testing.T, body []byte, name string) bool {
+	t.Helper()
+	var endpoints []struct {
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal(body, &endpoints); err != nil {
+		t.Fatalf("decode API documentation: %v", err)
+	}
+	for _, endpoint := range endpoints {
+		if endpoint.Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 func TestPublicModeAllowsDocumentedPublicRoutes(t *testing.T) {

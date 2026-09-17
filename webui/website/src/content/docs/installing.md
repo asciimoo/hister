@@ -57,6 +57,16 @@ cd hister
 
 The build produces a `hister` binary in the repository root. Source is also mirrored on [Codeberg](https://codeberg.org/asciimoo/hister).
 
+## Homebrew
+
+If you use Homebrew, getting started with Hister is quick and easy to do:
+
+```bash
+brew install hister
+```
+
+Running this command will place `hister` in your `$PATH`. This can be either `opt/homebrew` for Apple Silicon, `/usr/local` for macOS Intel, or `/home/linuxbrew/.linuxbrew` for Linux.
+
 ## Docker
 
 The official container is published at [GitHub Container Registry](https://github.com/asciimoo/hister/pkgs/container/hister). See the [Docker guide](docker) for a complete Compose setup, persistent storage, and reverse proxy examples.

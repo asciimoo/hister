@@ -7,7 +7,7 @@
   import * as Dialog from '@hister/components/ui/dialog';
   import { PageHeader } from '@hister/components';
   import { StatusMessage } from '$lib/components';
-  import { Eye, EyeOff, RefreshCw, User, Info } from '@lucide/svelte';
+  import { Copy, Eye, EyeOff, RefreshCw, User, Info } from '@lucide/svelte';
 
   let username = $state('');
   let token = $state('');
@@ -15,6 +15,7 @@
   let message = $state('');
   let messageType = $state<'success' | 'error'>('success');
   let generating = $state(false);
+  let copying = $state(false);
   let resetConfirmOpen = $state(false);
   let isAdmin = $state(false);
   let version = $state('');
@@ -65,6 +66,21 @@
     resetConfirmOpen = false;
     void generateToken();
   }
+
+  async function copyToken() {
+    if (!token || copying || generating) return;
+    copying = true;
+    try {
+      await navigator.clipboard.writeText(token);
+      message = 'Token copied to clipboard. Store it securely. It will not be shown again.';
+      messageType = 'success';
+    } catch {
+      message = 'Unable to copy token. Show it and copy it manually.';
+      messageType = 'error';
+    } finally {
+      copying = false;
+    }
+  }
 </script>
 
 <svelte:head>
@@ -112,16 +128,21 @@
         </Card.Description>
       </Card.Header>
       <Card.Content class="space-y-4 px-7 py-6">
-        {#if message}
-          <StatusMessage {message} type={messageType} />
-        {/if}
+        <div role="status">
+          {#if message}
+            <StatusMessage {message} type={messageType} />
+          {/if}
+        </div>
 
         {#if token}
           <div class="border-brutal-border flex items-center gap-2 border-[3px] px-4 py-3">
             {#if tokenVisible}
-              <code class="font-fira text-text-brand flex-1 text-sm break-all">{token}</code>
+              <code class="font-fira text-text-brand min-w-0 flex-1 text-sm break-all">{token}</code
+              >
             {:else}
-              <code class="font-fira text-text-brand-muted flex-1 text-sm">{'•'.repeat(40)}</code>
+              <code class="font-fira text-text-brand-muted min-w-0 flex-1 text-sm break-all"
+                >{'•'.repeat(40)}</code
+              >
             {/if}
             <button
               onclick={() => (tokenVisible = !tokenVisible)}
@@ -134,12 +155,23 @@
                 <Eye size={16} />
               {/if}
             </button>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onclick={copyToken}
+              disabled={copying || generating}
+              title="Copy token"
+              aria-label="Copy token"
+              class="text-text-brand-muted hover:text-hister-indigo"
+            >
+              <Copy size={16} />
+            </Button>
           </div>
         {/if}
 
         <Button
           onclick={() => (resetConfirmOpen = true)}
-          disabled={generating}
+          disabled={generating || copying}
           variant="outline"
           class="border-brutal-border font-outfit hover:border-hister-indigo h-11 w-full border-[3px] text-sm font-bold tracking-wide transition-all hover:shadow-[4px_4px_0_var(--brutal-shadow)] disabled:opacity-50"
         >

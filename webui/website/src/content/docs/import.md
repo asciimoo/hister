@@ -57,6 +57,12 @@ Supported inputs are:
 
 PDF, DOCX, Markdown, Org mode, and valid UTF 8 text use the same handlers as watched files. JSON that does not have the Hister export array shape and HTML that has no source URL are also treated as file snapshots.
 
+Hister JSON exports need a `.json` extension when importing. The export command appends `.json` when the output filename has no extension: `hister export backup` writes `backup.json`, which you can restore with `hister import file backup.json`. Existing backups with another extension or no extension should be renamed to end in `.json` before importing.
+
+Use the original JSON file produced by `hister export`. Each document must occupy one line starting with `{`, with array brackets and separating commas on their own lines. Compact or indented export layouts are rejected. An empty export may contain `[]`. Each line must be smaller than 64 MiB; `indexer.max_file_size_mb` controls file snapshots and does not change this export limit. Parse errors identify the input file and line, including the entry name when reading a 7z archive.
+
+ZIP, gzip, and other archive formats besides 7z must be extracted before importing their contents. Plain text files must use UTF 8 encoding.
+
 With no input paths, the command recursively creates remote file snapshots from every configured watched directory. It applies the same file type, pattern, exclusion, hidden path, size, and label settings. Use this mode only when the command line client can read those directories but the server cannot:
 
 ```bash

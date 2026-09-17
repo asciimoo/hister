@@ -7,8 +7,8 @@ Type=simple
 User=hister
 Group=hister
 StateDirectory=hister
-Environment=HISTER_DATA_DIR=/var/lib/hister
-EnvironmentFile=-/etc/hister/hister.env
+Environment=HISTER_DATA_DIR=%S/hister
+EnvironmentFile=-%E/hister/hister.env
 ExecStart=/usr/local/bin/hister listen
 Restart=on-failure
 
@@ -35,7 +35,8 @@ RestrictRealtime=true
 RestrictSUIDSGID=true
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 SystemCallArchitectures=native
-SystemCallFilter=@system-service ~@privileged
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged
 MemoryDenyWriteExecute=true
 UMask=0077
 

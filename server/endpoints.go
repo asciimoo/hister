@@ -129,6 +129,15 @@ func registerDebugEndpoints(mux *http.ServeMux, cfg *config.Config, idx *indexer
 	register("GET /debug/pprof/trace", pprof.Trace)
 }
 
+func serveMetrics(c *webContext) {
+	m := c.Indexer.Metrics()
+	if m == nil {
+		c.Response.WriteHeader(http.StatusNotFound)
+		return
+	}
+	m.Handler().ServeHTTP(c.Response, c.Request)
+}
+
 func endpointRequiresAuth(cfg *config.Config, e *Endpoint) bool {
 	if e.NoAuth {
 		return false
@@ -619,12 +628,20 @@ func doSearch(idx *indexer.Indexer, query *indexer.Query, rules *config.Rules, u
 					if h.Text == "" {
 						h.Text = d.Text
 					}
-					h.DocID = d.DocumentID
+					populatePriorityResultDetails(h, d)
 					continue
 				}
 				filtered = append(filtered, d)
 			}
 			res.Documents = filtered
+			for _, h := range hr {
+				if h.DocID != "" {
+					continue
+				}
+				if d := idx.GetByURLAndUser(h.URL, userID); d != nil {
+					populatePriorityResultDetails(h, d)
+				}
+			}
 		}
 		if oq != "" {
 			res.QuerySuggestion = model.GetQuerySuggestion(userID, oq)
@@ -632,6 +649,14 @@ func doSearch(idx *indexer.Indexer, query *indexer.Query, rules *config.Rules, u
 	}
 	res.SearchDuration = formatSearchDuration(time.Since(start))
 	return res, nil
+}
+
+func populatePriorityResultDetails(h *model.URLCount, d *document.Document) {
+	h.DocID = d.DocumentID
+	h.Domain = d.Domain
+	h.Added = d.Added
+	h.Updated = d.Updated
+	h.AddCount = d.AddCount
 }
 
 func searchIndex(idx *indexer.Indexer, query *indexer.Query, rules *config.Rules, userID uint) (*indexer.Results, error) {
@@ -1584,6 +1609,9 @@ func serveAPI(c *webContext) {
 	}
 	var result []endpointInfo
 	for _, e := range Endpoints {
+		if e.Name == "Metrics" && !c.Config.Server.Metrics {
+			continue
+		}
 		result = append(result, endpointInfo{
 			Name:         e.Name,
 			Path:         e.Path,

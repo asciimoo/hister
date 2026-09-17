@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 
 	"github.com/asciimoo/hister/client"
@@ -201,6 +203,9 @@ func TestIsHisterJSONExport(t *testing.T) {
 		{name: "ordinary object", content: "{\"name\":\"settings\"}", want: false},
 		{name: "ordinary array", content: "[1,2,3]", want: false},
 		{name: "ordinary URL array", content: "[{\"url\":\"https://example.com\"}]", want: false},
+		{name: "plain text", content: "Notes for tomorrow", want: false},
+		{name: "markdown link", content: "[Hister](https://hister.org)", want: false},
+		{name: "binary", content: "\xff\x00", want: false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -319,6 +324,73 @@ func TestImportJSONFileUsesConfiguredBatchSize(t *testing.T) {
 	}
 	if receivedMetadata["source"] != "export" {
 		t.Fatalf("metadata source = %v, want export", receivedMetadata["source"])
+	}
+}
+
+func TestImportJSONFileReportsInvalidInput(t *testing.T) {
+	const doc = `{"url":"https://example.com","type":0,"processed":true,"added":1}`
+	for _, tc := range []struct {
+		name, input       string
+		startDate         int64
+		imported, skipped int
+		errors, errorLine int
+	}{
+		{name: "compact export", input: "[" + doc + "]", errors: 1, errorLine: 1},
+		{name: "indented export", input: "[\n  " + doc + "\n]", errors: 1, errorLine: 2},
+		{name: "malformed document between valid documents", input: "[\n" + doc + "\n,\n{\"url\":}\n,\n" + doc + "\n]", imported: 2, errors: 1, errorLine: 4},
+		{name: "truncated export", input: "[\n" + doc + "\n", imported: 1, errors: 1, errorLine: 2},
+		{name: "empty export", input: "[\n]\n"},
+		{name: "all documents filtered", input: "[\n" + doc + "\n]", startDate: 2, skipped: 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var logs bytes.Buffer
+			oldLogger := log.Logger
+			log.Logger = zerolog.New(&logs)
+			t.Cleanup(func() { log.Logger = oldLogger })
+			inputFile := filepath.Join(t.TempDir(), "backup.json")
+			if err := os.WriteFile(inputFile, []byte(tc.input), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			submitted := 0
+			c := client.New("http://hister.test", client.WithMaxBatchBodyBytes(40<<20), client.WithHTTPClient(&http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+				if r.URL.Path != "/api/batch" {
+					t.Fatalf("unexpected request to %s", r.URL.Path)
+				}
+				var req struct {
+					Ops []json.RawMessage `json:"ops"`
+				}
+				if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+					return nil, err
+				}
+				submitted += len(req.Ops)
+				results := make([]map[string]int, len(req.Ops))
+				for i := range results {
+					results[i] = map[string]int{"status": http.StatusCreated}
+				}
+				body, err := json.Marshal(map[string]any{"results": results})
+				if err != nil {
+					return nil, err
+				}
+				return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(bytes.NewReader(body)), Request: r}, nil
+			})}))
+			imported, skipped, errCount := importJSONFile(c, inputFile, false, tc.startDate, 0, 10, documentLabelOverride{})
+			if imported != tc.imported || skipped != tc.skipped || errCount != tc.errors || submitted != tc.imported {
+				t.Fatalf("result = (%d, %d, %d), submitted %d, want (%d, %d, %d)", imported, skipped, errCount, submitted, tc.imported, tc.skipped, tc.errors)
+			}
+			if tc.errors > 0 {
+				var entry struct {
+					File  string `json:"file"`
+					Line  int    `json:"line"`
+					Error string `json:"error"`
+				}
+				if err := json.NewDecoder(&logs).Decode(&entry); err != nil {
+					t.Fatal(err)
+				}
+				if entry.File != inputFile || entry.Line != tc.errorLine || entry.Error == "" {
+					t.Fatalf("error lacks file, line or cause: %#v", entry)
+				}
+			}
+		})
 	}
 }
 

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"io/fs"
 	"net/url"
@@ -21,6 +22,35 @@ import (
 type importFileInput struct {
 	Path  string
 	Label string
+}
+
+type fileImportOptions struct {
+	Source       string
+	MaxFileSize  int64
+	SkipExisting bool
+	StartDate    int64
+	EndDate      int64
+	BatchSize    int
+	Label        documentLabelOverride
+}
+
+func importFile(c *client.Client, input importFileInput, opts fileImportOptions) (imported, skipped, errCount int) {
+	switch strings.ToLower(filepath.Ext(input.Path)) {
+	case ".7z":
+		return importJSONFile(c, input.Path, opts.SkipExisting, opts.StartDate, opts.EndDate, opts.BatchSize, opts.Label)
+	case ".json":
+		isExport, err := isHisterJSONExport(input.Path)
+		if err != nil {
+			log.Warn().Err(err).Str("file", input.Path).Msg("Failed to inspect JSON file")
+			return 0, 0, 1
+		}
+		if isExport {
+			return importJSONFile(c, input.Path, opts.SkipExisting, opts.StartDate, opts.EndDate, opts.BatchSize, opts.Label)
+		}
+	case ".html", ".htm":
+		return importHTMLFile(c, input, opts.Source, opts.MaxFileSize, opts.SkipExisting, opts.Label)
+	}
+	return importRemoteFilePath(c, input, opts.Source, opts.MaxFileSize, opts.SkipExisting, opts.Label)
 }
 
 func defaultRemoteFileSource() string {
@@ -192,14 +222,45 @@ func importRemoteFile(
 
 	d, err := prepareRemoteFile(input, content, info, source, maxFileSize, labelOverride)
 	if err != nil {
-		log.Warn().Err(err).Str("file", input.Path).Msg("Failed to extract file content")
+		log.Warn().Err(fileSnapshotImportError(input.Path, err)).Str("file", input.Path).Msg("Failed to extract file content")
 		return 0, 0, 1
 	}
 	if err := c.AddDocumentJSON(d); err != nil {
-		log.Warn().Err(err).Str("file", input.Path).Str("url", remoteURL).Msg("Failed to import file snapshot")
+		log.Warn().Err(fileSnapshotImportError(input.Path, err)).Str("file", input.Path).Str("url", remoteURL).Msg("Failed to import file snapshot")
 		return 0, 0, 1
 	}
 	return 1, 0, 0
+}
+
+func fileSnapshotImportError(path string, err error) error {
+	ext := strings.ToLower(filepath.Ext(path))
+	if ext == ".json" || errors.Is(err, indexer.ErrBinaryFile) {
+		return err
+	}
+	reason := "This file has no extension"
+	if ext != "" {
+		reason = fmt.Sprintf("This file has a %q extension", ext)
+	}
+	return fmt.Errorf("%w. %s, so Hister treated it as a file snapshot. "+
+		"If this is a Hister JSON export, rename it to %q and retry the import",
+		err, reason, strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))+".json")
+}
+
+func fileSnapshotSizeError(size, limit int64) error {
+	return fmt.Errorf("%w: file is %d bytes, limit from indexer.max_file_size_mb is %d bytes",
+		indexer.ErrFileTooLarge, size, limit)
+}
+
+func fileContentImportError(path string, err error) error {
+	if !errors.Is(err, indexer.ErrBinaryFile) {
+		return err
+	}
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".zip", ".gz", ".bz2", ".xz", ".zst", ".tgz", ".tar", ".rar":
+		return fmt.Errorf("%w: this archive format cannot be imported directly. Extract the archive and import the extracted files", err)
+	default:
+		return fmt.Errorf("%w: plain text extraction requires valid UTF 8. If this is a text file, convert it to UTF 8 and retry; otherwise use a supported file format", err)
+	}
 }
 
 func prepareRemoteFile(input importFileInput, content []byte, info os.FileInfo, source string, maxFileSize int64, labelOverride documentLabelOverride) (*document.Document, error) {
@@ -207,7 +268,7 @@ func prepareRemoteFile(input importFileInput, content []byte, info os.FileInfo, 
 		return nil, indexer.ErrEmptyFile
 	}
 	if maxFileSize > 0 && (info.Size() > maxFileSize || int64(len(content)) > maxFileSize) {
-		return nil, indexer.ErrFileTooLarge
+		return nil, fileSnapshotSizeError(max(info.Size(), int64(len(content))), maxFileSize)
 	}
 	remoteURL, err := remoteFileURL(source, input.Path)
 	if err != nil {
@@ -224,7 +285,7 @@ func prepareRemoteFile(input importFileInput, content []byte, info os.FileInfo, 
 		Label:   labelOverride.resolve("", fallbackLabel),
 	}
 	if err := indexer.PrepareFileContent(input.Path, d, content); err != nil {
-		return nil, err
+		return nil, fileContentImportError(input.Path, err)
 	}
 	if d.Text == "" && d.HTML == "" {
 		return nil, fmt.Errorf("file contains no indexable content")

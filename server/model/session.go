@@ -25,6 +25,7 @@ type WebSession struct {
 }
 
 func CreateWebSession(session *WebSession) error {
+	session.ExpiresAt = session.ExpiresAt.UTC()
 	return DB.Create(session).Error
 }
 
@@ -42,7 +43,7 @@ func GetWebSession(tokenHash string) (*WebSession, error) {
 func UpdateWebSession(tokenHash string, data []byte, expiresAt time.Time) error {
 	result := DB.Model(&WebSession{}).Where("token_hash = ?", tokenHash).Updates(map[string]any{
 		"data":       data,
-		"expires_at": expiresAt,
+		"expires_at": expiresAt.UTC(),
 	})
 	if result.Error != nil {
 		return result.Error
@@ -58,5 +59,5 @@ func DeleteWebSession(tokenHash string) error {
 }
 
 func DeleteExpiredWebSessions(now time.Time) error {
-	return DB.Where("expires_at <= ?", now).Delete(&WebSession{}).Error
+	return DB.Where("expires_at <= ?", now.UTC()).Delete(&WebSession{}).Error
 }

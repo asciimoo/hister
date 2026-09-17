@@ -35,13 +35,16 @@ var exportCmd = &cobra.Command{
 Each document is written as a single JSON line. Lines not starting with '{' are
 structural markers ('[', ']', ',') and can be safely skipped by parsers.
 
+If OUTPUT_FILE has no extension, .json is appended automatically. Explicit
+extensions are preserved; use .json so the file importer recognizes the export.
+
 Use --start-date and --end-date (format: YYYY-MM-DD) to only export
 documents updated within the given date range.
 
 Use '-' as OUTPUT_FILE to write to stdout.`,
 	Args: cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		outputFile := args[0]
+		outputFile := exportOutputPath(args[0])
 		queryStr := strings.Join(args[1:], " ")
 		if queryStr == "" {
 			queryStr = "*"
@@ -56,6 +59,9 @@ Use '-' as OUTPUT_FILE to write to stdout.`,
 		if outputFile == "-" {
 			out = os.Stdout
 		} else {
+			if !strings.EqualFold(filepath.Ext(outputFile), ".json") {
+				log.Warn().Str("file", outputFile).Msg("Export format is JSON. Use a .json extension so hister import file recognizes this export")
+			}
 			f, err := os.Create(outputFile)
 			if err != nil {
 				exit(1, "Failed to create output file: "+err.Error())
@@ -132,6 +138,13 @@ Use '-' as OUTPUT_FILE to write to stdout.`,
 	},
 }
 
+func exportOutputPath(path string) string {
+	if path == "" || path == "-" || os.IsPathSeparator(path[len(path)-1]) || filepath.Ext(path) != "" {
+		return path
+	}
+	return path + ".json"
+}
+
 var importCmd = &cobra.Command{
 	Use:   "import",
 	Short: "Import documents from files, browsers, or services",
@@ -157,8 +170,11 @@ var importFileCmd = &cobra.Command{
 
 JSON files are read line by line; each line starting with '{' is parsed as a
 document and submitted to the running server without reprocessing its stored
-content. JSON files that do not have the Hister export array shape are imported
-as file snapshots.
+content. Array brackets and separating commas must be on their own lines.
+Compact or indented export layouts are not supported. Each line must be smaller
+than 64 MiB; indexer.max_file_size_mb does not change this export limit.
+JSON files that do not have the Hister export array shape are imported as file
+snapshots.
 
 A Hister JSON export may be read directly or from a 7z compressed archive
 (.7z) containing a single JSON file.
@@ -244,25 +260,10 @@ documents whose "added" timestamp falls within the given date range.`,
 			return err
 		}
 		for _, input := range inputFiles {
-			var i, s, e int
-			switch ext := strings.ToLower(filepath.Ext(input.Path)); ext {
-			case ".7z":
-				i, s, e = importJSONFile(c, input.Path, skip, dateRange.From, dateRange.To, batchSize, labelOverride)
-			case ".json":
-				isExport, detectErr := isHisterJSONExport(input.Path)
-				if detectErr != nil {
-					log.Warn().Err(detectErr).Str("file", input.Path).Msg("Failed to inspect JSON file")
-					e = 1
-				} else if isExport {
-					i, s, e = importJSONFile(c, input.Path, skip, dateRange.From, dateRange.To, batchSize, labelOverride)
-				} else {
-					i, s, e = importRemoteFilePath(c, input, normalizedSource, maxFileSize, skip, labelOverride)
-				}
-			case ".html", ".htm":
-				i, s, e = importHTMLFile(c, input, normalizedSource, maxFileSize, skip, labelOverride)
-			default:
-				i, s, e = importRemoteFilePath(c, input, normalizedSource, maxFileSize, skip, labelOverride)
-			}
+			i, s, e := importFile(c, input, fileImportOptions{
+				Source: normalizedSource, MaxFileSize: maxFileSize, SkipExisting: skip,
+				StartDate: dateRange.From, EndDate: dateRange.To, BatchSize: batchSize, Label: labelOverride,
+			})
 			imported += i
 			skipped += s
 			errCount += e
@@ -408,6 +409,7 @@ func importJSONFile(
 	labelOverride documentLabelOverride,
 ) (imported, skipped, errCount int) {
 	var reader io.Reader
+	inputLog := log.With().Str("file", inputFile).Logger()
 
 	if strings.HasSuffix(strings.ToLower(inputFile), ".7z") {
 		sz, err := sevenzip.OpenReader(inputFile)
@@ -432,6 +434,7 @@ func importJSONFile(
 			log.Warn().Str("file", inputFile).Msg("No JSON file found inside 7z archive, skipping")
 			return 0, 0, 1
 		}
+		inputLog = inputLog.With().Str("entry", jsonEntry.Name).Logger()
 		rc, err := jsonEntry.Open()
 		if err != nil {
 			log.Warn().Err(err).Str("file", inputFile).Msg("Failed to open JSON entry in 7z archive, skipping")
@@ -457,9 +460,7 @@ func importJSONFile(
 		reader = f
 	}
 
-	const maxLineSize = 64 * 1024 * 1024 // 64 MB covers large HTML+favicon lines
-	scanner := bufio.NewScanner(reader)
-	scanner.Buffer(make([]byte, 64*1024), maxLineSize)
+	exportReader := newJSONExportReader(reader, maxJSONExportLineSize)
 	docs := make([]*document.Document, 0, batchSize)
 	flush := func() {
 		if len(docs) == 0 {
@@ -471,14 +472,19 @@ func importJSONFile(
 		docs = docs[:0]
 	}
 
-	for scanner.Scan() {
-		line := scanner.Bytes()
-		if len(line) == 0 || line[0] != '{' {
-			continue
+	for {
+		line, err := exportReader.nextLine()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			inputLog.Warn().Err(err).Int("line", exportReader.line).Msg("Failed to read JSON export, stopping this file")
+			errCount++
+			break
 		}
 		var d document.Document
 		if err := json.Unmarshal(line, &d); err != nil {
-			log.Warn().Err(err).Msg("Failed to parse document line, skipping")
+			inputLog.Warn().Err(err).Int("line", exportReader.line).Msg("Failed to parse document line, skipping; each document must be complete on one line")
 			errCount++
 			continue
 		}
@@ -508,11 +514,6 @@ func importJSONFile(
 		}
 	}
 	flush()
-
-	if err := scanner.Err(); err != nil {
-		log.Warn().Err(err).Str("file", inputFile).Msg("Failed to read input file")
-		errCount++
-	}
 
 	return imported, skipped, errCount
 }

@@ -3,6 +3,7 @@ package server
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/rand"
 	"encoding/gob"
 	"errors"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/asciimoo/hister/config"
 	"github.com/asciimoo/hister/server/indexer"
+	"github.com/asciimoo/hister/server/metrics"
 	"github.com/asciimoo/hister/server/model"
 	"github.com/asciimoo/hister/server/static"
 
@@ -143,6 +145,13 @@ func recParseStaticFiles(entries []iofs.DirEntry, dir, baseDir string) error {
 
 func Listen(cfg *config.Config, idx *indexer.Indexer) {
 	sessionStore = newSessionStore(cfg.SecretKey(), cfg.BaseURL(""), sessionMaxAge)
+
+	if cfg.Server.Metrics {
+		m := metrics.New(context.Background(), idx)
+		idx.SetMetrics(m)
+		log.Info().Msg("Prometheus metrics endpoint enabled")
+		defer m.Stop()
+	}
 
 	// This is an ugly hack required to set the base path dynamically in svelte files.
 	// Svelte only supports build time specification of the base path and it accepts

@@ -157,7 +157,8 @@ func (e *embeddingStatusError) transient() bool {
 
 func embeddingContextErrorDetails(err error) (promptTokens, contextLength int, ok bool) {
 	var statusErr *embeddingStatusError
-	if !errors.As(err, &statusErr) || statusErr.statusCode != http.StatusBadRequest {
+	if !errors.As(err, &statusErr) ||
+		(statusErr.statusCode != http.StatusBadRequest && statusErr.statusCode != http.StatusInternalServerError) {
 		return 0, 0, false
 	}
 
@@ -167,6 +168,16 @@ func embeddingContextErrorDetails(err error) (promptTokens, contextLength int, o
 	}
 	errorType := strings.ToLower(apiErr.Error.Type)
 	message := strings.ToLower(apiErr.Error.Message)
+	// llama.cpp reports inputs exceeding its physical batch size as HTTP 500.
+	// Treat that limit like a context overflow so smaller chunks can be retried.
+	if n, scanErr := fmt.Sscanf(message,
+		"input (%d tokens) is too large to process. increase the physical batch size (current batch size: %d)",
+		&promptTokens, &contextLength); scanErr == nil && n == 2 && promptTokens > 0 && contextLength > 0 {
+		return promptTokens, contextLength, true
+	}
+	if statusErr.statusCode != http.StatusBadRequest {
+		return 0, 0, false
+	}
 	isContextError := errorType == "exceed_context_size_error" ||
 		errorType == "context_length_exceeded" ||
 		(strings.Contains(message, "context") &&
@@ -189,6 +200,9 @@ func shouldRetryEmbeddingError(ctx context.Context, err error) bool {
 		return false
 	}
 	if errors.Is(err, context.Canceled) {
+		return false
+	}
+	if _, _, contextError := embeddingContextErrorDetails(err); contextError {
 		return false
 	}
 

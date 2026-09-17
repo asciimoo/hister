@@ -20,7 +20,6 @@ import (
 	"github.com/asciimoo/hister/config"
 	"github.com/asciimoo/hister/files"
 	"github.com/asciimoo/hister/server/document"
-	"github.com/asciimoo/hister/server/indexer"
 )
 
 type fileWatchOptions struct {
@@ -176,7 +175,7 @@ func importWatchedFile(ctx context.Context, c *client.Client, input importFileIn
 		return true, nil
 	}
 	if info.Size() > opts.MaxFileSize {
-		return false, indexer.ErrFileTooLarge
+		return false, fileSnapshotSizeError(info.Size(), opts.MaxFileSize)
 	}
 	f, err := os.Open(input.Path)
 	if err != nil {
@@ -188,7 +187,7 @@ func importWatchedFile(ctx context.Context, c *client.Client, input importFileIn
 		return false, err
 	}
 	if int64(len(content)) > opts.MaxFileSize {
-		return false, indexer.ErrFileTooLarge
+		return false, fileSnapshotSizeError(max(info.Size(), int64(len(content))), opts.MaxFileSize)
 	}
 	if ext == ".json" && isHisterJSONExportReader(bytes.NewReader(content)) {
 		log.Warn().Str("file", input.Path).Msg("Watch mode skips Hister exports")
@@ -318,8 +317,7 @@ func (q *fileImportQueue) run(ctx context.Context, process func(context.Context,
 }
 
 func retryableFileImportError(err error) bool {
-	var httpErr *client.HTTPError
-	if errors.As(err, &httpErr) {
+	if httpErr, ok := errors.AsType[*client.HTTPError](err); ok {
 		return httpErr.StatusCode == http.StatusRequestTimeout || httpErr.StatusCode == http.StatusTooManyRequests || httpErr.StatusCode >= 500
 	}
 	var netErr net.Error

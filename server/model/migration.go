@@ -37,6 +37,7 @@ var migrations = []migration{
 			})
 		},
 	},
+	{post: migrateTimestampsToUTC},
 }
 
 func migrationVersion() (int64, bool) {

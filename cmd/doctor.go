@@ -101,8 +101,7 @@ func diagnoseServer(ctx context.Context, cl *client.Client, report func(types.Di
 	checks, err := cl.FetchDiagnostics(ctx)
 	if err != nil {
 		check := types.DiagnosticCheck{Name: "server.diagnostics", Status: "error", Message: diagnosticRequestError(err)}
-		var status *client.HTTPError
-		if errors.As(err, &status) {
+		if status, ok := errors.AsType[*client.HTTPError](err); ok {
 			switch status.StatusCode {
 			case http.StatusNotFound:
 				check.Status, check.Message = "warning", "Server does not support diagnostics; update the server to check its index and dependencies"
@@ -130,8 +129,7 @@ func diagnoseServer(ctx context.Context, cl *client.Client, report func(types.Di
 // HTTP errors and transport errors can contain response bodies and credentials
 // embedded in URLs. Only report a controlled explanation.
 func diagnosticRequestError(err error) string {
-	var status *client.HTTPError
-	if errors.As(err, &status) {
+	if status, ok := errors.AsType[*client.HTTPError](err); ok {
 		if status.StatusCode == http.StatusUnauthorized {
 			return "Authentication failed; set --token or app.access_token"
 		}

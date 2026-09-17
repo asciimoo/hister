@@ -7,9 +7,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/spf13/cobra"
 )
+
+func formatLocalTimestamp(timestamp time.Time) string {
+	return timestamp.Local().Format("2006-01-02 15:04:05")
+}
 
 func addOutputFormatFlag(cmd *cobra.Command) {
 	cmd.Flags().StringP("format", "f", "text", "Output format: text, json, jsonl, csv")

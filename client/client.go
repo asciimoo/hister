@@ -179,11 +179,11 @@ func checkStatus(resp *http.Response) error {
 		}
 		return errWithStatus(fmt.Sprintf("%s\nCheck the token with --token / -t or verify the user's permissions on the server", msg))
 	case http.StatusNotFound:
-		msg := "server not reachable at the configured URL"
+		msg := "resource not found (404)"
 		if detail != "" {
 			msg += ": " + detail
 		}
-		return errWithStatus(fmt.Sprintf("%s\nVerify the server address with --server-url / -u", msg))
+		return errWithStatus(msg)
 	case http.StatusNotAcceptable:
 		msg := "page skipped: this URL was rejected by the server (usually due to skip rules or disabled domains)"
 		if detail != "" {

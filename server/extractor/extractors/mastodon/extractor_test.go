@@ -3,6 +3,7 @@
 package mastodon
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/asciimoo/hister/config"
@@ -21,65 +22,70 @@ func TestSetConfigRejectsUnknownOptions(t *testing.T) {
 	}
 }
 
-func TestOriginalStatusURL(t *testing.T) {
+func TestExtractPreservesStatusPermalink(t *testing.T) {
 	tests := []struct {
 		name string
-		url  string
+		href string
 		want string
 	}{
 		{
-			name: "remote status",
-			url:  "https://chaos.social/@hovav@infosec.exchange/116976714107843531",
-			want: "https://infosec.exchange/@hovav/116976714107843531",
+			name: "relative remote status",
+			href: "/@peteorrall@bsd.cafe/117269611598821921",
+			want: "https://hachyderm.io/@peteorrall@bsd.cafe/117269611598821921",
+		},
+		{
+			name: "absolute remote status",
+			href: "https://hachyderm.io/@peteorrall@bsd.cafe/117269611598821921",
+			want: "https://hachyderm.io/@peteorrall@bsd.cafe/117269611598821921",
+		},
+		{
+			name: "original status URL supplied by page",
+			href: "https://mastodon.bsd.cafe/@peteorrall/117269611556537474",
+			want: "https://mastodon.bsd.cafe/@peteorrall/117269611556537474",
 		},
 		{
 			name: "local status",
-			url:  "https://chaos.social/@alice/123",
-			want: "https://chaos.social/@alice/123",
-		},
-		{
-			name: "unrelated path",
-			url:  "https://chaos.social/tags/hister",
-			want: "https://chaos.social/tags/hister",
-		},
-		{
-			name: "invalid remote host",
-			url:  "https://chaos.social/@alice@example.com%3Fredirect=attacker.example/123",
-			want: "https://chaos.social/@alice@example.com%3Fredirect=attacker.example/123",
+			href: "/@alice/123",
+			want: "https://hachyderm.io/@alice/123",
 		},
 	}
 
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			if got := originalStatusURL(test.url); got != test.want {
-				t.Fatalf("originalStatusURL(%q) = %q, want %q", test.url, got, test.want)
+	for _, view := range []struct {
+		name      string
+		class     string
+		linkClass string
+	}{
+		{"timeline", "status", "status__relative-time"},
+		{"detail", "detailed-status", "detailed-status__datetime"},
+	} {
+		t.Run(view.name, func(t *testing.T) {
+			for _, test := range tests {
+				t.Run(test.name, func(t *testing.T) {
+					d := &document.Document{
+						URL: "https://hachyderm.io/public/local",
+						HTML: fmt.Sprintf(`<div class="%s">
+							<a class="%s" href="%s"></a>
+							<span class="display-name">Example author</span>
+							<div class="status__content"><p>Example toot</p></div>
+						</div>`, view.class, view.linkClass, test.href),
+					}
+
+					state, err := (&MastodonExtractor{}).Extract(d).Unpack()
+					if err != nil {
+						t.Fatalf("Extract returned an error: %v", err)
+					}
+					if state != sdk.ExtractorSuccess {
+						t.Fatalf("Extract state = %v, want %v", state, sdk.ExtractorSuccess)
+					}
+					if len(d.ExtraDocuments) != 1 {
+						t.Fatalf("ExtraDocuments length = %d, want 1", len(d.ExtraDocuments))
+					}
+					if got := d.ExtraDocuments[0].URL; got != test.want {
+						t.Fatalf("toot URL = %q, want %q", got, test.want)
+					}
+				})
 			}
 		})
-	}
-}
-
-func TestExtractUsesOriginalRemoteStatusURL(t *testing.T) {
-	d := &document.Document{
-		URL: "https://chaos.social/public/local",
-		HTML: `<div class="status">
-			<a class="status__relative-time" href="/@hovav@infosec.exchange/116976714107843531"></a>
-			<span class="display-name">Hovav</span>
-			<div class="status__content"><p>Remote toot</p></div>
-		</div>`,
-	}
-
-	state, err := (&MastodonExtractor{}).Extract(d).Unpack()
-	if err != nil {
-		t.Fatalf("Extract returned an error: %v", err)
-	}
-	if state != sdk.ExtractorSuccess {
-		t.Fatalf("Extract state = %v, want %v", state, sdk.ExtractorSuccess)
-	}
-	if len(d.ExtraDocuments) != 1 {
-		t.Fatalf("ExtraDocuments length = %d, want 1", len(d.ExtraDocuments))
-	}
-	if got, want := d.ExtraDocuments[0].URL, "https://infosec.exchange/@hovav/116976714107843531"; got != want {
-		t.Fatalf("toot URL = %q, want %q", got, want)
 	}
 }
 

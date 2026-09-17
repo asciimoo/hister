@@ -46,7 +46,13 @@ func InitReadOnly(c *config.Config) error {
 }
 
 func initDatabase(c *config.Config, accessMode AccessMode) error {
-	dbCfg := &gorm.Config{}
+	dbCfg := &gorm.Config{
+		// SQLite keeps whatever offset a time value carries and compares those
+		// values as text, so a timestamp written at a local offset does not
+		// order against one bound in UTC. Generate every timestamp in UTC to
+		// keep text order and chronological order the same thing.
+		NowFunc: func() time.Time { return time.Now().UTC() },
+	}
 	if c.App.DebugSQL {
 		dbCfg.Logger = logger.Default.LogMode(logger.Info)
 	} else {

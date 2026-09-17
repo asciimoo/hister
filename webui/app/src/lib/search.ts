@@ -189,9 +189,14 @@ export function scrollTo(el: Element): void {
   el.scrollIntoView({ block: 'nearest' });
 }
 
+export interface WebSocketRequest {
+  id: number;
+  message: string;
+}
+
 interface WebSocketManagerCallbacks {
   onOpen: () => void;
-  onMessage: (event: MessageEvent) => void;
+  onMessage: (event: MessageEvent, request: WebSocketRequest) => void;
   onClose: () => void;
   onError: (event: Event) => void;
 }
@@ -202,8 +207,9 @@ export class WebSocketManager {
   private callbacks: WebSocketManagerCallbacks;
   private reconnectTimer: number | null = null;
   private debounceTimer: number | null = null;
-  private inFlight: boolean = false;
-  private pendingMessage: string | null = null;
+  private inFlight: WebSocketRequest | null = null;
+  private pendingMessage: WebSocketRequest | null = null;
+  private nextRequestID = 0;
   private closed: boolean = false;
   private readonly debounceMs: number;
 
@@ -233,19 +239,20 @@ export class WebSocketManager {
 
     ws.onmessage = (event) => {
       if (this.ws !== ws) return;
-      this.inFlight = false;
+      const request = this.inFlight;
+      this.inFlight = null;
       if (this.pendingMessage !== null) {
         const msg = this.pendingMessage;
         this.pendingMessage = null;
         this.dispatch(msg);
       }
-      this.callbacks.onMessage(event);
+      if (request) this.callbacks.onMessage(event, request);
     };
 
     ws.onclose = () => {
       if (this.ws !== ws) return;
       this.ws = null;
-      this.inFlight = false;
+      this.inFlight = null;
       this.pendingMessage = null;
       this.callbacks.onClose();
       if (!this.closed) this.scheduleReconnect();
@@ -260,40 +267,45 @@ export class WebSocketManager {
   reconnect(): void {
     this.closed = false;
     const ws = this.releaseSocket();
-    this.inFlight = false;
+    this.inFlight = null;
     this.pendingMessage = null;
     ws?.close();
     this.connect();
   }
 
-  send(message: string): void {
+  send(message: string): number {
+    const request = { id: ++this.nextRequestID, message };
+    this.pendingMessage = null;
     if (this.debounceTimer !== null) {
       clearTimeout(this.debounceTimer);
     }
     this.debounceTimer = window.setTimeout(() => {
       this.debounceTimer = null;
       if (this.inFlight) {
-        this.pendingMessage = message;
+        this.pendingMessage = request;
       } else {
-        this.dispatch(message);
+        this.dispatch(request);
       }
     }, this.debounceMs);
+    return request.id;
   }
 
   // sendImmediate sends without debouncing. Use for load-more requests so that
   // a pending debounced query (from the user typing) is not cancelled.
-  sendImmediate(message: string): void {
+  sendImmediate(message: string): number {
+    const request = { id: ++this.nextRequestID, message };
     if (this.inFlight) {
-      this.pendingMessage = message;
+      this.pendingMessage = request;
     } else {
-      this.dispatch(message);
+      this.dispatch(request);
     }
+    return request.id;
   }
 
-  private dispatch(message: string): void {
+  private dispatch(request: WebSocketRequest): void {
     if (this.ws?.readyState === WebSocket.OPEN) {
-      this.inFlight = true;
-      this.ws.send(message);
+      this.inFlight = request;
+      this.ws.send(request.message);
     }
   }
 

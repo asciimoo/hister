@@ -36,12 +36,16 @@ type HistoryLink struct {
 }
 
 type URLCount struct {
-	URL    string `json:"url"`
-	Title  string `json:"title"`
-	Text   string `gorm:"-" json:"text,omitempty"`
-	Count  uint   `json:"count"`
-	Pinned bool   `json:"pinned"`
-	DocID  string `gorm:"-" json:"id,omitempty"`
+	URL      string `json:"url"`
+	Title    string `json:"title"`
+	Text     string `gorm:"-" json:"text,omitempty"`
+	Count    uint   `json:"count"`
+	Pinned   bool   `json:"pinned"`
+	DocID    string `gorm:"-" json:"id,omitempty"`
+	Domain   string `gorm:"-" json:"domain,omitempty"`
+	Added    int64  `gorm:"-" json:"added,omitempty"`
+	Updated  int64  `gorm:"-" json:"updated,omitempty"`
+	AddCount uint   `gorm:"-" json:"add_count,omitempty"`
 }
 
 type HistoryItem struct {
@@ -192,6 +196,7 @@ func GetLatestHistoryItemsFilteredByDate(userID uint, limit int, lastID uint, la
 		q = q.Where("history_links.updated_at < ?", time.Unix(dateTo, 0).UTC())
 	}
 	if !lastUpdatedAt.IsZero() {
+		lastUpdatedAt = lastUpdatedAt.UTC()
 		q = q.Where(
 			"(history_links.updated_at < ? OR (history_links.updated_at = ? AND history_links.id < ?))",
 			lastUpdatedAt,

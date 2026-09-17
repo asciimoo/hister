@@ -67,8 +67,7 @@ func LoadForInspection(filename string, explicit bool) (*Config, string, error) 
 	var metadata mapstructure.Metadata
 	if err := v.Unmarshal(c, func(dc *mapstructure.DecoderConfig) { dc.Metadata = &metadata }); err != nil {
 		// Decoder errors can include credential values. Do not echo them.
-		var field *mapstructure.DecodeError
-		if errors.As(err, &field) {
+		if field, ok := errors.AsType[*mapstructure.DecodeError](err); ok {
 			return nil, name, fmt.Errorf("invalid configuration value at %s", field.Name())
 		}
 		return nil, name, errors.New("invalid configuration keys or value types")

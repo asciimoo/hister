@@ -23,8 +23,11 @@ import (
 	"github.com/asciimoo/hister/server/extractor"
 	"github.com/asciimoo/hister/server/indexer/querybuilder"
 	"github.com/asciimoo/hister/server/indexer/searchschema"
+	"github.com/asciimoo/hister/server/metrics"
 	"github.com/asciimoo/hister/server/model"
 	"github.com/asciimoo/hister/server/vectorstore"
+
+	"github.com/prometheus/client_golang/prometheus"
 
 	"charm.land/lipgloss/v2"
 	"github.com/blevesearch/bleve/v2"
@@ -69,6 +72,8 @@ type Indexer struct {
 	maxFileSize       int64
 	sensitivePattern  *regexp.Regexp
 	semanticConfig    config.SemanticSearch
+	metricsMu         sync.RWMutex
+	metrics           *metrics.Metrics
 }
 
 const (
@@ -280,6 +285,12 @@ type MultiBatch struct {
 	embeddingIDs        map[string]struct{}
 	deletedIDs          map[string]struct{}
 	incrementAddCount   bool
+	stagedMetrics       []indexingMetric
+}
+
+type indexingMetric struct {
+	documentType string
+	startedAt    time.Time
 }
 
 func (i *Indexer) searchIndexes(req *bleve.SearchRequest) (*bleve.SearchResult, error) {
@@ -1075,6 +1086,29 @@ func (i *Indexer) Total() uint64 {
 	return i.total(query.NewMatchAllQuery())
 }
 
+func (i *Indexer) DataDir() string {
+	return i.dir
+}
+
+func (i *Indexer) SetMetrics(m *metrics.Metrics) {
+	i.metricsMu.Lock()
+	defer i.metricsMu.Unlock()
+	i.metrics = m
+}
+
+func (i *Indexer) Metrics() *metrics.Metrics {
+	i.metricsMu.RLock()
+	defer i.metricsMu.RUnlock()
+	return i.metrics
+}
+
+func (i *Indexer) recordIndexingMetric(documentType string, startedAt time.Time) {
+	if m := i.Metrics(); m != nil {
+		m.IndexingDuration.Observe(time.Since(startedAt).Seconds())
+		m.DocumentsIndexedTotal.WithLabelValues(documentType).Inc()
+	}
+}
+
 func (i *Indexer) TotalByUser(userID uint) uint64 {
 	return i.total(userDocumentsQuery(userID))
 }
@@ -1112,13 +1146,12 @@ func (i *Indexer) AddDocument(d *document.Document) error {
 	return i.AddDocumentContext(context.Background(), d)
 }
 
-// AddDocumentContext indexes a document while honoring caller cancellation
-// during document processing.
 func (i *Indexer) AddDocumentContext(ctx context.Context, d *document.Document) error {
-	return i.addDocument(ctx, d, true, i.applyDocumentWrite)
+	return i.addDocument(ctx, d, true, i.recordIndexingMetric, i.applyDocumentWrite)
 }
 
-func (i *Indexer) addDocument(ctx context.Context, d *document.Document, incrementAddCount bool, write documentWriteFunc) error {
+func (i *Indexer) addDocument(ctx context.Context, d *document.Document, incrementAddCount bool, recordMetric func(string, time.Time), write documentWriteFunc) error {
+	start := time.Now()
 	plan, err := i.prepareDocumentWrite(ctx, d, incrementAddCount)
 	if err != nil {
 		return err
@@ -1130,6 +1163,9 @@ func (i *Indexer) addDocument(ctx context.Context, d *document.Document, increme
 		if err := write(d, *plan); err != nil {
 			return err
 		}
+		if recordMetric != nil {
+			recordMetric(d.Type.String(), start)
+		}
 	}
 	for _, extra := range d.ExtraDocuments {
 		if err := ctx.Err(); err != nil {
@@ -1138,7 +1174,7 @@ func (i *Indexer) addDocument(ctx context.Context, d *document.Document, increme
 		if d.IgnoreSkipRules() {
 			extra.SetIgnoreSkipRules(true)
 		}
-		if err := i.addDocument(ctx, extra, false, write); err != nil {
+		if err := i.addDocument(ctx, extra, false, recordMetric, write); err != nil {
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
@@ -1578,7 +1614,11 @@ func (b *MultiBatch) AddContext(ctx context.Context, d *document.Document) error
 	if err := b.indexer.validateFileDocument(d); err != nil {
 		return err
 	}
-	return b.indexer.addDocument(ctx, d, b.incrementAddCount, b.applyDocumentWrite)
+	return b.indexer.addDocument(ctx, d, b.incrementAddCount, b.recordIndexingMetric, b.applyDocumentWrite)
+}
+
+func (b *MultiBatch) recordIndexingMetric(documentType string, startedAt time.Time) {
+	b.stagedMetrics = append(b.stagedMetrics, indexingMetric{documentType: documentType, startedAt: startedAt})
 }
 
 func (b *MultiBatch) applyDocumentWrite(d *document.Document, plan documentWritePlan) error {
@@ -1624,6 +1664,13 @@ func (b *MultiBatch) Save() error {
 	for _, entry := range b.batches {
 		if err := entry.index.Batch(entry.batch); err != nil {
 			return err
+		}
+	}
+	// Record batch metrics only after all batches are committed.
+	if m := b.indexer.Metrics(); m != nil {
+		for _, metric := range b.stagedMetrics {
+			m.IndexingDuration.Observe(time.Since(metric.startedAt).Seconds())
+			m.DocumentsIndexedTotal.WithLabelValues(metric.documentType).Inc()
 		}
 	}
 	b.indexer.cleanupDataKeys(b.orphanedHTMLKeys, "", b.orphanedFaviconKeys, "")
@@ -1735,7 +1782,25 @@ func (i *Indexer) CountByQuery(text string, userID *uint) (int, error) {
 }
 
 func (i *Indexer) Search(q *Query) (*Results, error) {
-	return i.search(i.semanticConfig, q)
+	m := i.Metrics()
+	var timer *prometheus.Timer
+	if m != nil {
+		timer = prometheus.NewTimer(m.SearchDuration)
+	}
+	res, err := i.search(i.semanticConfig, q)
+	if timer != nil {
+		timer.ObserveDuration()
+	}
+	if m != nil {
+		if err != nil {
+			m.QueriesTotal.WithLabelValues("error").Inc()
+		} else if res.Total == 0 {
+			m.QueriesTotal.WithLabelValues("miss").Inc()
+		} else {
+			m.QueriesTotal.WithLabelValues("hit").Inc()
+		}
+	}
+	return res, err
 }
 
 func (i *Indexer) search(semanticConfig config.SemanticSearch, q *Query) (*Results, error) {

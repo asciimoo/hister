@@ -89,6 +89,7 @@ type Server struct {
 	MaxBatchBodySize int64                  `yaml:"max_batch_body_size"      mapstructure:"max_batch_body_size"`
 	OAuth            map[string]*OAuthEntry `yaml:"oauth"                    mapstructure:"oauth"`
 	OAuthOnly        bool                   `yaml:"oauth_only"               mapstructure:"oauth_only"`
+	Metrics          bool                   `yaml:"metrics"                  mapstructure:"metrics"`
 }
 
 func (s Server) MaxBatchBodyBytes() int64 {
@@ -602,6 +603,7 @@ func CreateDefaultConfig() *Config {
 			BaseURL:          DefaultServerBaseURL,
 			Database:         "db.sqlite3",
 			MaxBatchBodySize: DefaultMaxBatchBodySize,
+			Metrics:          false,
 		},
 		Indexer: Indexer{
 			DetectLanguages: true,

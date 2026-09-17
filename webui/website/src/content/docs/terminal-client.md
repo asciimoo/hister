@@ -247,6 +247,11 @@ document is exported:
 hister export backup.json
 ```
 
+If the output filename has no extension, Hister appends `.json` automatically.
+For example, `hister export backup` writes `backup.json`. Explicit extensions are
+preserved, including `.JSON`. Other extensions produce a warning because the file
+importer expects `.json`. The success message shows the actual output filename.
+
 You can limit the export to documents matching a search query by passing it after the
 output file (see the [query language](query-language) reference):
 

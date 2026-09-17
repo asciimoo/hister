@@ -77,13 +77,3 @@ export function valuesForFacet(
 ): SearchValueDefinition[] {
   return facet.valueSet ? (capabilities.valueSets[facet.valueSet] ?? []) : [];
 }
-
-function escapeRegularExpression(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-export function queryFilterValues(query: string, field: string): Set<string> {
-  if (!field) return new Set();
-  const pattern = new RegExp(`(?:^|\\s)${escapeRegularExpression(field)}:([^\\s]+)`, 'g');
-  return new Set([...query.matchAll(pattern)].map((match) => match[1]));
-}

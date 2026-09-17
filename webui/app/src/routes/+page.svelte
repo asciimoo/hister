@@ -28,13 +28,14 @@
   } from '$lib/search';
   import { fetchConfig, apiFetch, getUserId } from '$lib/api';
   import { ResultState } from '$lib/result-state.svelte';
+  import { mergeSearchResults, removeSearchResults } from '$lib/search-results';
   import { showHelp } from '$lib/stores';
   import type {
     SearchResults,
-    SemanticHit,
     SearchResult,
     SearchQueryOptions,
     FacetsResult,
+    WebSocketRequest,
   } from '$lib/search';
   import { RESULTS_PER_PAGE } from '$lib/search';
   import {
@@ -44,7 +45,9 @@
     shiftISODate,
     timeFilters,
   } from '$lib/time-filters';
-  import { emptySearchCapabilities, queryFilterValues, valuesForFacet } from '$lib/search-schema';
+  import { emptySearchCapabilities, valuesForFacet } from '$lib/search-schema';
+  import { queryFilters, removeQueryFilters, toggleQueryFilter } from '$lib/query-filters';
+  import type { QueryFilter } from '$lib/query-filters';
   import type { SearchCapabilities, SearchFacetDefinition } from '$lib/search-schema';
   import {
     removeSortDirectives,
@@ -71,6 +74,7 @@
   import {
     PreviewPanel,
     QuerySuggestions,
+    SearchLoading,
     ResultActionsMenu,
     ResultFavicon,
   } from '$lib/components';
@@ -189,6 +193,10 @@
   let connected = $state(false);
   let unloading = false;
   let lastResults = $state<SearchResults | null>(null);
+  let searchInProgress = $state(false);
+  let completedSearchMessage = $state('');
+  let latestSearchRequest = 0;
+  let latestPageRequest = 0;
   let accumulatedDocs = $state<SearchResult[]>([]);
   let pageKey = $state('');
   let hasMore = $state(false);
@@ -196,6 +204,11 @@
   let sentinelEl = $state<HTMLElement | undefined>();
   let highlightIdx = $state(0);
   const currentSort = $derived(sortValueFromQuery(query, config.search.sort));
+  const currentSortLabel = $derived(
+    config.search.sort.options.find((option) =>
+      currentSort ? option.value === currentSort : option.default,
+    )?.label ?? 'Relevance',
+  );
   let dateFrom = $state('');
   let dateTo = $state('');
   let showPopup = $state(false);
@@ -225,15 +238,25 @@
 
   let resultsShown = $state(false);
 
-  // Semantic search per-session state — read from localStorage immediately so
-  // the first $effect run doesn't overwrite the saved value with the default.
+  function storedSemanticValue(key: string): number | undefined {
+    const stored = localStorage.getItem(key);
+    if (!stored?.trim()) return undefined;
+    const value = Number(stored);
+    return Number.isFinite(value) && value >= 0 && value <= 1 ? value : undefined;
+  }
+
+  const savedSimilarityThreshold = storedSemanticValue('hister-semantic-threshold');
+  const savedSemanticWeight = storedSemanticValue('hister-semantic-weight');
+  // Wait for server defaults before persisting settings that have not been saved yet.
+  let semanticSettingsReady = $state(false);
   let semanticOn = $state(localStorage.getItem('hister-semantic-on') === 'true');
-  let similarityThreshold = $state(
-    parseFloat(localStorage.getItem('hister-semantic-threshold') ?? 'NaN') || 0.5,
+  let similarityThreshold = $state(savedSimilarityThreshold ?? 0.5);
+  let semanticWeight = $state(savedSemanticWeight ?? 0.4);
+  const currentSearchMessage = $derived(JSON.stringify(buildSearchQuery(query, searchQueryOpts())));
+  const searchPending = $derived(
+    !!query && (searchInProgress || currentSearchMessage !== completedSearchMessage),
   );
-  let semanticWeight = $state(
-    parseFloat(localStorage.getItem('hister-semantic-weight') ?? 'NaN') || 0.4,
-  );
+  const isSearchLoading = $derived(searchPending && connectionState !== 'disconnected');
 
   let showDeleteConfirm = $state(false);
   let deleteConfirmUrl = $state('');
@@ -443,99 +466,22 @@
     tipWasSearching = isSearching;
   });
 
-  interface MergedResult {
-    id?: string;
-    url: string;
-    title: string;
-    domain: string;
-    score?: number;
-    text?: string;
-    favicon?: string;
-    favicon_key?: string;
-    added?: number;
-    updated?: number;
-    add_count?: number;
-    label?: string;
-    semanticScore?: number;
-    finalScore: number;
-    sourceType: 'keyword' | 'semantic' | 'both';
-  }
-
-  function mergeResults(
-    docs: SearchResults['documents'],
-    hits: SemanticHit[] | undefined,
-    alpha: number,
-  ): MergedResult[] {
-    const kwDocs = docs ?? [];
-    if (!semanticOn || !config.semanticEnabled || !hits?.length) {
-      return kwDocs.map((d) => ({ ...d, finalScore: d.score ?? 0, sourceType: 'keyword' }));
-    }
-
-    const maxBleve = Math.max(...kwDocs.map((d) => d.score ?? 0), 1);
-    const semByDocId = new Map<string, number>(hits.map((h) => [h.doc_id, h.similarity]));
-
-    // Helper: the doc_id is either a bare URL or "{uid}:{url}".
-    function urlFromDocId(docId: string): string {
-      const userId = getUserId();
-      if (userId) {
-        const prefix = `${userId}:`;
-        if (docId.startsWith(prefix)) return docId.slice(prefix.length);
-      }
-      return docId;
-    }
-
-    const merged = new Map<string, MergedResult>();
-
-    for (const d of kwDocs) {
-      // Find whether this keyword doc also appears in semantic hits.
-      // The semantic doc_id for this user+URL:
-      const userId = getUserId();
-      const expectedDocId = userId ? `${userId}:${d.url}` : d.url;
-      const semScore = semByDocId.get(expectedDocId) ?? semByDocId.get(d.url);
-      const norm = (d.score ?? 0) / maxBleve;
-      const finalScore =
-        semScore !== undefined ? (1 - alpha) * norm + alpha * semScore : (1 - alpha) * norm;
-      merged.set(d.url, {
-        ...d,
-        semanticScore: semScore,
-        finalScore,
-        sourceType: semScore !== undefined ? 'both' : 'keyword',
-      });
-    }
-
-    // Add semantic-only hits (server sets `document` only for non-keyword hits).
-    for (const hit of hits) {
-      if (!hit.document) continue;
-      const url = hit.document.url;
-      if (!merged.has(url)) {
-        merged.set(url, {
-          url,
-          title: hit.document.title ?? '',
-          domain: hit.document.domain ?? '',
-          favicon: hit.document.favicon,
-          favicon_key: hit.document.favicon_key,
-          added: hit.document.added,
-          updated: hit.document.updated,
-          add_count: hit.document.add_count,
-          text: hit.document.text,
-          semanticScore: hit.similarity,
-          finalScore: alpha * hit.similarity,
-          sourceType: 'semantic',
-        });
-      }
-    }
-
-    return Array.from(merged.values()).sort((a, b) => b.finalScore - a.finalScore);
-  }
-
   const mergedResults = $derived(
-    mergeResults(accumulatedDocs, lastResults?.semantic_hits, semanticWeight),
+    mergeSearchResults(accumulatedDocs, lastResults?.semantic_hits, {
+      semanticEnabled: semanticOn && config.semanticEnabled,
+      weight: semanticWeight,
+      sort: currentSort,
+      userId: getUserId(),
+    }),
   );
 
   const historyLen = $derived((lastResults?.history as any)?.length || 0);
   const docsLen = $derived(mergedResults.length);
   const totalResults = $derived(historyLen + docsLen);
-  const hasResults = $derived(totalResults > 0);
+  const hasResults = $derived(!searchPending && totalResults > 0);
+  const showPreviewPanel = $derived(
+    hasResults && !disablePreviews && (previewFullscreen || (panelOpen && isDesktop)),
+  );
   const displayResults = $derived<DisplayResult[]>([
     ...(lastResults?.history ?? []).map((r): DisplayResult => ({
       ...r,
@@ -626,9 +572,41 @@
     facetSizes = new Map();
   });
 
+  const filterFields = $derived([
+    ...new Set([
+      ...config.search.facets.map((facet) => facet.queryField),
+      ...config.search.fields.filter((field) => field.kind === 'time').map((field) => field.name),
+    ]),
+  ]);
+  const activeQueryFilters = $derived(queryFilters(query, filterFields));
+  const activeFilterChips = $derived(
+    activeQueryFilters.map((filter) => {
+      const facet = config.search.facets.find((facet) => facet.queryField === filter.field);
+      const field = config.search.fields.find((field) => field.name === filter.field);
+      const values = facet
+        ? valuesForFacet(config.search, facet)
+        : (config.search.valueSets[field?.valueSet ?? ''] ?? []);
+      const valueLabel =
+        values.find((value) => value.value === filter.value)?.label ??
+        currentFacets?.terms?.[facet?.name ?? '']?.terms?.find((term) => term.term === filter.value)
+          ?.label ??
+        filter.value;
+      return {
+        filter,
+        label: `${field?.label ?? facet?.label ?? filter.field}: ${filter.negated ? 'Not ' : ''}${valueLabel}`,
+      };
+    }),
+  );
   const activeFacetFilters = $derived(
     new Map(
-      termFacetDefinitions.map((facet) => [facet.name, queryFilterValues(query, facet.queryField)]),
+      termFacetDefinitions.map((facet) => [
+        facet.name,
+        new Set(
+          activeQueryFilters
+            .filter((filter) => filter.field === facet.queryField && !filter.negated)
+            .map((filter) => filter.value),
+        ),
+      ]),
     ),
   );
   const activeTimeFilters = $derived(timeFilters(query, dateFacetDefinition?.queryField ?? ''));
@@ -641,10 +619,33 @@
         )?.facetBucket ?? null)
       : null,
   );
-  const activeFilterCount = $derived(
-    [...activeFacetFilters.values()].reduce((total, filters) => total + filters.size, 0) +
-      (activeTimeFilters.length > 0 ? 1 : 0),
-  );
+  const activeFilterCount = $derived(activeQueryFilters.length);
+
+  function removeFilters(filters: QueryFilter[]) {
+    query = removeQueryFilters(query, filters) || '*';
+    querySuggestionOpen = false;
+  }
+
+  function clearFilters() {
+    removeFilters(activeQueryFilters);
+  }
+
+  function facetTerms(facet: SearchFacetDefinition) {
+    const terms = new Map(
+      (currentFacets?.terms?.[facet.name]?.terms ?? []).map((term) => [term.term, term]),
+    );
+    for (const value of activeFiltersForFacet(facet.name)) {
+      if (!terms.has(value)) {
+        terms.set(value, {
+          term: value,
+          count: 0,
+          label: valuesForFacet(config.search, facet).find((option) => option.value === value)
+            ?.label,
+        });
+      }
+    }
+    return [...terms.values()];
+  }
 
   function showFacetCategory(facet: SearchFacetDefinition) {
     return (
@@ -656,15 +657,11 @@
     return activeFacetFilters.get(name) ?? new Set<string>();
   }
   const visibleTermFacets = $derived(termFacetDefinitions.filter(showFacetCategory));
-  const showFiltersButton = $derived(hasResults || activeFilterCount > 0);
+  const showFiltersButton = $derived(config.search.facets.length > 0 || activeFilterCount > 0);
 
   function toggleQueryToken(prefix: string, value: string) {
-    const token = `${prefix}:${value}`;
-    if (query.includes(token)) {
-      query = query.replace(token, '').replace(/\s+/g, ' ').trim();
-    } else {
-      query = query.trim() ? `${query.trim()} ${token}` : token;
-    }
+    query = toggleQueryFilter(query, prefix, value);
+    querySuggestionOpen = false;
   }
 
   function toggleDateBucket(name: string) {
@@ -743,16 +740,21 @@
   }
 
   function sendQuery(q: string) {
+    searchInProgress = true;
+    latestPageRequest = 0;
     loadingMoreForQuery = '';
     pageKey = '';
     hasMore = false;
-    wsManager?.send(JSON.stringify(buildSearchQuery(q, searchQueryOpts())));
+    latestSearchRequest =
+      wsManager?.send(JSON.stringify(buildSearchQuery(q, searchQueryOpts()))) ?? 0;
   }
 
   function loadMoreResults() {
-    if (!pageKey || !hasMore || loadingMoreForQuery) return;
+    if (searchPending || !pageKey || !hasMore || loadingMoreForQuery) return;
     loadingMoreForQuery = query;
-    wsManager?.sendImmediate(JSON.stringify(buildSearchQuery(query, searchQueryOpts(pageKey))));
+    latestPageRequest =
+      wsManager?.sendImmediate(JSON.stringify(buildSearchQuery(query, searchQueryOpts(pageKey)))) ??
+      0;
   }
 
   const skipUrl = { value: false };
@@ -837,14 +839,23 @@
     });
   }
 
-  function renderResults(event: MessageEvent) {
+  function renderResults(event: MessageEvent, request: WebSocketRequest) {
+    if (!query) return;
+    const isLoadMore =
+      request.id === latestPageRequest && !searchPending && loadingMoreForQuery === query;
+    if (
+      !isLoadMore &&
+      (request.id !== latestSearchRequest || request.message !== currentSearchMessage)
+    )
+      return;
     const res = parseSearchResults(event.data);
-    const isLoadMore = loadingMoreForQuery !== '' && loadingMoreForQuery === query;
     loadingMoreForQuery = '';
     if (isLoadMore) {
       accumulatedDocs = [...accumulatedDocs, ...(res.documents ?? [])];
       lastResults = { ...lastResults!, ...res, documents: accumulatedDocs };
     } else {
+      searchInProgress = false;
+      completedSearchMessage = request.message;
       accumulatedDocs = res.documents ?? [];
       lastResults = res;
       autocomplete = (query && res.query_suggestion) || '';
@@ -861,7 +872,8 @@
 
   function openResult(url: string, title: string, newWindow = false, sourceUrl = url) {
     if (config.openResultsOnNewTab) newWindow = true;
-    saveHistoryItem(sourceUrl, stripHtml(title), query, false, () => openURL(url, newWindow));
+    sendHistoryBeacon(sourceUrl, title, query);
+    openURL(url, newWindow);
   }
 
   function sendHistoryBeacon(url: string, title: string, queryStr: string) {
@@ -872,28 +884,11 @@
       query: queryStr,
       delete: false,
     });
-    navigator.sendBeacon('api/history', new Blob([payload], { type: 'application/json' }));
-  }
-
-  async function saveHistoryItem(
-    url: string,
-    title: string,
-    queryStr: string,
-    remove: boolean,
-    callback?: () => void,
-  ) {
-    if (!config.historyEnabled) {
-      callback?.();
-      return;
-    }
     try {
-      const res = await apiFetch('/history', {
-        method: 'POST',
-        headers: { 'Content-type': 'application/json; charset=UTF-8' },
-        body: JSON.stringify({ url, title, query: queryStr, delete: remove }),
-      });
-      callback?.();
-    } catch {}
+      navigator.sendBeacon('api/history', new Blob([payload], { type: 'application/json' }));
+    } catch {
+      // History is best effort and must not prevent opening a result.
+    }
   }
 
   function setSort(sortId: string) {
@@ -983,11 +978,9 @@
       );
       return;
     }
-    accumulatedDocs = [];
-    if (lastResults) {
-      lastResults = { ...lastResults, documents: [], total: 0 };
-    }
-    resultsShown = false;
+    // Refresh because semantic and history matches may fall outside the deleted query.
+    if (connected) sendQuery(query);
+    else removeMatchingResults(() => true);
   }
 
   function confirmDeleteAll() {
@@ -1008,14 +1001,27 @@
     return resultStates.get(url)!;
   }
 
+  function removeMatchingResults(matches: (doc: SearchResult) => boolean) {
+    if (!lastResults) return;
+    lastResults = removeSearchResults({ ...lastResults, documents: accumulatedDocs }, matches);
+    accumulatedDocs = lastResults.documents ?? [];
+    highlightIdx = Math.min(highlightIdx, Math.max(0, totalResults - 1));
+    facetsCache = new Map();
+    // Discard a page fetched before deletion so it cannot restore stale results.
+    latestPageRequest = 0;
+    loadingMoreForQuery = '';
+    if (lastResults.total === 0 && totalResults === 0) {
+      hasMore = false;
+      pageKey = '';
+    }
+  }
+
   function removeResult(url: string) {
-    accumulatedDocs = accumulatedDocs.filter((d) => d.url !== url);
-    if (lastResults) lastResults = { ...lastResults, documents: accumulatedDocs };
+    removeMatchingResults((doc) => doc.url === url);
   }
 
   function removeResultsByDomain(domain: string) {
-    accumulatedDocs = accumulatedDocs.filter((d) => d.domain !== domain);
-    if (lastResults) lastResults = { ...lastResults, documents: accumulatedDocs };
+    removeMatchingResults((doc) => doc.domain === domain);
   }
 
   // Convert file document URLs to browser viewable Hister URLs.
@@ -1077,7 +1083,7 @@
   }
 
   function selectNthResult(n: number) {
-    if (!totalResults) return;
+    if (!hasResults) return;
     highlightIdx = (highlightIdx + n + totalResults) % totalResults;
     const results = document.querySelectorAll('[data-result]');
     scrollTo(results[highlightIdx]);
@@ -1098,6 +1104,7 @@
       openURL(getSearchUrl(config.searchUrl, query.substring(2)), newWindow);
       return;
     }
+    if (searchPending) return;
     const res = document.querySelectorAll<HTMLAnchorElement>('[data-result] [data-result-link]')[
       highlightIdx
     ];
@@ -1109,6 +1116,7 @@
 
   function viewResultPopup(e?: KeyboardEvent) {
     if (e) e.preventDefault();
+    if (searchPending) return;
     if (isDesktop) {
       if (previewFullscreen) {
         // Fullscreen → back to split-screen
@@ -1308,7 +1316,7 @@
   }
 
   function handleKeydown(e: KeyboardEvent) {
-    if (isIMEKeyboardEvent(e)) return;
+    if (e.defaultPrevented || isIMEKeyboardEvent(e)) return;
     if (showDeleteConfirm) {
       if (e.key === 'Enter') {
         e.preventDefault();
@@ -1555,6 +1563,10 @@
   });
   $effect(() => {
     if (!query) {
+      searchInProgress = false;
+      completedSearchMessage = '';
+      latestSearchRequest = 0;
+      latestPageRequest = 0;
       autocomplete = '';
       lastResults = null;
       accumulatedDocs = [];
@@ -1569,11 +1581,17 @@
     if (query && connected) sendQuery(query);
   });
   $effect(() => {
+    if (!semanticSettingsReady) return;
     localStorage.setItem('hister-semantic-threshold', String(similarityThreshold));
     if (query && connected) sendQuery(query);
   });
   $effect(() => {
+    if (!semanticSettingsReady) return;
     localStorage.setItem('hister-semantic-weight', String(semanticWeight));
+  });
+
+  $effect(() => {
+    if (lastResults && !searchPending && !hasResults && previewFullscreen) exitFullscreen();
   });
 
   // Auto-load the readability panel for the focused result on desktop.
@@ -1581,6 +1599,7 @@
   // the semantic weight slider also refreshes the panel.
   // Uses data instead of DOM queries so it works when results are hidden (fullscreen mode).
   $effect(() => {
+    if (searchPending) return;
     const idx = highlightIdx;
     const result = displayResults[idx]; // reactive: covers both pinned and regular results
     const isFullscreen = previewFullscreen;
@@ -1652,10 +1671,9 @@
       disablePreviews = (appConfig as any).disablePreviews ?? false;
       if (config.semanticEnabled) {
         // Apply server defaults only when the user has not yet customised these.
-        if (localStorage.getItem('hister-semantic-threshold') === null)
-          similarityThreshold = config.similarityThreshold;
-        if (localStorage.getItem('hister-semantic-weight') === null)
-          semanticWeight = config.semanticWeight;
+        similarityThreshold = savedSimilarityThreshold ?? config.similarityThreshold;
+        semanticWeight = savedSemanticWeight ?? config.semanticWeight;
+        semanticSettingsReady = true;
       }
       if (
         !config.canWrite &&
@@ -1836,7 +1854,7 @@
       <div class="min-w-0 flex-1">
         <p class="font-outfit text-hister-rose font-bold">Cannot connect to Hister</p>
         <p class="font-inter text-text-brand-secondary text-sm">
-          {lastResults
+          {hasResults
             ? 'Showing the last loaded results while automatic reconnection continues.'
             : 'Search is unavailable while automatic reconnection continues.'}
         </p>
@@ -1997,15 +2015,51 @@
         onactivechange={setActiveQuerySuggestion}
         onselect={selectQuerySuggestion}
       />
+      {#if activeFilterCount > 0}
+        <div
+          class="border-border-brand-muted flex flex-wrap items-center gap-2 border-b px-3 py-2 md:px-6"
+          role="group"
+          aria-label="Active filters"
+        >
+          {#each activeFilterChips as chip (chip.filter.start)}
+            <Button
+              variant="outline"
+              size="sm"
+              class="border-hister-indigo/40 bg-hister-indigo/5 text-hister-indigo font-inter h-auto min-h-7 max-w-full gap-1 border-2 px-2 py-1 text-xs"
+              aria-label={`Remove ${chip.label} filter`}
+              title={`Remove ${chip.label} filter`}
+              onclick={() => removeFilters([chip.filter])}
+              onkeydown={(event) => {
+                if (event.key !== 'Escape') event.stopPropagation();
+              }}
+            >
+              <span class="min-w-0 truncate">{chip.label}</span>
+              <X class="size-3 shrink-0" />
+            </Button>
+          {/each}
+          <Button
+            variant="ghost"
+            size="sm"
+            class="font-inter text-text-brand-muted hover:text-text-brand h-7 px-2 text-xs"
+            onclick={clearFilters}
+            onkeydown={(event) => {
+              if (event.key !== 'Escape') event.stopPropagation();
+            }}
+          >
+            Clear filters
+          </Button>
+        </div>
+      {/if}
     </div>
     {@render connectionNotice('mx-3 my-3 md:mx-6')}
 
     <div class="flex min-h-0 flex-1 overflow-hidden" bind:this={splitContainerEl}>
-      {#if !previewFullscreen}
+      {#if !previewFullscreen || !showPreviewPanel}
         <ScrollArea class="results-scroll min-h-0 min-w-0 flex-1 overflow-hidden">
           <div
             class="results-list w-full max-w-[70em] space-y-3 overflow-x-hidden px-3 py-2 md:px-6"
-            class:results-list-panel={lastResults && panelOpen && isDesktop && !disablePreviews}
+            class:results-list-panel={showPreviewPanel}
+            aria-busy={isSearchLoading}
           >
             {#if deleteError}
               <div
@@ -2019,11 +2073,13 @@
                 >
               </div>
             {/if}
-            {#if hasResults}
-              <div
-                class="results-toolbar flex min-w-0 flex-wrap items-center justify-between gap-2 px-1 py-2"
-              >
-                <span class="font-outfit text-text-brand text-sm font-bold md:text-base">
+            <div
+              class="results-toolbar flex min-w-0 flex-wrap items-center justify-between gap-2 px-1 py-2"
+            >
+              <span class="font-outfit text-text-brand text-sm font-bold md:text-base">
+                {#if isSearchLoading}
+                  Searching…
+                {:else if !searchPending && lastResults}
                   {lastResults?.total && lastResults.total > totalResults
                     ? lastResults.total
                     : totalResults} results{#if lastResults?.search_duration}{' '}<span
@@ -2031,193 +2087,196 @@
                     >
                       ({lastResults.search_duration})</span
                     >{/if}
-                </span>
-                <div class="flex min-w-0 flex-wrap items-center justify-end gap-2 overflow-hidden">
-                  {#if isDesktop && !panelOpen && !disablePreviews}
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      class="font-inter text-text-brand-muted hover:text-hister-indigo gap-1 text-xs"
-                      onclick={() => {
-                        panelOpen = true;
-                        localStorage.setItem('hister-panel-open', 'true');
-                      }}
+                {:else}
+                  Search unavailable
+                {/if}
+              </span>
+              <div class="flex min-w-0 flex-wrap items-center justify-end gap-2 overflow-hidden">
+                {#if hasResults && isDesktop && !panelOpen && !disablePreviews}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    class="font-inter text-text-brand-muted hover:text-hister-indigo gap-1 text-xs"
+                    onclick={() => {
+                      panelOpen = true;
+                      localStorage.setItem('hister-panel-open', 'true');
+                    }}
+                  >
+                    <Eye class="size-3" />
+                    Preview
+                  </Button>
+                {/if}
+                {#if showFiltersButton}
+                  <DropdownMenu.Root bind:open={filtersDropdownOpen}>
+                    <DropdownMenu.Trigger>
+                      {#snippet child({ props })}
+                        <Button
+                          {...props}
+                          variant="ghost"
+                          size="sm"
+                          class="font-inter gap-1 text-xs {filtersDropdownOpen
+                            ? 'text-hister-indigo'
+                            : 'text-text-brand-muted hover:text-hister-indigo'}"
+                        >
+                          <Filter class="size-3" />
+                          Filters
+                          {#if activeFilterCount > 0}
+                            <span
+                              class="bg-hister-indigo text-background flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] leading-none font-bold"
+                              >{activeFilterCount}</span
+                            >
+                          {/if}
+                          <ChevronDown
+                            class="size-3 transition-transform duration-200 {filtersDropdownOpen
+                              ? 'rotate-180'
+                              : ''}"
+                          />
+                        </Button>
+                      {/snippet}
+                    </DropdownMenu.Trigger>
+                    <DropdownMenu.Content
+                      class="border-brutal-border bg-card-surface w-80 rounded-none border-[3px] p-3 shadow-[4px_4px_0_var(--brutal-shadow)]"
                     >
-                      <Eye class="size-3" />
-                      Preview
-                    </Button>
-                  {/if}
-                  {#if showFiltersButton}
-                    <DropdownMenu.Root bind:open={filtersDropdownOpen}>
-                      <DropdownMenu.Trigger>
-                        {#snippet child({ props })}
-                          <Button
-                            {...props}
-                            variant="ghost"
-                            size="sm"
-                            class="font-inter gap-1 text-xs {filtersDropdownOpen
-                              ? 'text-hister-indigo'
-                              : 'text-text-brand-muted hover:text-hister-indigo'}"
-                          >
-                            <Filter class="size-3" />
-                            Filters
-                            {#if activeFilterCount > 0}
-                              <span
-                                class="bg-hister-indigo text-background flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] leading-none font-bold"
-                                >{activeFilterCount}</span
+                      <div class="space-y-3">
+                        {#snippet facetSection(
+                          facet: SearchFacetDefinition,
+                          activeFilters: Set<string>,
+                          showSeparator: boolean,
+                        )}
+                          {@const Icon = facetIcons[facet.icon ?? ''] ?? Filter}
+                          {#if showSeparator}
+                            <Separator class="bg-border-brand-muted" />
+                          {/if}
+                          <div class="space-y-1.5">
+                            <p
+                              class="font-inter text-text-brand-muted flex items-center gap-1.5 text-xs font-semibold"
+                            >
+                              <Icon class="size-3" />
+                              {facet.label}
+                            </p>
+                            <div class="flex flex-wrap gap-1">
+                              {#each facetTerms(facet) as { term, count, label } (term)}
+                                <button
+                                  class="font-inter cursor-pointer rounded-none border-[2px] px-2 py-0.5 text-xs transition-colors {activeFilters.has(
+                                    term,
+                                  )
+                                    ? 'border-hister-indigo bg-hister-indigo text-background'
+                                    : 'border-border-brand-muted text-text-brand-secondary hover:border-hister-indigo hover:text-hister-indigo'}"
+                                  onclick={() => toggleQueryToken(facet.queryField, term)}
+                                  aria-pressed={activeFilters.has(term)}
+                                >
+                                  {label ?? term}
+                                  <span class="opacity-60">({count})</span>
+                                </button>
+                              {/each}
+                            </div>
+                            {#if currentFacets?.terms?.[facet.name]?.other}
+                              <button
+                                class="font-inter text-text-brand-muted hover:text-hister-indigo mt-1 cursor-pointer text-xs underline-offset-2 hover:underline"
+                                onclick={() => loadMoreFacet(facet.name)}>Load more</button
                               >
                             {/if}
-                            <ChevronDown
-                              class="size-3 transition-transform duration-200 {filtersDropdownOpen
-                                ? 'rotate-180'
-                                : ''}"
-                            />
-                          </Button>
+                          </div>
                         {/snippet}
-                      </DropdownMenu.Trigger>
-                      <DropdownMenu.Content
-                        class="border-brutal-border bg-card-surface w-80 rounded-none border-[3px] p-3 shadow-[4px_4px_0_var(--brutal-shadow)]"
-                      >
-                        <div class="space-y-3">
-                          {#snippet facetSection(
-                            facet: SearchFacetDefinition,
-                            activeFilters: Set<string>,
-                            showSeparator: boolean,
-                          )}
-                            {@const Icon = facetIcons[facet.icon ?? ''] ?? Filter}
-                            {#if showSeparator}
+                        {#if facetsLoading}
+                          <p class="font-inter text-text-brand-muted text-xs">Loading filters…</p>
+                        {:else}
+                          {#each visibleTermFacets as facet, index (facet.name)}
+                            {@render facetSection(
+                              facet,
+                              activeFiltersForFacet(facet.name),
+                              index > 0,
+                            )}
+                          {/each}
+                          {#snippet customDateInputs()}
+                            <details class="group/custom w-full">
+                              <summary
+                                class="font-inter text-text-brand-muted hover:text-hister-indigo cursor-pointer list-none text-xs underline-offset-2 hover:underline"
+                                >Custom</summary
+                              >
+                              <div
+                                class="mt-1.5 grid grid-cols-[auto_1fr] items-center gap-x-1.5 gap-y-2"
+                              >
+                                <span class="font-inter text-text-brand-secondary text-xs"
+                                  >From:</span
+                                >
+                                <Input
+                                  type="date"
+                                  value={dateFrom}
+                                  oninput={(event) =>
+                                    updateCustomDateFilter('from', event.currentTarget.value)}
+                                  class="border-border-brand-muted bg-card-surface text-text-brand font-fira focus-visible:border-hister-indigo h-7 w-auto min-w-0 border-[2px] px-2 text-xs shadow-none focus-visible:ring-0"
+                                />
+                                <span class="font-inter text-text-brand-secondary text-xs">To:</span
+                                >
+                                <Input
+                                  type="date"
+                                  value={dateTo}
+                                  oninput={(event) =>
+                                    updateCustomDateFilter('to', event.currentTarget.value)}
+                                  class="border-border-brand-muted bg-card-surface text-text-brand font-fira focus-visible:border-hister-indigo h-7 w-auto min-w-0 border-[2px] px-2 text-xs shadow-none focus-visible:ring-0"
+                                />
+                              </div>
+                            </details>
+                          {/snippet}
+                          {#if dateFacetDefinition && currentFacets?.date_histogram?.some((b) => b.count > 0)}
+                            {@const DateIcon = facetIcons[dateFacetDefinition.icon ?? ''] ?? Filter}
+                            {#if visibleTermFacets.length > 0}
                               <Separator class="bg-border-brand-muted" />
                             {/if}
                             <div class="space-y-1.5">
                               <p
                                 class="font-inter text-text-brand-muted flex items-center gap-1.5 text-xs font-semibold"
                               >
-                                <Icon class="size-3" />
-                                {facet.label}
+                                <DateIcon class="size-3" />
+                                {dateFacetDefinition.label}
                               </p>
-                              <div class="flex flex-wrap gap-1">
-                                {#each currentFacets?.terms?.[facet.name]?.terms ?? [] as { term, count, label } (term)}
-                                  <button
-                                    class="font-inter cursor-pointer rounded-none border-[2px] px-2 py-0.5 text-xs transition-colors {activeFilters.has(
-                                      term,
-                                    )
-                                      ? 'border-hister-indigo bg-hister-indigo text-background'
-                                      : 'border-border-brand-muted text-text-brand-secondary hover:border-hister-indigo hover:text-hister-indigo'}"
-                                    onclick={() => toggleQueryToken(facet.queryField, term)}
-                                  >
-                                    {label ?? term}
-                                    <span class="opacity-60">({count})</span>
-                                  </button>
+                              <div class="flex flex-col gap-1">
+                                {#each currentFacets.date_histogram as { name, count } (name)}
+                                  {#if count > 0}
+                                    <button
+                                      class="font-inter flex cursor-pointer items-center justify-between rounded-none border-[2px] px-2 py-1 text-xs transition-colors {activeDateBucket ===
+                                      name
+                                        ? 'border-hister-indigo bg-hister-indigo text-background'
+                                        : 'border-border-brand-muted text-text-brand-secondary hover:border-hister-indigo hover:text-hister-indigo'}"
+                                      onclick={() => toggleDateBucket(name)}
+                                    >
+                                      <span
+                                        >{dateFacetValues.find(
+                                          (value) => value.facetBucket === name,
+                                        )?.label ?? name}</span
+                                      >
+                                      <span class="opacity-60">{count}</span>
+                                    </button>
+                                  {/if}
                                 {/each}
                               </div>
-                              {#if currentFacets?.terms?.[facet.name]?.other}
-                                <button
-                                  class="font-inter text-text-brand-muted hover:text-hister-indigo mt-1 cursor-pointer text-xs underline-offset-2 hover:underline"
-                                  onclick={() => loadMoreFacet(facet.name)}>Load more</button
-                                >
-                              {/if}
+                              {@render customDateInputs()}
                             </div>
-                          {/snippet}
-                          {#if facetsLoading}
-                            <p class="font-inter text-text-brand-muted text-xs">Loading filters…</p>
-                          {:else}
-                            {#each visibleTermFacets as facet, index (facet.name)}
-                              {@render facetSection(
-                                facet,
-                                activeFiltersForFacet(facet.name),
-                                index > 0,
-                              )}
-                            {/each}
-                            {#snippet customDateInputs()}
-                              <details class="group/custom w-full">
-                                <summary
-                                  class="font-inter text-text-brand-muted hover:text-hister-indigo cursor-pointer list-none text-xs underline-offset-2 hover:underline"
-                                  >Custom</summary
-                                >
-                                <div
-                                  class="mt-1.5 grid grid-cols-[auto_1fr] items-center gap-x-1.5 gap-y-2"
-                                >
-                                  <span class="font-inter text-text-brand-secondary text-xs"
-                                    >From:</span
-                                  >
-                                  <Input
-                                    type="date"
-                                    value={dateFrom}
-                                    oninput={(event) =>
-                                      updateCustomDateFilter('from', event.currentTarget.value)}
-                                    class="border-border-brand-muted bg-card-surface text-text-brand font-fira focus-visible:border-hister-indigo h-7 w-auto min-w-0 border-[2px] px-2 text-xs shadow-none focus-visible:ring-0"
-                                  />
-                                  <span class="font-inter text-text-brand-secondary text-xs"
-                                    >To:</span
-                                  >
-                                  <Input
-                                    type="date"
-                                    value={dateTo}
-                                    oninput={(event) =>
-                                      updateCustomDateFilter('to', event.currentTarget.value)}
-                                    class="border-border-brand-muted bg-card-surface text-text-brand font-fira focus-visible:border-hister-indigo h-7 w-auto min-w-0 border-[2px] px-2 text-xs shadow-none focus-visible:ring-0"
-                                  />
-                                </div>
-                              </details>
-                            {/snippet}
-                            {#if dateFacetDefinition && currentFacets?.date_histogram?.some((b) => b.count > 0)}
-                              {@const DateIcon =
-                                facetIcons[dateFacetDefinition.icon ?? ''] ?? Filter}
-                              {#if visibleTermFacets.length > 0}
-                                <Separator class="bg-border-brand-muted" />
-                              {/if}
-                              <div class="space-y-1.5">
-                                <p
-                                  class="font-inter text-text-brand-muted flex items-center gap-1.5 text-xs font-semibold"
-                                >
-                                  <DateIcon class="size-3" />
-                                  {dateFacetDefinition.label}
-                                </p>
-                                <div class="flex flex-col gap-1">
-                                  {#each currentFacets.date_histogram as { name, count } (name)}
-                                    {#if count > 0}
-                                      <button
-                                        class="font-inter flex cursor-pointer items-center justify-between rounded-none border-[2px] px-2 py-1 text-xs transition-colors {activeDateBucket ===
-                                        name
-                                          ? 'border-hister-indigo bg-hister-indigo text-background'
-                                          : 'border-border-brand-muted text-text-brand-secondary hover:border-hister-indigo hover:text-hister-indigo'}"
-                                        onclick={() => toggleDateBucket(name)}
-                                      >
-                                        <span
-                                          >{dateFacetValues.find(
-                                            (value) => value.facetBucket === name,
-                                          )?.label ?? name}</span
-                                        >
-                                        <span class="opacity-60">{count}</span>
-                                      </button>
-                                    {/if}
-                                  {/each}
-                                </div>
-                                {@render customDateInputs()}
-                              </div>
-                            {:else if dateFacetDefinition}
-                              {@const DateIcon =
-                                facetIcons[dateFacetDefinition.icon ?? ''] ?? Filter}
-                              <div class="space-y-1.5">
-                                <p
-                                  class="font-inter text-text-brand-muted flex items-center gap-1.5 text-xs font-semibold"
-                                >
-                                  <DateIcon class="size-3" />
-                                  {dateFacetDefinition.label}
-                                </p>
-                                {@render customDateInputs()}
-                              </div>
-                            {/if}
-                            {#if !termFacetDefinitions.some((facet) => currentFacets?.terms?.[facet.name]?.terms?.length) && !currentFacets?.date_histogram?.some((bucket) => bucket.count > 0)}
-                              <p class="font-inter text-text-brand-muted text-xs">
-                                No filters available for this query.
+                          {:else if dateFacetDefinition}
+                            {@const DateIcon = facetIcons[dateFacetDefinition.icon ?? ''] ?? Filter}
+                            <div class="space-y-1.5">
+                              <p
+                                class="font-inter text-text-brand-muted flex items-center gap-1.5 text-xs font-semibold"
+                              >
+                                <DateIcon class="size-3" />
+                                {dateFacetDefinition.label}
                               </p>
-                            {/if}
+                              {@render customDateInputs()}
+                            </div>
                           {/if}
-                        </div>
-                      </DropdownMenu.Content>
-                    </DropdownMenu.Root>
-                  {/if}
+                          {#if !termFacetDefinitions.some((facet) => currentFacets?.terms?.[facet.name]?.terms?.length) && !currentFacets?.date_histogram?.some((bucket) => bucket.count > 0)}
+                            <p class="font-inter text-text-brand-muted text-xs">
+                              No matching filter values. Remove an active filter to broaden your
+                              search.
+                            </p>
+                          {/if}
+                        {/if}
+                      </div>
+                    </DropdownMenu.Content>
+                  </DropdownMenu.Root>
+                {/if}
+                {#if hasResults || config.semanticEnabled}
                   <DropdownMenu.Root bind:open={actionsDropdownOpen}>
                     <DropdownMenu.Trigger>
                       {#snippet child({ props })}
@@ -2243,7 +2302,7 @@
                       class="border-brutal-border bg-card-surface w-80 rounded-none border-[3px] p-3 shadow-[4px_4px_0_var(--brutal-shadow)]"
                     >
                       <div class="space-y-3">
-                        {#if config.semanticEnabled && semanticOn}
+                        {#if config.semanticEnabled}
                           <div class="space-y-2">
                             <p
                               class="font-inter text-text-brand-muted flex items-center gap-1.5 text-xs font-semibold"
@@ -2251,6 +2310,16 @@
                               <Sparkles class="size-3" />
                               Semantic Search
                             </p>
+                            {#if !semanticOn}
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                class="font-inter text-hister-indigo border-hister-indigo border-2 text-xs"
+                                onclick={() => (semanticOn = true)}
+                              >
+                                Enable semantic search
+                              </Button>
+                            {/if}
                             <label
                               class="font-inter text-text-brand-secondary flex flex-col gap-1 text-xs"
                             >
@@ -2265,7 +2334,11 @@
                                 max="1"
                                 step="0.002"
                                 bind:value={similarityThreshold}
-                                class="accent-hister-indigo w-full cursor-pointer"
+                                disabled={!semanticOn}
+                                onkeydown={(event) => {
+                                  if (event.key !== 'Escape') event.stopPropagation();
+                                }}
+                                class="accent-hister-indigo w-full cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                               />
                             </label>
                             <label
@@ -2282,145 +2355,149 @@
                                 max="1"
                                 step="0.05"
                                 bind:value={semanticWeight}
-                                class="accent-hister-indigo w-full cursor-pointer"
+                                disabled={!semanticOn}
+                                onkeydown={(event) => {
+                                  if (event.key !== 'Escape') event.stopPropagation();
+                                }}
+                                class="accent-hister-indigo w-full cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                               />
                             </label>
                           </div>
-                          <Separator class="bg-border-brand-muted" />
+                          {#if hasResults}<Separator class="bg-border-brand-muted" />{/if}
                         {/if}
-                        <div class="space-y-2">
-                          <p
-                            class="font-inter text-text-brand-muted flex items-center gap-1.5 text-xs font-semibold"
-                          >
-                            <Download class="size-3" />
-                            Export Results
-                          </p>
-                          <div class="flex flex-wrap gap-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              class="border-hister-indigo text-hister-indigo hover:bg-hister-indigo/10 h-7 border-[2px] text-xs"
-                              onclick={() =>
-                                exportJSON({ ...lastResults!, documents: accumulatedDocs })}
-                            >
-                              JSON
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              class="border-hister-indigo text-hister-indigo hover:bg-hister-indigo/10 h-7 border-[2px] text-xs"
-                              onclick={() =>
-                                exportCSV({ ...lastResults!, documents: accumulatedDocs }, query)}
-                            >
-                              CSV
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              class="border-hister-indigo text-hister-indigo hover:bg-hister-indigo/10 h-7 border-[2px] text-xs"
-                              onclick={() =>
-                                exportRSS({ ...lastResults!, documents: accumulatedDocs }, query)}
-                            >
-                              RSS
-                            </Button>
-                          </div>
-                        </div>
-                        {#if config.canWrite}
-                          <Separator class="bg-border-brand-muted" />
+                        {#if hasResults}
                           <div class="space-y-2">
                             <p
-                              class="font-inter text-hister-rose flex items-center gap-1.5 text-xs font-semibold"
+                              class="font-inter text-text-brand-muted flex items-center gap-1.5 text-xs font-semibold"
                             >
-                              <Trash2 class="size-3" />
-                              Danger Zone
+                              <Download class="size-3" />
+                              Export Results
                             </p>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              class="border-hister-rose text-hister-rose hover:bg-hister-rose/10 h-7 w-full border-[2px] text-xs"
-                              onclick={() => {
-                                showDeleteAllConfirm = true;
-                              }}
-                            >
-                              <Trash2 class="size-3" />
-                              Delete all matching results
-                            </Button>
+                            <div class="flex flex-wrap gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                class="border-hister-indigo text-hister-indigo hover:bg-hister-indigo/10 h-7 border-[2px] text-xs"
+                                onclick={() =>
+                                  exportJSON({ ...lastResults!, documents: accumulatedDocs })}
+                              >
+                                JSON
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                class="border-hister-indigo text-hister-indigo hover:bg-hister-indigo/10 h-7 border-[2px] text-xs"
+                                onclick={() =>
+                                  exportCSV({ ...lastResults!, documents: accumulatedDocs }, query)}
+                              >
+                                CSV
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                class="border-hister-indigo text-hister-indigo hover:bg-hister-indigo/10 h-7 border-[2px] text-xs"
+                                onclick={() =>
+                                  exportRSS({ ...lastResults!, documents: accumulatedDocs }, query)}
+                              >
+                                RSS
+                              </Button>
+                            </div>
                           </div>
+                          {#if config.canWrite}
+                            <Separator class="bg-border-brand-muted" />
+                            <div class="space-y-2">
+                              <p
+                                class="font-inter text-hister-rose flex items-center gap-1.5 text-xs font-semibold"
+                              >
+                                <Trash2 class="size-3" />
+                                Danger Zone
+                              </p>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                class="border-hister-rose text-hister-rose hover:bg-hister-rose/10 h-7 w-full border-[2px] text-xs"
+                                onclick={() => {
+                                  showDeleteAllConfirm = true;
+                                }}
+                              >
+                                <Trash2 class="size-3" />
+                                Delete all matching results
+                              </Button>
+                            </div>
+                          {/if}
                         {/if}
                       </div>
                     </DropdownMenu.Content>
                   </DropdownMenu.Root>
-                  <DropdownMenu.Root bind:open={sortDropdownOpen}>
-                    <DropdownMenu.Trigger>
-                      {#snippet child({ props })}
-                        <Button
-                          {...props}
-                          variant="ghost"
-                          size="sm"
-                          class="font-inter gap-1 text-xs {sortDropdownOpen || currentSort
-                            ? 'text-hister-indigo'
-                            : 'text-text-brand-muted hover:text-hister-indigo'}"
-                        >
-                          <ArrowUpDown class="size-3" />
-                          Sort
-                          {#if currentSort}
-                            <span
-                              class="bg-hister-indigo text-background flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] leading-none font-bold"
-                              >1</span
-                            >
-                          {/if}
-                          <ChevronDown
-                            class="size-3 transition-transform duration-200 {sortDropdownOpen
-                              ? 'rotate-180'
-                              : ''}"
-                          />
-                        </Button>
-                      {/snippet}
-                    </DropdownMenu.Trigger>
-                    <DropdownMenu.Content
-                      class="border-brutal-border bg-card-surface w-52 rounded-none border-[3px] p-3 shadow-[4px_4px_0_var(--brutal-shadow)]"
-                    >
-                      <div class="space-y-1.5">
-                        <p
-                          class="font-inter text-text-brand-muted flex items-center gap-1.5 text-xs font-semibold"
-                        >
-                          <ArrowUpDown class="size-3" />
-                          Sort by
-                        </p>
-                        <div class="flex flex-col gap-1">
-                          {#each sortOptions as { value, label } (value)}
-                            <button
-                              class="font-inter flex cursor-pointer items-center gap-2 rounded-none border-[2px] px-2 py-1 text-xs transition-colors {currentSort ===
-                              value
-                                ? 'border-hister-indigo bg-hister-indigo text-background'
-                                : 'border-border-brand-muted text-text-brand-secondary hover:border-hister-indigo hover:text-hister-indigo'}"
-                              onclick={() => {
-                                setSort(value);
-                                sortDropdownOpen = false;
-                              }}
-                            >
-                              {label}
-                              {#if currentSort === value}
-                                <Check class="ml-auto size-3" />
-                              {/if}
-                            </button>
-                          {/each}
-                        </div>
-                      </div>
-                    </DropdownMenu.Content>
-                  </DropdownMenu.Root>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    class="font-inter text-text-brand-muted hover:text-hister-coral gap-1 text-xs no-underline"
-                    href={getSearchUrl(config.searchUrl, query)}
+                {/if}
+                <DropdownMenu.Root bind:open={sortDropdownOpen}>
+                  <DropdownMenu.Trigger>
+                    {#snippet child({ props })}
+                      <Button
+                        {...props}
+                        variant="ghost"
+                        size="sm"
+                        class="font-inter gap-1 text-xs {sortDropdownOpen || currentSort
+                          ? 'text-hister-indigo'
+                          : 'text-text-brand-muted hover:text-hister-indigo'}"
+                      >
+                        <ArrowUpDown class="size-3" />
+                        Sort: {currentSortLabel}
+                        <ChevronDown
+                          class="size-3 transition-transform duration-200 {sortDropdownOpen
+                            ? 'rotate-180'
+                            : ''}"
+                        />
+                      </Button>
+                    {/snippet}
+                  </DropdownMenu.Trigger>
+                  <DropdownMenu.Content
+                    class="border-brutal-border bg-card-surface w-52 rounded-none border-[3px] p-3 shadow-[4px_4px_0_var(--brutal-shadow)]"
                   >
-                    <ExternalLink class="size-3" />
-                    Web
-                  </Button>
-                </div>
+                    <div class="space-y-1.5">
+                      <p
+                        class="font-inter text-text-brand-muted flex items-center gap-1.5 text-xs font-semibold"
+                      >
+                        <ArrowUpDown class="size-3" />
+                        Sort by
+                      </p>
+                      <div class="flex flex-col gap-1">
+                        {#each sortOptions as { value, label } (value)}
+                          <button
+                            class="font-inter flex cursor-pointer items-center gap-2 rounded-none border-[2px] px-2 py-1 text-xs transition-colors {currentSort ===
+                            value
+                              ? 'border-hister-indigo bg-hister-indigo text-background'
+                              : 'border-border-brand-muted text-text-brand-secondary hover:border-hister-indigo hover:text-hister-indigo'}"
+                            onclick={() => {
+                              setSort(value);
+                              sortDropdownOpen = false;
+                            }}
+                          >
+                            {label}
+                            {#if currentSort === value}
+                              <Check class="ml-auto size-3" />
+                            {/if}
+                          </button>
+                        {/each}
+                      </div>
+                    </div>
+                  </DropdownMenu.Content>
+                </DropdownMenu.Root>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  class="font-inter text-text-brand-muted hover:text-hister-coral gap-1 text-xs no-underline"
+                  href={getSearchUrl(config.searchUrl, query)}
+                >
+                  <ExternalLink class="size-3" />
+                  Web
+                </Button>
               </div>
+            </div>
 
+            {#if isSearchLoading}
+              <SearchLoading />
+            {:else if hasResults}
               {#if lastResults?.query && lastResults.query.text.length > query.length}
                 <p class="font-inter text-text-brand-muted text-sm">
                   Expanded query: <code
@@ -2438,6 +2515,7 @@
                       ? 'hister-amber'
                       : 'hister-cyan'}
                   {@const state = getResultState(r.url, r.label)}
+                  {@const resultDate = r.updated || r.added}
                   <article
                     data-result
                     class="result-card flex w-full scroll-my-[6em] gap-3 transition-all duration-150"
@@ -2487,7 +2565,7 @@
                         />
                       </div>
                       <div
-                        class="result-meta flex max-w-full min-w-0 items-center gap-x-3 gap-y-1 overflow-hidden"
+                        class="result-meta flex max-w-full min-w-0 flex-wrap items-center gap-x-3 gap-y-1"
                       >
                         <div
                           class="result-url-line flex max-w-full min-w-0 shrink items-center gap-1.5"
@@ -2512,7 +2590,7 @@
                           </span>
                         </div>
                         <div
-                          class="result-secondary-meta flex shrink-0 items-center gap-x-3 gap-y-1"
+                          class="result-secondary-meta flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1"
                         >
                           <button
                             class="text-text-brand-muted hover:text-text-brand shrink-0 cursor-pointer"
@@ -2531,6 +2609,16 @@
                               <Copy class="size-3" />
                             {/if}
                           </button>
+                          {#if resultDate}
+                            <time
+                              class="font-inter text-text-brand-muted text-xs whitespace-nowrap md:text-sm"
+                              datetime={new Date(resultDate * 1000).toISOString()}
+                              title={formatTimestamp(resultDate)}
+                            >
+                              {r.updated ? 'Updated' : 'Added'}
+                              {formatRelativeTime(resultDate)}
+                            </time>
+                          {/if}
                           {#if r.isPinned}
                             <Badge
                               variant="secondary"
@@ -2544,17 +2632,11 @@
                               title="Prioritized because you opened it for this query. Use the result menu to forget it for this query."
                               >prioritized</Badge
                             >
-                          {:else if r.updated}
-                            <span
-                              class="font-inter text-text-brand-muted text-xs whitespace-nowrap md:text-sm"
-                              title={formatTimestamp(r.updated)}
-                              >{formatRelativeTime(r.updated)}</span
-                            >
                           {/if}
                           {#if state.displayLabel}
                             <Badge
                               variant="secondary"
-                              class="result-label bg-hister-teal/20 min-h-4 shrink-0 border-0 px-1.5 py-0"
+                              class="result-label bg-hister-teal/20 min-h-4 max-w-full border-0 px-1.5 py-0"
                               title={state.displayLabel}
                             >
                               <Tag class="mr-0.5 size-2.5 shrink-0" />{state.displayLabel}
@@ -2573,7 +2655,7 @@
                                 openReadable(e, r.url, r.title || '*title*', r.id || '');
                               }}
                             >
-                              <Eye class="size-3" /><span>view</span>
+                              <Eye class="size-3" /><span>Preview</span>
                             </Button>
                           {/if}
                           {#if !r.isPinned && r.finalScore && config.semanticEnabled && semanticOn}
@@ -2607,26 +2689,41 @@
                   </article>
                 {/each}
               {/if}
-            {:else if query && lastResults}
-              <section class="pmd:px-12 y-12 text-center">
+            {:else if !searchPending && query && lastResults}
+              <section class="px-4 py-12 text-center md:px-12">
                 <p class="font-inter text-text-brand-secondary mb-4">
                   No results found for "<span class="font-semibold">{query}</span>"
                 </p>
-                <Button
-                  variant="outline"
-                  class="border-hister-coral text-hister-coral hover:bg-hister-coral/10 font-inter border-[3px] font-semibold shadow-[3px_3px_0px_var(--hister-coral)]"
-                  href={getSearchUrl(config.searchUrl, query)}
-                >
-                  <ExternalLink class="size-4" />
-                  Search
-                </Button>
+                <p class="font-inter text-text-brand-muted mb-4 text-sm">
+                  {activeFilterCount > 0
+                    ? 'Try removing filters or changing your search terms.'
+                    : 'Try different search terms or search the web.'}
+                </p>
+                <div class="flex flex-wrap items-center justify-center gap-3">
+                  {#if activeFilterCount > 0}
+                    <Button
+                      variant="outline"
+                      class="border-hister-indigo text-hister-indigo font-inter border-2"
+                      onclick={clearFilters}
+                      onkeydown={(event) => {
+                        if (event.key !== 'Escape') event.stopPropagation();
+                      }}
+                    >
+                      Clear filters
+                    </Button>
+                  {/if}
+                  <Button
+                    variant="outline"
+                    class="border-hister-coral text-hister-coral hover:bg-hister-coral/10 font-inter border-[3px] font-semibold shadow-[3px_3px_0px_var(--hister-coral)]"
+                    href={getSearchUrl(config.searchUrl, query)}
+                  >
+                    <ExternalLink class="size-4" />
+                    Search the web
+                  </Button>
+                </div>
               </section>
-            {:else if query && connectionState !== 'disconnected'}
-              <div class="flex items-center justify-center py-16">
-                <span class="font-inter text-text-brand-muted">Searching...</span>
-              </div>
             {/if}
-            {#if hasMore || loadingMoreForQuery}
+            {#if !searchPending && (hasMore || loadingMoreForQuery)}
               <div bind:this={sentinelEl} class="flex items-center justify-center py-4">
                 <span class="font-inter text-text-brand-muted text-sm">Loading more…</span>
               </div>
@@ -2638,7 +2735,7 @@
       {/if}
 
       <!-- Preview panel: fullscreen (both mobile and desktop) or split-pane (desktop only) -->
-      {#if !disablePreviews}
+      {#if showPreviewPanel}
         {#if previewFullscreen}
           <PreviewPanel
             url={panelUrl}
@@ -2655,7 +2752,7 @@
               );
             }}
           />
-        {:else if lastResults && panelOpen && isDesktop}
+        {:else}
           <!-- Drag handle to resize the split-screen panel -->
           <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
           <div

@@ -29,8 +29,7 @@ func ExitCode(err error) int {
 	if err == nil {
 		return 0
 	}
-	var partial *partialFailure
-	if errors.As(err, &partial) {
+	if _, ok := errors.AsType[*partialFailure](err); ok {
 		return 2
 	}
 	return 1

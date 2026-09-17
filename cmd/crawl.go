@@ -166,12 +166,12 @@ func writeCrawlJobs(out io.Writer, format string, jobs []*model.CrawlJob, detail
 			if !detail {
 				fmt.Fprintf(&text, "%s  %-12s  %s\n", cliInfoStyle.Render(job.ID), crawlJobStatusLabel(job.Status), job.StartURL)
 				fmt.Fprintf(&text, "  pending: %d  done: %d  failed: %d  skipped: %d  created: %s\n",
-					stats.Pending, stats.Done, stats.Failed, stats.Skipped, job.CreatedAt.Format("2006-01-02 15:04:05"))
+					stats.Pending, stats.Done, stats.Failed, stats.Skipped, formatLocalTimestamp(job.CreatedAt))
 			} else {
 				fmt.Fprintln(&text, cliBoldStyle.Render("CRAWL JOB"))
 				fmt.Fprintf(&text, "id: %s\nstatus: %s\nstart_url: %s\nlabel: %s\ncreated: %s\nupdated: %s\n\n",
 					cliInfoStyle.Render(job.ID), crawlJobStatusLabel(job.Status), job.StartURL, job.Label,
-					job.CreatedAt.Format("2006-01-02 15:04:05"), job.UpdatedAt.Format("2006-01-02 15:04:05"))
+					formatLocalTimestamp(job.CreatedAt), formatLocalTimestamp(job.UpdatedAt))
 				fmt.Fprintln(&text, cliBoldStyle.Render("STATE"))
 				fmt.Fprintf(&text, "pending: %d\nin_progress: %d\ndone: %d\nfailed: %d\nskipped: %d\n\n",
 					stats.Pending, stats.InProgress, stats.Done, stats.Failed, stats.Skipped)
