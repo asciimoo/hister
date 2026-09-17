@@ -155,6 +155,17 @@ type CrawlerConfig struct {
 	ShutdownGrace     int                            `yaml:"shutdown_grace"     mapstructure:"shutdown_grace"`
 }
 
+// PerHostRPSFromDelay converts a legacy inter-request delay in seconds into the
+// per-host request rate the crawler actually reads. It reports false when the
+// delay carries no instruction (zero or negative), so callers leave the
+// configured rate alone rather than substituting one of their own.
+func PerHostRPSFromDelay(delaySeconds int) (float64, bool) {
+	if delaySeconds <= 0 {
+		return 0, false
+	}
+	return 1.0 / float64(delaySeconds), true
+}
+
 // CrawlerRate configures global and per-host request rates.
 // RPS values are requests per second; 0 means use the default.
 // Duration fields are in seconds.
@@ -714,8 +725,8 @@ func (c *Config) validateBasic() error {
 
 	// Backwards compatibility: if legacy delay > 0 and per-host RPS is still
 	// at its default, derive per-host RPS from the delay value.
-	if c.Crawler.Delay > 0 && c.Crawler.Rate.PerHostRPS == 0 {
-		c.Crawler.Rate.PerHostRPS = 1.0 / float64(c.Crawler.Delay)
+	if rps, ok := PerHostRPSFromDelay(c.Crawler.Delay); ok && c.Crawler.Rate.PerHostRPS == 0 {
+		c.Crawler.Rate.PerHostRPS = rps
 		log.Warn().
 			Int("delay", c.Crawler.Delay).
 			Float64("per_host_rps", c.Crawler.Rate.PerHostRPS).

@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/net/html"
@@ -71,6 +72,10 @@ type baseCrawler struct {
 	skipURLChecker SkipURLChecker
 	coord          *Coordinator
 	backoff        *Backoff
+	// err holds the failure from the most recent background crawl. It is
+	// written before the document channel closes, which is the happens-before
+	// the ErrorReporter contract relies on.
+	err error
 }
 
 // New creates a Crawler backed by the backend specified in cfg.Backend.
@@ -159,11 +164,17 @@ func (c *baseCrawler) Crawl(ctx context.Context, startURL string, v *Validator) 
 	q := newMemoryQueue()
 	go func() {
 		defer close(ch)
-		if err := c.run(ctx, q, startURL, v, ch); err != nil {
-			log.Error().Err(err).Msg("crawler: crawl failed")
+		c.err = c.run(ctx, q, startURL, v, ch)
+		if c.err != nil {
+			log.Error().Err(c.err).Msg("crawler: crawl failed")
 		}
 	}()
 	return ch, nil
+}
+
+// Err returns the background crawl error after the document channel closes.
+func (c *baseCrawler) Err() error {
+	return c.err
 }
 
 // Close releases resources held by the underlying backend.
@@ -192,7 +203,15 @@ func (c *baseCrawler) run(ctx context.Context, q CrawlQueue, startURL string, v 
 		grace = 30 * time.Second
 	}
 
+	// MaxDuration has to bound the whole run, not just the gaps between items.
+	// Checking it only after a fetch lets a Retry-After cooldown, a rate-limiter
+	// wait or a retry backoff run straight past the limit, so it is enforced as
+	// a deadline on the context every one of those waits selects on.
+	c.coord.StartRun()
 	crawlCtx, crawlCancel := context.WithCancel(ctx)
+	if deadline, ok := c.coord.Deadline(); ok {
+		crawlCtx, crawlCancel = context.WithDeadline(ctx, deadline)
+	}
 	defer crawlCancel()
 
 	fetchCtx, fetchCancel := context.WithCancel(context.Background())
@@ -216,6 +235,20 @@ func (c *baseCrawler) run(ctx context.Context, q CrawlQueue, startURL string, v 
 		concurrency = 1
 	}
 
+	// A queue write is the crawl's durable state, not a log line. Failures are
+	// collected here so the run reports them and, critically, never reaches
+	// OnDone: a job marked completed with unrecorded results cannot be resumed.
+	var (
+		errMu   sync.Mutex
+		runErr  error
+		stopped atomic.Bool
+	)
+	recordErr := func(err error) {
+		errMu.Lock()
+		runErr = errors.Join(runErr, err)
+		errMu.Unlock()
+	}
+
 	var wg sync.WaitGroup
 	for i := 0; i < concurrency; i++ {
 		wg.Add(1)
@@ -224,8 +257,10 @@ func (c *baseCrawler) run(ctx context.Context, q CrawlQueue, startURL string, v 
 			for {
 				item, ok, err := q.Pop(crawlCtx)
 				if err != nil {
+					// A cancelled crawl is the caller's doing, not a fault.
 					if crawlCtx.Err() == nil {
-						log.Warn().Err(err).Msg("crawler: queue Pop failed, worker stopping")
+						recordErr(fmt.Errorf("read the crawl queue: %w", err))
+						stopped.Store(true)
 					}
 					return
 				}
@@ -238,16 +273,25 @@ func (c *baseCrawler) run(ctx context.Context, q CrawlQueue, startURL string, v 
 				// the row to pending (interrupted) or record the outcome.
 				if cerr := q.Complete(context.Background(), item, comp); cerr != nil {
 					log.Error().Err(cerr).Str("url", item.rawURL).Msg("crawler: recording the crawl result failed")
+					recordErr(cerr)
 				}
 				if comp.stop || c.coord.Exhausted() {
-					crawlCancel()
-					return
+					// Stop intake without cancelling the crawl. Cancelling here
+					// kills the workers that already hold a reservation and are
+					// only waiting on a rate token, which cuts the crawl short
+					// of the very budget that triggered the stop.
+					stopped.Store(true)
+					q.Stop()
+					continue
 				}
-				if comp.deferred && comp.deferFor > 0 {
+				if comp.deferred {
+					// BreakerRetryIn can race to zero, and sleeping for zero
+					// turns an outage into a hot requeue loop.
+					wait := max(comp.deferFor, breakerProbeWait)
 					select {
 					case <-crawlCtx.Done():
 						return
-					case <-time.After(comp.deferFor):
+					case <-time.After(wait):
 					}
 				}
 			}
@@ -255,12 +299,24 @@ func (c *baseCrawler) run(ctx context.Context, q CrawlQueue, startURL string, v 
 	}
 	wg.Wait()
 
-	// crawlCtx is cancelled either by the caller or by a limit stopping the
-	// crawl from inside. Both leave URLs pending, so the queue must record the
-	// run as stopped: reporting it as done marks the job completed and the CLI
-	// then refuses to resume it. Only a drained queue reaches OnDone.
-	if crawlCtx.Err() != nil {
-		return q.OnStop(context.Background())
+	// Reaching max_duration is a configured stopping condition, not a failure:
+	// it must not make the command exit non-zero. The signal callers act on is
+	// the job being recorded as stopped below, which is what makes it resumable.
+	if ctx.Err() == nil && crawlCtx.Err() != nil {
+		log.Info().
+			Int("max_duration", c.cfg.Limits.MaxDuration).
+			Msg("crawler: max crawl duration reached, stopping crawl")
+		stopped.Store(true)
+	}
+
+	// Anything but a queue drained to completion leaves URLs pending, so the
+	// queue must record the run as stopped: reporting it as done marks the job
+	// completed and the CLI then refuses to resume it. That covers caller
+	// cancellation, the MaxDuration deadline, a budget stopping intake, and a
+	// queue write that failed - the last one especially, since its row is still
+	// in_progress with its discovered links unrecorded.
+	if ctx.Err() != nil || stopped.Load() || runErr != nil {
+		return errors.Join(runErr, q.OnStop(context.Background()))
 	}
 	return q.OnDone(context.Background())
 }
@@ -303,9 +359,18 @@ func (c *baseCrawler) fetchOne(fetchCtx, crawlCtx context.Context, item *pending
 		log.Info().Str("url", item.rawURL).Msg("crawler: max links reached, stopping crawl")
 		return completion{stop: true}
 	}
+	// A URL that ends without a document must hand back everything it reserved.
+	// stop is in the list because the crawl-budget stop below is returned after
+	// TryVisit already succeeded; the MaxLinks stop above returns before this
+	// defer is installed, so it cannot double-release.
+	reservedPage := false
 	defer func() {
-		if comp.interrupted || comp.skipped || comp.deferred {
-			v.ReleaseVisit()
+		if !comp.interrupted && !comp.skipped && !comp.stop && !comp.deferred {
+			return
+		}
+		v.ReleaseVisit()
+		if reservedPage {
+			c.coord.ReleasePage(host)
 		}
 	}()
 
@@ -313,6 +378,19 @@ func (c *baseCrawler) fetchOne(fetchCtx, crawlCtx context.Context, item *pending
 	if maxAttempts < 1 {
 		maxAttempts = 1
 	}
+	// Attempts spent on this URL by earlier passes. A URL handed back by an open
+	// breaker keeps its count, so the retry budget is spent across passes rather
+	// than restarting on each one - otherwise a half-open breaker grants a fresh
+	// probe every pass and one URL is fetched without bound during an outage.
+	remaining := maxAttempts - item.attempts
+	if remaining < 1 {
+		return completion{err: fmt.Errorf(
+			"giving up on %s after %d attempts", item.rawURL, item.attempts)}
+	}
+	// Fetches this pass actually reached the network. Only these are charged
+	// back to the item: a pass turned away before it fetched costs it nothing,
+	// so URLs never tried during an outage stay queued indefinitely.
+	fetches := 0
 
 	var finalURL string
 	var body []byte
@@ -320,7 +398,7 @@ func (c *baseCrawler) fetchOne(fetchCtx, crawlCtx context.Context, item *pending
 	var meta FetchMeta
 	var fetchErr error
 
-	for attempt := 0; attempt < maxAttempts; attempt++ {
+	for attempt := 0; attempt < remaining; attempt++ {
 		if attempt > 0 {
 			wait := c.backoff.Duration(attempt)
 			select {
@@ -340,18 +418,25 @@ func (c *baseCrawler) fetchOne(fetchCtx, crawlCtx context.Context, item *pending
 				// Recording it as failed would drain the rest of the host's
 				// queue into permanent failures during an outage, so leave it
 				// queued and hold off until the breaker probes again.
+				//
+				// Deferring is not free: each pass hands the URL back with a
+				// fresh retry loop, and a half-open breaker grants a fresh probe
+				// with it. The attempt count carried on the item is what bounds
+				// that, so an outage that outlasts the retry budget retires the
+				// URL instead of serving it forever.
 				wait := c.coord.BreakerRetryIn(host)
 				log.Info().
 					Str("url", item.rawURL).
 					Str("host", host).
+					Int("attempts", item.attempts+fetches).
 					Dur("retry_in", wait).
 					Msg("crawler: circuit breaker open, deferring URL")
-				return completion{deferred: true, deferFor: wait}
+				return completion{deferred: true, deferFor: wait, attemptsUsed: fetches}
 			}
 			return completion{err: err}
 		}
 
-		if !c.coord.TryReservePage(host) {
+		if !reservedPage && !c.coord.TryReservePage(host) {
 			c.coord.Release(host)
 			c.coord.AbandonProbe(host)
 			if c.coord.Exhausted() {
@@ -365,8 +450,12 @@ func (c *baseCrawler) fetchOne(fetchCtx, crawlCtx context.Context, item *pending
 			log.Info().Str("url", item.rawURL).Str("host", host).Msg("crawler: per-host page budget reached, skipping")
 			return completion{skipped: true, skipReason: "budget"}
 		}
+		// Retries of the same URL reuse the reservation. Charging each attempt
+		// spends one unit of MaxPages per retry for a single page.
+		reservedPage = true
 
 		start := time.Now()
+		fetches++
 		finalURL, body, links, meta, fetchErr = c.fetcher.fetchPage(fetchCtx, item.rawURL)
 		elapsed := time.Since(start)
 
@@ -384,7 +473,7 @@ func (c *baseCrawler) fetchOne(fetchCtx, crawlCtx context.Context, item *pending
 				Str("url", item.rawURL).
 				Str("host", host).
 				Int("status", statusCode).
-				Int("attempt", attempt+1).
+				Int("attempt", item.attempts+fetches).
 				Int64("duration_ms", elapsed.Milliseconds()).
 				Str("breaker_state", breakerStateName(c.coord.HostBreakerState(host))).
 				Msg("crawler: fetch error")
@@ -392,7 +481,7 @@ func (c *baseCrawler) fetchOne(fetchCtx, crawlCtx context.Context, item *pending
 			if retryAfter > 0 {
 				c.coord.Cooldown(host, retryAfter)
 			}
-			if retryable && attempt < maxAttempts-1 {
+			if retryable && attempt < remaining-1 {
 				c.coord.RecordFailure(host)
 				continue
 			}
@@ -406,7 +495,7 @@ func (c *baseCrawler) fetchOne(fetchCtx, crawlCtx context.Context, item *pending
 			Int("status", meta.StatusCode).
 			Int64("bytes", int64(len(body))).
 			Int64("duration_ms", elapsed.Milliseconds()).
-			Int("attempt", attempt+1).
+			Int("attempt", item.attempts+fetches).
 			Str("breaker_state", breakerStateName(c.coord.HostBreakerState(host))).
 			Msg("crawler: fetched page")
 

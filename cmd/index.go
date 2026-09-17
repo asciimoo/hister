@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/asciimoo/hister/client"
+	"github.com/asciimoo/hister/config"
 	"github.com/asciimoo/hister/server/crawler"
 	"github.com/asciimoo/hister/server/extractor"
 	"github.com/asciimoo/hister/server/model"
@@ -67,10 +68,7 @@ var indexCmd = &cobra.Command{
 			UserAgent = ua
 			cfg.Crawler.UserAgent = ua
 		}
-		if cmd.Flags().Changed("delay") {
-			d, _ := cmd.Flags().GetInt("delay")
-			cfg.Crawler.Delay = d
-		}
+		applyCrawlerRateFlags(cmd, &cfg.Crawler.Rate)
 		if cmd.Flags().Changed("timeout") {
 			t, _ := cmd.Flags().GetInt("timeout")
 			cfg.Crawler.Timeout = t
@@ -435,10 +433,33 @@ func init() {
 	indexCmd.Flags().String("job-id", "", "Persistent crawl job ID; use with --recursive to start a new job or alone to resume an existing one")
 	addCrawlerBackendFlags(indexCmd)
 	indexCmd.Flags().Bool("no-robots", false, "Disable robots.txt compliance during crawling")
-	indexCmd.Flags().Int("delay", 0, "Delay in seconds between requests (0 = no delay; overrides config)")
+	indexCmd.Flags().Float64("per-host-rps", 0, "Maximum requests per second per host (overrides config)")
+	indexCmd.Flags().Int("delay", 0, "Deprecated alias for --per-host-rps, expressed as seconds between requests")
+	if err := indexCmd.Flags().MarkDeprecated("delay", "use --per-host-rps instead"); err != nil {
+		panic(err)
+	}
 	indexCmd.Flags().Int("timeout", 0, "Request timeout in seconds (0 = 5s default; overrides config)")
 	indexCmd.Flags().String("user-agent", "", "User-agent string for requests (overrides config)")
 	indexCmd.Flags().Bool("allow-sensitive", false, "Skip sensitive content checks, allowing matching documents to be indexed")
+}
+
+// applyCrawlerRateFlags applies --per-host-rps and the deprecated --delay to
+// rate, overriding any config-file values. Both write PerHostRPS, which is the
+// value the crawler actually reads: assigning the deprecated CrawlerConfig.Delay
+// here did nothing, because the config loader's delay-to-rate conversion has
+// already run by the time command flags are applied.
+func applyCrawlerRateFlags(cmd *cobra.Command, rate *config.CrawlerRate) {
+	if cmd.Flags().Changed("delay") {
+		d, _ := cmd.Flags().GetInt("delay")
+		if rps, ok := config.PerHostRPSFromDelay(d); ok {
+			rate.PerHostRPS = rps
+		}
+	}
+	// Applied second so it wins if both are given.
+	if cmd.Flags().Changed("per-host-rps") {
+		rps, _ := cmd.Flags().GetFloat64("per-host-rps")
+		rate.PerHostRPS = rps
+	}
 }
 
 func indexURL(ctx context.Context, cr crawler.Crawler, u string, label string, clientOpts ...client.Option) error {

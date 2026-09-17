@@ -36,7 +36,6 @@ type persistentCrawler struct {
 	jobID     string
 	owner     string
 	leaseLost atomic.Bool
-	err       error
 }
 
 // newLeaseOwner builds a human-readable owner ID so a blocked resume can say
@@ -183,9 +182,4 @@ func (c *persistentCrawler) releaseLease() {
 	if err := model.ReleaseCrawlJobLease(c.jobID, c.owner); err != nil {
 		log.Warn().Err(err).Str("job_id", c.jobID).Msg("crawler: releasing crawl job lease failed")
 	}
-}
-
-// Err returns the background crawl error after the document channel closes.
-func (c *persistentCrawler) Err() error {
-	return c.err
 }

@@ -48,13 +48,18 @@ type CrawlJob struct {
 
 // CrawlURL tracks every URL discovered during a crawl job.
 type CrawlURL struct {
-	ID        uint      `gorm:"primaryKey;autoIncrement" json:"id"`
-	JobID     string    `gorm:"uniqueIndex:idx_crawl_job_url;not null" json:"job_id"`
-	URL       string    `gorm:"uniqueIndex:idx_crawl_job_url;not null" json:"url"`
-	Depth     int       `json:"depth"`
-	Status    string    `gorm:"not null;default:pending" json:"status"`
-	Error     string    `json:"error"`
-	ErrorCode int       `json:"error_code"`
+	ID        uint   `gorm:"primaryKey;autoIncrement" json:"id"`
+	JobID     string `gorm:"uniqueIndex:idx_crawl_job_url;not null" json:"job_id"`
+	URL       string `gorm:"uniqueIndex:idx_crawl_job_url;not null" json:"url"`
+	Depth     int    `json:"depth"`
+	Status    string `gorm:"not null;default:pending" json:"status"`
+	Error     string `json:"error"`
+	ErrorCode int    `json:"error_code"`
+	// Attempts counts how many times this URL has been handed to a worker and
+	// handed back without a verdict. It must survive requeueing: a URL deferred
+	// by an open circuit breaker is put back as pending, and without a durable
+	// count the retry limit restarts from zero on every pass.
+	Attempts  int       `json:"attempts"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
@@ -332,6 +337,21 @@ func ClaimNextPendingCrawlURL(jobID string) (*CrawlURL, error) {
 func UpdateCrawlURLStatus(id uint, status, errMsg string) error {
 	return DB.Model(&CrawlURL{}).Where("id = ?", id).
 		Updates(map[string]any{"status": status, "error": errMsg, "error_code": 0}).Error
+}
+
+// DeferCrawlURL returns a URL to the pending pool, charging it the fetches the
+// deferred pass actually made. Deferral means the host refused the request as a
+// whole, so the URL keeps its place in the queue - but the attempts have to be
+// recorded, otherwise the retry budget restarts on every pass and a host that
+// stays down is fetched without bound.
+func DeferCrawlURL(id uint, attemptsUsed int) error {
+	return DB.Model(&CrawlURL{}).Where("id = ?", id).
+		Updates(map[string]any{
+			"status":     CrawlURLPending,
+			"error":      "",
+			"error_code": 0,
+			"attempts":   gorm.Expr("attempts + ?", attemptsUsed),
+		}).Error
 }
 
 func MarkCrawlURLFailed(jobID, rawURL string, errCode int, errMsg string) error {

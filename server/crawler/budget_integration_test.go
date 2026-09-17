@@ -66,9 +66,13 @@ func TestBudgetMaxPages(t *testing.T) {
 		docs++
 	}
 
-	calls := cf.calls.Load()
-	if calls > 2 {
-		t.Errorf("expected at most 2 fetches with MaxPages=2, got %d", calls)
+	// Exactly, not at most: an "at most" bound also passes when the budget stops
+	// the crawl short of what it was allowed to fetch.
+	if docs != 2 {
+		t.Errorf("emitted %d documents with MaxPages=2, want exactly 2", docs)
+	}
+	if calls := cf.calls.Load(); calls != 2 {
+		t.Errorf("expected exactly 2 fetches with MaxPages=2, got %d", calls)
 	}
 }
 
@@ -143,8 +147,9 @@ func TestBudgetMaxBytesPerHost(t *testing.T) {
 	for range ch {
 	}
 
-	calls := cf.calls.Load()
-	if calls > 2 {
-		t.Errorf("expected at most 2 fetches with MaxBytesPerHost=100 and 60-byte body, got %d", calls)
+	// Two 60-byte bodies cross the 100-byte cap, so the third URL is refused and
+	// the second is still fetched: exactly two, not merely no more than two.
+	if calls := cf.calls.Load(); calls != 2 {
+		t.Errorf("expected exactly 2 fetches with MaxBytesPerHost=100 and 60-byte body, got %d", calls)
 	}
 }

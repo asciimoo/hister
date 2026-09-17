@@ -91,6 +91,27 @@ func NewCoordinator(cfg *config.CrawlerConfig) *Coordinator {
 	}
 }
 
+// StartRun restamps the clock that MaxDuration is measured against. The
+// constructor runs when the crawler is built, which for a persistent crawler is
+// well before Crawl is called, so the limit would otherwise count time the
+// crawl was not running.
+func (c *Coordinator) StartRun() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.startTime = time.Now()
+}
+
+// Deadline returns the wall-clock time at which MaxDuration expires, and false
+// when no duration limit is configured.
+func (c *Coordinator) Deadline() (time.Time, bool) {
+	if c.cfg.Limits.MaxDuration <= 0 {
+		return time.Time{}, false
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.startTime.Add(time.Duration(c.cfg.Limits.MaxDuration) * time.Second), true
+}
+
 func (c *Coordinator) effectiveRPS(host string) float64 {
 	rps := c.cfg.Rate.PerHostRPS
 	if rps <= 0 {
@@ -128,22 +149,30 @@ func (c *Coordinator) Wait(ctx context.Context, host string) error {
 	effectiveRate := c.effectiveRPS(host)
 	he.limiter.SetLimit(rate.Limit(effectiveRate))
 
+	// Installed before the semaphore, not after it: breakerAllow above may have
+	// already handed this caller the half-open probe permit, and a caller that
+	// gives up while queueing for a slot must return it. Leaving it held pins
+	// the breaker half-open with probing set, which refuses every later request
+	// to the host for the rest of the crawl.
+	admitted := false
+	held := false
+	defer func() {
+		if admitted {
+			return
+		}
+		if held {
+			c.releaseSlot(he)
+		}
+		c.abandonProbe(he)
+	}()
+
 	// Per-host in-flight semaphore.
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-he.inflightCh:
+		held = true
 	}
-
-	admitted := false
-	defer func() {
-		if !admitted {
-			c.releaseSlot(he)
-			// The breaker may have handed this caller the half-open probe
-			// permit. Giving up without making a request must return it.
-			c.abandonProbe(he)
-		}
-	}()
 
 	for {
 		// Per-host cooldown (Retry-After).
@@ -430,6 +459,16 @@ func (c *Coordinator) TryReservePage(host string) bool {
 	return true
 }
 
+// ReleasePage returns a reservation taken by TryReservePage. Callers that
+// reserved a page but never produced a document must call it, otherwise a URL
+// that was deferred or interrupted permanently spends a unit of the page budget
+// without anything to show for it.
+func (c *Coordinator) ReleasePage(host string) {
+	he := c.getHostEntry(host)
+	he.pages.Add(-1)
+	c.globalPages.Add(-1)
+}
+
 // AddBytes records n bytes fetched for the given host.
 func (c *Coordinator) AddBytes(host string, n int64) {
 	c.globalBytes.Add(n)
@@ -441,10 +480,8 @@ func (c *Coordinator) Exhausted() bool {
 	if c.cfg.Limits.MaxPages > 0 && c.globalPages.Load() >= int64(c.cfg.Limits.MaxPages) {
 		return true
 	}
-	if c.cfg.Limits.MaxDuration > 0 {
-		if time.Since(c.startTime) >= time.Duration(c.cfg.Limits.MaxDuration)*time.Second {
-			return true
-		}
+	if deadline, ok := c.Deadline(); ok && !time.Now().Before(deadline) {
+		return true
 	}
 	return false
 }
