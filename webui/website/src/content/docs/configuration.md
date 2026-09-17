@@ -1211,6 +1211,19 @@ crawler:
     socket: 'ws://127.0.0.1:9222/session'
 ```
 
+The `bidi` backend subscribes to `network.responseCompleted` for the tab it
+navigates, so pages served with a `4xx` or `5xx` status are reported as fetch
+failures instead of being indexed as error pages. Redirects are followed and
+judged by the status of the final response. Statuses of subresources such as
+images or favicons are ignored. When the browser does not report the
+subscription, the status stays unknown and the page is indexed as before.
+
+Firefox only allows a single WebDriver session per browser instance. If another
+client (an IDE integration, a test runner, Selenium, …) already holds the
+session, Hister cannot create one and every command fails with
+`invalid session id`. Start a dedicated browser instance with its own profile
+and port for crawling.
+
 ### Crawler Cookies
 
 Each entry in `cookies` is an object with the following keys:

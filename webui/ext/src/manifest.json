@@ -51,7 +51,7 @@
       "extension_ids": []
     }
   ],
-  "permissions": ["tabs", "storage", "cookies"],
+  "permissions": ["tabs", "storage", "cookies", "webRequest"],
   "host_permissions": ["*://*/*"],
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAzYzQnIbG0kNUBUIrsGGF3x8G8Rz6iy9X5pcxeru+uaxCejx9vm8Sy9frzH8qhs/WWTaqnlyFbvkrL0NxPFfYw7hulP5ew9WNzqk4DJ/rEZHAF9eNhvtMJbIdLRwg6yZiIGmZ+kaCEPKQu+IyHuBMFZNt+n5I/uMEMO9gI5OmK/Z17bQAGVdqlVubqPLTYz4mmtjHhNUK5JGChIHUP238a1X+M87K6QwJNX9lbyXTBCojrYwcgRBWB02IBoevqHoA+wKOCgL6ExGhdkj9N0ons/cUqLvJCop/H3iIl39KCbfKiI5Fc+neOXpa6bzZlfX7EC6kt4J/i/FLncLQUcQbywIDAQAB"
 }

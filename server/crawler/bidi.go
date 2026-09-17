@@ -32,6 +32,11 @@ type bidiFetcher struct {
 	// Set after session.new succeeds; used to send session.end on close.
 	ownsSession bool
 
+	// HTTP status of the navigation request of every browsing context that is
+	// currently being fetched, populated from network.responseCompleted events.
+	navMu     sync.Mutex
+	navStatus map[string]bidiNavStatus
+
 	// Closed when the reader goroutine exits.
 	done chan struct{}
 }
@@ -39,6 +44,13 @@ type bidiFetcher struct {
 type bidiResult struct {
 	data json.RawMessage
 	err  error
+}
+
+// bidiNavStatus is the response status of the last navigation request seen in a
+// browsing context. A zero navigation means no response has been observed yet.
+type bidiNavStatus struct {
+	navigation string
+	status     int
 }
 
 // newBidiFetcher creates a bidiFetcher that connects to the browser's
@@ -105,6 +117,7 @@ func newBidiFetcher(cfg *config.CrawlerConfig) (*bidiFetcher, error) {
 		conn:         conn,
 		timeout:      timeout,
 		captureDelay: captureDelay,
+		navStatus:    make(map[string]bidiNavStatus),
 		done:         make(chan struct{}),
 	}
 
@@ -252,9 +265,9 @@ func (f *bidiFetcher) readLoop() {
 			continue
 		}
 
-		// Events (no ID) are logged and discarded.
 		if envelope.ID == nil {
 			log.Trace().Str("type", envelope.Type).Str("method", envelope.Method).Msg("bidi: received event")
+			f.handleEvent(envelope.Method, data)
 			continue
 		}
 
@@ -271,6 +284,93 @@ func (f *bidiFetcher) readLoop() {
 			ch <- bidiResult{data: envelope.Result}
 		}
 	}
+}
+
+// handleEvent records the response status of main frame navigations.
+//
+// Only network.responseCompleted events that belong to a navigation request of
+// a browsing context we are currently fetching are kept. Subresource requests
+// carry a null navigation and are ignored. Redirects keep the navigation id of
+// the navigation that started them, so the last recorded status of a navigation
+// is the status of the response that actually got rendered.
+func (f *bidiFetcher) handleEvent(method string, data []byte) {
+	if method != "network.responseCompleted" {
+		return
+	}
+	var ev struct {
+		Params struct {
+			Context    string  `json:"context"`
+			Navigation *string `json:"navigation"`
+			Response   struct {
+				Status int `json:"status"`
+			} `json:"response"`
+		} `json:"params"`
+	}
+	if err := json.Unmarshal(data, &ev); err != nil {
+		log.Debug().Err(err).Msg("bidi: failed to parse network.responseCompleted event")
+		return
+	}
+	p := ev.Params
+	if p.Context == "" || p.Navigation == nil || *p.Navigation == "" {
+		return
+	}
+
+	f.navMu.Lock()
+	defer f.navMu.Unlock()
+	if _, tracked := f.navStatus[p.Context]; !tracked {
+		return
+	}
+	f.navStatus[p.Context] = bidiNavStatus{navigation: *p.Navigation, status: p.Response.Status}
+}
+
+// trackContext starts recording navigation response statuses for contextID.
+func (f *bidiFetcher) trackContext(contextID string) {
+	f.navMu.Lock()
+	defer f.navMu.Unlock()
+	f.navStatus[contextID] = bidiNavStatus{}
+}
+
+func (f *bidiFetcher) untrackContext(contextID string) {
+	f.navMu.Lock()
+	defer f.navMu.Unlock()
+	delete(f.navStatus, contextID)
+}
+
+// navigationStatus returns the HTTP status of navigationID in contextID, or 0
+// when it is unknown. navigationID may be empty, in which case any status
+// recorded for the context is returned.
+func (f *bidiFetcher) navigationStatus(contextID, navigationID string) int {
+	f.navMu.Lock()
+	defer f.navMu.Unlock()
+	s, ok := f.navStatus[contextID]
+	if !ok || s.navigation == "" {
+		return 0
+	}
+	if navigationID != "" && s.navigation != navigationID {
+		return 0
+	}
+	return s.status
+}
+
+// subscribeResponses enables network.responseCompleted events for a single
+// browsing context and returns the subscription id. The id is empty when the
+// browser does not report one; such subscriptions cannot be removed
+// individually, but they die with the browsing context and the session.
+func (f *bidiFetcher) subscribeResponses(ctx context.Context, contextID string) (string, error) {
+	data, err := f.call(ctx, "session.subscribe", map[string]any{
+		"events":   []string{"network.responseCompleted"},
+		"contexts": []string{contextID},
+	})
+	if err != nil {
+		return "", err
+	}
+	var res struct {
+		Subscription string `json:"subscription"`
+	}
+	if err := json.Unmarshal(data, &res); err != nil {
+		return "", nil
+	}
+	return res.Subscription, nil
 }
 
 func (f *bidiFetcher) fetchPage(ctx context.Context, rawURL string) (string, string, []string, error) {
@@ -301,6 +401,26 @@ func (f *bidiFetcher) fetchPage(ctx context.Context, rawURL string) (string, str
 		}
 	}()
 
+	// Watch the navigation response status so error pages are not indexed.
+	// PerformanceNavigationTiming.responseStatus is not available in every
+	// browser, so the status has to come from the protocol.
+	f.trackContext(contextID)
+	defer f.untrackContext(contextID)
+
+	subscriptionID, err := f.subscribeResponses(timeoutCtx, contextID)
+	if err != nil {
+		log.Warn().Err(err).Str("context", contextID).
+			Msg("bidi: cannot subscribe to network events, HTTP status detection is disabled")
+	} else if subscriptionID != "" {
+		defer func() {
+			if _, err := f.call(context.Background(), "session.unsubscribe", map[string]any{
+				"subscriptions": []string{subscriptionID},
+			}); err != nil {
+				log.Debug().Err(err).Msg("bidi: failed to unsubscribe from network events")
+			}
+		}()
+	}
+
 	// Navigate to the URL and wait for it to finish loading.
 	log.Debug().Str("url", rawURL).Str("context", contextID).Msg("bidi: navigating")
 
@@ -314,7 +434,8 @@ func (f *bidiFetcher) fetchPage(ctx context.Context, rawURL string) (string, str
 	}
 
 	var nav struct {
-		URL string `json:"url"`
+		URL        string `json:"url"`
+		Navigation string `json:"navigation"`
 	}
 	if err := json.Unmarshal(navData, &nav); err != nil {
 		log.Debug().Err(err).Msg("bidi: failed to parse navigation result")
@@ -322,6 +443,14 @@ func (f *bidiFetcher) fetchPage(ctx context.Context, rawURL string) (string, str
 	finalURL := nav.URL
 	if finalURL == "" {
 		finalURL = rawURL
+	}
+
+	// Redirects are followed by the browser and reported under the same
+	// navigation, so this is the status of the response that was rendered.
+	// A zero status means no response was observed, e.g. for a page restored
+	// from the cache or a non-HTTP URL; such pages are still indexed.
+	if status := f.navigationStatus(contextID, nav.Navigation); status >= 400 {
+		return "", "", nil, fmt.Errorf("bidi: unexpected status %d for %s", status, rawURL)
 	}
 
 	// Optional extra wait for slow-loading pages (JS rendering, etc.).

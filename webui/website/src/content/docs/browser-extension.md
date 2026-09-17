@@ -102,6 +102,12 @@ The extension automatically captures page content every time you visit a URL. It
 
 After a page is successfully indexed, the extension continues monitoring it in the background and re-submits if the content changes (for example on single-page applications). The re-check interval starts at 10 seconds and doubles each time the page content is unchanged, reducing resource usage over time.
 
+Pages served with an unsuccessful HTTP status (`4xx` or `5xx`) are not indexed
+automatically, so error pages such as "404 Not Found" stay out of the index. The
+extension reads the status of every main frame response with the `webRequest`
+API, which works in both Chromium based browsers and Firefox. Manual reindex
+overrides this check.
+
 Automatic indexing can be paused at any time using the toggle in the popup.
 
 ### Manual Reindex
