@@ -1,0 +1,183 @@
+# Auto-format on PR comment.
+#
+# Triggered when an authorized user posts a comment that STARTS with
+# `@github-actions format` on a PR. Runs prettier + golangci-lint --fix,
+# commits, and pushes to the PR branch.
+#
+
+name: Format on demand
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: format-on-demand-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  format:
+    if: >
+      github.event.issue.pull_request &&
+      startsWith(github.event.comment.body, '@github-actions format') &&
+      (github.event.comment.user.login == github.repository_owner ||
+       github.event.comment.user.login == github.event.issue.user.login)
+    runs-on: ubuntu-latest
+    steps:
+      - name: React 👀 to trigger comment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api -X POST \
+            "repos/${{ github.repository }}/issues/comments/${{ github.event.comment.id }}/reactions" \
+            -f content=eyes >/dev/null
+
+      - name: Generate app token
+        id: app-token
+        if: vars.FORMAT_BOT_APP_ID != ''
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.FORMAT_BOT_APP_ID }}
+          private-key: ${{ secrets.FORMAT_BOT_APP_PRIVATE_KEY }}
+
+      - name: Fetch PR metadata
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api "repos/${{ github.repository }}/pulls/${{ github.event.issue.number }}" > pr.json
+          {
+            echo "head_ref=$(jq -r .head.ref pr.json)"
+            echo "head_repo=$(jq -r .head.repo.full_name pr.json)"
+            echo "head_sha=$(jq -r .head.sha pr.json)"
+            echo "base_repo=$(jq -r .base.repo.full_name pr.json)"
+            echo "maintainer_can_modify=$(jq -r .maintainer_can_modify pr.json)"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Pick token
+        id: token
+        env:
+          APP_TOKEN: ${{ steps.app-token.outputs.token }}
+          FALLBACK: ${{ secrets.GITHUB_TOKEN }}
+          IS_FORK: ${{ steps.pr.outputs.head_repo != steps.pr.outputs.base_repo }}
+        run: |
+          if [ "$IS_FORK" = "true" ] || [ -z "$APP_TOKEN" ]; then
+            echo "value=$FALLBACK" >> "$GITHUB_OUTPUT"
+          else
+            echo "::add-mask::$APP_TOKEN"
+            echo "value=$APP_TOKEN" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Bail if fork without "Allow edits from maintainers"
+        if: >
+          steps.pr.outputs.head_repo != steps.pr.outputs.base_repo &&
+          steps.pr.outputs.maintainer_can_modify != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api -X POST \
+            "repos/${{ github.repository }}/issues/${{ github.event.issue.number }}/comments" \
+            -f body="Can't push to your fork — please enable **Allow edits from maintainers** on this PR and re-comment \`@github-actions format\`."
+          gh api -X POST \
+            "repos/${{ github.repository }}/issues/comments/${{ github.event.comment.id }}/reactions" \
+            -f content=confused >/dev/null
+          exit 1
+
+      - name: Checkout PR head
+        uses: actions/checkout@v6.0.2
+        with:
+          repository: ${{ steps.pr.outputs.head_repo }}
+          ref: ${{ steps.pr.outputs.head_ref }}
+          token: ${{ steps.token.outputs.value }}
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@v6.3.0
+        with:
+          node-version: latest
+
+      - name: Set up Go
+        uses: actions/setup-go@v6.3.0
+        with:
+          go-version: 'stable'
+
+      - name: Install npm deps
+        run: npm ci
+
+      - name: Build SPA (needed for golangci-lint embeds)
+        run: sh webui/build.sh
+
+      - name: Run prettier
+        run: npm run format
+
+      - name: Run golangci-lint --fix
+        uses: golangci/golangci-lint-action@v9.2.0
+        with:
+          args: --fix
+
+      - name: Commit & push
+        id: commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git commit -m "style: auto-format via @github-actions format"
+          git push origin HEAD:"${{ steps.pr.outputs.head_ref }}"
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Hide stale format-prompt comments (always)
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          MARKER='<!-- hister-format-prompt -->'
+          gh api \
+            "repos/${{ github.repository }}/issues/${{ github.event.issue.number }}/comments" \
+            --paginate \
+            --jq ".[] | select(.body | startswith(\"$MARKER\")) | .node_id" \
+          | while read -r NODE; do
+              [ -z "$NODE" ] && continue
+              gh api graphql -f query='
+                mutation($id:ID!){
+                  minimizeComment(input:{subjectId:$id, classifier:RESOLVED}){
+                    minimizedComment { isMinimized }
+                  }
+                }' -f id="$NODE" >/dev/null || true
+            done
+
+      - name: Hide trigger comment (only on success)
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE: ${{ github.event.comment.node_id }}
+        run: |
+          gh api graphql -f query='
+            mutation($id:ID!){
+              minimizeComment(input:{subjectId:$id, classifier:RESOLVED}){
+                minimizedComment { isMinimized }
+              }
+            }' -f id="$NODE" >/dev/null || true
+
+      - name: React result on trigger comment
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${{ steps.commit.outputs.changed }}" = "true" ]; then
+            content=rocket
+          elif [ "${{ steps.commit.outputs.changed }}" = "false" ]; then
+            content="+1"
+          else
+            content=confused
+          fi
+          gh api -X POST \
+            "repos/${{ github.repository }}/issues/comments/${{ github.event.comment.id }}/reactions" \
+            -f content="$content" >/dev/null
