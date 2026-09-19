@@ -281,6 +281,28 @@ func withTokenAuth(handler endpointHandler) endpointHandler {
 }
 
 func populateUserContext(c *webContext) {
+	if c.Config.Server.ProxyAuthHeader != "" {
+		username := strings.TrimSpace(c.Request.Header.Get(c.Config.Server.ProxyAuthHeader))
+		if username == "" {
+			return
+		}
+		u, err := model.GetUser(username)
+		if err != nil {
+			u, err = model.CreateUser(username, "", false)
+			if err != nil {
+				return
+			}
+		}
+		c.UserID = u.ID
+		c.Username = u.Username
+		c.IsAdmin = u.IsAdmin
+		c.Authenticated = true
+		if rules, err := u.ParseRules(); err == nil {
+			c.userRules = rules
+		}
+		return
+	}
+
 	session, err := sessionStore.Get(c.Request, storeName)
 	if err != nil {
 		return
