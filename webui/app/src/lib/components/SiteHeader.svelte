@@ -38,6 +38,18 @@
       color: 'var(--hister-amber)',
       external: true,
     },
+    {
+      label: 'Firefox extension',
+      href: 'https://addons.mozilla.org/en-US/firefox/addon/hister/',
+      color: 'var(--hister-rose)',
+      external: true,
+    },
+    {
+      label: 'Chrome extension',
+      href: 'https://chromewebstore.google.com/detail/hister/cciilamhchpmbdnniabclekddabkifhb',
+      color: 'var(--hister-lime)',
+      external: true,
+    },
   ];
 
   const menuItem =
