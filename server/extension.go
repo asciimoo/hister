@@ -11,17 +11,19 @@ const chromeExtensionOrigin = "chrome-extension://cciilamhchpmbdnniabclekddabkif
 // port are allowed to call without a web-session CSRF token. Keep this in
 // lockstep with the endpoints the extension actually uses.
 var browserExtensionAPIPaths = map[string]struct{}{
-	"/add":          {},
-	"/api/add":      {},
-	"/api/add_pdf":  {},
-	"/api/config":   {},
-	"/api/rules":    {},
-	"/api/delete":   {},
-	"/api/label":    {},
-	"/api/versions": {},
-	"/api/history":  {},
-	"/api/profile":  {},
-	"/api/document": {},
+	"/add":            {},
+	"/api/add":        {},
+	"/api/crawl":      {},
+	"/api/crawl/stop": {},
+	"/api/add_pdf":    {},
+	"/api/config":     {},
+	"/api/rules":      {},
+	"/api/delete":     {},
+	"/api/label":      {},
+	"/api/versions":   {},
+	"/api/history":    {},
+	"/api/profile":    {},
+	"/api/document":   {},
 }
 
 func trustedBrowserExtensionOrigin(origin string) bool {

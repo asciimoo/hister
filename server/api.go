@@ -81,6 +81,23 @@ func documentMetadataSchema() *JSONSchemaField {
 func init() {
 	Endpoints = []*Endpoint{
 		{
+			Name: "Site crawl status", Path: "/api/crawl", Method: GET, Handler: serveSiteCrawl,
+			Description: "Return the most recent site crawl if it belongs to the current user, otherwise null. Crawls are kept in memory until replaced or the server restarts.",
+		},
+		{
+			Name: "Start site crawl", Path: "/api/crawl", Method: POST, CSRFRequired: true, Handler: startSiteCrawl,
+			Description: "Crawl public HTML links from a site home page on the same hostname. One crawl per server, robots.txt and skip rules respected, one-second delay, 30-minute limit. Existing documents are not replaced.",
+			JSONSchema: []*JSONSchemaField{
+				{Name: "url", Type: "string", Required: true, Description: "HTTP(S) site URL on a standard port"},
+				{Name: "max_pages", Type: "integer", Description: "Page visit limit, 1–1000 (default 100)"},
+			},
+		},
+		{
+			Name: "Stop site crawl", Path: "/api/crawl/stop", Method: POST, CSRFRequired: true, Handler: stopSiteCrawl,
+			Description: "Cancel the current user's site crawl. Already indexed pages remain searchable.",
+			Args:        []*EndpointArg{{Name: "id", Type: "string", Required: true, Description: "Crawl ID returned by the status endpoint"}},
+		},
+		{
 			Name:        "Metrics",
 			Path:        "/metrics",
 			Method:      GET,

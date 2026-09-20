@@ -59,13 +59,15 @@ var ws = websocket.Upgrader{
 	},
 }
 
-func registerEndpoints(cfg *config.Config, idx *indexer.Indexer) http.Handler {
+func registerEndpoints(cfg *config.Config, idx *indexer.Indexer) *crawlHandler {
+	crawls := &siteCrawls{}
 	mux := http.NewServeMux()
 	tokenAuth := cfg.App.AccessToken != ""
 	userHandling := cfg.App.UserHandling
 
 	for _, e := range Endpoints {
-		h := e.Handler
+		handler := e.Handler
+		h := endpointHandler(func(c *webContext) { c.crawls = crawls; handler(c) })
 		if e.CSRFRequired {
 			h = withCSRF(h)
 		}
@@ -98,7 +100,7 @@ func registerEndpoints(cfg *config.Config, idx *indexer.Indexer) http.Handler {
 	serverMux := http.NewServeMux()
 	serverMux.HandleFunc(healthCheckPath, serveHealth)
 	serverMux.Handle("/", appHandler)
-	return serverMux
+	return &crawlHandler{Handler: serverMux, crawls: crawls}
 }
 
 func serveHealth(w http.ResponseWriter, r *http.Request) {
