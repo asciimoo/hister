@@ -437,11 +437,10 @@
         >
           Index this page now
         </Button>
+        {#key url}
+          <SiteCrawl serverURL={url} {tabURL} {customHeaders} />
+        {/key}
       </div>
-
-      {#key url}
-        <SiteCrawl serverURL={url} {tabURL} {customHeaders} />
-      {/key}
 
       <!-- Label section -->
       <div class="border-brutal-border border-b-[3px] px-5 py-4">
