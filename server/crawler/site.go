@@ -73,10 +73,26 @@ func NewSite(rawURL string, maxPages int, skip SkipURLChecker) (Crawler, *Valida
 	if err != nil {
 		return nil, nil, err
 	}
-	return &baseCrawler{
-		fetcher: &httpFetcher{client: &pageClient, userAgent: cfg.UserAgent}, cfg: cfg,
-		robots: robots, skipURLChecker: skip, maxQueue: 10000,
+	return &siteCrawler{
+		baseCrawler: &baseCrawler{
+			fetcher: &httpFetcher{client: &pageClient, userAgent: cfg.UserAgent}, cfg: cfg,
+			robots: robots, skipURLChecker: skip, maxQueue: 10000,
+		},
+		client: &pageClient,
 	}, v, nil
+}
+
+// Keep error reporting and connection cleanup specific to server-started crawls.
+type siteCrawler struct {
+	*baseCrawler
+	client *http.Client
+}
+
+func (c *siteCrawler) Err() error { return c.err }
+
+func (c *siteCrawler) Close() error {
+	c.client.CloseIdleConnections()
+	return c.baseCrawler.Close()
 }
 
 func checkSiteURL(u *url.URL, host string) error {

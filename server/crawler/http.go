@@ -114,7 +114,4 @@ func (f *httpFetcher) fetchPage(ctx context.Context, rawURL string) (string, str
 	return finalURL, htmlContent, extractLinks(htmlContent), nil
 }
 
-func (f *httpFetcher) close() error {
-	f.client.CloseIdleConnections()
-	return nil
-}
+func (f *httpFetcher) close() error { return nil }

@@ -8,6 +8,8 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+
+	"github.com/asciimoo/hister/config"
 )
 
 type siteRoundTripFunc func(*http.Request) (*http.Response, error)
@@ -51,7 +53,7 @@ func TestSiteCrawlTraversal(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = cr.Close() }()
-	base := cr.(*baseCrawler)
+	base := cr.(*siteCrawler).baseCrawler
 	base.cfg.Delay = 0
 	visited := map[string]int{}
 	base.fetcher.(*httpFetcher).client.Transport.(*siteTransport).transport = siteRoundTripFunc(func(req *http.Request) (*http.Response, error) {
@@ -121,7 +123,7 @@ func TestSiteRedirectRespectsRules(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer func() { _ = cr.Close() }()
-			base := cr.(*baseCrawler)
+			base := cr.(*siteCrawler).baseCrawler
 			base.cfg.Delay = 0
 			base.fetcher.(*httpFetcher).client.Transport.(*siteTransport).transport = siteRoundTripFunc(func(req *http.Request) (*http.Response, error) {
 				if req.URL.Path == target {
@@ -141,8 +143,73 @@ func TestSiteRedirectRespectsRules(t *testing.T) {
 			for range docs {
 				t.Error("indexed excluded redirect")
 			}
-			if base.Err() == nil {
+			if cr.(ErrorReporter).Err() == nil {
 				t.Fatal("missing redirect failure")
+			}
+		})
+	}
+}
+
+type siteCloseTrackingTransport struct {
+	siteRoundTripFunc
+	closes int
+}
+
+func (t *siteCloseTrackingTransport) CloseIdleConnections() { t.closes++ }
+
+func TestSiteLifecycleDoesNotChangeRegularCrawlers(t *testing.T) {
+	for _, site := range []bool{false, true} {
+		t.Run(map[bool]string{false: "regular", true: "site"}[site], func(t *testing.T) {
+			var cr Crawler
+			var v *Validator
+			var err error
+			var base *baseCrawler
+			if site {
+				cr, v, err = NewSite("https://example.com/", 1, nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				base = cr.(*siteCrawler).baseCrawler
+				base.cfg.Delay = 0
+				base.robots = nil
+			} else {
+				cr, err = New(&config.CrawlerConfig{}, nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				base = cr.(*baseCrawler)
+				v, err = NewValidator(&ValidatorRules{MaxLinks: 1})
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			transport := &siteCloseTrackingTransport{siteRoundTripFunc: func(req *http.Request) (*http.Response, error) {
+				return &http.Response{StatusCode: http.StatusNotFound, Header: http.Header{}, Body: io.NopCloser(strings.NewReader("")), Request: req}, nil
+			}}
+			base.fetcher.(*httpFetcher).client.Transport = transport
+			docs, err := cr.Crawl(context.Background(), "https://example.com/", v)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for range docs {
+				t.Error("unexpected document for failed fetch")
+			}
+			reporter, reportsErrors := cr.(ErrorReporter)
+			if reportsErrors != site {
+				t.Fatalf("ErrorReporter exposed = %v, want %v", reportsErrors, site)
+			}
+			if reportsErrors && reporter.Err() == nil {
+				t.Error("missing site fetch error")
+			}
+			if err := cr.Close(); err != nil {
+				t.Fatal(err)
+			}
+			wantCloses := 0
+			if site {
+				wantCloses = 1
+			}
+			if transport.closes != wantCloses {
+				t.Errorf("idle connection cleanup calls = %d, want %d", transport.closes, wantCloses)
 			}
 		})
 	}

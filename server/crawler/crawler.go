@@ -145,9 +145,6 @@ func (c *baseCrawler) Crawl(ctx context.Context, startURL string, v *Validator) 
 	return ch, nil
 }
 
-// Err reports the first fetch failure or queue limit after crawling finishes.
-func (c *baseCrawler) Err() error { return c.err }
-
 // Close releases resources held by the underlying backend.
 func (c *baseCrawler) Close() error {
 	return c.fetcher.close()
