@@ -44,6 +44,11 @@
         panelVersionId = id;
         replacePreviewHistory(docUrl, docTitle, id, documentId);
       }}
+      onnavigate={(u, title, selectedDocumentId) => {
+        docUrl = u;
+        docTitle = title;
+        documentId = selectedDocumentId;
+      }}
       onclose={() => {
         try {
           const ref = document.referrer;
