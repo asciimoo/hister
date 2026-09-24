@@ -179,6 +179,27 @@
     withSkipUrl(skipUrl, () => pushPreviewHistory(url, title, null, documentId));
   }
 
+  // The preview panel followed a link to another archived page: highlight it in the list when
+  // it is one of the loaded entries, and keep the panel state (and the URL) pointing at it.
+  function handlePanelNavigate(url: string, title: string) {
+    const idx = items.findIndex((i) => i.url === url);
+    const item = items[idx];
+    panelViewingVersion = null;
+    panelDocumentId = item ? historyDocumentId(item) : '';
+    panelHintTitle = item ? item.title || item.url : title;
+    panelUrl = url;
+    if (item) {
+      highlightIdx = idx;
+      const el = document.querySelectorAll('[data-result]')[idx];
+      if (el) scrollTo(el);
+    }
+    if (previewFullscreen) {
+      withSkipUrl(skipUrl, () =>
+        replacePreviewHistory(panelUrl, panelHintTitle, null, panelDocumentId),
+      );
+    }
+  }
+
   function enterFullscreen() {
     previewFullscreen = true;
     withSkipUrl(skipUrl, () =>
@@ -1106,6 +1127,7 @@
                 replacePreviewHistory(panelUrl, panelHintTitle, id, panelDocumentId),
               );
             }}
+            onnavigate={handlePanelNavigate}
           />
         {:else if panelOpen && isDesktop}
           <!-- Drag handle to resize the split-screen panel -->
@@ -1134,6 +1156,7 @@
               onviewingversionchange={(id) => {
                 panelViewingVersion = id;
               }}
+              onnavigate={handlePanelNavigate}
             />
           </div>
         {/if}
