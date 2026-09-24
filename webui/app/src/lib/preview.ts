@@ -17,29 +17,61 @@ export function buildPreviewUrl(
   return `${base}/preview?id=${encodeURIComponent(id)}${title ? '&title=' + encodeURIComponent(title) : ''}${versionParam}${documentParam}`;
 }
 
+/** Position of a history entry inside a preview panel navigation flow (see PreviewPanel). */
+export interface PanelNavTag {
+  flow: string;
+  index: number;
+}
+
+/** Returns the panel navigation tag of the current browser history entry, if any. */
+export function currentPanelNavTag(): PanelNavTag | null {
+  return (history.state as { panelNav?: PanelNavTag } | null)?.panelNav ?? null;
+}
+
 /** Pushes a preview entry onto the browser history stack. */
 export function pushPreviewHistory(
   id: string,
   title: string,
   versionId?: number | null,
   documentId?: string,
+  panelNav?: PanelNavTag,
 ) {
   history.pushState(
-    { type: 'preview', id, title, versionId: versionId ?? null, documentId: documentId ?? '' },
+    {
+      type: 'preview',
+      id,
+      title,
+      versionId: versionId ?? null,
+      documentId: documentId ?? '',
+      panelNav,
+    },
     '',
     buildPreviewUrl(id, title, versionId, documentId),
   );
 }
 
-/** Replaces the current browser history entry with a preview entry. */
+/**
+ * Replaces the current browser history entry with a preview entry.
+ * Without an explicit `panelNav`, the entry keeps its panel navigation tag as long as it still
+ * shows the same document (e.g. when only the viewed version changes).
+ */
 export function replacePreviewHistory(
   id: string,
   title: string,
   versionId?: number | null,
   documentId?: string,
+  panelNav?: PanelNavTag,
 ) {
+  const previous = history.state as { id?: string; panelNav?: PanelNavTag } | null;
   history.replaceState(
-    { type: 'preview', id, title, versionId: versionId ?? null, documentId: documentId ?? '' },
+    {
+      type: 'preview',
+      id,
+      title,
+      versionId: versionId ?? null,
+      documentId: documentId ?? '',
+      panelNav: panelNav ?? (previous?.id === id ? previous.panelNav : undefined),
+    },
     '',
     buildPreviewUrl(id, title, versionId, documentId),
   );
