@@ -41,6 +41,7 @@
     connected?: boolean;
     initialViewingVersionId?: number | null;
     onviewingversionchange?: (id: number | null) => void;
+    onnavigate?: (url: string, title: string) => void;
   }
 
   let {
@@ -53,7 +54,13 @@
     connected = false,
     initialViewingVersionId = null,
     onviewingversionchange,
+    onnavigate,
   }: Props = $props();
+
+  // the document currently displayed
+  let activeUrl = $state('');
+  let activeDocumentId = $state('');
+  let activeHintTitle = $state('');
 
   let title = $state('');
   let content = $state('');
@@ -146,6 +153,12 @@
   // Plain variable (not $state) so it persists across effect runs without triggering reactivity.
   let _mountedWithDocument = '';
 
+  function resetExtractors() {
+    extractorName = '';
+    availableExtractors = [];
+    extractorsLoaded = false;
+  }
+
   function documentRequestUrl(
     path: string,
     u: string,
@@ -165,11 +178,22 @@
     const selectedDocumentId = documentId;
     const hint = hintTitle;
     if (u) {
+      // The parent echoing back a document this panel navigated to by itself: it is already
+      // shown, so only adopt the (possibly more precise) identity without reloading it.
+      const alreadyShown = untrack(
+        () => u === activeUrl && (!activeDocumentId || selectedDocumentId === activeDocumentId),
+      );
+      if (alreadyShown) {
+        activeDocumentId = selectedDocumentId;
+        activeHintTitle = hint;
+        return;
+      }
       const isFirstLoad = _mountedWithDocument === '';
       _mountedWithDocument = selectedDocumentId || u;
-      extractorName = '';
-      availableExtractors = [];
-      extractorsLoaded = false;
+      activeUrl = u;
+      activeDocumentId = selectedDocumentId;
+      activeHintTitle = hint;
+      resetExtractors();
       // untrack so that reading the prop here does not make the effect re-run on prop change.
       const versionId = isFirstLoad ? untrack(() => initialViewingVersionId) : null;
       loadContent(u, hint, '', versionId, selectedDocumentId);
@@ -179,9 +203,9 @@
   // Reload when the user picks a different extractor.
   $effect(() => {
     const name = extractorName;
-    const selectedDocumentId = documentId;
-    if (url && name) {
-      loadContent(url, hintTitle, name, null, selectedDocumentId);
+    const selectedDocumentId = activeDocumentId;
+    if (activeUrl && name) {
+      loadContent(activeUrl, activeHintTitle, name, null, selectedDocumentId);
     }
   });
 
@@ -190,7 +214,7 @@
     hint: string,
     extractor: string = '',
     versionId: number | null = null,
-    selectedDocumentId: string = documentId,
+    selectedDocumentId: string = activeDocumentId,
   ) {
     loading = true;
     content = '';
@@ -248,7 +272,7 @@
     if (extractorsLoaded || extractorsLoading) return;
     extractorsLoading = true;
     try {
-      const resp = await apiFetch(documentRequestUrl('/extractors', u, documentId));
+      const resp = await apiFetch(documentRequestUrl('/extractors', u, activeDocumentId));
       if (resp.ok) {
         const data: { name: string; description: string }[] = await resp.json();
         availableExtractors = data ?? [];
@@ -261,6 +285,73 @@
     }
   }
 
+  // Shows another document in this panel, as if it had been focused from the results list.
+  function openDocument(u: string, hint: string, selectedDocumentId: string = '') {
+    activeUrl = u;
+    activeDocumentId = selectedDocumentId;
+    activeHintTitle = hint;
+    resetExtractors();
+    loadContent(u, hint, '', null, selectedDocumentId);
+    onnavigate?.(u, hint);
+  }
+
+  async function isArchived(u: string): Promise<boolean> {
+    try {
+      // HEAD skips the document body server side: we only care about the status.
+      const resp = await apiFetch(documentRequestUrl('/document', u, ''), {
+        method: 'HEAD',
+        redirectOnForbidden: false,
+      });
+      return resp.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  function resolveContentHref(anchor: HTMLAnchorElement): URL | null {
+    const href = anchor.getAttribute('href') ?? '';
+    if (!href || href.startsWith('#')) return null;
+    try {
+      // Relative links belong to the archived page, not to the app serving the panel.
+      return new URL(href, /^https?:\/\//i.test(activeUrl) ? activeUrl : anchor.href);
+    } catch {
+      return null;
+    }
+  }
+
+  function followLink(anchor: HTMLAnchorElement, u: string) {
+    if (anchor.target && anchor.target !== '_self') {
+      window.open(u, anchor.target, 'noopener,noreferrer');
+    } else {
+      window.location.href = u;
+    }
+  }
+
+  // Links inside extracted content point at the live web. When the target is archived too we
+  // stay in the panel and show the stored copy; otherwise the click behaves like a plain anchor.
+  async function handleContentClick(event: MouseEvent) {
+    if (event.defaultprevented || event.button !== 0) return;
+    if (event.metakey || event.ctrlkey || event.shiftkey || event.altkey) return;
+    const anchor = (event.target as Element | null)?.closest('a');
+    if (!anchor) return;
+    const resolved = resolveContentHref(anchor);
+    // In-page anchors and non-web schemes (mailto:, …) keep their native behavior.
+    if (!resolved || (resolved.protocol !== 'http:' && resolved.protocol !== 'https:')) return;
+    // The lookup is asynchronous, so the navigation has to be cancelled up front and
+    // replayed below when the target turns out not to be archived.
+    event.preventDefault();
+    resolved.hash = '';
+
+    const target = resolved.href;
+    const hint = anchor.textContent?.trim() || '';
+
+    if (await isArchived(target)) {
+      openDocument(target, hint);
+    } else {
+      followLink(anchor, target);
+    }
+  }
+
   async function toggleVersions(u: string) {
     if (showVersions) {
       showVersions = false;
@@ -268,7 +359,7 @@
     }
     if (versions.length === 0) {
       try {
-        const resp = await apiFetch(documentRequestUrl('/versions', u, documentId));
+        const resp = await apiFetch(documentRequestUrl('/versions', u, activeDocumentId));
         if (resp.ok) {
           versions = (await resp.json()) ?? [];
         }
@@ -326,7 +417,7 @@
         <div class="float-right mt-1 ml-2 flex items-center gap-1 text-sm leading-normal">
           <DropdownMenu.Root
             onOpenChange={(open) => {
-              if (open) loadExtractors(url);
+              if (open) loadExtractors(activeUrl);
             }}
           >
             <DropdownMenu.Trigger>
@@ -374,7 +465,12 @@
             variant="ghost"
             size="icon-sm"
             class="text-text-brand-muted hover:text-text-brand"
-            href={buildPreviewUrl(url, title || hintTitle, viewingVersion?.id, documentId)}
+            href={buildPreviewUrl(
+              activeUrl,
+              title || activeHintTitle,
+              viewingVersion?.id,
+              activeDocumentId,
+            )}
             target="_blank"
             rel="noopener noreferrer"
             title="Open direct preview"
@@ -418,10 +514,10 @@
           </Button>
         </div>
         <h2 class="font-outfit text-text-brand font-bold">
-          {#if url.startsWith('remote-file://')}
+          {#if activeUrl.startsWith('remote-file://')}
             {title}
           {:else}
-            <a href={url} target="_blank" rel="noopener noreferrer" class="hover:underline"
+            <a href={activeUrl} target="_blank" rel="noopener noreferrer" class="hover:underline"
               >{title}</a
             >
           {/if}
@@ -449,7 +545,7 @@
           {#if versionCount > 0}
             <span class="text-text-brand-muted">·</span>
             <button
-              onclick={() => toggleVersions(url)}
+              onclick={() => toggleVersions(activeUrl)}
               class="font-inter text-hister-teal inline-flex cursor-pointer items-center gap-1 text-xs hover:underline"
             >
               <History class="size-3" />
@@ -534,7 +630,7 @@
         </span>
         <span class="text-text-brand-muted text-xs">·</span>
         <button
-          onclick={() => loadContent(url, hintTitle, extractorName)}
+          onclick={() => loadContent(activeUrl, activeHintTitle, extractorName)}
           class="font-inter text-hister-teal cursor-pointer text-xs hover:underline"
         >
           Show current
@@ -551,7 +647,7 @@
                   {formatTimestamp(versionTimestamp(v.created_at))}
                 </p>
                 <button
-                  onclick={() => loadContent(url, hintTitle, extractorName, v.id)}
+                  onclick={() => loadContent(activeUrl, activeHintTitle, extractorName, v.id)}
                   class="font-inter text-hister-teal shrink-0 cursor-pointer text-xs hover:underline"
                 >
                   show this version
@@ -588,8 +684,10 @@
           {/each}
         </div>
       {:else}
+        <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
         <div
           class="preview-content font-inter text-text-brand-secondary prose dark:prose-invert prose-a:text-hister-teal w-full max-w-[60em] p-4 text-sm"
+          onclick={handleContentClick}
         >
           {#if meta?.videos?.length && showEmbeddedVideos}
             <div class="not-prose mb-6 space-y-4">
