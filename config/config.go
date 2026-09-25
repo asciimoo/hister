@@ -87,6 +87,7 @@ type Server struct {
 	BaseURL          string                 `yaml:"base_url"                 mapstructure:"base_url"`
 	Database         string                 `yaml:"database"                 mapstructure:"database"`
 	MaxBatchBodySize int64                  `yaml:"max_batch_body_size"      mapstructure:"max_batch_body_size"`
+	ProxyAuthHeader  string                 `yaml:"proxy_auth_header"        mapstructure:"proxy_auth_header"`
 	OAuth            map[string]*OAuthEntry `yaml:"oauth"                    mapstructure:"oauth"`
 	OAuthOnly        bool                   `yaml:"oauth_only"               mapstructure:"oauth_only"`
 	Metrics          bool                   `yaml:"metrics"                  mapstructure:"metrics"`
@@ -658,6 +659,10 @@ func (c *Config) validateBasic() error {
 }
 
 func (c *Config) normalize() error {
+	if c.Server.ProxyAuthHeader != "" {
+		c.App.UserHandling = true
+	}
+
 	if dataDir := os.Getenv("HISTER_DATA_DIR"); dataDir != "" {
 		c.App.Directory = dataDir
 	}
