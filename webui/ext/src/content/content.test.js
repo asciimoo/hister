@@ -20,7 +20,13 @@ const bundle = await build({
 });
 const script = bundle.output.find((entry) => entry.type === 'chunk').code;
 
-function browser({ hidden = false, status = 200, contentType = 'text/html', respond = true } = {}) {
+function browser({
+  hidden = false,
+  status = 200,
+  contentType = 'text/html',
+  respond = true,
+  frame = false,
+} = {}) {
   let now = 0;
   let nextTimer = 0;
   let onMessage;
@@ -29,6 +35,7 @@ function browser({ hidden = false, status = 200, contentType = 'text/html', resp
   const messages = [];
   const reads = { text: 0, html: 0 };
   const delays = [];
+  const observers = [];
   const page = {
     url: 'https://example.com/article',
     title: 'Article',
@@ -36,6 +43,7 @@ function browser({ hidden = false, status = 200, contentType = 'text/html', resp
     html: '<head><title>Article</title></head><body>The article text.</body>',
     favicon: '/favicon.ico',
     metadata: [],
+    editor: null,
   };
   const addEventListener = (name, fn) => {
     if (!listeners.has(name)) listeners.set(name, []);
@@ -58,8 +66,11 @@ function browser({ hidden = false, status = 200, contentType = 'text/html', resp
         return page.html;
       },
     },
-    querySelector: (selector) =>
-      selector === 'title' ? { innerText: page.title } : { getAttribute: () => page.favicon },
+    querySelector: (selector) => {
+      if (selector === 'title') return { innerText: page.title };
+      if (selector === '[data-lexical-editor="true"]') return page.editor;
+      return { getAttribute: () => page.favicon };
+    },
     querySelectorAll: () => page.metadata,
   };
   const window = {
@@ -71,6 +82,8 @@ function browser({ hidden = false, status = 200, contentType = 'text/html', resp
     navigation: { addEventListener },
     performance: { getEntries: () => [{ entryType: 'navigation', responseStatus: status }] },
   };
+  window.top = frame ? {} : window;
+  if (frame) page.url = 'https://docs-editor.proton.me/?type=doc&mode=edit';
   const runtime = {
     id: 'extension',
     onMessage: { addListener: (fn) => (onMessage = fn) },
@@ -86,6 +99,13 @@ function browser({ hidden = false, status = 200, contentType = 'text/html', resp
     URL,
     Date: { now: () => now },
     console,
+    MutationObserver: class {
+      constructor(fn) {
+        observers.push(fn);
+      }
+      observe() {}
+      disconnect() {}
+    },
     setTimeout: (fn, delay) => {
       assert.ok(Number.isFinite(delay) && delay >= 0 && delay <= 300_000);
       delays.push(delay);
@@ -125,6 +145,12 @@ function browser({ hidden = false, status = 200, contentType = 'text/html', resp
     restore() {
       document.hidden = false;
       emit('pageshow', { persisted: true });
+    },
+    mutate() {
+      observers.forEach((fn) => fn([]));
+    },
+    embed(embeddedContent) {
+      return onMessage({ embeddedContent }, {}, () => {});
     },
     reindex(callback = () => {}) {
       return onMessage({ action: 'reindex' }, {}, callback);
@@ -439,4 +465,47 @@ test('unsupported content is never extracted, and manual indexing can override a
   assert.equal(errorPage.messages.length, 0);
   errorPage.reindex();
   assert.equal(errorPage.messages.length, 1);
+});
+
+test('embedded frame content is merged into the top frame submission', () => {
+  const b = browser();
+  b.advance(0);
+  assert.equal(b.messages.length, 1);
+  b.embed({ html: '<p>Doc body</p>', text: 'Doc body' });
+  b.advance(30_000);
+  assert.equal(b.messages.length, 2);
+  const { pageData } = b.messages[1].request;
+  assert.equal(pageData.text, 'The article text.\n\nDoc body');
+  assert.equal(
+    pageData.html,
+    '<head><title>Article</title></head><body>The article text.<article><p>Doc body</p></article></body>',
+  );
+});
+
+test('embedded content frame relays editor content and never indexes the iframe URL', () => {
+  const b = browser({ frame: true });
+  // The editor mounts after the script starts and is picked up by the observer
+  assert.equal(b.messages.length, 0);
+  b.page.editor = { innerHTML: '<p>Hello</p>', innerText: 'Hello' };
+  b.mutate();
+  b.advance(2_000);
+  assert.deepEqual(
+    b.messages.map((m) => m.request),
+    [{ embeddedContent: { html: '<p>Hello</p>', text: 'Hello' } }],
+  );
+  // Unchanged content is not relayed again
+  b.mutate();
+  b.advance(2_000);
+  assert.equal(b.messages.length, 1);
+  // Edits are throttled into one relay
+  b.page.editor = { innerHTML: '<p>Hello world</p>', innerText: 'Hello world' };
+  b.mutate();
+  b.mutate();
+  b.advance(2_000);
+  assert.equal(b.messages.length, 2);
+  assert.equal(b.messages[1].request.embeddedContent.text, 'Hello world');
+  // Reindex requests broadcast to the tab are left to the top frame
+  assert.equal(b.reindex(), undefined);
+  b.advance(600_000);
+  assert.ok(b.messages.every((m) => !m.request.pageData));
 });

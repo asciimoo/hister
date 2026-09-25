@@ -1,16 +1,20 @@
 import {
   type PageData,
   type PageState,
+  extractEmbeddedContent,
   extractPageData,
   extractPageState,
   getPageURL,
+  isEmbeddedContentFrame,
   registerResultExtractor,
+  setEmbeddedContent,
 } from '../modules/extract';
 
 const minimumUpdateInterval = 30 * 1000;
 const maximumPollInterval = 5 * 60 * 1000;
 const previewCheckInterval = 5 * 60 * 1000;
 const navigationDebounce = 1000;
+const embeddedContentThrottle = 2000;
 const supportedContentTypes = new Set(['text/html', 'application/xhtml+xml', 'text/plain']);
 
 type PageSnapshot = { state: PageState; data: PageData };
@@ -27,6 +31,7 @@ let skippedUrl: string | null = null;
 let started = false;
 let pageLeaving = false;
 let submissionNumber = 0;
+const embeddedFrame = isEmbeddedContentFrame();
 
 function isContextValid(): boolean {
   try {
@@ -156,7 +161,32 @@ function start() {
   scheduleUpdate(0);
 }
 
-if (document.readyState === 'complete') {
+// Runs inside an iframe that holds the page content (see embeddedContentSources)
+// and relays that content to the top frame instead of indexing the iframe URL.
+function startEmbeddedContentRelay() {
+  let lastHTML: string | null = null;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const relay = () => {
+    timer = null;
+    if (!isContextValid()) {
+      observer.disconnect();
+      return;
+    }
+    const content = extractEmbeddedContent();
+    if (!content || content.html === lastHTML) return;
+    lastHTML = content.html;
+    chrome.runtime.sendMessage({ embeddedContent: content });
+  };
+  const observer = new MutationObserver(() => {
+    timer ??= setTimeout(relay, embeddedContentThrottle);
+  });
+  observer.observe(document, { subtree: true, childList: true, characterData: true });
+  relay();
+}
+
+if (embeddedFrame) {
+  startEmbeddedContentRelay();
+} else if (document.readyState === 'complete') {
   start();
 } else {
   window.addEventListener('load', start, { once: true });
@@ -227,7 +257,15 @@ window.addEventListener('pageshow', (event) => {
 });
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (!request) return;
+  if (!request || embeddedFrame) return;
+  if (request.embeddedContent) {
+    setEmbeddedContent(request.embeddedContent);
+    if (started && !pageLeaving && !document.hidden) {
+      pollInterval = minimumUpdateInterval;
+      scheduleUpdate(navigationDebounce);
+    }
+    return;
+  }
   if (request.error) {
     alert(request.error);
     return;
