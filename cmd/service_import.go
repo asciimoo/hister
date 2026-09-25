@@ -241,10 +241,21 @@ func (f *crawlerServiceContentFetcher) Fetch(ctx context.Context, rawURL string)
 	if err != nil {
 		return nil, fmt.Errorf("initialize content validator: %w", err)
 	}
-	documents, err := f.crawler.Crawl(ctx, rawURL, validator)
+	crawlCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	documents, err := f.crawler.Crawl(crawlCtx, rawURL, validator)
 	if err != nil {
 		return nil, fmt.Errorf("download content: %w", err)
 	}
+	// Crawl workers block on unread sends and this crawler is reused for the
+	// next URL, so cancel and drain before returning.
+	defer func() {
+		cancel()
+		for range documents {
+		}
+	}()
+
 	select {
 	case d, ok := <-documents:
 		if !ok {
