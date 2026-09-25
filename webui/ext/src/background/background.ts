@@ -285,7 +285,13 @@ async function updateTabIcon(tabId: number, url: string): Promise<void> {
 function isPDFUrl(url: string): boolean {
   try {
     const pathname = new URL(url).pathname.toLowerCase();
-    return pathname.endsWith('.pdf');
+    // Match direct .pdf files AND content-server PDF paths whose URL has no
+    // file extension, e.g. arxiv.org/pdf/2212.01669 (arxiv 301s the *.pdf URL
+    // to /pdf/<id>, stripping the extension — so the extension must match the
+    // path family, not just the extension) and springer
+    // link.springer.com/content/pdf/<id>. A /pdf/ segment followed by exactly
+    // one path segment (optionally a trailing slash) is treated as a PDF.
+    return pathname.endsWith('.pdf') || /\/pdf\/[^/]+\/?$/.test(pathname);
   } catch (_) {
     return false;
   }
