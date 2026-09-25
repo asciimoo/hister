@@ -1,10 +1,30 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
+<script lang="ts" module>
+  type NavEntry = { url: string; documentId: string; title: string };
+
+  // Pages visited through in-content links, starting from the one picked by the parent.
+  // At module level so the flow survives the remount that happens when fullscreen is toggled (only
+  // one panel is mounted at a time).
+  const nav = $state({
+    flow: '',
+    entries: [] as NavEntry[],
+    index: -1,
+    // Range of entries mirrored one to one by consecutive browser history entries (fullscreen
+    // only): within it the arrows defer to the browser, so both stay in sync.
+    historyLo: -1,
+    historyHi: -1,
+  });
+</script>
+
 <script lang="ts">
   import VideoPreview from './VideoPreview.svelte';
   import { apiFetch } from '$lib/api';
   import {
     buildPreviewUrl,
+    currentPanelNavTag,
     getStoredPreviewDetailsOpen,
+    pushPreviewHistory,
+    replacePreviewHistory,
     setStoredPreviewDetailsOpen,
   } from '$lib/preview';
   import { formatTimestamp, formatMetaDate } from '$lib/search';
@@ -28,6 +48,8 @@
     ExternalLink,
     Info,
     Video,
+    ArrowLeft,
+    ArrowRight,
   } from '@lucide/svelte';
   import { onMount, untrack } from 'svelte';
 
@@ -41,6 +63,7 @@
     connected?: boolean;
     initialViewingVersionId?: number | null;
     onviewingversionchange?: (id: number | null) => void;
+    onnavigate?: (url: string, title: string, documentId: string) => void;
   }
 
   let {
@@ -53,7 +76,13 @@
     connected = false,
     initialViewingVersionId = null,
     onviewingversionchange,
+    onnavigate,
   }: Props = $props();
+
+  // the document currently displayed
+  let activeUrl = $state('');
+  let activeDocumentId = $state('');
+  let activeHintTitle = $state('');
 
   let title = $state('');
   let content = $state('');
@@ -146,6 +175,12 @@
   // Plain variable (not $state) so it persists across effect runs without triggering reactivity.
   let _mountedWithDocument = '';
 
+  function resetExtractors() {
+    extractorName = '';
+    availableExtractors = [];
+    extractorsLoaded = false;
+  }
+
   function documentRequestUrl(
     path: string,
     u: string,
@@ -165,11 +200,38 @@
     const selectedDocumentId = documentId;
     const hint = hintTitle;
     if (u) {
+      // The parent echoing back a document this panel navigated to by itself: it is already
+      // shown, so only adopt the (possibly more precise) identity without reloading it.
+      const alreadyShown = untrack(() =>
+        sameDocument({ url: activeUrl, documentId: activeDocumentId }, u, selectedDocumentId),
+      );
+      if (alreadyShown) {
+        activeDocumentId = selectedDocumentId;
+        activeHintTitle = hint;
+        return;
+      }
+      // The flow is kept when the parent follows the browser onto one of its history entries (its
+      // popstate listener can run before ours) or remounts the panel on the document it was
+      // showing; any other document picked by the parent starts a new flow.
+      untrack(() => {
+        const tag = currentPanelNavTag();
+        const tagged = tag?.flow === nav.flow ? nav.entries[tag.index] : undefined;
+        if (tag && tagged && sameDocument(tagged, u, selectedDocumentId)) {
+          moveToHistoryEntry(tag.index);
+          return;
+        }
+        const entry = nav.entries[nav.index];
+        if (entry && sameDocument(entry, u, selectedDocumentId)) return;
+        startNavigation({ url: u, documentId: selectedDocumentId, title: hint });
+        // A panel opened in a new tab through "Open direct preview" inherits the flow.
+        if (_mountedWithDocument === '') restoreNavigation(u, selectedDocumentId);
+      });
       const isFirstLoad = _mountedWithDocument === '';
       _mountedWithDocument = selectedDocumentId || u;
-      extractorName = '';
-      availableExtractors = [];
-      extractorsLoaded = false;
+      activeUrl = u;
+      activeDocumentId = selectedDocumentId;
+      activeHintTitle = hint;
+      resetExtractors();
       // untrack so that reading the prop here does not make the effect re-run on prop change.
       const versionId = isFirstLoad ? untrack(() => initialViewingVersionId) : null;
       loadContent(u, hint, '', versionId, selectedDocumentId);
@@ -179,19 +241,24 @@
   // Reload when the user picks a different extractor.
   $effect(() => {
     const name = extractorName;
-    const selectedDocumentId = documentId;
-    if (url && name) {
-      loadContent(url, hintTitle, name, null, selectedDocumentId);
+    const selectedDocumentId = activeDocumentId;
+    if (activeUrl && name) {
+      loadContent(activeUrl, activeHintTitle, name, null, selectedDocumentId);
     }
   });
+
+  // Incremented on every load so that a slow response cannot overwrite a newer one (e.g. when
+  // clicking through the navigation arrows quickly).
+  let loadRequest = 0;
 
   async function loadContent(
     u: string,
     hint: string,
     extractor: string = '',
     versionId: number | null = null,
-    selectedDocumentId: string = documentId,
+    selectedDocumentId: string = activeDocumentId,
   ) {
+    const request = ++loadRequest;
     loading = true;
     content = '';
     template = '';
@@ -213,10 +280,12 @@
       if (extractor) extra.extractor = extractor;
       if (versionId != null) extra.version = String(versionId);
       const resp = await apiFetch(documentRequestUrl('/preview', u, selectedDocumentId, extra));
+      if (request !== loadRequest) return;
       if (!resp.ok) {
         content = `<p class="text-hister-rose">Failed to load readable content. Status: ${resp.status}</p>`;
       } else {
         const data = (await resp.json()) as DocumentPreviewResponse;
+        if (request !== loadRequest) return;
         template = data.template || '';
         templateData = template === 'video' ? parseTemplateData(data.content) : null;
         content = template === 'video' ? '' : data.content || '<p>No content available</p>';
@@ -238,9 +307,10 @@
         onviewingversionchange?.(viewingVersion?.id ?? null);
       }
     } catch (err) {
-      content = `<p class="text-hister-rose">Failed to load: ${err}</p>`;
+      if (request === loadRequest)
+        content = `<p class="text-hister-rose">Failed to load: ${err}</p>`;
     } finally {
-      loading = false;
+      if (request === loadRequest) loading = false;
     }
   }
 
@@ -248,7 +318,7 @@
     if (extractorsLoaded || extractorsLoading) return;
     extractorsLoading = true;
     try {
-      const resp = await apiFetch(documentRequestUrl('/extractors', u, documentId));
+      const resp = await apiFetch(documentRequestUrl('/extractors', u, activeDocumentId));
       if (resp.ok) {
         const data: { name: string; description: string }[] = await resp.json();
         availableExtractors = data ?? [];
@@ -261,6 +331,204 @@
     }
   }
 
+  // An empty document ID on either side means "whichever one the backend resolves the URL to".
+  function sameDocument(
+    entry: { url: string; documentId: string },
+    u: string,
+    selectedDocumentId: string,
+  ): boolean {
+    return (
+      entry.url === u &&
+      (!entry.documentId || !selectedDocumentId || entry.documentId === selectedDocumentId)
+    );
+  }
+
+  function startNavigation(entry: NavEntry) {
+    nav.flow = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+    nav.entries = [entry];
+    nav.index = 0;
+    nav.historyLo = -1;
+    nav.historyHi = -1;
+  }
+
+  // The flow travels to a new tab in the `nav` parameter of the direct preview link.
+  function directPreviewUrl(): string {
+    const url = buildPreviewUrl(
+      activeUrl,
+      title || activeHintTitle,
+      viewingVersion?.id,
+      activeDocumentId,
+    );
+    if (nav.entries.length < 2) return url;
+    const flow = JSON.stringify({ index: nav.index, entries: nav.entries });
+    return `${url}&nav=${encodeURIComponent(flow)}`;
+  }
+
+  function restoreNavigation(u: string, selectedDocumentId: string) {
+    try {
+      const raw = new URLSearchParams(window.location.search).get('nav');
+      const flow = raw ? (JSON.parse(raw) as { index: number; entries: NavEntry[] }) : null;
+      const entry = flow?.entries[flow.index];
+      if (!flow || !entry || !sameDocument(entry, u, selectedDocumentId)) return;
+      nav.entries = flow.entries;
+      nav.index = flow.index;
+    } catch {
+      // malformed parameter: keep the fresh flow
+    }
+  }
+
+  // Whether the current browser history entry is the mirror of the given flow entry.
+  function isHistoryMirroredAt(index: number): boolean {
+    const tag = currentPanelNavTag();
+    return tag?.flow === nav.flow && tag.index === index;
+  }
+
+  // Shows a flow entry in this panel, as if it had been focused from the results list.
+  function showEntry(entry: NavEntry) {
+    activeUrl = entry.url;
+    activeDocumentId = entry.documentId;
+    activeHintTitle = entry.title;
+    resetExtractors();
+    loadContent(entry.url, entry.title, '', null, entry.documentId);
+    onnavigate?.(entry.url, entry.title, entry.documentId);
+  }
+
+  // Follows an in-content link: drops the pages ahead of the current one, like a browser does.
+  function openDocument(u: string, hint: string) {
+    const from = nav.index;
+    const entry: NavEntry = { url: u, documentId: '', title: hint };
+    nav.entries = [...nav.entries.slice(0, from + 1), entry];
+    nav.index = from + 1;
+    if (fullscreen) {
+      // The entry we leave was created by the page, not by this flow: claim it as its start.
+      if (!isHistoryMirroredAt(from)) {
+        replacePreviewHistory(
+          activeUrl,
+          title || activeHintTitle,
+          viewingVersion?.id,
+          activeDocumentId,
+          { flow: nav.flow, index: from },
+        );
+        nav.historyLo = from;
+      }
+      nav.historyHi = from + 1;
+      pushPreviewHistory(entry.url, entry.title, null, entry.documentId, {
+        flow: nav.flow,
+        index: from + 1,
+      });
+    }
+    showEntry(entry);
+  }
+
+  // Moves through the flow with the panel arrows. In fullscreen, when both ends are mirrored in
+  // the browser history the browser does the move (see handlePopState), so its own back/forward
+  // buttons stay consistent; otherwise the current browser entry is rewritten in place.
+  function goTo(index: number) {
+    const entry = nav.entries[index];
+    if (!entry) return;
+    if (
+      fullscreen &&
+      isHistoryMirroredAt(nav.index) &&
+      index >= nav.historyLo &&
+      index <= nav.historyHi
+    ) {
+      history.go(index - nav.index);
+      return;
+    }
+    nav.index = index;
+    if (fullscreen) {
+      replacePreviewHistory(entry.url, entry.title, null, entry.documentId, {
+        flow: nav.flow,
+        index,
+      });
+      nav.historyLo = index;
+      nav.historyHi = index;
+    }
+    showEntry(entry);
+  }
+
+  // Points the flow at the entry the browser moved onto.
+  function moveToHistoryEntry(index: number) {
+    if (index < nav.historyLo || index > nav.historyHi) {
+      nav.historyLo = index;
+      nav.historyHi = index;
+    }
+    nav.index = index;
+  }
+
+  // Browser back/forward onto an entry of the current flow. The parent may have already handed
+  // the entry over through the props (see the effect above), in which case it is only announced.
+  function handlePopState(event: PopStateEvent) {
+    const tag = currentPanelNavTag();
+    const entry = tag?.flow === nav.flow ? nav.entries[tag.index] : undefined;
+    if (!tag || !entry) return;
+    moveToHistoryEntry(tag.index);
+    if (
+      sameDocument({ url: activeUrl, documentId: activeDocumentId }, entry.url, entry.documentId)
+    ) {
+      onnavigate?.(entry.url, entry.title, entry.documentId);
+    } else {
+      showEntry(entry);
+    }
+  }
+
+  async function isArchived(u: string): Promise<boolean> {
+    try {
+      // HEAD skips the document body server side: we only care about the status.
+      const resp = await apiFetch(documentRequestUrl('/document', u, ''), {
+        method: 'HEAD',
+        redirectOnForbidden: false,
+      });
+      return resp.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  function resolveContentHref(anchor: HTMLAnchorElement): URL | null {
+    const href = anchor.getAttribute('href') ?? '';
+    if (!href || href.startsWith('#')) return null;
+    try {
+      // Relative links belong to the archived page, not to the app serving the panel.
+      return new URL(href, /^https?:\/\//i.test(activeUrl) ? activeUrl : anchor.href);
+    } catch {
+      return null;
+    }
+  }
+
+  function followLink(anchor: HTMLAnchorElement, u: string) {
+    if (anchor.target && anchor.target !== '_self') {
+      window.open(u, anchor.target, 'noopener,noreferrer');
+    } else {
+      window.location.href = u;
+    }
+  }
+
+  // Links inside extracted content point at the live web. When the target is archived too we
+  // stay in the panel and show the stored copy; otherwise the click behaves like a plain anchor.
+  async function handleContentClick(event: MouseEvent) {
+    if (event.defaultprevented || event.button !== 0) return;
+    if (event.metakey || event.ctrlkey || event.shiftkey || event.altkey) return;
+    const anchor = (event.target as Element | null)?.closest('a');
+    if (!anchor) return;
+    const resolved = resolveContentHref(anchor);
+    // In-page anchors and non-web schemes (mailto:, …) keep their native behavior.
+    if (!resolved || (resolved.protocol !== 'http:' && resolved.protocol !== 'https:')) return;
+    // The lookup is asynchronous, so the navigation has to be cancelled up front and
+    // replayed below when the target turns out not to be archived.
+    event.preventDefault();
+    resolved.hash = '';
+
+    const target = resolved.href;
+    const hint = anchor.textContent?.trim() || '';
+
+    if (await isArchived(target)) {
+      openDocument(target, hint);
+    } else {
+      followLink(anchor, target);
+    }
+  }
+
   async function toggleVersions(u: string) {
     if (showVersions) {
       showVersions = false;
@@ -268,7 +536,7 @@
     }
     if (versions.length === 0) {
       try {
-        const resp = await apiFetch(documentRequestUrl('/versions', u, documentId));
+        const resp = await apiFetch(documentRequestUrl('/versions', u, activeDocumentId));
         if (resp.ok) {
           versions = (await resp.json()) ?? [];
         }
@@ -279,6 +547,8 @@
     showVersions = true;
   }
 </script>
+
+<svelte:window onpopstate={handlePopState} />
 
 <div
   class="preview-panel border-border-brand bg-card-surface flex flex-1 flex-col overflow-hidden {fullscreen
@@ -324,9 +594,31 @@
     >
       <div class="flow-root max-h-[6.875em] overflow-hidden text-lg leading-snug md:text-3xl">
         <div class="float-right mt-1 ml-2 flex items-center gap-1 text-sm leading-normal">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            class="text-text-brand-muted hover:text-text-brand"
+            onclick={() => goTo(nav.index - 1)}
+            disabled={nav.index <= 0}
+            title="Back"
+            aria-label="Back"
+          >
+            <ArrowLeft class="size-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            class="text-text-brand-muted hover:text-text-brand"
+            onclick={() => goTo(nav.index + 1)}
+            disabled={nav.index >= nav.entries.length - 1}
+            title="Forward"
+            aria-label="Forward"
+          >
+            <ArrowRight class="size-4" />
+          </Button>
           <DropdownMenu.Root
             onOpenChange={(open) => {
-              if (open) loadExtractors(url);
+              if (open) loadExtractors(activeUrl);
             }}
           >
             <DropdownMenu.Trigger>
@@ -374,7 +666,7 @@
             variant="ghost"
             size="icon-sm"
             class="text-text-brand-muted hover:text-text-brand"
-            href={buildPreviewUrl(url, title || hintTitle, viewingVersion?.id, documentId)}
+            href={directPreviewUrl()}
             target="_blank"
             rel="noopener noreferrer"
             title="Open direct preview"
@@ -418,10 +710,10 @@
           </Button>
         </div>
         <h2 class="font-outfit text-text-brand font-bold">
-          {#if url.startsWith('remote-file://')}
+          {#if activeUrl.startsWith('remote-file://')}
             {title}
           {:else}
-            <a href={url} target="_blank" rel="noopener noreferrer" class="hover:underline"
+            <a href={activeUrl} target="_blank" rel="noopener noreferrer" class="hover:underline"
               >{title}</a
             >
           {/if}
@@ -449,7 +741,7 @@
           {#if versionCount > 0}
             <span class="text-text-brand-muted">·</span>
             <button
-              onclick={() => toggleVersions(url)}
+              onclick={() => toggleVersions(activeUrl)}
               class="font-inter text-hister-teal inline-flex cursor-pointer items-center gap-1 text-xs hover:underline"
             >
               <History class="size-3" />
@@ -534,7 +826,7 @@
         </span>
         <span class="text-text-brand-muted text-xs">·</span>
         <button
-          onclick={() => loadContent(url, hintTitle, extractorName)}
+          onclick={() => loadContent(activeUrl, activeHintTitle, extractorName)}
           class="font-inter text-hister-teal cursor-pointer text-xs hover:underline"
         >
           Show current
@@ -551,7 +843,7 @@
                   {formatTimestamp(versionTimestamp(v.created_at))}
                 </p>
                 <button
-                  onclick={() => loadContent(url, hintTitle, extractorName, v.id)}
+                  onclick={() => loadContent(activeUrl, activeHintTitle, extractorName, v.id)}
                   class="font-inter text-hister-teal shrink-0 cursor-pointer text-xs hover:underline"
                 >
                   show this version
@@ -588,8 +880,10 @@
           {/each}
         </div>
       {:else}
+        <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
         <div
           class="preview-content font-inter text-text-brand-secondary prose dark:prose-invert prose-a:text-hister-teal w-full max-w-[60em] p-4 text-sm"
+          onclick={handleContentClick}
         >
           {#if meta?.videos?.length && showEmbeddedVideos}
             <div class="not-prose mb-6 space-y-4">

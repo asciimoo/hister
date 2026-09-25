@@ -1063,6 +1063,24 @@
     withSkipUrl(skipUrl, () => pushPreviewHistory(url, title, null, documentId));
   }
 
+  // The preview panel moved to another archived page (link, arrows or browser history). When it
+  // is one of the results it becomes the highlighted one; otherwise the results (and the
+  // highlight) stay untouched, since the list only ever reflects the query. The panel manages the
+  // browser history entries itself.
+  function handlePanelNavigate(url: string, title: string, documentId: string) {
+    const idx = displayResults.findIndex((r) => r.url === url);
+    const result = displayResults[idx];
+    panelViewingVersion = null;
+    panelDocumentId = result ? result.id || '' : documentId;
+    panelHintTitle = result ? result.title || '' : title;
+    panelUrl = url;
+    if (result) {
+      highlightIdx = idx;
+      const el = document.querySelectorAll('[data-result]')[idx];
+      if (el) scrollTo(el);
+    }
+  }
+
   function enterFullscreen() {
     previewFullscreen = true;
     withSkipUrl(skipUrl, () =>
@@ -1602,7 +1620,7 @@
     if (searchPending) return;
     const idx = highlightIdx;
     const result = displayResults[idx]; // reactive: covers both pinned and regular results
-    const isFullscreen = previewFullscreen;
+    const isFullscreen = untrack(() => previewFullscreen);
     if (!isDesktop || (!panelOpen && !isFullscreen)) return;
     if (!result) {
       panelUrl = '';
@@ -2751,6 +2769,7 @@
                 replacePreviewHistory(panelUrl, panelHintTitle, id, panelDocumentId),
               );
             }}
+            onnavigate={handlePanelNavigate}
           />
         {:else}
           <!-- Drag handle to resize the split-screen panel -->
@@ -2780,6 +2799,7 @@
               onviewingversionchange={(id) => {
                 panelViewingVersion = id;
               }}
+              onnavigate={handlePanelNavigate}
             />
           </div>
         {/if}

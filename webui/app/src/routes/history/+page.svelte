@@ -179,6 +179,23 @@
     withSkipUrl(skipUrl, () => pushPreviewHistory(url, title, null, documentId));
   }
 
+  // The preview panel moved to another archived page (link, arrows or browser history): highlight
+  // it in the list when it is one of the loaded entries, and keep the panel state pointing at it.
+  // The panel manages the browser history entries itself.
+  function handlePanelNavigate(url: string, title: string, documentId: string) {
+    const idx = items.findIndex((i) => i.url === url);
+    const item = items[idx];
+    panelViewingVersion = null;
+    panelDocumentId = item ? historyDocumentId(item) : documentId;
+    panelHintTitle = item ? item.title || item.url : title;
+    panelUrl = url;
+    if (item) {
+      highlightIdx = idx;
+      const el = document.querySelectorAll('[data-result]')[idx];
+      if (el) scrollTo(el);
+    }
+  }
+
   function enterFullscreen() {
     previewFullscreen = true;
     withSkipUrl(skipUrl, () =>
@@ -708,7 +725,7 @@
   $effect(() => {
     const idx = highlightIdx;
     items;
-    const isFullscreen = previewFullscreen;
+    const isFullscreen = untrack(() => previewFullscreen);
     if (!isDesktop || !items.length || (!panelOpen && !isFullscreen)) return;
     const item = items[idx];
     if (!item) return;
@@ -1106,6 +1123,7 @@
                 replacePreviewHistory(panelUrl, panelHintTitle, id, panelDocumentId),
               );
             }}
+            onnavigate={handlePanelNavigate}
           />
         {:else if panelOpen && isDesktop}
           <!-- Drag handle to resize the split-screen panel -->
@@ -1134,6 +1152,7 @@
               onviewingversionchange={(id) => {
                 panelViewingVersion = id;
               }}
+              onnavigate={handlePanelNavigate}
             />
           </div>
         {/if}
