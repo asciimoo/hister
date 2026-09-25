@@ -282,14 +282,74 @@ async function updateTabIcon(tabId: number, url: string): Promise<void> {
 
 // --- PDF tab indexing ---
 
+// The primary signal for "this tab is a PDF" is the actual HTTP Content-Type
+// header reported by the server (observed via webRequest.onHeadersReceived),
+// not a URL regex — URL heuristics miss content-server PDFs whose path has no
+// .pdf extension and can misfire on non-PDF URLs that merely contain /pdf/.
+// isPDFUrl() is retained only as a fallback for the manual "index current
+// page" command, where no network response is being navigated at that moment.
 function isPDFUrl(url: string): boolean {
-  try {
-    const pathname = new URL(url).pathname.toLowerCase();
-    return pathname.endsWith('.pdf');
-  } catch (_) {
+  return /\.pdf(\?.*)?$/i.test(url) || /\/pdf\/[^/]+\/?(\?.*)?$/i.test(url);
+}
+
+// Content-Type value split on ';' so we match "application/pdf; charset=..." too.
+function isPDFContentType(value: string | undefined): boolean {
+  return value !== undefined && value.toLowerCase().split(';')[0].trim() === 'application/pdf';
+}
+
+// Non-pageload schemes we must never try to index.
+function doNotIndexUrl(url: string): boolean {
+  return (
+    url.startsWith('chrome://') ||
+    url.startsWith('about:') ||
+    url.startsWith('moz-extension://') ||
+    url.startsWith('chrome-extension://') ||
+    url.startsWith('file://')
+  );
+}
+
+// Guards against indexing the same PDF tab twice (webRequest fires per HTTP
+// response and tabs.onUpdated may also fire after navigation completes).
+const recentPdfIndex = new Map<string, number>();
+const PDF_INDEX_DEDUPE_MS = 30_000;
+
+function markPdfIndexed(tabId: number, url: string): boolean {
+  const key = `${tabId}:${url}`;
+  const last = recentPdfIndex.get(key);
+  const now = Date.now();
+  if (last !== undefined && now - last < PDF_INDEX_DEDUPE_MS) {
     return false;
   }
+  recentPdfIndex.set(key, now);
+  return true;
 }
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  for (const key of recentPdfIndex.keys()) {
+    if (key.startsWith(`${tabId}:`)) recentPdfIndex.delete(key);
+  }
+});
+
+// Authoritative PDF detection: observe the top-level document response and
+// index it when the server reports application/pdf. Works for arxiv /pdf/<id>,
+// springer /content/pdf/<id>, and any other content-server PDF regardless of
+// URL heuristics. Requires only "webRequest" (read-only), not webRequestBlocking.
+chrome.webRequest.onHeadersReceived.addListener(
+  (details) => {
+    if (details.tabId < 0 || details.statusCode !== 200) return;
+    const contentType = details.responseHeaders?.find(
+      (h) => h.name.toLowerCase() === 'content-type',
+    )?.value;
+    if (!isPDFContentType(contentType)) return;
+    void chrome.tabs.get(details.tabId).then((tab) => {
+      if (!tab.url) return;
+      if (doNotIndexUrl(tab.url) || !markPdfIndexed(tab.id!, tab.url)) return;
+      void indexPDFTab(tab.id!, tab);
+    });
+  },
+  { urls: ['<all_urls>'], types: ['main_frame'] },
+  ['responseHeaders'],
+);
 
 async function indexPDFTab(
   tabId: number,
@@ -382,11 +442,10 @@ chrome.tabs.onActivated.addListener(async ({ tabId }) => {
 });
 
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+  // PDF indexing is driven by the webRequest.onHeadersReceived Content-Type
+  // observer, not a URL check here (PDFs live at arbitrary URLs).
   if (changeInfo.status === 'complete' && tab.url) {
     await updateTabIcon(tabId, tab.url);
-    if (isPDFUrl(tab.url)) {
-      await indexPDFTab(tabId, tab);
-    }
   }
 });
 
