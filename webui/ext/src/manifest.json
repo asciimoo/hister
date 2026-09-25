@@ -40,6 +40,11 @@
     {
       "js": ["content.js"],
       "matches": ["<all_urls>"]
+    },
+    {
+      "js": ["content.js"],
+      "matches": ["https://docs-editor.proton.me/*"],
+      "all_frames": true
     }
   ],
   "background": {},

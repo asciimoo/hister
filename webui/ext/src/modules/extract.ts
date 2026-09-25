@@ -8,6 +8,8 @@ type PageData = {
 
 type PageState = Omit<PageData, 'html'> & { metadata: string };
 
+type EmbeddedContent = { html: string; text: string };
+
 type Result = {
   title: string;
   url: string;
@@ -73,6 +75,34 @@ class DuckDuckGoExtractor implements ResultExtractor {
 
 let resultExtractors: ResultExtractor[] = [new GoogleExtractor(), new DuckDuckGoExtractor()];
 
+// Some apps render the document body in a cross-origin iframe, so the top frame
+// only sees the app shell. A content script in the iframe reads the content and
+// relays it to the top frame, which merges it into the submitted page.
+const embeddedContentSources = [
+  // Proton Docs renders its Lexical editor on docs-editor.proton.me
+  { hostname: 'docs-editor.proton.me', selector: '[data-lexical-editor="true"]' },
+];
+
+let embeddedContent: EmbeddedContent | null = null;
+
+function isEmbeddedContentFrame(): boolean {
+  return (
+    window.top !== window &&
+    embeddedContentSources.some((s) => s.hostname === window.location.hostname)
+  );
+}
+
+function extractEmbeddedContent(): EmbeddedContent | null {
+  const source = embeddedContentSources.find((s) => s.hostname === window.location.hostname);
+  const el = source && (document.querySelector(source.selector) as HTMLElement | null);
+  if (!el) return null;
+  return { html: el.innerHTML, text: el.innerText };
+}
+
+function setEmbeddedContent(content: EmbeddedContent | null) {
+  embeddedContent = content;
+}
+
 function getPageURL() {
   return window.location.href.replace(window.location.hash, '');
 }
@@ -88,7 +118,9 @@ function extractPageState(): PageState {
   } catch {}
 
   return {
-    text: document.body?.innerText ?? '',
+    text: [document.body?.innerText ?? '', embeddedContent?.text ?? '']
+      .filter(Boolean)
+      .join('\n\n'),
     title: document.querySelector('title')?.innerText ?? document.title,
     url,
     faviconURL,
@@ -112,7 +144,13 @@ function extractPageState(): PageState {
 
 function extractPageData(state: PageState): PageData {
   const { metadata, ...data } = state;
-  return { ...data, html: document.documentElement?.innerHTML ?? '' };
+  let html = document.documentElement?.innerHTML ?? '';
+  if (embeddedContent?.html) {
+    const article = `<article>${embeddedContent.html}</article>`;
+    const end = html.lastIndexOf('</body>');
+    html = end === -1 ? html + article : html.slice(0, end) + article + html.slice(end);
+  }
+  return { ...data, html };
 }
 
 function registerResultExtractor(w: Window, cb: ExtractorCallback) {
@@ -128,6 +166,9 @@ export {
   type PageData,
   type PageState,
   registerResultExtractor,
+  isEmbeddedContentFrame,
+  extractEmbeddedContent,
+  setEmbeddedContent,
   getPageURL,
   extractPageState,
   extractPageData,

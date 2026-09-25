@@ -489,6 +489,18 @@ chrome.commands?.onCommand?.addListener((command) => {
 
 // TODO check source
 function cjsMsgHandler(request, sender, sendResponse) {
+  if (request.embeddedContent) {
+    // Relay content from an embedded iframe to the top frame of the same tab
+    if (sender.tab?.id !== undefined) {
+      chrome.tabs.sendMessage(
+        sender.tab.id,
+        { embeddedContent: request.embeddedContent },
+        { frameId: 0 },
+        () => void chrome.runtime.lastError,
+      );
+    }
+    return false;
+  }
   if (request.action === 'indexCurrentPage') {
     indexCurrentTab()
       .then(sendResponse)
