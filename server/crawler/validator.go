@@ -19,8 +19,6 @@ const (
 	URLAllow URLStatus = iota
 	// URLSkip means this URL should be skipped but crawling continues.
 	URLSkip
-	// URLStop means crawling should stop entirely.
-	URLStop
 )
 
 // ValidatorRules configures the traversal constraints for a crawl.
@@ -91,16 +89,34 @@ func (v *Validator) SetVisited(n int) {
 	v.mu.Unlock()
 }
 
-// Validate checks whether u at the given crawl depth should be visited.
-// When URLAllow is returned the internal visited counter is incremented,
-// so the same Validator instance tracks how many pages have been allowed.
+// TryVisit reserves one unit of the MaxLinks budget. It returns false when the
+// budget is exhausted, meaning the crawl must stop. Callers that end up not
+// fetching the page must return the reservation with ReleaseVisit.
+func (v *Validator) TryVisit() bool {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if v.rules.MaxLinks > 0 && v.visited >= v.rules.MaxLinks {
+		return false
+	}
+	v.visited++
+	return true
+}
+
+// ReleaseVisit returns a reservation taken by TryVisit.
+func (v *Validator) ReleaseVisit() {
+	v.mu.Lock()
+	if v.visited > 0 {
+		v.visited--
+	}
+	v.mu.Unlock()
+}
+
+// Validate reports whether u at the given crawl depth passes the traversal
+// filters. It has no side effects, so it is safe to call on duplicate URLs.
+// The MaxLinks budget is enforced separately through TryVisit.
 func (v *Validator) Validate(u *url.URL, depth int) URLStatus {
 	v.mu.Lock()
 	defer v.mu.Unlock()
-
-	if v.rules.MaxLinks > 0 && v.visited >= v.rules.MaxLinks {
-		return URLStop
-	}
 
 	if v.rules.MaxDepth > 0 && depth > v.rules.MaxDepth {
 		return URLSkip
@@ -148,7 +164,6 @@ func (v *Validator) Validate(u *url.URL, depth int) URLStatus {
 		}
 	}
 
-	v.visited++
 	return URLAllow
 }
 

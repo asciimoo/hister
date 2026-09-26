@@ -32,24 +32,34 @@ const (
 
 // CrawlJob stores the configuration and status of a persistent crawl job.
 type CrawlJob struct {
-	ID             string    `gorm:"primaryKey" json:"id"`
-	StartURL       string    `json:"start_url"`
-	ValidatorRules string    `gorm:"type:text" json:"validator_rules"` // JSON-encoded ValidatorRules
-	Label          string    `json:"label"`
-	Status         string    `json:"status"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	ID             string `gorm:"primaryKey" json:"id"`
+	StartURL       string `json:"start_url"`
+	ValidatorRules string `gorm:"type:text" json:"validator_rules"` // JSON-encoded ValidatorRules
+	Label          string `json:"label"`
+	Status         string `json:"status"`
+	// LockedBy identifies the run that currently owns the job, and
+	// LockExpiresAt is how long that ownership survives without a renewal.
+	// Together they keep two processes from crawling one job at the same time.
+	LockedBy      string    `json:"locked_by"`
+	LockExpiresAt time.Time `json:"lock_expires_at"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }
 
 // CrawlURL tracks every URL discovered during a crawl job.
 type CrawlURL struct {
-	ID        uint      `gorm:"primaryKey;autoIncrement" json:"id"`
-	JobID     string    `gorm:"uniqueIndex:idx_crawl_job_url;not null" json:"job_id"`
-	URL       string    `gorm:"uniqueIndex:idx_crawl_job_url;not null" json:"url"`
-	Depth     int       `json:"depth"`
-	Status    string    `gorm:"not null;default:pending" json:"status"`
-	Error     string    `json:"error"`
-	ErrorCode int       `json:"error_code"`
+	ID        uint   `gorm:"primaryKey;autoIncrement" json:"id"`
+	JobID     string `gorm:"uniqueIndex:idx_crawl_job_url;not null" json:"job_id"`
+	URL       string `gorm:"uniqueIndex:idx_crawl_job_url;not null" json:"url"`
+	Depth     int    `json:"depth"`
+	Status    string `gorm:"not null;default:pending" json:"status"`
+	Error     string `json:"error"`
+	ErrorCode int    `json:"error_code"`
+	// Attempts counts how many times this URL has been handed to a worker and
+	// handed back without a verdict. It must survive requeueing: a URL deferred
+	// by an open circuit breaker is put back as pending, and without a durable
+	// count the retry limit restarts from zero on every pass.
+	Attempts  int       `json:"attempts"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
@@ -131,6 +141,55 @@ func GetCrawlJob(id string) (*CrawlJob, error) {
 // UpdateCrawlJobStatus updates the status field of a job.
 func UpdateCrawlJobStatus(id, status string) error {
 	return DB.Model(&CrawlJob{}).Where("id = ?", id).Update("status", status).Error
+}
+
+// AcquireCrawlJobLease takes ownership of a job for owner, for ttl. A job is
+// available when nobody holds it, when owner already holds it, or when the
+// current holder's lease has expired - the last case is what recovers a job
+// from a process that died without releasing it. When the job is held by a
+// live run it returns (false, holder, nil) so the caller can say who has it.
+func AcquireCrawlJobLease(jobID, owner string, ttl time.Duration) (bool, *CrawlJob, error) {
+	now := time.Now()
+	res := DB.Model(&CrawlJob{}).
+		Where("id = ? AND ((locked_by IS NULL OR locked_by = ? OR locked_by = ?) OR lock_expires_at < ?)",
+			jobID, "", owner, now).
+		Updates(map[string]any{"locked_by": owner, "lock_expires_at": now.Add(ttl)})
+	if res.Error != nil {
+		return false, nil, res.Error
+	}
+	if res.RowsAffected == 1 {
+		return true, nil, nil
+	}
+
+	holder, err := GetCrawlJob(jobID)
+	if err != nil {
+		return false, nil, err
+	}
+	if holder == nil {
+		return false, nil, fmt.Errorf("crawl job not found: %s", jobID)
+	}
+	return false, holder, nil
+}
+
+// RenewCrawlJobLease extends owner's lease by ttl. It reports false when the
+// lease is no longer owner's, which means another run has taken the job over
+// and this one must stop.
+func RenewCrawlJobLease(jobID, owner string, ttl time.Duration) (bool, error) {
+	res := DB.Model(&CrawlJob{}).
+		Where("id = ? AND locked_by = ?", jobID, owner).
+		Update("lock_expires_at", time.Now().Add(ttl))
+	if res.Error != nil {
+		return false, res.Error
+	}
+	return res.RowsAffected == 1, nil
+}
+
+// ReleaseCrawlJobLease drops owner's lease so the job can be resumed straight
+// away. It does nothing when the lease belongs to someone else.
+func ReleaseCrawlJobLease(jobID, owner string) error {
+	return DB.Model(&CrawlJob{}).
+		Where("id = ? AND locked_by = ?", jobID, owner).
+		Updates(map[string]any{"locked_by": "", "lock_expires_at": time.Time{}}).Error
 }
 
 // IsUniqueConstraintError reports whether err is a SQLite unique constraint
@@ -236,10 +295,63 @@ func NextPendingCrawlURL(jobID string) (*CrawlURL, error) {
 	return &cu, nil
 }
 
+// ClaimNextPendingCrawlURL takes exclusive ownership of the oldest pending URL
+// for the job and marks it in_progress. Ownership comes from the conditional
+// UPDATE: only the caller whose write finds the row still pending claims it,
+// and a caller that loses the race retries with the next candidate. Wrapping a
+// select and a blind update by ID in a transaction would not do this - two
+// callers can read the same row before either writes, which hands the same URL
+// to both on postgres and fails the second with a locking error on sqlite.
+// Returns (nil, nil) when no pending URLs remain.
+func ClaimNextPendingCrawlURL(jobID string) (*CrawlURL, error) {
+	for {
+		var cu CrawlURL
+		err := DB.Where("job_id = ? AND status = ?", jobID, CrawlURLPending).
+			Order("id ASC").
+			First(&cu).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		res := DB.Model(&CrawlURL{}).
+			Where("id = ? AND status = ?", cu.ID, CrawlURLPending).
+			Updates(map[string]any{"status": CrawlURLInProgress, "error": "", "error_code": 0})
+		if res.Error != nil {
+			return nil, res.Error
+		}
+		if res.RowsAffected == 0 {
+			// Another claimer took this row; it is no longer pending, so the
+			// next iteration necessarily considers a different one.
+			continue
+		}
+
+		cu.Status = CrawlURLInProgress
+		return &cu, nil
+	}
+}
+
 // UpdateCrawlURLStatus sets the status and optional error message on a URL row.
 func UpdateCrawlURLStatus(id uint, status, errMsg string) error {
 	return DB.Model(&CrawlURL{}).Where("id = ?", id).
 		Updates(map[string]any{"status": status, "error": errMsg, "error_code": 0}).Error
+}
+
+// DeferCrawlURL returns a URL to the pending pool, charging it the fetches the
+// deferred pass actually made. Deferral means the host refused the request as a
+// whole, so the URL keeps its place in the queue - but the attempts have to be
+// recorded, otherwise the retry budget restarts on every pass and a host that
+// stays down is fetched without bound.
+func DeferCrawlURL(id uint, attemptsUsed int) error {
+	return DB.Model(&CrawlURL{}).Where("id = ?", id).
+		Updates(map[string]any{
+			"status":     CrawlURLPending,
+			"error":      "",
+			"error_code": 0,
+			"attempts":   gorm.Expr("attempts + ?", attemptsUsed),
+		}).Error
 }
 
 func MarkCrawlURLFailed(jobID, rawURL string, errCode int, errMsg string) error {
@@ -248,7 +360,8 @@ func MarkCrawlURLFailed(jobID, rawURL string, errCode int, errMsg string) error 
 }
 
 // ResetInProgressCrawlURLs moves all in_progress URLs back to pending so they
-// are retried after a crash or interruption.
+// are retried after a crash or interruption. Callers must hold the job lease:
+// without it this would reset rows another live run is fetching right now.
 func ResetInProgressCrawlURLs(jobID string) error {
 	return DB.Model(&CrawlURL{}).
 		Where("job_id = ? AND status = ?", jobID, CrawlURLInProgress).
