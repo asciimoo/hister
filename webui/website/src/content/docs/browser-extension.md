@@ -127,6 +127,34 @@ index rebuild. It leaves your indexing rules and automatic indexing setting inta
 later automatic submissions still respect them. Sensitive content checks and
 normal access restrictions still apply.
 
+### Crawl a Site
+
+Open a page on the site, choose **Crawl this site**, set a page limit, and click
+**Start crawl**. Hister follows public HTML links from that hostname's home
+page. Reopen the popup to see progress or choose **Stop crawl**. Closing the
+popup does not stop the crawl, and pages already indexed remain searchable.
+
+Both the extension and server must support this feature. The server reuses the
+CLI crawler's link traversal, deduplication, robots.txt checks, and delay. It
+waits one second before each page fetch, defaults to 100 page visits (maximum
+1000), and stops after 30 minutes. Only one site crawl can run per server.
+Robots-blocked and skipped URLs can count toward the page limit. Discovery is
+capped at 10,000 URLs and each response at 5 MiB.
+
+Crawls use the authenticated user's index and skip rules. Existing documents
+are preserved, but their pages are fetched again to discover links. Browser
+login cookies, custom crawl headers, and the **Submit as public documents**
+setting are not used. Only public HTTP(S) addresses on standard ports are
+allowed; links and redirects to other hostnames, including subdomains, are
+excluded. JavaScript is not executed and extraction uses the fetched HTML
+without network enrichers.
+
+This follows discoverable links; it does not guarantee every page on a domain
+will be found. Sitemap import, automatic retries, and resuming after a server
+restart are not supported by this control. Only the latest crawl's status is
+kept, until another crawl replaces it or the server restarts. Use the
+[CLI crawler](/docs/crawler) for persistent jobs and advanced configuration.
+
 ### Keyboard Shortcuts
 
 The extension defines browser level shortcuts for common indexing actions.

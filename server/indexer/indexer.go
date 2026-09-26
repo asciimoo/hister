@@ -1098,6 +1098,14 @@ func (i *Indexer) AddContext(ctx context.Context, d *document.Document, options 
 	return i.AddDocumentContext(ctx, d, options...)
 }
 
+// AddHTMLContext indexes fetched HTML without making extractor network requests.
+func (i *Indexer) AddHTMLContext(ctx context.Context, d *document.Document) error {
+	if err := d.ProcessWithSensitivePatternContext(ctx, i.langDetector, extractor.ExtractHTMLContext, i.sensitivePattern); err != nil {
+		return err
+	}
+	return i.AddContext(ctx, d)
+}
+
 func (i *Indexer) processDocument(ctx context.Context, d *document.Document) error {
 	return d.ProcessWithSensitivePatternContext(ctx, i.langDetector, extractor.ExtractContext, i.sensitivePattern)
 }

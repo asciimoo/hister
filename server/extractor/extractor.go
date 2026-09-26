@@ -183,6 +183,13 @@ func (r *Registry) Extract(d *document.Document) error {
 	return r.ExtractContext(context.Background(), d)
 }
 
+// ExtractHTMLContext extracts already fetched HTML without network enrichers.
+func ExtractHTMLContext(ctx context.Context, d *document.Document) error {
+	return htmlRegistry.ExtractContext(ctx, d)
+}
+
+var htmlRegistry = mustNewRegistry(&readabilityExtractor{}, &basicExtractor{})
+
 // ExtractContext runs the extraction chain with caller cancellation.
 func ExtractContext(ctx context.Context, d *document.Document) error {
 	return defaultRegistry.ExtractContext(ctx, d)

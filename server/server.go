@@ -78,6 +78,7 @@ type webContext struct {
 	IsAdmin       bool
 	Authenticated bool
 	userRules     *config.Rules
+	crawls        *siteCrawls
 }
 
 func (c *webContext) effectiveRules() *config.Rules {
@@ -165,7 +166,8 @@ func Listen(ctx context.Context, cfg *config.Config, idx *indexer.Indexer) {
 	}
 
 	handler := registerEndpoints(cfg, idx)
-	handler = withLogging(handler)
+	defer handler.crawls.close()
+	loggedHandler := withLogging(handler)
 
 	listener, err := newListener(cfg.Server)
 	if err != nil {
@@ -173,7 +175,7 @@ func Listen(ctx context.Context, cfg *config.Config, idx *indexer.Indexer) {
 		return
 	}
 	log.Info().Str("Address", cfg.Server.Address).Str("Version", Version).Str("URL", cfg.BaseURL("/")).Msg("Starting webserver")
-	if err := serveListener(ctx, listener, handler); err != nil {
+	if err := serveListener(ctx, listener, loggedHandler); err != nil {
 		log.Error().Err(err).Msg("Webserver failed")
 	}
 }
