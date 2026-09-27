@@ -750,6 +750,8 @@ The vector store backend is chosen automatically based on `server.database`:
 - **SQLite** (default) stores vectors in a separate `vectors.sqlite3` file in the same directory as the main database, using the [sqlite-vec](https://github.com/asg017/sqlite-vec) extension. No extra setup required.
 - **PostgreSQL** stores vectors in the same database as the main data using the [pgvector](https://github.com/pgvector/pgvector) extension. Hister uses an HNSW index with the `vector` type, which supports at most 2000 dimensions. Make sure `pgvector` is installed and enabled (`CREATE EXTENSION vector;`) before starting Hister.
 
+Set `semantic_search.dimensions` to the output size supported by your embedding endpoint. If the endpoint returns a different size, Hister rejects the embeddings. After changing dimensions with SQLite, restart Hister and run `hister reindex` to rebuild the vector table and regenerate embeddings. Existing vectors are preserved until reindexing begins, and startup logs report when the stored dimensions differ from the configuration.
+
 ### Example
 
 ```yaml
@@ -1120,26 +1122,26 @@ to cycle modes, or use `ctrl+t` for the full theme picker.
 
 TUI keyboard shortcuts are configured in `tui.yaml` under the `hotkeys` section. See the [tui.yaml example](#tui-configuration) above.
 
-| Action            | Description                                                                 |
-| ----------------- | --------------------------------------------------------------------------- |
-| `quit`            | Exit the TUI                                                                |
-| `toggle_help`     | Show/hide the keybindings help overlay                                      |
-| `toggle_focus`    | Change focus or return to the previous workspace                            |
-| `scroll_up`       | Move selection up                                                           |
-| `scroll_down`     | Move selection down                                                         |
-| `open_result`     | Open, edit, or submit the focused item                                      |
-| `copy_result`     | Copy the selected URL                                                       |
-| `toggle_preview`  | Show/hide selected result details                                           |
-| `edit_label`      | Edit the selected document label                                            |
-| `delete_result`   | Delete the selected entry from the index                                    |
-| `toggle_theme`    | Open the interactive theme picker overlay                                   |
-| `toggle_settings` | Open appearance and keybinding settings                                     |
-| `toggle_sort`     | Toggle domain-based sorting for search results                              |
-| `toggle_semantic` | Toggle semantic search when enabled                                         |
-| `tab_search`      | Switch to the Search tab                                                    |
-| `tab_history`     | Switch to the History tab (view recent searches)                            |
-| `tab_rules`       | Switch to the Rules tab (manage skip/priority/versioning rules and aliases) |
-| `tab_add`         | Switch to the Add tab (manually add URLs and multiline text)                |
+| Action            | Description                                                                       |
+| ----------------- | --------------------------------------------------------------------------------- |
+| `quit`            | Exit the TUI                                                                      |
+| `toggle_help`     | Show/hide the keybindings help overlay                                            |
+| `toggle_focus`    | Change focus or return to the previous workspace                                  |
+| `scroll_up`       | Move selection up                                                                 |
+| `scroll_down`     | Move selection down                                                               |
+| `open_result`     | Open, edit, or submit the focused item                                            |
+| `copy_result`     | Copy the selected URL                                                             |
+| `toggle_preview`  | Show/hide selected result details                                                 |
+| `edit_label`      | Edit the selected document label                                                  |
+| `delete_result`   | Delete the selected entry from the index                                          |
+| `toggle_theme`    | Open the interactive theme picker overlay                                         |
+| `toggle_settings` | Open appearance and keybinding settings                                           |
+| `toggle_sort`     | Toggle domain-based sorting for search results                                    |
+| `toggle_semantic` | Toggle semantic search when enabled                                               |
+| `tab_search`      | Switch to the Search tab                                                          |
+| `tab_history`     | Switch to the History tab (view recent searches)                                  |
+| `tab_rules`       | Switch to the Rules tab (manage allow/skip/priority/versioning rules and aliases) |
+| `tab_add`         | Switch to the Add tab (manually add URLs and multiline text)                      |
 
 ## `crawler` Section
 
@@ -1171,9 +1173,13 @@ so Hister never continues while silently ignoring the proxy.
 
 The `backend_options` map passes configuration to the selected backend. Each backend validates its own options and rejects unknown keys.
 
-**`http` backend** — no backend-specific options supported.
+**`http` backend**: no backend specific options supported.
 
 **`chromedp` backend**:
+
+Launches Chrome or Chromium on the machine running `hister index`. Install the browser there and
+use `exec_path` if it is not found automatically. This backend launches its own browser process;
+Hister does not currently expose an option to connect it to a remote CDP socket.
 
 <ConfigReference items={chromedpOptions} scopes={['client']} />
 
@@ -1188,21 +1194,21 @@ crawler:
 
 **`bidi` backend** (WebDriver BiDi):
 
-Connects to an **already-running** browser that exposes a [WebDriver BiDi](https://w3c.github.io/webdriver-bidi/) WebSocket endpoint. This is the W3C-standard automation protocol supported by Firefox (≥ 102), Chrome (≥ 106), Edge, and other modern browsers. Unlike `chromedp`, the `bidi` backend does **not** launch a browser process — it reuses one you have started yourself (headless or not).
+Connects to an already running browser that exposes a
+[WebDriver BiDi](https://w3c.github.io/webdriver-bidi/) WebSocket endpoint. Hister opens the supplied
+WebSocket and sends `session.new`; it does not launch a browser or create a session through a
+WebDriver HTTP server. Firefox supports this direct connection at `/session`.
+
+Chrome and Chromium's `--remote-debugging-port` exposes the Chrome DevTools Protocol (CDP).
+That socket cannot be used as a BiDi endpoint. Use Hister's `chromedp` backend for a local Chrome
+or Chromium installation.
+
+See [Firefox with BiDi](crawler#firefox-with-bidi) for browser startup and indexing commands, or
+[browser backends with Docker](docker#browser-backends-with-docker) when the server is containerized.
 
 <ConfigReference items={bidiOptions} scopes={['client']} />
 
-Start your browser with BiDi enabled, for example:
-
-```bash
-# Firefox
-firefox --remote-debugging-port 9222
-
-# Chrome / Chromium
-chromium --remote-debugging-port=9222
-```
-
-Then configure Hister to use it:
+Apply these settings to the configuration used by the indexing command:
 
 ```yaml
 crawler:
@@ -1214,7 +1220,8 @@ crawler:
   timeout: 15
 ```
 
-Or using a full socket URL:
+The `host` and `port` options above produce `ws://127.0.0.1:9222/session`. Alternatively, specify
+the full socket URL, including `/session`. When `socket` is set, it overrides `host` and `port`:
 
 ```yaml
 crawler:

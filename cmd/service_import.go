@@ -296,6 +296,7 @@ func newServiceImportRuntime(cmd *cobra.Command) (*serviceImportRuntime, error) 
 	}
 	global, _ := cmd.Flags().GetBool("global")
 	clientOptions := append([]client.Option{client.WithTimeout(0)}, targetUserIDClientOptions(cmd, global)...)
+	clientOptions = append(clientOptions, documentSubmissionClientOptions(cmd)...)
 	languageDetector := document.LanguageDetector(document.NewNullLanguageDetector())
 	if cfg.Indexer.DetectLanguages {
 		languageDetector = document.NewLanguageDetector()

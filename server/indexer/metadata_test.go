@@ -3,6 +3,7 @@
 package indexer
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -15,7 +16,9 @@ import (
 	"github.com/blevesearch/bleve/v2"
 )
 
-type metadataVectorStore struct{}
+type metadataVectorStore struct {
+	clearErr error
+}
 
 func (*metadataVectorStore) Init() error { return nil }
 
@@ -27,7 +30,7 @@ func (*metadataVectorStore) Search([]float32, int, float64, uint) ([]vectorstore
 	return nil, nil
 }
 
-func (*metadataVectorStore) Clear() error { return nil }
+func (s *metadataVectorStore) Clear() error { return s.clearErr }
 
 func (*metadataVectorStore) Close() error { return nil }
 
@@ -376,5 +379,41 @@ func TestReindexStoresActiveEmbeddingFingerprint(t *testing.T) {
 	wantFingerprint := semanticConfig.EmbeddingFingerprint()
 	if storedFingerprint != wantFingerprint {
 		t.Fatalf("embedding fingerprint = %q, want %q", storedFingerprint, wantFingerprint)
+	}
+}
+
+func TestReindexPreservesIndexWhenVectorRebuildFails(t *testing.T) {
+	cfg := testutil.Config(t)
+	idx, err := initializeIndexer(cfg.FullPath(""), false, false, "stored-embedding")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer idx.Close()
+	doc := &document.Document{URL: "https://example.com/rebuild-failure", Text: "original text", Processed: true}
+	if err := idx.Add(doc); err != nil {
+		t.Fatal(err)
+	}
+	idx.semanticConfig = config.SemanticSearch{Enable: true, Dimensions: 4}
+	idx.embedder = vectorstore.NewEmbedder(&idx.semanticConfig)
+	wantErr := errors.New("vector table rebuild failed")
+	idx.vectorStore = &metadataVectorStore{clearErr: wantErr}
+	if err := idx.Reindex(&config.Rules{}, false, false, false, nil); !errors.Is(err, wantErr) {
+		t.Fatalf("Reindex error = %v, want %v", err, wantErr)
+	}
+	if idx.GetByURLAndUser(doc.URL, 0) == nil {
+		t.Fatal("existing document was lost after failed vector rebuild")
+	}
+	fingerprint, err := idx.GetEmbeddingFingerprint()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fingerprint != "stored-embedding" {
+		t.Fatalf("embedding fingerprint changed after failed rebuild: %q", fingerprint)
+	}
+	if idx.reindexInProgress.Load() {
+		t.Fatal("reindex remains in progress after failed vector rebuild")
+	}
+	if _, err := os.Stat(filepath.Join(cfg.App.Directory, "reindex")); !os.IsNotExist(err) {
+		t.Fatalf("temporary reindex directory remains after failure: %v", err)
 	}
 }

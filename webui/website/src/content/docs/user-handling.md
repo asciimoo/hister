@@ -154,6 +154,12 @@ When user handling is enabled, each user has their own set of rules and aliases 
 
 Users can view and edit their rules and aliases through the **Rules** tab in the web interface, or via the API endpoints.
 
+Expand **Add rule**, which is closed by default, then choose **Domain**, **URL**, or **Advanced regexp** to define what a rule matches. For **Domain**, enter a domain or paste a page URL, then choose whether to include subdomains. Domain rules match the hostname over HTTP and HTTPS on any port, so a domain mentioned in another site's path or query does not match. **URL** matches one complete URL literally, including its scheme, path, and query. Use the URL as shown in your index. **Advanced regexp** lets you write a custom pattern or adjust a generated one.
+
+Choose the rule's action separately from the **Action** menu: skip indexing, prioritize in search, allow indexing, or keep document versions. Every matching option supports every action, and changing the matching option preserves the selected action.
+
+The optional **Test URL** field checks a draft with the same matcher used by the server. It reports whether the URL matches without opening the URL or saving the rule. The check applies only to that draft; other rules, including allow and skip precedence, can still affect indexing. URL testing is also available when editing an existing rule. Select **Add rule** or save the edit to apply your changes.
+
 In single user mode, rules and aliases continue to be read from and written to `rules.json` in the application data directory.
 
 ## Regexp

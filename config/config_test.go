@@ -1,12 +1,83 @@
 package config
 
 import (
+	"encoding/json"
 	"os"
 	"regexp"
 	"testing"
 
 	"gopkg.in/yaml.v3"
 )
+
+func TestAllowAndSkipRules(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		allow []string
+		skip  []string
+		url   string
+		want  bool
+	}{
+		{name: "empty", url: "https://other.example/"},
+		{name: "allow first", allow: []string{`^https://one\.example/`, `^https://two\.example/`}, url: "https://one.example/page"},
+		{name: "allow second", allow: []string{`^https://one\.example/`, `^https://two\.example/`}, url: "https://two.example/page"},
+		{name: "outside allow", allow: []string{`^https://one\.example/`}, url: "https://other.example/", want: true},
+		{name: "skip wins", allow: []string{`^https://one\.example/`}, skip: []string{`/private/`}, url: "https://one.example/private/page", want: true},
+		{name: "skip only", skip: []string{`/private/`}, url: "https://one.example/private/page", want: true},
+		{name: "skip does not match", skip: []string{`/private/`}, url: "https://one.example/public/page"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := &Rules{Allow: &Rule{ReStrs: tc.allow}, Skip: &Rule{ReStrs: tc.skip}}
+			if err := r.Compile(); err != nil {
+				t.Fatal(err)
+			}
+			if got := r.IsSkip(tc.url); got != tc.want {
+				t.Errorf("IsSkip(%q) = %v, want %v", tc.url, got, tc.want)
+			}
+			if got := r.Count(); got != len(tc.allow)+len(tc.skip) {
+				t.Errorf("Count() = %d", got)
+			}
+		})
+	}
+	r := &Rules{Allow: &Rule{ReStrs: []string{"["}}}
+	if err := r.Compile(); err == nil {
+		t.Fatal("invalid allow pattern was accepted")
+	}
+	if (*Rules)(nil).IsSkip("https://example.com/") || (&Rules{}).IsSkip("https://example.com/") {
+		t.Fatal("missing rules should permit URLs")
+	}
+}
+
+func TestAllowRulesLoadAndSave(t *testing.T) {
+	for _, content := range []string{`{}`, `{"allow":null}`, `{"skip":["private"]}`, `{"allow":["example.com"]}`} {
+		t.Run(content, func(t *testing.T) {
+			cfg := &Config{App: App{Directory: t.TempDir()}}
+			if err := os.WriteFile(cfg.RulesPath(), []byte(content), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if err := cfg.LoadRules(); err != nil {
+				t.Fatal(err)
+			}
+			if cfg.Rules.Allow == nil || cfg.Rules.Allow.ReStrs == nil {
+				t.Fatal("missing allow rules were not initialized")
+			}
+			cfg.Rules.Allow.ReStrs = []string{`^https://allowed\.example/`}
+			if err := cfg.SaveRules(); err != nil {
+				t.Fatal(err)
+			}
+			data, err := os.ReadFile(cfg.RulesPath())
+			if err != nil {
+				t.Fatal(err)
+			}
+			var saved Rules
+			if err := json.Unmarshal(data, &saved); err != nil {
+				t.Fatal(err)
+			}
+			if saved.Allow == nil || saved.IsSkip("https://allowed.example/page") || !saved.IsSkip("https://other.example/page") {
+				t.Fatal("saved allow rules were not preserved")
+			}
+		})
+	}
+}
 
 func restoreEnv(key, value string, existed bool) {
 	if existed {

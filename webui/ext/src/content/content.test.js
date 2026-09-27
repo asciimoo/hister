@@ -45,6 +45,9 @@ function browser({ hidden = false, status = 200, contentType = 'text/html', resp
     readyState: 'complete',
     contentType,
     hidden,
+    get baseURI() {
+      return page.baseURI ?? page.url;
+    },
     addEventListener,
     body: {
       get innerText() {
@@ -58,8 +61,19 @@ function browser({ hidden = false, status = 200, contentType = 'text/html', resp
         return page.html;
       },
     },
-    querySelector: (selector) =>
-      selector === 'title' ? { innerText: page.title } : { getAttribute: () => page.favicon },
+    querySelector: (selector) => {
+      if (selector === 'title') return { innerText: page.title };
+      if (selector === "link[rel~='icon']") return { getAttribute: () => page.favicon };
+      if (selector === 'link[rel~="canonical" i][href]') {
+        return page.metadata.find(
+          (el) =>
+            el.tagName === 'LINK' &&
+            el.getAttribute('rel')?.toLowerCase().split(/\s+/).includes('canonical') &&
+            el.getAttribute('href') !== null,
+        );
+      }
+      return null;
+    },
     querySelectorAll: () => page.metadata,
   };
   const window = {
@@ -129,6 +143,11 @@ function browser({ hidden = false, status = 200, contentType = 'text/html', resp
     reindex(callback = () => {}) {
       return onMessage({ action: 'reindex' }, {}, callback);
     },
+    getPageURL() {
+      let response;
+      onMessage({ action: 'getPageURL' }, {}, (value) => (response = value));
+      return response?.url;
+    },
     advance(ms) {
       const end = now + ms;
       let ticks = 0;
@@ -148,6 +167,95 @@ function browser({ hidden = false, status = 200, contentType = 'text/html', resp
 function metadata(tagName, attributes, textContent = '') {
   return { tagName, textContent, getAttribute: (name) => attributes[name] ?? null };
 }
+
+test('automatic and manual indexing prefer canonical URLs on the same hostname', () => {
+  const cases = [
+    ['https://example.com/clean#section', 'https://example.com/clean'],
+    ['/clean?lang=en#section', 'https://example.com/clean?lang=en'],
+    ['../clean', 'https://example.com/clean'],
+    ['clean', 'https://example.com/articles/clean'],
+    ['//example.com/clean', 'https://example.com/clean'],
+    ['  https://EXAMPLE.com/clean  ', 'https://example.com/clean'],
+  ];
+  for (const [href, expected] of cases) {
+    const b = browser();
+    b.page.url = 'https://example.com/articles/original?utm_source=test#section';
+    b.page.metadata = [metadata('LINK', { rel: 'alternate CANONICAL', href })];
+    assert.equal(b.getPageURL(), expected, href);
+    assert.equal(b.messages.length, 0);
+    b.advance(0);
+    assert.equal(b.messages[0].request.pageData.url, expected, href);
+    b.reindex();
+    assert.equal(b.messages[1].request.action, 'reindex');
+    assert.equal(b.messages[1].request.pageData.url, expected, href);
+  }
+});
+
+test('missing, invalid, and unsafe canonical URLs fall back to the current page URL', () => {
+  const hrefs = [
+    undefined,
+    '',
+    '   ',
+    'https://other.example/clean',
+    '//other.example/clean',
+    'https://www.example.com/clean',
+    'https://sub.example.com/clean',
+    'https://example.com.other.example/clean',
+    'https://notexample.com/clean',
+    'https://example.com@other.example/clean',
+    'https://user:password@example.com/clean',
+    'https://[invalid',
+    'javascript:alert(1)',
+    'data:text/html,hello',
+    'ftp://example.com/clean',
+    'file://example.com/clean',
+    'blob:https://example.com/clean',
+  ];
+  for (const href of hrefs) {
+    const b = browser();
+    b.page.url = 'https://example.com/article?utm_source=test#section';
+    b.page.metadata = [metadata('LINK', { rel: 'canonical', href })];
+    b.advance(0);
+    assert.equal(
+      b.messages[0].request.pageData.url,
+      'https://example.com/article?utm_source=test',
+      String(href),
+    );
+  }
+});
+
+test('relative canonical URLs honor the document base while checking the actual page hostname', () => {
+  const b = browser();
+  b.page.baseURI = 'https://example.com/base/';
+  b.page.metadata = [metadata('LINK', { rel: 'canonical', href: 'clean' })];
+  b.advance(0);
+  assert.equal(b.messages[0].request.pageData.url, 'https://example.com/base/clean');
+
+  b.page.baseURI = 'https://other.example/base/';
+  b.advance(30_000);
+  assert.equal(b.messages[1].request.pageData.url, b.page.url);
+});
+
+test('relative favicon URLs use the loaded document base instead of the canonical URL', () => {
+  const b = browser();
+  b.page.url = 'https://example.com/articles/original?tracking=true';
+  b.page.favicon = 'icon.png';
+  b.page.metadata = [metadata('LINK', { rel: 'canonical', href: '/clean/article' })];
+  b.advance(0);
+  assert.equal(b.messages[0].request.pageData.url, 'https://example.com/clean/article');
+  assert.equal(b.messages[0].request.pageData.faviconURL, 'https://example.com/articles/icon.png');
+});
+
+test('canonical URL changes are picked up while monitoring a page', () => {
+  const b = browser();
+  b.advance(0);
+  b.page.metadata = [metadata('LINK', { rel: 'canonical', href: '/clean' })];
+  b.advance(30_000);
+  assert.equal(b.messages[1].request.pageData.url, 'https://example.com/clean');
+  b.page.metadata = [metadata('LINK', { rel: 'canonical', href: 'https://other.example/clean' })];
+  b.advance(30_000);
+  assert.equal(b.messages[2].request.pageData.url, b.page.url);
+});
 
 test('cosmetic HTML changes wait for the preview interval without repeated DOM serialization', () => {
   const b = browser();
@@ -213,7 +321,10 @@ test('text, title, favicon, and structured metadata changes trigger updates with
     (page) => (page.title = 'Updated title'),
     (page) => (page.favicon = '/new.ico'),
     (page) => (page.metadata = [metadata('META', { property: 'og:description', content: 'New' })]),
-    (page) => (page.metadata = [metadata('LINK', { href: 'https://example.com/canonical' })]),
+    (page) =>
+      (page.metadata = [
+        metadata('LINK', { rel: 'canonical', href: 'https://example.com/canonical' }),
+      ]),
     (page) => (page.metadata = [metadata('SCRIPT', {}, '{"@type":"Article"}')]),
   ];
   for (const change of changes) {

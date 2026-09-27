@@ -100,23 +100,30 @@ WebEngine debugging port to a network.
 
 The extension captures visible pages, including the page title, full text, HTML, and favicon, then sends them to your Hister server via its API. Pages opened in a background tab are captured when you view them.
 
+When a page provides a `<link rel="canonical">` URL, the extension uses it for indexing if it is an HTTP or HTTPS URL with exactly the same hostname as the visited page. Relative canonical URLs are resolved against the document base URL. Other domains and subdomains, invalid URLs, and URLs containing credentials are ignored. URL fragments are removed. Automatic indexing checks allow and skip rules against both the visited URL and the canonical URL.
+
 While a page remains visible, the extension checks for changes at intervals starting at 30 seconds. The interval doubles when nothing changes, up to five minutes. Navigation within a page waits for one second of quiet before a check, and automatic checks and submissions remain at least 30 seconds apart within that page. Rapid navigation can therefore capture only the latest page state.
 
 Changes to text, title, favicon, or page metadata trigger an update. Cosmetic markup changes alone wait for a preview check, at most once every five minutes, so animations and changing HTML attributes do not continuously trigger indexing. Each submission includes the current full HTML for extraction and previews.
 
 When you hide a tab, the extension captures one final snapshot and stops polling. If that snapshot has changed, it is submitted after any remaining submission delay. Showing the tab again resumes checks using fresh content. Closing the tab or navigating away flushes changed content immediately to the extension's background process, bypassing the remaining delay. Unchanged content is not submitted again. Manual indexing also submits immediately and bypasses these delays.
 
+To capture only selected websites, add allow patterns on the Hister Rules page. A URL
+must match at least one allow pattern when the list is nonempty, and skip rules take
+precedence. The extension checks both lists before uploading pages or PDFs. Patterns
+that JavaScript cannot evaluate are checked by the server when the page is submitted.
+
 Automatic indexing can be paused at any time using the toggle in the popup.
 
 ### Manual Reindex
 
 The **Index this page now** button in the popup immediately submits the current
-page or PDF, even when automatic indexing is disabled or a skip rule matches.
+page or PDF, even when automatic indexing is disabled or allow or skip rules exclude it.
 The indexing keyboard shortcut does the same. This is useful when you exclude a
 domain from automatic indexing but want to save an individual page from it.
 
-Manual indexing saves a skip rule override with the document, so it survives an
-index rebuild. It leaves your skip rules and automatic indexing setting intact;
+Manual indexing saves an allow and skip rule override with the document, so it survives an
+index rebuild. It leaves your indexing rules and automatic indexing setting intact;
 later automatic submissions still respect them. Sensitive content checks and
 normal access restrictions still apply.
 

@@ -49,7 +49,7 @@ type cdpClient struct {
 	pendingMu sync.Mutex
 	pending   map[int64]chan rpcMessage
 
-	events chan rpcMessage
+	events *cdpEventQueue
 	done   chan struct{}
 
 	closeOnce sync.Once
@@ -83,7 +83,7 @@ func dialCDP(
 	client := &cdpClient{
 		conn:    conn,
 		pending: make(map[int64]chan rpcMessage),
-		events:  make(chan rpcMessage, 512),
+		events:  newCDPEventQueue(),
 		done:    make(chan struct{}),
 	}
 	go client.readLoop()
@@ -228,14 +228,8 @@ func (c *cdpClient) readLoop() {
 			}
 			continue
 		}
-		if message.Method == "" {
-			continue
-		}
-		select {
-		case c.events <- message:
-		default:
-			c.fail(errors.New("DevTools event buffer is full"))
-			return
+		if isMonitoredEvent(message.Method) {
+			c.events.push(message)
 		}
 	}
 }

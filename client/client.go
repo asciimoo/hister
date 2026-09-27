@@ -24,6 +24,7 @@ type Client struct {
 	accessToken    string
 	targetUserID   *uint
 	allowSensitive bool
+	ignoreRules    bool
 	batchLimitOnce sync.Once
 	batchBodyBytes int64
 }
@@ -63,6 +64,12 @@ func WithAccessToken(token string) Option {
 
 func WithAllowSensitive() Option {
 	return func(c *Client) { c.allowSensitive = true }
+}
+
+// WithIgnoreRules marks submitted documents as explicitly saved, bypassing URL
+// indexing rules on submission and on subsequent index rebuilds.
+func WithIgnoreRules() Option {
+	return func(c *Client) { c.ignoreRules = true }
 }
 
 // WithMaxBatchBodyBytes overrides batch capability discovery. It is primarily
@@ -185,7 +192,7 @@ func checkStatus(resp *http.Response) error {
 		}
 		return errWithStatus(msg)
 	case http.StatusNotAcceptable:
-		msg := "page skipped: this URL was rejected by the server (usually due to skip rules or disabled domains)"
+		msg := "page skipped: this URL was rejected by the server (usually due to allow or skip rules)"
 		if detail != "" {
 			msg += " (" + detail + ")"
 		}

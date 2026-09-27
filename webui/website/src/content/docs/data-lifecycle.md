@@ -93,7 +93,11 @@ See [Disable Previews](configuration#disable-previews) for the user interface ef
 
 ## Deleting Documents
 
-Delete one result from the web or terminal interface, or delete every document matching a query with the command line client:
+Delete one result from the web or terminal interface, or prune every document matching a search query from the search web UI or command line client.
+
+In the search web UI, enter a query such as `domain:example.com` or `updated:>90d`. Refine the query while reviewing the results until it selects the documents you want to remove. Open **Actions**, click **Delete all matching results**, and confirm the deletion. Like `hister delete`, this removes every document matching the query, including matches beyond the currently displayed results. This lets you quickly build and adjust cleanup queries without leaving the search page.
+
+To delete matching documents from the command line:
 
 ```bash
 hister delete 'domain:example.com'

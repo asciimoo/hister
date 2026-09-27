@@ -318,7 +318,7 @@ func workspaceStatus(m *model.Model) string {
 		if m.RulesLoading {
 			return m.Styles.Spin.Render(m.Spinner.View() + " loading rules…")
 		}
-		total := len(m.RulesData.Skip) + len(m.RulesData.Priority) + len(m.RulesData.Versioning) + len(m.RulesData.Aliases)
+		total := len(m.RulesData.Allow) + len(m.RulesData.Skip) + len(m.RulesData.Priority) + len(m.RulesData.Versioning) + len(m.RulesData.Aliases)
 		return m.Styles.Status.Render(itemCount(total, "rule"))
 	case model.TabAdd:
 		return m.Styles.Status.Render("Add a document")

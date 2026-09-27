@@ -53,9 +53,7 @@ var indexCmd = &cobra.Command{
 
 		global, _ := cmd.Flags().GetBool("global")
 		clientOpts := targetUserIDClientOptions(cmd, global)
-		if allowSensitive, _ := cmd.Flags().GetBool("allow-sensitive"); allowSensitive {
-			clientOpts = append(clientOpts, client.WithAllowSensitive())
-		}
+		clientOpts = append(clientOpts, documentSubmissionClientOptions(cmd)...)
 
 		force, _ := cmd.Flags().GetBool("force")
 		recursive, _ := cmd.Flags().GetBool("recursive")
@@ -418,6 +416,7 @@ func init() {
 	indexCmd.Flags().String("failed-urls", "", "Write failed URLs to this file, one per line, replacing its contents")
 	indexCmd.Flags().String("label", "", "Label to attach to all indexed documents")
 	indexCmd.Flags().Bool("force", false, "Reindex URLs even if they are already in the index. Already indexed URLs are skipped otherwise")
+	indexCmd.Flags().Bool("ignore-rules", false, ignoreRulesFlagUsage)
 	indexCmd.Flags().BoolP("recursive", "r", false, "Recursively crawl linked pages")
 	indexCmd.Flags().Int("max-depth", 0, "Maximum crawl depth (0 = unlimited)")
 	indexCmd.Flags().Int("max-links", 0, "Maximum number of pages to visit (0 = unlimited)")

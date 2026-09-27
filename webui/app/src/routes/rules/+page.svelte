@@ -10,8 +10,15 @@
   import BulkRulesDialog from '$lib/components/BulkRulesDialog.svelte';
   import DeleteMatchingDocumentsDialog from '$lib/components/DeleteMatchingDocumentsDialog.svelte';
   import DeleteMatchingDocumentsOption from '$lib/components/DeleteMatchingDocumentsOption.svelte';
+  import RulePatternEditor from '$lib/components/RulePatternEditor.svelte';
   import { deleteDocuments, previewDocumentDeletion } from '$lib/document-delete';
-  import { fetchRules, saveRuleLists, type RulesData, type RuleType } from '$lib/rules';
+  import {
+    fetchRules,
+    saveRuleLists,
+    type RulesData,
+    type RuleType,
+    type RuleMatchMode,
+  } from '$lib/rules';
   import { Button } from '@hister/components/ui/button';
   import { Input } from '@hister/components/ui/input';
   import { Badge } from '@hister/components/ui/badge';
@@ -79,7 +86,7 @@
     return `${ruleCount(addedCount)} added; skipped ${duplicateMessage}.`;
   }
 
-  let rules: RulesData = $state({ skip: [], priority: [], versioning: [], aliases: {} });
+  let rules: RulesData = $state({ allow: [], skip: [], priority: [], versioning: [], aliases: {} });
   let loading = $state(true);
   let saving = $state(false);
   let message = $state('');
@@ -88,6 +95,14 @@
   let newAliasValue = $state('');
   let newRulePattern = $state('');
   let newRuleType: RuleType = $state('skip');
+  let newRuleMode: RuleMatchMode = $state('domain');
+  const ruleMatchModes: { mode: RuleMatchMode; label: string }[] = [
+    { mode: 'domain', label: 'Domain' },
+    { mode: 'url', label: 'URL' },
+    { mode: 'regex', label: 'Advanced regexp' },
+  ];
+  let newRuleValid = $state(false);
+  let ruleDraftID = $state(0);
   let deleteMatchingDocuments = $state(false);
   let bulkAddOpen = $state(false);
   let bulkRulePatterns = $state('');
@@ -105,6 +120,7 @@
   let editingRuleIndex = $state<number | null>(null);
   let editRulePattern = $state('');
   let editRuleType: RuleType = $state('skip');
+  let editRuleValid = $state(false);
   let editDeleteMatchingDocuments = $state(false);
 
   // Filter state
@@ -133,7 +149,14 @@
   const aliasSort = new SortState<'keyword' | 'value'>();
   const ruleSort = new SortState<'pattern' | 'type'>();
 
-  const existingRulePatterns = $derived([...rules.skip, ...rules.priority, ...rules.versioning]);
+  const existingRulePatterns = $derived(rules[newRuleType]);
+  const ruleDescriptions: Record<RuleType, string> = {
+    skip: 'Skip matching URLs during automatic indexing. Explicit manual saves can bypass this rule.',
+    priority: 'Prioritize matching URLs in search results.',
+    allow:
+      'Allow matching URLs. Once any allow rule exists, other URLs are excluded unless they match another allow rule. Skip rules take precedence.',
+    versioning: 'Keep previous versions when matching documents change.',
+  };
   const bulkRuleSummary = $derived.by(() =>
     parseRulePatterns(bulkRulePatterns, existingRulePatterns),
   );
@@ -141,6 +164,7 @@
   const ruleRows = $derived.by(() => {
     const rows: RuleRow[] = [];
     let addedOrder = 0;
+    for (const p of rules.allow) rows.push({ pattern: p, type: 'allow', addedOrder: addedOrder++ });
     for (const p of rules.skip) rows.push({ pattern: p, type: 'skip', addedOrder: addedOrder++ });
     for (const p of rules.priority)
       rows.push({ pattern: p, type: 'priority', addedOrder: addedOrder++ });
@@ -242,7 +266,7 @@
 
   async function addRule() {
     const pattern = newRulePattern.trim();
-    if (!pattern) return;
+    if (!pattern || !newRuleValid || saving) return;
 
     if (existingRulePatterns.includes(pattern)) {
       message = `Rule "${pattern}" already exists.`;
@@ -253,6 +277,8 @@
     const shouldDeleteMatches = newRuleType === 'skip' && deleteMatchingDocuments;
     if (!(await saveRules(rulesWithPatterns([pattern])))) return;
     newRulePattern = '';
+    newRuleValid = false;
+    ruleDraftID++;
     deleteMatchingDocuments = false;
     await deleteMatchesAfterSaving([pattern], shouldDeleteMatches, rulesAddedMessage(1, 0));
   }
@@ -455,6 +481,7 @@
     editingRuleIndex = index;
     editRulePattern = row.pattern;
     editRuleType = row.type;
+    editRuleValid = false;
     editDeleteMatchingDocuments = false;
   }
 
@@ -466,6 +493,7 @@
   function rulesWithEditedRule(row: RuleRow, pattern: string, type: RuleType): RulesData {
     const nextRules = {
       ...rules,
+      allow: [...rules.allow],
       skip: [...rules.skip],
       priority: [...rules.priority],
       versioning: [...rules.versioning],
@@ -481,14 +509,12 @@
 
   async function saveEditRule() {
     const trimmed = editRulePattern.trim();
-    if (!trimmed) return;
+    if (!trimmed || !editRuleValid || saving) return;
     const row = ruleRows[editingRuleIndex!];
-    // Reject if the new pattern already exists elsewhere (different item)
+    // Reject duplicate patterns within the selected rule type.
     const isDuplicate =
-      (rules.skip.includes(trimmed) ||
-        rules.priority.includes(trimmed) ||
-        rules.versioning.includes(trimmed)) &&
-      trimmed !== row.pattern;
+      rules[editRuleType].includes(trimmed) &&
+      !(editRuleType === row.type && trimmed === row.pattern);
     if (isDuplicate) {
       message = `Rule "${trimmed}" already exists.`;
       isError = true;
@@ -588,13 +614,19 @@
     </Table.Head>
   {/snippet}
 
-  {#snippet editCancelButtons(onSave: () => void, onCancel: () => void)}
+  {#snippet editCancelButtons(
+    onSave: () => void,
+    onCancel: () => void,
+    saveDisabled: boolean = false,
+  )}
     <div class="flex items-center gap-1">
       <Button
         variant="ghost"
         size="icon-sm"
         class="text-hister-teal shrink-0 transition-colors"
         onclick={onSave}
+        disabled={saveDisabled}
+        aria-label="Save changes"
       >
         <Check class="size-4" />
       </Button>
@@ -603,6 +635,7 @@
         size="icon-sm"
         class="text-text-brand-muted shrink-0 transition-colors"
         onclick={onCancel}
+        aria-label="Cancel editing"
       >
         <X class="size-4" />
       </Button>
@@ -804,84 +837,116 @@
               class="font-space text-xl font-extrabold tracking-[1px] text-white uppercase"
               >Indexing rules</Card.Title
             >
-            <Card.Description class="font-inter text-sm text-white/80"
-              >{ruleRows.length} rules configured · patterns use
-              <a
-                href="https://pkg.go.dev/regexp/syntax"
-                target="_blank"
-                class="text-white underline opacity-80 hover:opacity-100">Go regexp</a
-              > syntax</Card.Description
-            >
+            <Card.Description class="font-inter text-sm text-white/80">
+              {ruleRows.length} rules configured. Choose what to match and which action to apply.
+            </Card.Description>
           </div>
         </Card.Header>
 
-        <div
-          class="bg-muted-surface border-brutal-border flex items-center border-b-[3px] px-4 py-4 md:px-5 md:py-5"
+        <p class="font-inter text-text-brand-muted px-4 py-3 text-sm md:px-5">
+          When allow rules exist, URLs must match at least one. Skip rules take precedence.
+          Reindexing removes excluded documents, except pages explicitly saved manually. Removing
+          all allow rules restores indexing of any URL without a skip match.
+        </p>
+
+        <details
+          id="add-rule-section"
+          class="group/rule-add bg-muted-surface border-brutal-border border-b-[3px]"
         >
-          <div class="flex w-full flex-col gap-3">
-            <div class="flex flex-col items-stretch gap-3 md:flex-row md:items-end">
-              <div class="flex flex-1 flex-col gap-1">
-                <Label for="rule-pattern" class="font-outfit text-text-brand text-sm font-bold"
-                  >Pattern</Label
-                >
-                <Input
-                  id="rule-pattern"
-                  type="text"
-                  variant="brutal"
-                  bind:value={newRulePattern}
-                  placeholder="Enter Go regexp pattern"
-                  class="bg-card-surface focus-visible:border-hister-coral h-10 w-full px-3"
-                  onkeydown={(e) => {
-                    if (e.key === 'Enter') addRule();
-                  }}
-                />
+          <summary
+            class="font-outfit text-text-brand hover:bg-card-surface focus-visible:outline-hister-coral box-border flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 font-bold focus-visible:outline-2 focus-visible:outline-offset-[-4px] md:px-5 [&::-webkit-details-marker]:hidden"
+          >
+            <span class="flex items-center gap-2">
+              <Plus class="size-4" aria-hidden="true" />
+              Add rule
+            </span>
+            <ChevronDown
+              class="size-4 transition-transform group-open/rule-add:rotate-180"
+              aria-hidden="true"
+            />
+          </summary>
+          <!-- Reset inherited box sizing across the native details content boundary. -->
+          <div class="box-border flex w-full min-w-0 flex-col gap-4 px-4 pb-4 md:px-5 md:pb-5">
+            <fieldset>
+              <legend class="font-outfit text-text-brand mb-2 text-sm font-bold">Match by</legend>
+              <div class="flex flex-wrap gap-2">
+                {#each ruleMatchModes as option}
+                  <Button
+                    variant={newRuleMode === option.mode ? 'default' : 'outline'}
+                    disabled={saving}
+                    aria-pressed={newRuleMode === option.mode}
+                    onclick={() => (newRuleMode = option.mode)}
+                  >
+                    {option.label}
+                  </Button>
+                {/each}
               </div>
-              <div class="flex flex-col gap-1">
+            </fieldset>
+
+            {#key ruleDraftID}
+              <RulePatternEditor
+                id="new-rule"
+                mode={newRuleMode}
+                bind:pattern={newRulePattern}
+                bind:valid={newRuleValid}
+                disabled={saving}
+                onSubmit={addRule}
+              />
+            {/key}
+
+            <div class="space-y-1.5">
+              <div class="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
                 <Label for="rule-type" class="font-outfit text-text-brand text-sm font-bold"
-                  >Type</Label
+                  >Action</Label
                 >
                 <select
                   id="rule-type"
                   value={newRuleType}
+                  disabled={saving}
+                  aria-describedby="rule-action-help"
                   onchange={(event) => {
                     newRuleType = (event.currentTarget as HTMLSelectElement)
                       .value as typeof newRuleType;
                     if (newRuleType !== 'skip') deleteMatchingDocuments = false;
                   }}
-                  class="bg-card-surface border-brutal-border font-space text-text-brand h-10 w-full shrink-0 cursor-pointer appearance-none border-[3px] px-3 text-center text-xs font-bold tracking-[0.5px] outline-none md:w-27.5"
+                  class="bg-card-surface border-brutal-border font-inter text-text-brand h-10 border-[3px] px-3 text-sm"
                 >
-                  <option value="skip">SKIP</option>
-                  <option value="priority">PRIORITY</option>
-                  <option value="versioning">VERSION</option>
+                  <option value="skip">Skip indexing</option>
+                  <option value="priority">Prioritize in search</option>
+                  <option value="allow">Allow indexing</option>
+                  <option value="versioning">Keep document versions</option>
                 </select>
               </div>
-              <div class="flex gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onclick={openBulkAdd}
-                  disabled={saving}
-                  class="bg-card-surface text-text-brand-secondary font-space border-brutal-border brutal-press h-10 flex-1 gap-2 rounded-none border-[3px] px-4 text-xs font-bold tracking-[0.5px] uppercase md:flex-none"
-                >
-                  <ListPlus class="size-4 shrink-0" />
-                  Bulk add
-                </Button>
-                <Button
-                  type="button"
-                  onclick={addRule}
-                  disabled={saving || !newRulePattern.trim()}
-                  class="bg-hister-coral font-space border-brutal-border brutal-press h-10 flex-1 gap-2 border-[3px] px-5 text-sm font-bold tracking-[1px] text-white uppercase md:flex-none"
-                >
-                  <Plus class="size-4 shrink-0" />
-                  Add
-                </Button>
-              </div>
+              <p id="rule-action-help" class="font-inter text-text-brand-secondary text-sm">
+                {ruleDescriptions[newRuleType]}
+              </p>
             </div>
             {#if newRuleType === 'skip'}
               <DeleteMatchingDocumentsOption bind:checked={deleteMatchingDocuments} />
             {/if}
+            <div class="flex flex-wrap justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onclick={openBulkAdd}
+                disabled={saving}
+                class="bg-card-surface text-text-brand-secondary font-space border-brutal-border brutal-press h-10 flex-1 gap-2 rounded-none border-[3px] px-4 text-xs font-bold tracking-[0.5px] uppercase md:flex-none"
+              >
+                <ListPlus class="size-4 shrink-0" />
+                Bulk add
+              </Button>
+              <Button
+                type="button"
+                onclick={addRule}
+                disabled={saving || !newRuleValid || !newRulePattern.trim()}
+                class="bg-hister-coral font-space border-brutal-border brutal-press h-10 flex-1 gap-2 border-[3px] px-5 text-sm font-bold tracking-[1px] text-white uppercase md:flex-none"
+              >
+                <Plus class="size-4 shrink-0" />
+                Add rule
+              </Button>
+            </div>
           </div>
-        </div>
+        </details>
 
         <Card.Content class="flex-1 p-0">
           <!-- Rules table -->
@@ -927,31 +992,44 @@
                   {#if editingRuleIndex === i}
                     <Table.Cell class="px-2 py-2 md:px-3" colspan={2}>
                       <div class="flex flex-col gap-2">
-                        <div class="flex items-center gap-2">
-                          <Input
-                            type="text"
-                            variant="brutal"
-                            bind:value={editRulePattern}
-                            class="bg-card-surface focus-visible:border-hister-coral h-8 flex-1 px-2 text-sm"
-                            onkeydown={(e) => {
-                              if (e.key === 'Enter') saveEditRule();
-                              if (e.key === 'Escape') cancelEditRule();
-                            }}
+                        {#key row.pattern}
+                          <RulePatternEditor
+                            id="edit-rule"
+                            bind:pattern={editRulePattern}
+                            bind:valid={editRuleValid}
+                            disabled={saving}
+                            onSubmit={saveEditRule}
+                            onCancel={cancelEditRule}
                           />
+                        {/key}
+                        <div class="flex items-center gap-2">
+                          <Label for="edit-rule-type" class="font-outfit text-sm font-bold"
+                            >Action</Label
+                          >
                           <select
+                            id="edit-rule-type"
                             value={editRuleType}
+                            disabled={saving}
+                            aria-describedby="edit-rule-action-help"
                             onchange={(event) => {
                               editRuleType = (event.currentTarget as HTMLSelectElement)
                                 .value as typeof editRuleType;
                               if (editRuleType !== 'skip') editDeleteMatchingDocuments = false;
                             }}
-                            class="bg-card-surface border-brutal-border font-space text-text-brand h-8 w-20 shrink-0 cursor-pointer appearance-none border-[3px] px-2 text-center text-xs font-bold tracking-[0.5px] outline-none md:w-25 md:px-3"
+                            class="bg-card-surface border-brutal-border font-inter text-text-brand h-10 min-w-0 border-[3px] px-2 text-sm"
                           >
-                            <option value="skip">SKIP</option>
-                            <option value="priority">PRIORITY</option>
-                            <option value="versioning">VERSION</option>
+                            <option value="skip">Skip indexing</option>
+                            <option value="priority">Prioritize in search</option>
+                            <option value="allow">Allow indexing</option>
+                            <option value="versioning">Keep document versions</option>
                           </select>
                         </div>
+                        <p
+                          id="edit-rule-action-help"
+                          class="font-inter text-text-brand-secondary text-sm"
+                        >
+                          {ruleDescriptions[editRuleType]}
+                        </p>
                         {#if editRuleType === 'skip'}
                           <DeleteMatchingDocumentsOption
                             bind:checked={editDeleteMatchingDocuments}
@@ -960,7 +1038,11 @@
                       </div>
                     </Table.Cell>
                     <Table.Cell class="w-16 px-1 py-2 md:w-20 md:px-3">
-                      {@render editCancelButtons(saveEditRule, cancelEditRule)}
+                      {@render editCancelButtons(
+                        saveEditRule,
+                        cancelEditRule,
+                        saving || !editRuleValid,
+                      )}
                     </Table.Cell>
                   {:else}
                     <Table.Cell
@@ -973,9 +1055,11 @@
                         class="font-space border-0 px-2 py-1 text-xs font-bold tracking-[0.5px] uppercase md:px-3 {row.type ===
                         'skip'
                           ? 'bg-hister-rose text-white'
-                          : row.type === 'priority'
-                            ? 'bg-hister-teal text-white'
-                            : 'bg-violet-500 text-white'}"
+                          : row.type === 'allow'
+                            ? 'bg-hister-indigo text-white'
+                            : row.type === 'priority'
+                              ? 'bg-hister-teal text-white'
+                              : 'bg-violet-500 text-white'}"
                       >
                         {row.type}
                       </Badge>

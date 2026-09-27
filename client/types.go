@@ -15,6 +15,7 @@ type historyRequest struct {
 }
 
 type RulesResponse struct {
+	Allow      []string          `json:"allow"`
 	Skip       []string          `json:"skip"`
 	Priority   []string          `json:"priority"`
 	Versioning []string          `json:"versioning"`

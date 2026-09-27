@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # Build the frontend with only the workspaces required by the embedded app.
-FROM node:26-alpine3.24@sha256:ef24c5053d50fdc3e4e56eb4e7ddb7861874ab0fdc797046ba897581deb8e868 AS frontend
+FROM node:26-alpine3.24@sha256:dbaa92e5758cbbcf85d65d5403fdb530fe3442cbe8c6dbfb7ef23365450d5070 AS frontend
 
 WORKDIR /app
 
@@ -21,7 +21,7 @@ RUN npm run build --workspace=@hister/app
 
 # Build a static Go binary. Cache downloads and compiled packages separately so
 # source changes do not force the toolchain to start cold.
-FROM golang:1.27-alpine3.24@sha256:cf6fca6641884b8433441b2b0652976f975e1d0fdd26d177eaaf8596087f3125 AS builder
+FROM golang:1.27-alpine3.24@sha256:4cb7ac979db5fcc41cae44b2227ba5ab8a51e8807f40d9ba4dee20a0ad960b5b AS builder
 
 RUN apk add --no-cache gcc musl-dev
 

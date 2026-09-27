@@ -4,6 +4,7 @@
 package chatgpt
 
 import (
+	"errors"
 	"fmt"
 	stdhtml "html"
 	"net/url"
@@ -20,6 +21,11 @@ import (
 
 const conversationType = "chatgpt"
 
+const conversationRoleSelector = `[data-message-author-role], [data-testid^="conversation-turn-"][data-turn], ` +
+	`[data-chatgpt-search-unit-key], [data-content-search-unit-key]`
+
+const noConversationTurns = "no visible user or assistant turns found; capture the loaded conversation with the browser extension or a browser crawler (chromedp or bidi); private conversations require a signed in browser"
+
 // ChatGPTExtractor extracts one visible ChatGPT conversation into one Hister
 // document. It intentionally works only with the rendered HTML already on the
 // document and never fetches conversation data itself.
@@ -34,7 +40,7 @@ func (e *ChatGPTExtractor) Name() string {
 }
 
 func (e *ChatGPTExtractor) Description() string {
-	return "Extracts the visible user and assistant turns from ChatGPT conversations as one searchable document."
+	return "Extracts the visible user and assistant turns from rendered ChatGPT conversations as one searchable document. Requires HTML captured by the browser extension or a browser crawler (chromedp or bidi)."
 }
 
 func (e *ChatGPTExtractor) Capabilities() sdk.Capabilities {
@@ -110,7 +116,7 @@ func (e *ChatGPTExtractor) Extract(d *sdk.Document) sdk.ExtractResult {
 		return sdk.ExtractFallback(err)
 	}
 	if len(turns) == 0 {
-		return sdk.AbortExtraction(fmt.Errorf("no visible user or assistant turns found"))
+		return sdk.AbortExtraction(errors.New(noConversationTurns))
 	}
 
 	title := documentTitle(d, doc)
@@ -134,7 +140,7 @@ func (e *ChatGPTExtractor) Preview(d *sdk.Document) sdk.PreviewResult {
 		return sdk.PreviewFallback(err)
 	}
 	if len(turns) == 0 {
-		return sdk.PreviewFallback(fmt.Errorf("no visible user or assistant turns found"))
+		return sdk.PreviewFallback(errors.New(noConversationTurns))
 	}
 
 	base, err := url.Parse(d.URL)
@@ -181,40 +187,18 @@ func findConversationTurns(doc *goquery.Document) []conversationTurn {
 	if doc == nil {
 		return nil
 	}
-	if turns := findArticleConversationTurns(doc); len(turns) > 0 {
-		return turns
-	}
-	return findRoleConversationTurns(doc)
-}
-
-func findArticleConversationTurns(doc *goquery.Document) []conversationTurn {
 	turns := make([]conversationTurn, 0)
-	doc.Find(`article[data-testid^="conversation-turn-"]`).Each(func(_ int, article *goquery.Selection) {
-		if isHiddenElement(article) {
-			return
-		}
-		roleNode, role := findRoleNode(article)
-		if roleNode == nil || isHiddenElement(roleNode) {
-			return
-		}
-
-		content := roleNode.Clone()
-		cleanConversationContent(content, role)
-		if strings.TrimSpace(conversationSelectionText(content)) == "" {
-			return
-		}
-		turns = append(turns, conversationTurn{role: role, content: content})
-	})
-	return turns
-}
-
-func findRoleConversationTurns(doc *goquery.Document) []conversationTurn {
-	turns := make([]conversationTurn, 0)
-	doc.Find(`[data-message-author-role]`).Each(func(_ int, roleNode *goquery.Selection) {
-		role := normalizeRole(roleNode.AttrOr("data-message-author-role", ""))
+	// Visit all marker forms together so mixed markup retains document order.
+	doc.Find(conversationRoleSelector).Each(func(_ int, roleNode *goquery.Selection) {
+		role := conversationRole(roleNode)
 		if role == "" || hasRoleAncestor(roleNode) || isHiddenElement(roleNode) {
 			return
 		}
+		if _, explicit := roleNode.Attr("data-message-author-role"); !explicit && roleNode.Find(`[data-message-author-role]`).Length() > 0 {
+			// Prefer explicit messages, even when they are hidden or unsupported.
+			// Falling back to their wrapper would index controls or internal text.
+			return
+		}
 
 		content := roleNode.Clone()
 		cleanConversationContent(content, role)
@@ -226,30 +210,24 @@ func findRoleConversationTurns(doc *goquery.Document) []conversationTurn {
 	return turns
 }
 
-func findRoleNode(article *goquery.Selection) (*goquery.Selection, string) {
-	if article == nil || article.Length() == 0 {
-		return nil, ""
+func conversationRole(selection *goquery.Selection) string {
+	if rawRole, ok := selection.Attr("data-message-author-role"); ok {
+		return normalizeRole(rawRole)
 	}
-	if rawRole, ok := article.Attr("data-message-author-role"); ok {
-		role := normalizeRole(rawRole)
-		if role == "" {
-			return nil, ""
-		}
-		return article, role
+	if rawRole, ok := selection.Attr("data-turn"); ok {
+		return normalizeRole(rawRole)
 	}
-
-	var selected *goquery.Selection
-	role := ""
-	article.Find(`[data-message-author-role]`).EachWithBreak(func(_ int, candidate *goquery.Selection) bool {
-		candidateRole := normalizeRole(candidate.AttrOr("data-message-author-role", ""))
-		if candidateRole == "" || hasRoleAncestor(candidate) {
-			return true
+	// Search units encode the role as the final component, for example
+	// "fallback-turn-0:2:assistant". Both attributes may wrap the same message.
+	for _, attribute := range []string{"data-chatgpt-search-unit-key", "data-content-search-unit-key"} {
+		if key, ok := selection.Attr(attribute); ok {
+			if separator := strings.LastIndexByte(key, ':'); separator > 0 {
+				return normalizeRole(key[separator+1:])
+			}
+			return ""
 		}
-		selected = candidate
-		role = candidateRole
-		return false
-	})
-	return selected, role
+	}
+	return ""
 }
 
 func normalizeRole(raw string) string {
@@ -265,9 +243,12 @@ func normalizeRole(raw string) string {
 
 func hasRoleAncestor(selection *goquery.Selection) bool {
 	found := false
-	selection.ParentsFiltered(`[data-message-author-role]`).EachWithBreak(func(_ int, ancestor *goquery.Selection) bool {
-		found = true
-		return false
+	selection.ParentsFiltered(conversationRoleSelector).EachWithBreak(func(_ int, ancestor *goquery.Selection) bool {
+		_, explicit := ancestor.Attr("data-message-author-role")
+		// A wrapper with explicit messages is not itself a turn. Other role
+		// ancestors either already contain this text or mark internal content.
+		found = explicit || conversationRole(ancestor) == "" || ancestor.Find(`[data-message-author-role]`).Length() == 0
+		return !found
 	})
 	return found
 }
@@ -276,11 +257,16 @@ func cleanConversationContent(content *goquery.Selection, role string) {
 	if content == nil {
 		return
 	}
-	content.Find(`[data-message-author-role]`).Each(func(_ int, nested *goquery.Selection) {
-		if normalizeRole(nested.AttrOr("data-message-author-role", "")) != role {
+	content.Find(conversationRoleSelector).Each(func(_ int, nested *goquery.Selection) {
+		if conversationRole(nested) != role {
 			nested.Remove()
 		}
 	})
+	if _, explicit := content.Attr("data-message-author-role"); !explicit {
+		// Turn wrappers include an accessibility heading repeating the speaker.
+		content.ChildrenFiltered(".sr-only").Remove()
+	}
+	content.Find(`[data-markdown-copy="exclude"], .turn-action-controls`).Remove()
 	content.Find(`script, style, noscript, template, button, svg, img, picture, video, audio, iframe, embed, object, canvas, source, form, input, textarea, select, option`).Remove()
 	content.Find(`[hidden], [aria-hidden]`).Each(func(_ int, nested *goquery.Selection) {
 		if isHiddenElement(nested) {

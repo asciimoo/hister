@@ -236,9 +236,7 @@ documents whose "added" timestamp falls within the given date range.`,
 		}
 
 		clientOpts := append([]client.Option{client.WithTimeout(0)}, targetUserIDClientOptions(cmd, global)...)
-		if allowSensitive, _ := cmd.Flags().GetBool("allow-sensitive"); allowSensitive {
-			clientOpts = append(clientOpts, client.WithAllowSensitive())
-		}
+		clientOpts = append(clientOpts, documentSubmissionClientOptions(cmd)...)
 		c := newClient(clientOpts...)
 		imported := 0
 		skipped := 0

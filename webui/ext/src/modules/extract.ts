@@ -74,7 +74,28 @@ class DuckDuckGoExtractor implements ResultExtractor {
 let resultExtractors: ResultExtractor[] = [new GoogleExtractor(), new DuckDuckGoExtractor()];
 
 function getPageURL() {
-  return window.location.href.replace(window.location.hash, '');
+  let url = new URL(window.location.href);
+  const canonicalHref = document
+    .querySelector('link[rel~="canonical" i][href]')
+    ?.getAttribute('href')
+    ?.trim();
+  if (canonicalHref) {
+    try {
+      const canonicalURL = new URL(canonicalHref, document.baseURI);
+      // Compare parsed hostnames exactly so another site or subdomain cannot
+      // use this page's content to overwrite a document in the index.
+      if (
+        (canonicalURL.protocol === 'http:' || canonicalURL.protocol === 'https:') &&
+        canonicalURL.hostname === url.hostname &&
+        !canonicalURL.username &&
+        !canonicalURL.password
+      ) {
+        url = canonicalURL;
+      }
+    } catch {}
+  }
+  url.hash = '';
+  return url.href;
 }
 
 // Read the fields that can justify an automatic update without serializing
@@ -84,7 +105,7 @@ function extractPageState(): PageState {
   let faviconURL = '';
   try {
     const faviconHref = document.querySelector("link[rel~='icon']")?.getAttribute('href');
-    faviconURL = new URL(faviconHref || '/favicon.ico', url).href;
+    faviconURL = new URL(faviconHref || '/favicon.ico', document.baseURI).href;
   } catch {}
 
   return {
@@ -95,7 +116,7 @@ function extractPageState(): PageState {
     metadata: JSON.stringify(
       Array.from(
         document.querySelectorAll(
-          'meta[name], meta[property], link[rel="canonical"], script[type="application/ld+json"]',
+          'meta[name], meta[property], link[rel~="canonical" i], script[type="application/ld+json"]',
         ),
         (el) => [
           el.tagName,

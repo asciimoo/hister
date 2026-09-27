@@ -418,6 +418,16 @@ domain:github.com title:(security|vulnerability) -closed
 
 ## Common Use Cases
 
+### Pruning Unwanted Documents
+
+Use the search web UI to build a query that selects unwanted documents. For example, find pages from a domain that have not been updated for more than 90 days:
+
+```textplain
+domain:example.com updated:>90d
+```
+
+Review the results and refine the query as needed, then open **Actions**, click **Delete all matching results**, and confirm. This deletes every document matching the query, like `hister delete`, so you can quickly clean up unwanted results as you search. See [Deleting Documents](data-lifecycle#deleting-documents) for details about what deletion removes.
+
 ### Finding Documentation
 
 ```textplain

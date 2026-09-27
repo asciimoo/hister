@@ -165,6 +165,7 @@ type Hotkeys struct {
 }
 
 type Rules struct {
+	Allow      *Rule   `json:"allow"`
 	Skip       *Rule   `json:"skip"`
 	Priority   *Rule   `json:"priority"`
 	Versioning *Rule   `json:"versioning"`
@@ -1073,6 +1074,9 @@ func (c *Config) LoadRules() error {
 	if c.Rules == nil {
 		c.Rules = &Rules{}
 	}
+	if c.Rules.Allow == nil {
+		c.Rules.Allow = &Rule{ReStrs: make([]string, 0)}
+	}
 	if c.Rules.Skip == nil {
 		c.Rules.Skip = &Rule{ReStrs: make([]string, 0)}
 	}
@@ -1095,6 +1099,7 @@ func (c *Config) SaveRules() error {
 	}
 	if c.Rules == nil {
 		c.Rules = &Rules{
+			Allow:      &Rule{ReStrs: make([]string, 0)},
 			Skip:       &Rule{ReStrs: make([]string, 0)},
 			Priority:   &Rule{ReStrs: make([]string, 0)},
 			Versioning: &Rule{ReStrs: make([]string, 0)},
@@ -1127,11 +1132,16 @@ func (r *Rules) IsVersioning(s string) bool {
 	return r.Versioning.Match(s)
 }
 
+// IsSkip reports whether a URL is excluded by the allow or skip rules.
+// A nonempty allow list requires at least one match; skip always takes precedence.
 func (r *Rules) IsSkip(s string) bool {
-	if r == nil || r.Skip == nil {
+	if r == nil {
 		return false
 	}
-	return r.Skip.Match(s)
+	if r.Allow != nil && len(r.Allow.ReStrs) > 0 && !r.Allow.Match(s) {
+		return true
+	}
+	return r.Skip != nil && r.Skip.Match(s)
 }
 
 func (r *Rule) Match(s string) bool {
@@ -1168,18 +1178,22 @@ func (r *Rule) UnmarshalJSON(data []byte) error {
 }
 
 func (r *Rules) Count() int {
-	return len(r.Skip.ReStrs) + len(r.Priority.ReStrs) + len(r.Versioning.ReStrs)
+	count := 0
+	for _, rule := range []*Rule{r.Allow, r.Skip, r.Priority, r.Versioning} {
+		if rule != nil {
+			count += len(rule.ReStrs)
+		}
+	}
+	return count
 }
 
 func (r *Rules) Compile() error {
-	if err := r.Skip.Compile(); err != nil {
-		return err
-	}
-	if err := r.Priority.Compile(); err != nil {
-		return err
-	}
-	if err := r.Versioning.Compile(); err != nil {
-		return err
+	for _, rule := range []*Rule{r.Allow, r.Skip, r.Priority, r.Versioning} {
+		if rule != nil {
+			if err := rule.Compile(); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }

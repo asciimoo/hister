@@ -32,6 +32,7 @@ type User struct {
 
 func (u *User) ParseRules() (*config.Rules, error) {
 	r := &config.Rules{
+		Allow:      &config.Rule{ReStrs: []string{}},
 		Skip:       &config.Rule{ReStrs: []string{}},
 		Priority:   &config.Rule{ReStrs: []string{}},
 		Versioning: &config.Rule{ReStrs: []string{}},
@@ -43,6 +44,9 @@ func (u *User) ParseRules() (*config.Rules, error) {
 		}
 		if r.Skip == nil {
 			r.Skip = &config.Rule{ReStrs: []string{}}
+		}
+		if r.Allow == nil {
+			r.Allow = &config.Rule{ReStrs: []string{}}
 		}
 		if r.Priority == nil {
 			r.Priority = &config.Rule{ReStrs: []string{}}

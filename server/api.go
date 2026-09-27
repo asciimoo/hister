@@ -61,7 +61,7 @@ func (e *Endpoint) Pattern() string {
 // Endpoints contains all registered API endpoints.
 var Endpoints []*Endpoint
 
-const skipRulesOverrideDescription = " Set metadata.ignore_skip_rules to boolean true in the submitted JSON document to bypass URL skip rules. The saved metadata also bypasses skip rules on import and reindex. Other validation still applies."
+const skipRulesOverrideDescription = " Set metadata.ignore_skip_rules to boolean true in the submitted JSON document to bypass URL allow and skip rules. The saved metadata also bypasses these rules on import and reindex. Other validation still applies."
 
 func documentMetadataSchema() *JSONSchemaField {
 	return &JSONSchemaField{
@@ -72,7 +72,7 @@ func documentMetadataSchema() *JSONSchemaField {
 			{
 				Name:        "ignore_skip_rules",
 				Type:        "bool",
-				Description: "Explicitly bypass URL skip rules for this document, including during index rebuilds. Only boolean true enables the override.",
+				Description: "Explicitly bypass URL allow and skip rules for this document, including during index rebuilds. Only boolean true enables the override.",
 			},
 		},
 	}
@@ -602,7 +602,7 @@ func init() {
 			Method:       GET,
 			CSRFRequired: true,
 			Handler:      serveRules,
-			Description:  "Retrieve current skip, priority, and versioning rules and query aliases",
+			Description:  "Retrieve current allow, skip, priority, and versioning rules and query aliases",
 		},
 		{
 			Name:         "Save rules",
@@ -610,8 +610,14 @@ func init() {
 			Method:       POST,
 			CSRFRequired: true,
 			Handler:      serveRules,
-			Description:  "Update the supplied skip, priority, or versioning rules. Omitted rule groups remain unchanged. Accepts application/x-www-form-urlencoded.",
+			Description:  "Update the supplied allow, skip, priority, or versioning rules. Omitted rule groups remain unchanged. Accepts application/x-www-form-urlencoded.",
 			Args: []*EndpointArg{
+				{
+					Name:        "allow",
+					Type:        "string",
+					Required:    false,
+					Description: "Space-separated URL regex patterns. When nonempty, a URL must match at least one to be indexed or retained during reindex. Skip rules take precedence. Explicit manual overrides bypass both rule groups.",
+				},
 				{
 					Name:        "skip",
 					Type:        "string",
@@ -630,6 +636,21 @@ func init() {
 					Required:    false,
 					Description: "Space-separated list of URL regex patterns for which document versions are tracked",
 				},
+			},
+		},
+		{
+			Name:         "Preview rule",
+			Path:         "/api/rules/preview",
+			Method:       POST,
+			CSRFRequired: true,
+			Handler:      serveRulePreview,
+			Description:  "Validate a draft rule or generate a domain or exact URL rule, and optionally test a URL using the indexing rule matcher. Returns pattern and, when a test URL is supplied, matches. Does not fetch URLs or save rules. Tests only the supplied draft, without evaluating other saved rules. Provide exactly one of pattern, domain, or exact_url.",
+			JSONSchema: []*JSONSchemaField{
+				{Name: "pattern", Type: "string", Description: "A single Go regexp pattern."},
+				{Name: "domain", Type: "string", Description: "Domain or HTTP page URL from which to generate a hostname rule. Applies to HTTP and HTTPS on any port."},
+				{Name: "exact_url", Type: "string", Description: "Complete URL to match literally, including scheme, path, and query. Use the URL as stored in the index. No URL normalization is applied."},
+				{Name: "include_subdomains", Type: "bool", Description: "Include subdomains in the generated domain rule. Defaults to false."},
+				{Name: "url", Type: "string", Description: "Optional complete URL to test against the draft rule."},
 			},
 		},
 		{

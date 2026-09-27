@@ -9,11 +9,11 @@
   import { Button } from '@hister/components/ui/button';
   import * as Card from '@hister/components/ui/card';
   import * as Alert from '@hister/components/ui/alert';
-  import { PageHeader } from '@hister/components';
   import AlertCircle from '@lucide/svelte/icons/circle-alert';
   import CheckCircle from '@lucide/svelte/icons/circle-check';
   import {
     Database,
+    ExternalLink,
     Eye,
     FileText,
     Link,
@@ -155,10 +155,10 @@
                 <Card.Title
                   class="font-space text-card-foreground text-xl font-extrabold uppercase"
                 >
-                  Add document
+                  Add document manually
                 </Card.Title>
                 <Card.Description class="font-inter text-text-brand-secondary text-sm">
-                  Enter a URL and optionally add searchable title and content.
+                  Save a URL with optional title and content.
                 </Card.Description>
               </div>
             </div>
@@ -191,6 +191,25 @@
         </Card.Header>
 
         <Card.Content class="p-0">
+          <div class="bg-muted-surface border-border-brand space-y-2 border-b px-4 py-3 md:px-5">
+            <p class="font-inter text-text-brand-secondary text-sm">
+              This form saves only the information you enter. It does not download the page.
+            </p>
+            <p class="font-inter text-text-brand-secondary text-sm">
+              To capture page content automatically as you browse,
+              <a
+                href="https://hister.org/docs/browser-extension"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="text-hister-indigo font-semibold underline underline-offset-2"
+              >
+                set up the browser extension<ExternalLink
+                  class="ml-1 inline size-3.5 align-baseline"
+                  aria-hidden="true"
+                />
+              </a>.
+            </p>
+          </div>
           <form id="add-entry-form" onsubmit={handleSubmit} class="divide-border-brand divide-y">
             <div class="grid gap-3 p-4 md:grid-cols-[12rem_minmax(0,1fr)] md:p-5">
               <div class="flex items-start gap-2">
@@ -222,7 +241,7 @@
                   class="focus-visible:border-hister-coral [font-variant-ligatures:none]"
                 />
                 <p id="entry-url-help" class="font-inter text-text-brand-muted text-xs">
-                  Hister stores this URL but does not download the page from this form.
+                  The address to save in your index
                 </p>
               </div>
             </div>
@@ -290,7 +309,7 @@
                 />
                 <div class="flex items-center justify-between gap-3">
                   <p id="entry-content-help" class="font-inter text-text-brand-muted text-xs">
-                    Searchable plain text for the document
+                    Paste the text you want to search later
                   </p>
                   <span class="font-fira text-text-brand-muted shrink-0 text-xs">
                     {contentChars.toLocaleString()} chars

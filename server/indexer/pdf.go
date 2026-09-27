@@ -4,6 +4,7 @@ package indexer
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -38,13 +39,13 @@ func (pdfFileType) Prepare(d *document.Document, pdfData []byte) error {
 }
 
 // AddPDF extracts plain text from pdfData, stores it in d.Text, then indexes
-// the document via Add. d.URL and d.Type must already be set by the caller.
+// the document via AddContext. d.URL and d.Type must already be set by the caller.
 // d.Title is set to the last path segment of the URL if it is not already set.
-func (i *Indexer) AddPDF(d *document.Document, pdfData []byte) error {
+func (i *Indexer) AddPDF(d *document.Document, pdfData []byte, options ...AddOption) error {
 	if err := (pdfFileType{}).Prepare(d, pdfData); err != nil {
 		return err
 	}
-	return i.Add(d)
+	return i.AddContext(context.Background(), d, options...)
 }
 
 // extractPDFText reads all pages of a PDF from pdfData and returns the

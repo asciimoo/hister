@@ -170,6 +170,7 @@ const (
 	RulesSectionSkip = iota
 	RulesSectionPriority
 	RulesSectionVersioning
+	RulesSectionAllow
 	RulesSectionAliases
 )
 
@@ -184,6 +185,7 @@ var RulesSections = []RulesSectionDefinition{
 	{ID: RulesSectionSkip, Title: "Skip Patterns", Placeholder: "skip pattern..."},
 	{ID: RulesSectionPriority, Title: "Priority Patterns", Placeholder: "priority pattern..."},
 	{ID: RulesSectionVersioning, Title: "Versioning Patterns", Placeholder: "versioning pattern..."},
+	{ID: RulesSectionAllow, Title: "Allow Patterns", Placeholder: "allow pattern..."},
 	{ID: RulesSectionAliases, Title: "Aliases", Aliases: true},
 }
 

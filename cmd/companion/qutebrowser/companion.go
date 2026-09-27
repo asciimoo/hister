@@ -187,8 +187,8 @@ func (m *monitor) eventLoop(ctx context.Context) error {
 			return ctx.Err()
 		case <-m.client.done:
 			return m.client.connectionError()
-		case event := <-m.client.events:
-			m.handleEvent(ctx, event)
+		case <-m.client.events.ready:
+			m.handleEvent(ctx, m.client.events.pop())
 		case due := <-m.extraction:
 			m.handleExtractionDue(ctx, due)
 		case result := <-m.results:

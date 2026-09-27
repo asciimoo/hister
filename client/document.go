@@ -37,9 +37,7 @@ func (c *Client) AddDocumentsJSON(docs []*document.Document) (results []AddDocum
 	}
 	ops := make([]encodedAddDocument, len(docs))
 	for i, doc := range docs {
-		if c.allowSensitive {
-			doc.SkipSensitiveCheck = true
-		}
+		c.applyDocumentOptions(doc)
 		data, err := json.Marshal(addDocumentOperation{Op: "add", Document: doc})
 		if err != nil {
 			return results, err
@@ -173,9 +171,7 @@ func (c *Client) AddDocumentJSON(doc *document.Document) (err error) {
 
 // AddDocumentJSONContext submits a prepared document until ctx is cancelled.
 func (c *Client) AddDocumentJSONContext(ctx context.Context, doc *document.Document) (err error) {
-	if c.allowSensitive {
-		doc.SkipSensitiveCheck = true
-	}
+	c.applyDocumentOptions(doc)
 	data, err := json.Marshal(doc)
 	if err != nil {
 		return err
@@ -191,6 +187,15 @@ func (c *Client) AddDocumentJSONContext(ctx context.Context, doc *document.Docum
 	}
 	defer closeBody(resp, &err)
 	return checkStatus(resp)
+}
+
+func (c *Client) applyDocumentOptions(doc *document.Document) {
+	if c.allowSensitive {
+		doc.SkipSensitiveCheck = true
+	}
+	if c.ignoreRules {
+		doc.SetIgnoreSkipRules(true)
+	}
 }
 
 func (c *Client) AddPage(u, title, text string) (err error) {

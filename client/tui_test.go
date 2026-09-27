@@ -54,7 +54,7 @@ func TestFetchConfigReadsServerSemanticCapabilities(t *testing.T) {
 	}
 }
 
-func TestSaveRulesIncludesVersioning(t *testing.T) {
+func TestSaveRulesIncludesVersioningAndAllow(t *testing.T) {
 	var got url.Values
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/rules" || r.Method != http.MethodPost {
@@ -68,10 +68,10 @@ func TestSaveRulesIncludesVersioning(t *testing.T) {
 	}))
 	defer server.Close()
 
-	if err := New(server.URL).SaveRules("skip", "priority", "version"); err != nil {
+	if err := New(server.URL).SaveRules("skip", "priority", "version", "allowed"); err != nil {
 		t.Fatal(err)
 	}
-	for key, want := range map[string]string{"skip": "skip", "priority": "priority", "versioning": "version"} {
+	for key, want := range map[string]string{"skip": "skip", "priority": "priority", "versioning": "version", "allow": "allowed"} {
 		if got.Get(key) != want {
 			t.Errorf("form[%q] = %q, want %q", key, got.Get(key), want)
 		}
@@ -94,6 +94,9 @@ func TestSaveRulesKeepsVersioningOptional(t *testing.T) {
 	}
 	if got.Get("versioning") != "" {
 		t.Errorf("form[%q] = %q, want empty", "versioning", got.Get("versioning"))
+	}
+	if got.Has("allow") {
+		t.Error("legacy save must omit allow so existing rules are preserved")
 	}
 }
 

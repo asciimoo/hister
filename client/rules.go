@@ -24,12 +24,17 @@ func (c *Client) FetchRules() (_ *RulesResponse, err error) {
 	return &data, err
 }
 
-func (c *Client) SaveRules(skip, priority string, versioning ...string) (err error) {
+// SaveRules saves skip and priority patterns, followed by optional versioning
+// and allow patterns. Omitting allow leaves the server's allow rules unchanged.
+func (c *Client) SaveRules(skip, priority string, patterns ...string) (err error) {
 	versioningRules := ""
-	if len(versioning) > 0 {
-		versioningRules = versioning[0]
+	if len(patterns) > 0 {
+		versioningRules = patterns[0]
 	}
 	formData := url.Values{"skip": {skip}, "priority": {priority}, "versioning": {versioningRules}}
+	if len(patterns) > 1 {
+		formData.Set("allow", patterns[1])
+	}
 	req, err := c.newRequest("POST", "/api/rules", strings.NewReader(formData.Encode()))
 	if err != nil {
 		return err

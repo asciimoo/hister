@@ -1,5 +1,161 @@
 # Changelog
 
+## v0.20.0
+
+### New Features
+
+#### Browser Bookmark Imports
+
+`hister import browser bookmarks` imports bookmarks from Firefox based browsers,
+Chromium based browsers, and Ladybird. It supports automatic detection and
+explicit `--browser` and `--db` options, applies the `bookmarks` label by default,
+and uses persistent crawl jobs that can be interrupted and resumed.
+
+The new `hister import browser history` command accepts the same named options.
+The existing positional history command and older browser import jobs remain
+supported.
+
+#### Raindrop.io Imports
+
+`hister import raindrop` imports bookmarks through the Raindrop.io API or from a
+CSV export with `--input`. API imports preserve titles, dates, notes, highlights,
+annotations, tags, favorites, and collection paths. Linked pages are downloaded
+with the configured crawler, while bookmark details are retained if a page
+cannot be retrieved. CSV input can also be read from standard input.
+
+#### Continuous File Imports
+
+`hister import file --watch` performs an initial scan and keeps remote file
+snapshots updated as files change. It supports explicit files, recursive
+directories, or configured directory rules, including labels and ownership.
+Temporary server failures are retried while the command runs.
+
+Watch mode handles file snapshots rather than restoring exports or archives.
+Removing or renaming a source file leaves its previously imported snapshot in
+the index.
+
+#### Configuration and Diagnostics
+
+The new `hister config` commands create default configuration, report its path,
+show effective settings with credentials redacted, and validate configuration
+and extractor options. Inspection does not create runtime files.
+
+`hister doctor` checks local configuration and extractor dependencies, then
+verifies server connectivity, authentication, index compatibility, and server
+extractor dependencies. It supports structured output and uses the new
+`GET /api/diagnostics` endpoint, which requires an administrator in multiple
+user mode.
+
+#### Allow Rules and Guided Rule Editing
+
+The new `allow` rule group restricts indexing to URLs matching at least one
+allowed pattern. Skip rules still take precedence, and an empty allow list
+preserves the existing behavior. The Rules page can now create patterns from
+domains or exact URLs, optionally include subdomains, and validate and test
+patterns before saving them.
+
+Manual indexing from the browser extension and `--ignore-rules` on `hister index`
+or import commands can override allow and skip rules. This choice is saved with
+the document and survives reindexing. Sensitive content checks, robots rules,
+and source selection filters still apply.
+
+#### Structured Command Line Output
+
+Search, indexing summaries, crawl inspection, diagnostics, and file and service
+import summaries share text, JSON, JSONL, and CSV output formats. Search results
+stream as pages arrive and preserve selected field order in text and CSV.
+
+Indexing reports indexed, skipped, and failed counts and continues after
+individual URL failures. `hister index --failed-urls PATH` writes failed URLs to
+a file that can be reused with `--input`.
+
+#### Prometheus Monitoring and Unix Sockets
+
+Setting `server.metrics: true` enables `GET /metrics` with search, indexing,
+document count, storage, Go runtime, and process metrics. The endpoint follows
+the configured base path and authentication settings and requires an
+administrator in multiple user mode, including when public mode is enabled.
+
+The server can listen on a Unix socket using a `server.address` such as
+`unix:/run/hister/hister.sock`. An explicit public `server.base_url` is required
+for clients connecting through a reverse proxy. The socket is removed on a
+clean shutdown.
+
+### Enhancements
+
+1. **Browser extension**: automatic capture reduces redundant submissions and
+   preserves final page snapshots during navigation and tab closure.
+2. **Search interface**: loading feedback is clearer, filters and sort controls
+   remain available for empty results, and history results display index counts.
+3. **Web interface**: the Add page clarifies file import and indexing options,
+   the profile page can copy access tokens, and the menu links to the browser's
+   extension store.
+4. **OAuth**: GitHub, Google, and OIDC logins use S256 PKCE by default. GitHub
+   token exchanges now send credentials in a form POST.
+5. **Imports and backups**: import failures provide clearer explanations,
+   backups receive a `.json` extension when omitted, and sensitive content
+   matches are easier to identify.
+6. **Offline commands**: operations that only read SQLite data open the database
+   in read only mode.
+7. **Documentation**: new monitoring and Homebrew instructions accompany expanded
+   crawler backend, import, configuration, and command line guides.
+8. **Dependencies**: Go modules, npm packages, container bases, Nix inputs, and
+   GitHub Actions were updated.
+
+### Bug Fixes
+
+1. SQLite vector stores tolerate changed embedding dimensions at startup, and
+   reindexing recreates the store with the configured dimensions. A failed
+   vector store rebuild now aborts reindexing instead of silently proceeding.
+2. Embedding retries recognize llama.cpp physical batch size errors.
+3. Semantic search respects the selected result order, removes deleted results
+   from the interface, and initially uses the server's configured defaults.
+4. Languages without a registered Bleve analyzer use the default index instead
+   of attempting to create an unsupported language index.
+5. Local file indexing applies configured labels, watches directory roots that
+   are symbolic links, and handles home directory and absolute paths correctly.
+6. Imported HTML files follow the appropriate saved page or file snapshot path,
+   and the index command initializes configured extractors.
+7. Database timestamps are stored consistently in UTC, with existing SQLite
+   timestamps normalized while preserving their instants and precision.
+8. Browser import detection handles profile paths more reliably, including
+   Ladybird profiles, and retains support for resuming older history jobs.
+9. Safari and other browser extensions receive valid CORS preflight responses,
+   including when custom authentication headers are used.
+10. Text previews escape content when HTML is unavailable. Favicon responses use
+    stricter headers, and oversized thumbnails are rejected.
+11. Lobsters extraction avoids duplicate comments, and Mastodon extraction no
+    longer applies incorrect link resolution.
+12. History loading no longer blocks navigation, empty results clear stale
+    previews, and the TUI refreshes its viewport when a WebSocket connects.
+13. Client errors preserve server explanations for HTTP 404 responses.
+14. FreeBSD builds work again, and the systemd service correctly excludes
+    privileged system calls and uses paths compatible with user services.
+
+### Backward Compatibility Notes
+
+The following changes require attention when upgrading from v0.19.0:
+
+1. **Command line automation**: `--format json` consistently returns an array,
+   including single record summaries. Indexing, file imports, and service
+   imports return status `2` when processing completes with item failures and
+   status `1` for errors that prevent completion. Update scripts that depend on
+   earlier output shapes or exit statuses.
+2. **Configuration creation**: use `hister config create` in place of
+   `hister create-config`. The old command remains as a deprecated alias and
+   writes its notice to standard error. Configuration creation refuses to
+   overwrite an existing file.
+3. **OAuth providers**: providers that reject PKCE parameters need
+   `disable_pkce: true` in their provider configuration. Restart logins begun
+   before the upgrade; existing authenticated sessions remain valid. Custom
+   GitHub token endpoints and proxies must accept form POST requests.
+4. **Allow rules and reindexing**: existing rules without an `allow` group retain
+   their behavior. Once allow rules are added, reindexing removes documents
+   excluded by allow or skip rules unless they carry an explicit manual
+   override.
+5. **SQLite timestamps**: an automatic migration normalizes stored timestamps
+   to UTC. Command line displays continue to use local time.
+
 ## v0.19.0
 
 ### New Features

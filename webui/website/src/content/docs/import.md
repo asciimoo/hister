@@ -33,6 +33,15 @@ Use the global `--server-url` and `--token` flags when the destination Hister se
 
 Use `--label LABEL` with any import source to attach the same label to every imported document. Without this flag, labels stored in imported documents or resumed browser jobs are preserved. The default shown above is applied only when no label was supplied by the user or the imported document.
 
+Use `--ignore-rules` with any import source to explicitly save submitted documents despite URL allow and skip rules. The saved override also protects them from allow and skip rules during `hister reindex`. Browser imports bypass their initial URL rule filtering too. Sensitive content checks and source selection filters still apply. Documents skipped because they already exist are not changed.
+
+```bash
+hister import file --ignore-rules export.json
+hister import browser bookmarks --ignore-rules --browser firefox
+```
+
+For persistent browser imports, pass `--ignore-rules` again when resuming with `hister index --job-id JOB_ID`. The option applies to documents submitted during that invocation; it is not stored as a crawl job setting.
+
 Hister also limits each batch according to the byte limit advertised by the destination server. Documents are serialized before batching so stored HTML and other large fields are measured accurately. If another HTTP server imposes a smaller limit, Hister splits a rejected batch and retries it automatically. A document that exceeds the limit by itself is reported with its URL, encoded size, and the server limit when known.
 
 ## Importing Files
@@ -204,7 +213,7 @@ hister import browser bookmarks --db ~/.config/google-chrome/Default/Bookmarks
 
 Automatic detection covers Firefox, Firefox Developer Edition, Zen, Waterfox, Chrome, Chromium, Brave, Edge, Vivaldi, Opera, and Ladybird. Each browser is a separate bookmark source: Firefox-family `places.sqlite`, Chromium-family `Bookmarks` JSON, and Ladybird `Bookmarks.json`.
 
-Skip rules apply the same way they do for history import. A browser's shipped default bookmarks are not filtered out unless they match a skip rule.
+Allow and skip rules apply the same way they do for history import. A browser's shipped default bookmarks follow these same rules.
 
 Bookmark documents receive the `bookmarks` label by default. Use `--label LABEL` to replace it. `--start-date` is not supported, because it would drop bookmarks that have never been visited.
 

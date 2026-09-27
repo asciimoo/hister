@@ -3,6 +3,7 @@
 package chatgpt
 
 import (
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -10,6 +11,96 @@ import (
 	"github.com/asciimoo/hister/server/document"
 	"github.com/asciimoo/hister/server/extractor/sdk"
 )
+
+func TestExtractsTurnMarkers(t *testing.T) {
+	for _, tag := range []string{"article", "section", "div"} {
+		for _, legacy := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/legacy=%v", tag, legacy), func(t *testing.T) {
+				question := `<p>Explain <strong>gravity</strong>.</p>`
+				followup := `<section data-testid="conversation-turn-3" data-turn="user"><p>Thanks.</p></section>`
+				if legacy {
+					question = `<div data-message-author-role="user">` + question + `</div>`
+					followup = `<div data-message-author-role="user"><p>Thanks.</p></div>`
+				}
+				doc := &document.Document{
+					URL: "https://chatgpt.com/c/turn-markers",
+					HTML: fmt.Sprintf(`<html><body><nav>Sidebar content</nav><main>
+						<%[1]s data-testid="conversation-turn-1" data-turn="user">%[2]s</%[1]s>
+						<%[1]s data-testid="conversation-turn-2" data-turn="assistant">
+							<h4 class="sr-only">ChatGPT said:</h4>
+							<div class="markdown"><p>Gravity attracts masses.</p><pre><code>F = G * m1 * m2 / r^2</code></pre></div>
+							<button>Copy answer</button><script>ignored()</script>
+						</%[1]s>
+						%[3]s
+					</main></body></html>`, tag, question, followup),
+				}
+				extractor := &ChatGPTExtractor{}
+				decision, err := extractor.Extract(doc).Unpack()
+				if err != nil || decision != sdk.ExtractorSuccess {
+					t.Fatalf("Extract returned decision %v and error %v", decision, err)
+				}
+				want := "User:\nExplain gravity.\n\nAssistant:\nGravity attracts masses.\nF = G * m1 * m2 / r^2\n\nUser:\nThanks."
+				if doc.Text != want {
+					t.Fatalf("indexed text = %q, want %q", doc.Text, want)
+				}
+				preview, decision, err := extractor.Preview(doc).Unpack()
+				if err != nil || decision != sdk.ExtractorSuccess {
+					t.Fatalf("Preview returned decision %v and error %v", decision, err)
+				}
+				for _, want := range []string{"<strong>gravity</strong>", "<pre><code>F = G * m1 * m2 / r^2</code></pre>"} {
+					if !strings.Contains(preview.Content, want) {
+						t.Errorf("preview is missing %q: %s", want, preview.Content)
+					}
+				}
+				if strings.Count(preview.Content, "<h2>User</h2>") != 2 || strings.Count(preview.Content, "<h2>Assistant</h2>") != 1 {
+					t.Errorf("preview has missing or duplicate turns: %s", preview.Content)
+				}
+				for _, unwanted := range []string{"Sidebar content", "ChatGPT said:", "Copy answer", "ignored()"} {
+					if strings.Contains(preview.Content, unwanted) {
+						t.Errorf("preview contains %q: %s", unwanted, preview.Content)
+					}
+				}
+			})
+		}
+	}
+}
+
+func TestTurnMarkersRespectExplicitRolesAndVisibility(t *testing.T) {
+	doc := &document.Document{
+		URL: "https://chatgpt.com/c/turn-visibility",
+		HTML: `<html><body>
+			<section data-testid="conversation-turn-1" data-turn="user" hidden><p>Hidden user</p></section>
+			<div aria-hidden="true"><section data-testid="conversation-turn-2" data-turn="assistant"><p>Hidden ancestor</p></section></div>
+			<section data-testid="conversation-turn-3" data-turn="assistant"><div data-message-author-role="assistant" hidden>Hidden message</div>Turn controls</section>
+			<section data-testid="conversation-turn-4" data-turn="system"><div data-message-author-role="user">Internal user</div></section>
+			<section data-testid="conversation-turn-5" data-turn="assistant"><div data-message-author-role="tool">Tool output</div>Turn controls</section>
+			<section data-testid="conversation-turn-6" data-turn="assistant"><div data-message-author-role="assistant"><p>First answer.</p></div><div data-message-author-role="assistant"><p>Second answer.</p></div></section>
+			<section data-testid="conversation-turn-7" data-turn="user"><section data-testid="conversation-turn-nested" data-turn="user"><p>Follow up.</p></section></section>
+			<section data-testid="conversation-turn-8" data-turn="assistant"><div hidden>Hidden content</div><p>Final answer.</p></section>
+			<section data-testid="conversation-turn-9" data-turn="assistant" data-message-author-role="tool">Explicit tool</section>
+			<section data-testid="conversation-turn-10" data-turn="assistant"><h4 class="sr-only">ChatGPT said:</h4><button>Copy</button></section>
+			<div data-turn="user">Unrelated element</div>
+		</body></html>`,
+	}
+	extractor := &ChatGPTExtractor{}
+	decision, err := extractor.Extract(doc).Unpack()
+	if err != nil || decision != sdk.ExtractorSuccess {
+		t.Fatalf("Extract returned decision %v and error %v", decision, err)
+	}
+	want := "Assistant:\nFirst answer.\n\nAssistant:\nSecond answer.\n\nUser:\nFollow up.\n\nAssistant:\nFinal answer."
+	if doc.Text != want {
+		t.Fatalf("indexed text = %q, want %q", doc.Text, want)
+	}
+	preview, decision, err := extractor.Preview(doc).Unpack()
+	if err != nil || decision != sdk.ExtractorSuccess {
+		t.Fatalf("Preview returned decision %v and error %v", decision, err)
+	}
+	for _, unwanted := range []string{"Hidden", "Internal", "Tool output", "Turn controls", "Unrelated", "Explicit tool", "ChatGPT said:"} {
+		if strings.Contains(preview.Content, unwanted) {
+			t.Errorf("preview contains %q: %s", unwanted, preview.Content)
+		}
+	}
+}
 
 func TestMatchConversationURLForms(t *testing.T) {
 	extractor := &ChatGPTExtractor{}
@@ -164,8 +255,10 @@ func TestExtractAbortsWithoutVisibleUserOrAssistantTurns(t *testing.T) {
 	if err == nil {
 		t.Fatal("Extract returned no abort diagnostic")
 	}
-	if got, want := err.Error(), "no visible user or assistant turns found"; got != want {
-		t.Fatalf("Extract diagnostic = %q, want %q", got, want)
+	for _, want := range []string{"no visible user or assistant turns found", "browser extension", "chromedp or bidi", "signed in browser"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("Extract diagnostic %q is missing %q", err, want)
+		}
 	}
 	if doc.Text != "" {
 		t.Fatalf("abort populated text: %q", doc.Text)

@@ -2959,7 +2959,7 @@
               Start building your index
             </h2>
             <p class="font-inter text-text-brand-secondary text-sm">
-              Choose any option to add your first searchable page.
+              Choose how to add your first searchable document.
             </p>
           </div>
           <a
@@ -2997,9 +2997,9 @@
           >
             <Link2 class="text-hister-coral size-5 shrink-0" />
             <span class="min-w-0">
-              <span class="font-outfit text-text-brand block font-bold">Add one page</span>
+              <span class="font-outfit text-text-brand block font-bold">Add manually</span>
               <span class="font-inter text-text-brand-muted block text-xs"
-                >Paste a URL to index it now</span
+                >Save a URL with optional title and content</span
               >
             </span>
           </a>

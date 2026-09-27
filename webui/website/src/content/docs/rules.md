@@ -2,7 +2,7 @@
 date: '2026-05-15T00:00:00+00:00'
 draft: false
 title: 'Rules'
-description: 'Control indexing and ranking with skip, priority, versioning, and query alias rules.'
+description: 'Control indexing and ranking with allow, skip, priority, versioning, and query alias rules.'
 ---
 
 Rules let you control how Hister indexes and surfaces documents. They live in
@@ -12,23 +12,57 @@ interface (and the TUI) is the easiest way to manage them.
 
 ## Rule Types
 
+### Allow rules
+
+Allow rules limit indexing to URLs matching at least one allow pattern. Patterns
+are combined with OR: a match against any entry is enough. Skip rules still take
+precedence, so you can allow a whole site while excluding particular paths.
+
+An empty allow list permits any URL that does not match a skip rule. Removing the
+last allow rule restores that behavior. Existing rules files without an `allow`
+field continue to work as before.
+
+For example, allow these sites:
+
+```text
+^https://example\.com/
+^https://docs\.example\.org/
+```
+
+Then add `^https://docs\.example\.org/private/` as a skip rule to exclude private
+paths on the documentation site.
+
+Allow rules apply to API submissions and browser imports as well as automatic
+browser capture. Editing rules does not immediately remove saved documents.
+Running `hister reindex` removes documents excluded by the current allow or skip
+rules, except documents carrying an explicit manual override. In multiple user
+mode, reindexing uses each document owner's rules; public documents use the
+instance rules.
+
 ### Skip rules
 
 Skip rules prevent matching URLs from being added to the index. When a URL
 matches any pattern in the skip list, Hister silently discards the document
 during indexing and during `hister reindex`.
 
-To save an individual page that matches a skip rule, click **Index this page now**
+To save an individual page excluded by allow or skip rules, click **Index this page now**
 in the browser extension or use its indexing shortcut. This explicitly overrides
-skip rules for that submission and saves the choice with the document, so the
-page survives `hister reindex`. Automatic submissions still respect the rule.
+both rule groups for that submission and saves the choice with the document, so the
+page survives `hister reindex`. Automatic submissions still respect the rules.
+
+From the command line, use `--ignore-rules` with `hister index` or any `hister import`
+subcommand to save the same explicit override with each submitted document. For an
+already indexed URL, combine `hister index --ignore-rules` with `--force` so that the
+document is submitted again. The override does not bypass sensitive content checks,
+robots rules, or crawl and file selection filters.
 
 API clients can set `metadata.ignore_skip_rules` to the boolean `true` in JSON
 documents submitted to `/api/add` or `/add`. For `/api/add_pdf`, it belongs inside
 `document.metadata`; for `/api/batch`, each add operation has its own metadata.
 The override is stored with the document and preserved in exported documents.
 
-The override applies only to URL skip rules. Authentication, ownership, sensitive
+The override applies only to URL allow and skip rules. The metadata field keeps its
+existing name for compatibility. Authentication, ownership, sensitive
 content checks, and the exclusion of Hister's own URLs still apply. Accepted
 updates preserve an existing override unless they explicitly submit
 `metadata.ignore_skip_rules: false`. Explicit deletion still removes the document.
@@ -97,7 +131,7 @@ With the `work` alias above, searching for `work deployment` is equivalent to
 
 ## Pattern syntax
 
-Skip, priority, and versioning rules are matched against the **full URL**
+Allow, skip, priority, and versioning rules are matched against the **full URL**
 (including scheme, host, path, and query string). A few important details:
 
 - Patterns follow [Go regular expression syntax](https://pkg.go.dev/regexp/syntax).

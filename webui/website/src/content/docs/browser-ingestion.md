@@ -61,7 +61,7 @@ hister import browser bookmarks --browser firefox
 
 Hister reads saved URLs, including bookmarks you have never visited, then fetches and indexes the current pages. Use `--browser` to select a browser or `--db` to select a bookmark store. Documents receive the `bookmarks` label by default; `--label LABEL` overrides it.
 
-Like history imports, bookmark imports use persistent crawl jobs and do not inherit your signed in browser session. They apply skip rules and support the same crawler backends and request options. The history filters `--min-visit` and `--start-date` do not apply to bookmarks.
+Like history imports, bookmark imports use persistent crawl jobs and do not inherit your signed in browser session. They apply allow and skip rules and support the same crawler backends and request options. The history filters `--min-visit` and `--start-date` do not apply to bookmarks.
 
 See [Importing Browser Bookmarks](import#importing-browser-bookmarks) for supported stores, examples, and resume commands.
 

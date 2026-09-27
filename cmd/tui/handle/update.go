@@ -272,6 +272,7 @@ func Update(m *model.Model, msg tea.Msg) tea.Cmd {
 			m.Conn = msg.Conn
 			m.WsReady = true
 			m.ConnError = nil
+			render.RefreshViewport(m)
 		}
 		return network.ListenToWebSocket(m.WsChan, m.WsDone)
 

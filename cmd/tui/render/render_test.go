@@ -145,25 +145,36 @@ func TestResultDetailsWrapsDocumentTextToViewport(t *testing.T) {
 	}
 }
 
-func TestRulesTabRendersVersioningAndEmitsTargets(t *testing.T) {
+func TestRulesTabRendersVersioningAndAllowAndEmitsTargets(t *testing.T) {
 	m := renderModel()
 	m.RulesData.Versioning = []string{"example.com/article/*"}
+	m.RulesData.Allow = []string{"allowed.example/*"}
 	view := RulesTab(m)
 
 	if !strings.Contains(view, "Versioning Patterns") || !strings.Contains(view, "example.com/article/*") {
 		t.Fatalf("rules view is missing versioning section:\n%s", view)
 	}
-	if len(m.WorkspaceTargets) != 5 {
-		t.Fatalf("workspace target count = %d, want 5 (four forms and one item)", len(m.WorkspaceTargets))
+	if !strings.Contains(view, "Allow Patterns") || !strings.Contains(view, "allowed.example/*") {
+		t.Fatalf("rules view is missing allow section:\n%s", view)
+	}
+	if len(m.WorkspaceTargets) != 7 {
+		t.Fatalf("workspace target count = %d, want 7 (five forms and two items)", len(m.WorkspaceTargets))
 	}
 	found := false
+	foundAllow := false
 	for _, target := range m.WorkspaceTargets {
 		if target.Kind == model.WorkspaceRulesItem && target.Section == model.RulesSectionVersioning {
 			found = true
 		}
+		if target.Kind == model.WorkspaceRulesItem && target.Section == model.RulesSectionAllow {
+			foundAllow = true
+		}
 	}
 	if !found {
 		t.Fatal("renderer did not emit a hit target for the versioning item")
+	}
+	if !foundAllow {
+		t.Fatal("renderer did not emit a hit target for the allow item")
 	}
 }
 

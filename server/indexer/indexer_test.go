@@ -915,3 +915,76 @@ func TestSearchReturnsFaviconKeyWithoutFaviconData(t *testing.T) {
 		t.Fatalf("ReadFavicon = %q, want %q", string(data), faviconData)
 	}
 }
+
+func TestNestedDocumentsRespectRulesAfterManualIndexing(t *testing.T) {
+	for _, batch := range []bool{false, true} {
+		name := "single"
+		if batch {
+			name = "batch"
+		}
+		t.Run(name, func(t *testing.T) {
+			idx := newTestIndexer(t, testutil.Config(t))
+			t.Cleanup(idx.Close)
+			rules := &config.Rules{
+				Allow: &config.Rule{ReStrs: []string{`^https://allowed\.example/`}},
+				Skip:  &config.Rule{ReStrs: []string{`/private$`}},
+			}
+			if err := rules.Compile(); err != nil {
+				t.Fatal(err)
+			}
+			for _, submission := range []struct {
+				text   string
+				manual bool
+			}{
+				{"initial automatic submission", false},
+				{"manual submission", true},
+				{"later automatic submission", false},
+			} {
+				doc := &document.Document{
+					URL:  "https://allowed.example/root",
+					Text: submission.text,
+					ExtraDocuments: []*document.Document{{
+						URL:  "https://allowed.example/child",
+						Text: submission.text,
+						ExtraDocuments: []*document.Document{
+							{URL: "https://outside.example/reply", Text: submission.text},
+							{URL: "https://allowed.example/private", Text: submission.text},
+						},
+					}},
+				}
+				if submission.manual {
+					doc.SetIgnoreSkipRules(true)
+				}
+				if batch {
+					b := idx.NewMultiBatch()
+					if err := b.AddContext(context.Background(), doc, WithRules(rules)); err != nil {
+						t.Fatal(err)
+					}
+					if err := b.Save(); err != nil {
+						t.Fatal(err)
+					}
+				} else if err := idx.AddContext(context.Background(), doc, WithRules(rules)); err != nil {
+					t.Fatal(err)
+				}
+				for _, rawURL := range []string{doc.URL, doc.ExtraDocuments[0].URL} {
+					stored := idx.GetByURLAndUser(rawURL, 0)
+					if stored == nil || stored.Text != submission.text {
+						t.Fatalf("allowed document %s was not updated", rawURL)
+					}
+				}
+				for _, extra := range doc.ExtraDocuments[0].ExtraDocuments {
+					stored := idx.GetByURLAndUser(extra.URL, 0)
+					if submission.text == "initial automatic submission" {
+						if stored != nil {
+							t.Fatalf("excluded document %s was indexed automatically", extra.URL)
+						}
+						continue
+					}
+					if stored == nil || stored.Text != "manual submission" || !stored.IgnoreSkipRules() {
+						t.Fatalf("excluded document %s must retain only its manual submission", extra.URL)
+					}
+				}
+			}
+		})
+	}
+}

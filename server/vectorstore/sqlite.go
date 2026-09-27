@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"math"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/asciimoo/hister/config"
@@ -18,6 +20,8 @@ import (
 )
 
 const sqliteVectorSchemaVersion = 1
+
+var sqliteEmbeddingColumn = regexp.MustCompile(`(?i)\bembedding\s+float\s*\[\s*(\d+)\s*\]`)
 
 type sqliteVectorStore struct {
 	db         *sql.DB
@@ -97,12 +101,12 @@ func (s *sqliteVectorStore) Init() error {
 	return nil
 }
 
-func (s *sqliteVectorStore) createEmbeddingsTable(tx *sql.Tx) error {
+func (s *sqliteVectorStore) createEmbeddingsTable(tx *sql.Tx, dimensions int) error {
 	stmt := fmt.Sprintf(`CREATE VIRTUAL TABLE embeddings USING vec0(
 		user_id INTEGER PARTITION KEY,
 		chunk_key TEXT PRIMARY KEY,
 		embedding FLOAT[%d] distance_metric=cosine
-	)`, s.dimensions)
+	)`, dimensions)
 	if _, err := tx.Exec(stmt); err != nil {
 		return fmt.Errorf("create embeddings table: %w", err)
 	}
@@ -113,7 +117,7 @@ func (s *sqliteVectorStore) initEmbeddingsTable(tx *sql.Tx) (int64, error) {
 	var schema string
 	err := tx.QueryRow(`SELECT sql FROM sqlite_schema WHERE type = 'table' AND name = 'embeddings'`).Scan(&schema)
 	if errors.Is(err, sql.ErrNoRows) {
-		return -1, s.createEmbeddingsTable(tx)
+		return -1, s.createEmbeddingsTable(tx, s.dimensions)
 	}
 	if err != nil {
 		return -1, fmt.Errorf("read embeddings table schema: %w", err)
@@ -122,6 +126,20 @@ func (s *sqliteVectorStore) initEmbeddingsTable(tx *sql.Tx) (int64, error) {
 	normalizedSchema := strings.Join(strings.Fields(strings.ToLower(schema)), "")
 	if !strings.Contains(normalizedSchema, "usingvec0(") {
 		return -1, errors.New("existing embeddings table is not a vec0 virtual table")
+	}
+	column := sqliteEmbeddingColumn.FindStringSubmatch(schema)
+	if len(column) != 2 {
+		return -1, errors.New("cannot read dimensions from existing embeddings table")
+	}
+	storedDimensions, err := strconv.Atoi(column[1])
+	if err != nil {
+		return -1, fmt.Errorf("read stored embedding dimensions: %w", err)
+	}
+	if storedDimensions != s.dimensions {
+		// Keep existing vectors until the user requests a reindex. Initialization
+		// must still succeed so the live indexer can rebuild this store.
+		log.Warn().Int("stored_dimensions", storedDimensions).Int("configured_dimensions", s.dimensions).
+			Msg("vector store dimensions differ from semantic_search.dimensions. Run `hister reindex` to rebuild embeddings")
 	}
 	if strings.Contains(normalizedSchema, "distance_metric=cosine") {
 		return -1, nil
@@ -146,7 +164,9 @@ func (s *sqliteVectorStore) initEmbeddingsTable(tx *sql.Tx) (int64, error) {
 	if _, err := tx.Exec(`DROP TABLE embeddings`); err != nil {
 		return -1, fmt.Errorf("drop L2 embeddings table: %w", err)
 	}
-	if err := s.createEmbeddingsTable(tx); err != nil {
+	// A distance metric migration preserves vectors and their original size.
+	// Only a reindex can replace them with vectors of a different size.
+	if err := s.createEmbeddingsTable(tx, storedDimensions); err != nil {
 		return -1, err
 	}
 	restoreResult, err := tx.Exec(`INSERT INTO embeddings(user_id, chunk_key, embedding)
@@ -294,11 +314,26 @@ func (s *sqliteVectorStore) searchUser(vector []float32, topK int, threshold flo
 }
 
 func (s *sqliteVectorStore) Clear() error {
-	if _, err := s.db.Exec(`DELETE FROM embeddings`); err != nil {
-		return fmt.Errorf("clear embeddings: %w", err)
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin vector store rebuild: %w", err)
 	}
-	if _, err := s.db.Exec(`DELETE FROM chunk_meta`); err != nil {
+	defer func() {
+		_ = tx.Rollback()
+	}()
+	// vec0 column dimensions cannot be altered. Recreate the table so reindex
+	// also applies dimension changes from the semantic search configuration.
+	if _, err := tx.Exec(`DROP TABLE embeddings`); err != nil {
+		return fmt.Errorf("drop embeddings table: %w", err)
+	}
+	if err := s.createEmbeddingsTable(tx, s.dimensions); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM chunk_meta`); err != nil {
 		return fmt.Errorf("clear chunk_meta: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit vector store rebuild: %w", err)
 	}
 	return nil
 }

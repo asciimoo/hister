@@ -12,7 +12,10 @@ import (
 	"github.com/asciimoo/hister/server/sanitizer"
 )
 
-const matchURLPrefix = "https://lobste.rs/s/"
+const (
+	matchURLPrefix           = "https://lobste.rs/s/"
+	topLevelCommentsSelector = "#story_comments > ol.comments > li.comments_subtree"
+)
 
 type LobstersExtractor struct {
 	sdk.ConfigSupport
@@ -51,7 +54,7 @@ func (e *LobstersExtractor) Extract(d *sdk.Document) sdk.ExtractResult {
 		b.WriteString("\n\n")
 		b.WriteString(body)
 	}
-	doc.Find("#story_comments > ol.comments > li.comments_subtree").Each(func(_ int, s *goquery.Selection) {
+	doc.Find(topLevelCommentsSelector).Each(func(_ int, s *goquery.Selection) {
 		writeCommentText(&b, s, 0)
 	})
 
@@ -114,7 +117,7 @@ func (e *LobstersExtractor) Preview(d *sdk.Document) sdk.PreviewResult {
 		b.WriteString(body)
 	}
 
-	comments := doc.Find("ol.comments > li.comments_subtree")
+	comments := doc.Find(topLevelCommentsSelector)
 	if comments.Length() > 0 {
 		b.WriteString("<h2>Comments</h2>")
 		b.WriteString(`<ol class="comments">`)

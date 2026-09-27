@@ -164,9 +164,9 @@ type Model struct {
 	// Rules tab (form-based UI)
 	RulesData           RulesResponse
 	RulesIdx            int
-	RulesSection        int // skip, priority, versioning, or aliases
+	RulesSection        int // skip, priority, versioning, allow, or aliases
 	RulesLoading        bool
-	RulesPatternInputs  [3]textinput.Model // skip, priority, versioning
+	RulesPatternInputs  [RulesSectionAliases]textinput.Model
 	RulesAliasKeyInput  textinput.Model
 	RulesAliasValInput  textinput.Model
 	RulesFormFocus      int // pattern, alias key, alias value, or list
@@ -449,6 +449,8 @@ func (m *Model) RulesSectionLen(section int) int {
 		return len(m.RulesData.Priority)
 	case RulesSectionVersioning:
 		return len(m.RulesData.Versioning)
+	case RulesSectionAllow:
+		return len(m.RulesData.Allow)
 	case RulesSectionAliases:
 		return len(m.RulesData.Aliases)
 	}
@@ -577,7 +579,7 @@ func (m *Model) ResetDetails() []int {
 func (m *Model) FocusedRulesInput() *textinput.Model {
 	switch m.RulesFormFocus {
 	case RulesFocusPattern:
-		if m.RulesSection >= RulesSectionSkip && m.RulesSection <= RulesSectionVersioning {
+		if m.RulesSection >= 0 && m.RulesSection < len(m.RulesPatternInputs) {
 			return &m.RulesPatternInputs[m.RulesSection]
 		}
 	case RulesFocusAliasKey:
@@ -650,8 +652,9 @@ func (m *Model) SaveRulesCmd() tea.Cmd {
 	skip := strings.Join(m.RulesData.Skip, "\n")
 	priority := strings.Join(m.RulesData.Priority, "\n")
 	versioning := strings.Join(m.RulesData.Versioning, "\n")
+	allow := strings.Join(m.RulesData.Allow, "\n")
 	return func() tea.Msg {
-		return RulesSavedMsg{Err: m.Client.SaveRules(skip, priority, versioning)}
+		return RulesSavedMsg{Err: m.Client.SaveRules(skip, priority, versioning, allow)}
 	}
 }
 
@@ -664,6 +667,8 @@ func (m *Model) RulesPatterns(section int) *[]string {
 		return &m.RulesData.Priority
 	case RulesSectionVersioning:
 		return &m.RulesData.Versioning
+	case RulesSectionAllow:
+		return &m.RulesData.Allow
 	default:
 		return nil
 	}
@@ -715,6 +720,7 @@ func (m *Model) PrioritizeRuleCmd(pattern string) tea.Cmd {
 			strings.Join(rules.Skip, "\n"),
 			strings.Join(rules.Priority, "\n"),
 			strings.Join(rules.Versioning, "\n"),
+			strings.Join(rules.Allow, "\n"),
 		)}
 	}
 }

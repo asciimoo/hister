@@ -232,6 +232,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     alert(request.error);
     return;
   }
+  if (request.action === 'getPageURL') {
+    if (isContextValid() && isSupportedPage()) sendResponse({ url: getPageURL() });
+    return;
+  }
   if (request.action !== 'reindex') return;
   if (!isContextValid()) return;
   if (!isSupportedPage()) {

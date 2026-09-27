@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -449,6 +450,38 @@ func TestDocumentLabelOverrideReadsInheritedFlag(t *testing.T) {
 	}
 }
 
+func TestSubmissionOverrideInheritedByImports(t *testing.T) {
+	for _, enabled := range []bool{false, true} {
+		t.Run(strconv.FormatBool(enabled), func(t *testing.T) {
+			parent := &cobra.Command{Use: "import"}
+			parent.PersistentFlags().Bool("ignore-rules", false, ignoreRulesFlagUsage)
+			child := &cobra.Command{Use: "source"}
+			parent.AddCommand(child)
+			if err := child.ParseFlags([]string{"--ignore-rules=" + strconv.FormatBool(enabled)}); err != nil {
+				t.Fatal(err)
+			}
+			var received document.Document
+			opts := documentSubmissionClientOptions(child)
+			opts = append(opts, client.WithHTTPClient(&http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+				if err := json.NewDecoder(r.Body).Decode(&received); err != nil {
+					return nil, err
+				}
+				return jsonHTTPResponse(r, http.StatusCreated, ""), nil
+			})}))
+			c := client.New("http://hister.test", opts...)
+			if err := c.AddDocumentJSON(&document.Document{URL: "https://example.com"}); err != nil {
+				t.Fatal(err)
+			}
+			if received.IgnoreSkipRules() != enabled {
+				t.Errorf("saved override = %v, want %v", received.IgnoreSkipRules(), enabled)
+			}
+			if received.SkipSensitiveCheck {
+				t.Error("URL rule override unexpectedly disabled sensitive content checks")
+			}
+		})
+	}
+}
+
 func TestImportCommandHierarchy(t *testing.T) {
 	tests := map[string]*cobra.Command{
 		"file":       importFileCmd,
@@ -496,6 +529,9 @@ func TestImportCommandHierarchy(t *testing.T) {
 }
 
 func TestImportSubcommandFlagOwnership(t *testing.T) {
+	if indexCmd.Flags().Lookup("ignore-rules") == nil {
+		t.Error("index is missing --ignore-rules")
+	}
 	if indexCmd.Flags().Lookup("proxy") == nil {
 		t.Error("index is missing --proxy")
 	}
@@ -503,6 +539,9 @@ func TestImportSubcommandFlagOwnership(t *testing.T) {
 		t.Fatal("import is missing --label")
 	}
 	for _, importCommand := range []*cobra.Command{importFileCmd, importBrowserCmd, importBrowserHistoryCmd, importBookmarksCmd, importLinkdingCmd, importLinkwardenCmd, importKarakeepCmd, importRaindropCmd, importReadeckCmd, importShaarliCmd, importWallabagCmd} {
+		if importCommand.InheritedFlags().Lookup("ignore-rules") == nil {
+			t.Errorf("import %s does not inherit --ignore-rules", importCommand.Name())
+		}
 		if importCommand.InheritedFlags().Lookup("label") == nil {
 			t.Errorf("import %s does not inherit --label", importCommand.Name())
 		}

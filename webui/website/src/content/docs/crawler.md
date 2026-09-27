@@ -48,6 +48,18 @@ Already indexed URLs are skipped unless `--force` is present:
 hister index --force https://example.com/a
 ```
 
+Use `--ignore-rules` to explicitly save submitted documents despite URL allow and skip rules.
+The saved override also protects them from allow and skip rules during `hister reindex`.
+Combine it with `--force` to fetch and mark a URL that is already indexed:
+
+```bash
+hister index --ignore-rules --force https://example.com/a
+```
+
+The override applies to every document submitted by the invocation, including recursive
+crawls and URL lists. Pass it again when resuming a job with `--job-id`; it is not stored
+as a crawl job setting. Robots rules, crawl filters, and sensitive content checks still apply.
+
 Direct indexing supports the same backend, header, cookie, timeout, ownership, and labeling flags
 as persistent crawling.
 
@@ -233,9 +245,20 @@ hister index --recursive \
 
 ## Select a Fetch Backend
 
-The default `http` backend is fast and works well for server rendered pages. Hister also supports
-`chromedp` for pages that need Chrome or Chromium, and `bidi` for an already running browser with a
-WebDriver BiDi endpoint.
+The backend controls how the `hister index` process fetches pages. The browser must be available
+to that process, which can run on a different machine from `hister listen`. Changing crawler
+settings on the server does not start a browser or change how the extension captures pages.
+
+| Backend    | Browser setup                                             | Connection                                                |
+| ---------- | --------------------------------------------------------- | --------------------------------------------------------- |
+| `http`     | No browser needed. The default for server rendered pages. | Direct HTTP requests.                                     |
+| `chromedp` | Chrome or Chromium installed where `hister index` runs.   | Hister launches and controls a local browser using CDP.   |
+| `bidi`     | Start Firefox before running `hister index`.              | Hister connects to its WebDriver BiDi WebSocket endpoint. |
+
+### Chrome or Chromium
+
+Install Chrome or Chromium on the machine running the indexing command. Hister starts the
+browser itself. Set `exec_path` to its executable if it is not found automatically:
 
 ```bash
 hister index --recursive \
@@ -245,6 +268,48 @@ hister index --recursive \
   --allowed-domain docs.example.com \
   https://docs.example.com
 ```
+
+Hister's `chromedp` backend currently supports local browser launching only. It has no remote
+WebSocket option. A Chromium `--remote-debugging-port` socket speaks CDP and cannot be used with
+`--backend bidi`.
+
+### Firefox with BiDi
+
+Start Firefox with a dedicated profile so the command creates a separate browser instance. This
+Linux example creates the profile directory and runs without a graphical display:
+
+```bash
+mkdir -p "$HOME/.local/share/hister-firefox"
+firefox --headless --no-remote \
+  --profile "$HOME/.local/share/hister-firefox" \
+  --remote-debugging-port 9222
+```
+
+Keep Firefox running and use a second terminal for Hister. Omit `--headless` if you want to see
+the browser window. Firefox's [Remote Agent](https://firefox-source-docs.mozilla.org/remote/Security.html)
+enables BiDi through `--remote-debugging-port`. This setup was verified with Firefox 156.0 without
+`--marionette`; Hister connects to the BiDi endpoint rather than the separate Marionette interface.
+
+With the Hister server running, fetch a page through Firefox:
+
+```bash
+hister index --force \
+  --backend bidi \
+  --backend-option socket=ws://127.0.0.1:9222/session \
+  https://example.com
+```
+
+The `/session` path is required for this direct Firefox connection. `--force` makes the check
+fetch the page even if it is already indexed; omit it for normal runs that should skip existing
+documents. Look for an indexed count rather than a skipped count when verifying the setup.
+
+Use one indexing process per Firefox instance. Firefox accepts one active WebDriver session at
+a time, so another automation client can prevent Hister from creating a session.
+
+If the server runs in Docker or LXC, see [browser backends with Docker](docker#browser-backends-with-docker)
+for placement and network requirements.
+
+### Fetch Options
 
 The request related flags are:
 
@@ -271,19 +336,36 @@ hister index --recursive \
   https://docs.example.com
 ```
 
+### Browser Connection Troubleshooting
+
+| Symptom                                                                     | What to check                                                                                                                                      |
+| --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Chrome or Chromium executable not found                                     | Install the browser where `hister index` runs and check `exec_path` there. A browser on the Docker host is not an executable inside the container. |
+| Connection refused                                                          | Keep Firefox running with `--remote-debugging-port` and check the address from the machine or container running `hister index`.                    |
+| WebSocket handshake fails                                                   | Check the port and `/session` path. Firefox restricts accepted Host headers; use a loopback IP for a local connection.                             |
+| `session.new` was not found, or an error mentions `cannot unmarshal object` | Check the endpoint protocol. A CDP endpoint, including Browserless's Chromium endpoint, cannot handle Hister's BiDi commands.                      |
+| Maximum number of active sessions                                           | Stop the other automation session or use a separate Firefox instance with its own profile and port.                                                |
+| URL already indexed, skipping                                               | Repeat a single URL check with `--force` to exercise fetching. A skipped URL does not verify browser navigation.                                   |
+
+[Browserless's Chromium endpoint](https://docs.browserless.io/open-api/chromium) uses CDP.
+Pointing `crawler.backend_options.socket` at that endpoint does not make it compatible with
+Hister's `bidi` backend. Use local Chrome or Chromium with `chromedp`, or Firefox with BiDi as
+described above.
+
 ## Indexing and Ownership Options
 
 These flags control how fetched documents are added to Hister:
 
-| Flag                 | Behavior                                                                            |
-| -------------------- | ----------------------------------------------------------------------------------- |
-| `--label VALUE`      | Attach a label to documents indexed by this run.                                    |
-| `--force`            | Fetch and reindex URLs even when they already exist.                                |
-| `--allow-sensitive`  | Bypass sensitive content checks for the indexed documents.                          |
-| `--global`           | Make documents available to all users. Requires an administrator in multiuser mode. |
-| `--user-id ID`       | Index documents for a specific user. Requires an administrator in multiuser mode.   |
-| `--format FORMAT`    | Print the indexing summary as `text`, `json`, `jsonl`, or `csv`.                    |
-| `--failed-urls PATH` | Save failed URLs, one per line, replacing the file's contents.                      |
+| Flag                 | Behavior                                                                                |
+| -------------------- | --------------------------------------------------------------------------------------- |
+| `--label VALUE`      | Attach a label to documents indexed by this run.                                        |
+| `--force`            | Fetch and reindex URLs even when they already exist.                                    |
+| `--ignore-rules`     | Bypass URL allow and skip rules and preserve submitted documents during index rebuilds. |
+| `--allow-sensitive`  | Bypass sensitive content checks for the indexed documents.                              |
+| `--global`           | Make documents available to all users. Requires an administrator in multiuser mode.     |
+| `--user-id ID`       | Index documents for a specific user. Requires an administrator in multiuser mode.       |
+| `--format FORMAT`    | Print the indexing summary as `text`, `json`, `jsonl`, or `csv`.                        |
+| `--failed-urls PATH` | Save failed URLs, one per line, replacing the file's contents.                          |
 
 `--global` and `--user-id` cannot be used together.
 

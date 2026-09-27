@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/asciimoo/hister/client"
+	"github.com/asciimoo/hister/config"
 	"github.com/asciimoo/hister/server/crawler"
 	"github.com/asciimoo/hister/server/model"
 
@@ -278,17 +279,27 @@ func detectHistoryTable(path string) (_ string, err error) {
 	return "", errors.New("no recognised browser history table found")
 }
 
+// browserImportSkipChecker applies the same explicit override before URLs enter
+// the crawl queue. Per user rules are checked by the destination server.
+func browserImportSkipChecker(cmd *cobra.Command) func(string) bool {
+	ignoreRules, _ := cmd.Flags().GetBool("ignore-rules")
+	return func(rawURL string) bool {
+		return !ignoreRules && !cfg.App.UserHandling && cfg.Rules.IsSkip(rawURL)
+	}
+}
+
 func importDB(databases []DBToImport, cmd *cobra.Command, startDate *time.Time, kind string) {
-	// Fetch skip rules from the server.
+	// Fetch URL indexing rules from the server.
 	c := newClient()
 	resp, err := c.FetchRules()
 	if err != nil {
-		log.Error().Err(err).Msg("Unable to obtain skip rules from server; using local ones instead")
+		log.Error().Err(err).Msg("Unable to obtain indexing rules from server; using local ones instead")
 	} else {
 		// TODO: let the user know that their local rules are being overwritten?
 		cfg.Rules.Skip.ReStrs = resp.Skip
-		if err := cfg.Rules.Skip.Compile(); err != nil {
-			log.Error().Err(err).Msg("Unable to compile skip rules from server")
+		cfg.Rules.Allow = &config.Rule{ReStrs: resp.Allow}
+		if err := cfg.Rules.Compile(); err != nil {
+			log.Error().Err(err).Msg("Unable to compile indexing rules from server")
 			return
 		}
 	}
@@ -304,9 +315,8 @@ func importDB(databases []DBToImport, cmd *cobra.Command, startDate *time.Time, 
 			return
 		}
 	}
-	dbsToImport, issues := prepareBrowserImports(databases, minVisit, startDate, func(u string) bool {
-		return !cfg.App.UserHandling && cfg.Rules.IsSkip(u)
-	})
+	isSkip := browserImportSkipChecker(cmd)
+	dbsToImport, issues := prepareBrowserImports(databases, minVisit, startDate, isSkip)
 	for _, issue := range issues {
 		event := log.Warn().Str("file", issue.databaseFile)
 		if issue.query != "" {
@@ -367,8 +377,7 @@ func importDB(databases []DBToImport, cmd *cobra.Command, startDate *time.Time, 
 				log.Error().Err(err).Msg("Failed to scan database row")
 				return
 			}
-			// skip URLs only in single user environments
-			if !cfg.App.UserHandling && cfg.Rules.IsSkip(u) {
+			if isSkip(u) {
 				log.Debug().Str("URL", u).Msg("skip importing URL by rule")
 				skippedByRules += 1
 				continue
@@ -727,7 +736,8 @@ func finishBrowserImportJob(cmd *cobra.Command, job *browserImportJob) {
 	fmt.Println("Starting crawl job:", job.id)
 
 	cfg.Crawler.UserAgent = UserAgent
-	cr, err := crawler.NewPersistent(&cfg.Crawler, job.id, nil, crawlerSkipOptions(false)...)
+	clientOpts := documentSubmissionClientOptions(cmd)
+	cr, err := crawler.NewPersistent(&cfg.Crawler, job.id, nil, crawlerSkipOptions(false, clientOpts...)...)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to initialize persistent crawler")
 	}
@@ -752,7 +762,7 @@ func finishBrowserImportJob(cmd *cobra.Command, job *browserImportJob) {
 	}
 	validator.SetVisited(int(done + failed))
 
-	if err := crawlAndIndex(cmd.Context(), job.id, job.startURL, cr, validator, job.label); err != nil {
+	if err := crawlAndIndex(cmd.Context(), job.id, job.startURL, cr, validator, job.label, clientOpts...); err != nil {
 		log.Fatal().Err(err).Msg("Browser import crawl failed")
 	}
 }

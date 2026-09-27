@@ -1,12 +1,11 @@
 <script lang="ts">
   import { Button } from '@hister/components/ui/button';
   import DeleteMatchingDocumentsOption from '$lib/components/DeleteMatchingDocumentsOption.svelte';
+  import type { RuleType } from '$lib/rules';
   import * as Dialog from '@hister/components/ui/dialog';
   import { Label } from '@hister/components/ui/label';
   import { Textarea } from '@hister/components/ui/textarea';
   import { ListPlus, Plus, X } from '@lucide/svelte';
-
-  type RuleType = 'skip' | 'priority' | 'versioning';
 
   interface Props {
     open: boolean;
@@ -97,6 +96,7 @@
           }}
           class="bg-page-bg border-brutal-border font-space text-text-brand h-10 w-full cursor-pointer appearance-none border-[3px] px-3 text-xs font-bold tracking-[0.5px] outline-none"
         >
+          <option value="allow">ALLOW</option>
           <option value="skip">SKIP</option>
           <option value="priority">PRIORITY</option>
           <option value="versioning">VERSION</option>

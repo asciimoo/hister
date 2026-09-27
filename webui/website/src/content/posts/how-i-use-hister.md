@@ -120,6 +120,8 @@ The `--dry` flag lets you preview what would be deleted before committing:
 hister delete --dry "domain:old-framework.io"
 ```
 
+You can also prune directly from the search web UI. Enter a query such as `domain:old-framework.io`, review the results, and adjust the query until it selects the content you want to remove. Then open **Actions**, click **Delete all matching results**, and confirm. Like `hister delete`, this deletes every document matching the query. Being able to refine the query while reviewing matches makes it quick to clean up unwanted results without leaving the search page.
+
 ## Pre-indexing Reference Material
 
 The browser extension indexes pages as you visit them, which means documentation you have never opened is invisible to Hister. I close this gap by using the crawler to pre-index reference material I expect to look up repeatedly.

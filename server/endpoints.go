@@ -10,6 +10,7 @@ import (
 	"html"
 	iofs "io/fs"
 	"mime"
+	"net"
 	"net/http"
 	"net/http/pprof"
 	"net/url"
@@ -19,6 +20,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/asciimoo/hister/config"
 	"github.com/asciimoo/hister/files"
@@ -35,6 +37,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/rs/zerolog/log"
 	"github.com/sergi/go-diff/diffmatchpatch"
+	"golang.org/x/net/idna"
 )
 
 type historyItem struct {
@@ -756,7 +759,7 @@ func serveVersions(c *webContext) {
 	c.JSON(versions)
 }
 
-// shouldSkipSubmission checks URL skip rules unless the document carries an
+// shouldSkipSubmission checks URL allow and skip rules unless the document carries an
 // explicit override. Other document validation and authorization still apply.
 func shouldSkipSubmission(c *webContext, d *document.Document) bool {
 	return !d.IgnoreSkipRules() && c.effectiveRules().IsSkip(d.URL)
@@ -805,7 +808,7 @@ func serveAdd(c *webContext) {
 		if d.Type != document.RemoteFile && rules.IsVersioning(d.URL) {
 			existingDoc = c.Indexer.GetByURLAndUser(d.URL, d.UserID)
 		}
-		err := c.Indexer.AddContext(c.Request.Context(), d)
+		err := c.Indexer.AddContext(c.Request.Context(), d, indexer.WithRules(rules))
 		if err != nil {
 			if errors.Is(err, document.ErrSensitiveContent) {
 				log.Warn().Str("URL", d.URL).Msg("rejected document: sensitive content")
@@ -913,7 +916,7 @@ func serveAddPDF(c *webContext) {
 
 	d.UserID = submittedDocumentUserID(c)
 
-	if err := c.Indexer.AddPDF(d, pdfData); err != nil {
+	if err := c.Indexer.AddPDF(d, pdfData, indexer.WithRules(c.effectiveRules())); err != nil {
 		if errors.Is(err, document.ErrSensitiveContent) {
 			log.Warn().Str("URL", d.URL).Msg("rejected pdf document: sensitive content")
 			http.Error(c.Response, document.ErrSensitiveContent.Error(), http.StatusUnprocessableEntity)
@@ -1298,10 +1301,15 @@ func serveRules(c *webContext) {
 	rules := c.effectiveRules()
 	if m == http.MethodGet {
 		type rulesResponse struct {
+			Allow      []string          `json:"allow"`
 			Skip       []string          `json:"skip"`
 			Priority   []string          `json:"priority"`
 			Versioning []string          `json:"versioning"`
 			Aliases    map[string]string `json:"aliases"`
+		}
+		allow := []string{}
+		if rules.Allow != nil && rules.Allow.ReStrs != nil {
+			allow = rules.Allow.ReStrs
 		}
 		skip := rules.Skip.ReStrs
 		if skip == nil {
@@ -1319,7 +1327,7 @@ func serveRules(c *webContext) {
 		if aliases == nil {
 			aliases = make(map[string]string)
 		}
-		c.JSON(rulesResponse{Skip: skip, Priority: priority, Versioning: versioning, Aliases: aliases})
+		c.JSON(rulesResponse{Allow: allow, Skip: skip, Priority: priority, Versioning: versioning, Aliases: aliases})
 		return
 	}
 	if m != http.MethodPost {
@@ -1336,11 +1344,12 @@ func serveRules(c *webContext) {
 		patterns []string
 		target   **config.Rule
 	}
-	updates := make([]ruleUpdate, 0, 3)
+	updates := make([]ruleUpdate, 0, 4)
 	for _, field := range []struct {
 		label  string
 		target **config.Rule
 	}{
+		{label: "allow", target: &rules.Allow},
 		{label: "skip", target: &rules.Skip},
 		{label: "priority", target: &rules.Priority},
 		{label: "versioning", target: &rules.Versioning},
@@ -1381,6 +1390,132 @@ func serveRules(c *webContext) {
 		}
 	}
 	serve200(c)
+}
+
+type rulePreviewRequest struct {
+	Pattern           string `json:"pattern"`
+	Domain            string `json:"domain"`
+	ExactURL          string `json:"exact_url"`
+	IncludeSubdomains bool   `json:"include_subdomains"`
+	URL               string `json:"url"`
+}
+
+type rulePreviewResponse struct {
+	Pattern string `json:"pattern"`
+	Matches *bool  `json:"matches,omitempty"`
+}
+
+// domainRulePattern matches an HTTP URL's hostname, never its path or query.
+func domainRulePattern(value string, includeSubdomains bool) (string, error) {
+	value = strings.TrimSpace(value)
+	if !strings.Contains(value, "://") {
+		value = "https://" + value
+	}
+	u, err := url.Parse(value)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" || u.User != nil {
+		return "", fmt.Errorf("enter a domain such as example.com or an HTTP page URL")
+	}
+	host := strings.TrimSuffix(strings.ToLower(u.Hostname()), ".")
+	var hostPattern string
+	if ip := net.ParseIP(host); ip != nil {
+		if strings.Contains(host, ":") {
+			host = "[" + host + "]"
+		}
+		hostPattern = regexp.QuoteMeta(host)
+	} else {
+		ascii, err := idna.Lookup.ToASCII(host)
+		if err != nil || len(ascii) > 253 || ascii == "" {
+			return "", fmt.Errorf("enter a valid domain such as example.com")
+		}
+		for label := range strings.SplitSeq(ascii, ".") {
+			if label == "" || len(label) > 63 || strings.HasPrefix(label, "-") || strings.HasSuffix(label, "-") {
+				return "", fmt.Errorf("enter a valid domain such as example.com")
+			}
+		}
+		hostPattern = regexp.QuoteMeta(ascii)
+		unicode, err := idna.Lookup.ToUnicode(ascii)
+		if err == nil && unicode != ascii {
+			// URLs can arrive as IDNA, Unicode, or Go's escaped URL string.
+			escaped := strings.TrimPrefix((&url.URL{Host: unicode}).String(), "//")
+			hostPattern = "(?:" + hostPattern + "|" + regexp.QuoteMeta(unicode) + "|" + regexp.QuoteMeta(escaped) + ")"
+		}
+		hostPattern += `\.?`
+		if includeSubdomains {
+			hostPattern = `(?:[^./:?#@]+\.)*` + hostPattern
+		}
+	}
+	return `(?i)^https?://(?:[^/?#@]*@)?` + hostPattern + `(?::[0-9]+)?(?:[/?#]|$)`, nil
+}
+
+// exactURLRulePattern treats the complete URL as literal text.
+func exactURLRulePattern(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	u, err := url.Parse(value)
+	if err != nil || !u.IsAbs() || (u.Host == "" && (u.Scheme != "file" || !strings.HasPrefix(u.Path, "/"))) {
+		return "", fmt.Errorf("enter a complete URL, including its scheme and host")
+	}
+	if strings.ContainsFunc(value, unicode.IsSpace) {
+		return "", fmt.Errorf("encode spaces in the URL as %%20")
+	}
+	return "^" + regexp.QuoteMeta(value) + "$", nil
+}
+
+func serveRulePreview(c *webContext) {
+	var request rulePreviewRequest
+	decoder := json.NewDecoder(http.MaxBytesReader(c.Response, c.Request.Body, 64<<10))
+	if err := decoder.Decode(&request); err != nil {
+		http.Error(c.Response, "Invalid rule preview request", http.StatusBadRequest)
+		return
+	}
+	pattern, domain := strings.TrimSpace(request.Pattern), strings.TrimSpace(request.Domain)
+	exactURL := strings.TrimSpace(request.ExactURL)
+	inputCount := 0
+	for _, input := range []string{pattern, domain, exactURL} {
+		if input != "" {
+			inputCount++
+		}
+	}
+	if inputCount != 1 {
+		http.Error(c.Response, "Provide exactly one of domain, exact_url, or pattern", http.StatusBadRequest)
+		return
+	}
+	if domain != "" {
+		var err error
+		pattern, err = domainRulePattern(domain, request.IncludeSubdomains)
+		if err != nil {
+			http.Error(c.Response, err.Error(), http.StatusBadRequest)
+			return
+		}
+	}
+	if exactURL != "" {
+		var err error
+		pattern, err = exactURLRulePattern(exactURL)
+		if err != nil {
+			http.Error(c.Response, err.Error(), http.StatusBadRequest)
+			return
+		}
+	}
+	// Saving rules splits on whitespace. Preview exactly one saveable pattern.
+	if len(strings.Fields(pattern)) != 1 {
+		http.Error(c.Response, `Enter one pattern without spaces. Use \s to match whitespace.`, http.StatusBadRequest)
+		return
+	}
+	rule := &config.Rule{ReStrs: []string{pattern}}
+	if err := rule.Compile(); err != nil {
+		http.Error(c.Response, "Invalid pattern: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	response := rulePreviewResponse{Pattern: pattern}
+	if testURL := strings.TrimSpace(request.URL); testURL != "" {
+		u, err := url.Parse(testURL)
+		if err != nil || !u.IsAbs() {
+			http.Error(c.Response, "Enter a complete test URL, including its scheme", http.StatusBadRequest)
+			return
+		}
+		matches := rule.Match(testURL)
+		response.Matches = &matches
+	}
+	c.JSON(response)
 }
 
 func serveGetFacets(c *webContext) {
@@ -1976,7 +2111,7 @@ func serveBatch(c *webContext) {
 				results[i] = batchOpResult{Status: http.StatusNotAcceptable, Error: "url skipped by rules"}
 				continue
 			}
-			if err := batch.AddContext(c.Request.Context(), d); err != nil {
+			if err := batch.AddContext(c.Request.Context(), d, indexer.WithRules(c.effectiveRules())); err != nil {
 				if errors.Is(err, document.ErrSensitiveContent) {
 					log.Warn().Str("URL", op.URL).Msg("rejected document: sensitive content")
 					results[i] = batchOpResult{Status: http.StatusUnprocessableEntity, Error: document.ErrSensitiveContent.Error()}

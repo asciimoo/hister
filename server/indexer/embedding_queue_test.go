@@ -15,9 +15,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/asciimoo/hister/config"
 	"github.com/asciimoo/hister/server/document"
 	"github.com/asciimoo/hister/server/model"
 	"github.com/asciimoo/hister/server/testutil"
+	"github.com/asciimoo/hister/server/vectorstore"
 )
 
 func embeddingTestServer(t *testing.T, requests *atomic.Int64) *httptest.Server {
@@ -124,6 +126,76 @@ func TestEmbeddingQueueSkipsUnchangedDocumentText(t *testing.T) {
 		t.Fatalf("changed Add() error: %v", err)
 	}
 	waitForEmbeddingJobs(t, &requests, 2)
+}
+
+func TestReindexRebuildsEmbeddingsAfterDimensionChange(t *testing.T) {
+	var requests atomic.Int64
+	server := embeddingTestServer(t, &requests)
+	defer server.Close()
+	cfg := testutil.Config(t)
+	cfg.SemanticSearch.EmbeddingEndpoint = server.URL
+	cfg.SemanticSearch.EmbeddingModel = "test"
+	cfg.SemanticSearch.Dimensions = 768
+	cfg.SemanticSearch.MaxEmbeddingConcurrency = 1
+	testutil.InitModelWithConfig(t, cfg)
+	idx := newTestIndexer(t, cfg)
+	doc := &document.Document{
+		URL:       "https://example.com/changed-dimensions",
+		Title:     "Dimension change",
+		Text:      "Document to embed again with the new dimensions",
+		Processed: true,
+	}
+	if err := idx.Add(doc); err != nil {
+		idx.Close()
+		t.Fatal(err)
+	}
+	idx.Close()
+
+	// Seed an existing vector table with a size that differs from the endpoint.
+	store, err := vectorstore.New(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	if err := store.Init(); err != nil {
+		t.Fatal(err)
+	}
+	oldVector := make([]float32, 768)
+	oldVector[0] = 1
+	if err := store.PutChunks(doc.ID(), 0, []vectorstore.Chunk{{Text: doc.Text, Embedding: oldVector}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg.SemanticSearch.Enable = true
+	cfg.SemanticSearch.Dimensions = 2
+	idx = newTestIndexer(t, cfg)
+	defer idx.Close()
+	if !idx.SemanticSearchEnabled() {
+		t.Fatal("schema mismatch disabled the vector store needed for reindexing")
+	}
+	if err := idx.Reindex(&config.Rules{}, false, false, false, nil); err != nil {
+		t.Fatal(err)
+	}
+	results, err := idx.vectorStore.Search([]float32{0.25, 0.75}, 5, 0.9, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) == 0 || results[0].DocID != doc.ID() {
+		t.Fatalf("semantic search after dimension change = %#v, want %q", results, doc.ID())
+	}
+	if idx.GetByURLAndUser(doc.URL, 0) == nil {
+		t.Fatal("document missing after reindex")
+	}
+	fingerprint, err := idx.GetEmbeddingFingerprint()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fingerprint != cfg.SemanticSearch.EmbeddingFingerprint() {
+		t.Fatal("reindex did not record the updated embedding configuration")
+	}
 }
 
 func TestEmbeddingQueueReprocessesDocumentChangedWhileActive(t *testing.T) {
