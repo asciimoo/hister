@@ -64,8 +64,6 @@ type fetcher interface {
 type baseCrawler struct {
 	fetcher        fetcher
 	cfg            *config.CrawlerConfig
-	maxQueue       int // zero means unlimited
-	err            error
 	robots         *RobotsCache // nil means robots.txt enforcement is disabled
 	skipURLChecker SkipURLChecker
 }
@@ -136,7 +134,6 @@ func (c *baseCrawler) Crawl(ctx context.Context, startURL string, v *Validator) 
 	if _, err := url.Parse(startURL); err != nil {
 		return nil, fmt.Errorf("invalid start URL: %w", err)
 	}
-	c.err = nil
 	ch := make(chan *document.Document)
 	go func() {
 		defer close(ch)
@@ -207,9 +204,6 @@ func (c *baseCrawler) bfsCrawl(ctx context.Context, startURL string, v *Validato
 
 		finalURL, htmlContent, links, err := c.fetcher.fetchPage(ctx, cur.rawURL)
 		if err != nil {
-			if c.err == nil {
-				c.err = err
-			}
 			log.Warn().Err(err).Str("url", cur.rawURL).Msg("crawler: failed to fetch page")
 			continue
 		}
@@ -242,12 +236,6 @@ func (c *baseCrawler) bfsCrawl(ctx context.Context, startURL string, v *Validato
 				continue
 			}
 			if _, exists := seen[abs]; !exists {
-				if c.maxQueue > 0 && len(seen) >= c.maxQueue {
-					if c.err == nil {
-						c.err = fmt.Errorf("crawl discovery limit reached")
-					}
-					continue
-				}
 				seen[abs] = struct{}{}
 				queue = append(queue, queueItem{abs, cur.depth + 1})
 			}

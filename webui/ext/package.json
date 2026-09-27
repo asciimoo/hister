@@ -6,7 +6,7 @@
     "clean": "rm -rf dist/*",
     "build": "vite build",
     "dev": "vite build --watch --mode development",
-    "test": "node src/content/content.test.js"
+    "test": "node src/content/content.test.js && node --test src/popup/crawl-command.test.js"
   },
   "dependencies": {
     "@hister/components": "^1.0.0",

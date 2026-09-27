@@ -437,9 +437,7 @@
         >
           Index this page now
         </Button>
-        {#key url}
-          <SiteCrawl serverURL={url} {tabURL} {customHeaders} />
-        {/key}
+        <SiteCrawl serverURL={url} {tabURL} hasCustomHeaders={customHeaders.length > 0} />
       </div>
 
       <!-- Label section -->

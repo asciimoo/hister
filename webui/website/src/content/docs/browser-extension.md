@@ -122,31 +122,30 @@ normal access restrictions still apply.
 
 ### Crawl a Site
 
-Open a page on the site, choose **Crawl this site**, set a page limit, and click
-**Start crawl**. Hister follows public HTML links from that hostname's home
-page. Reopen the popup to see progress or choose **Stop crawl**. Closing the
-popup does not stop the crawl, and pages already indexed remain searchable.
+Open a page on the site and choose **Crawl this site**. Set a page limit and
+request delay, then choose **Copy crawl command**. Review and run the command
+in a POSIX shell such as bash or zsh on a machine with Hister installed.
+The extension only generates text; it does not start or monitor a crawl.
 
-Both the extension and server must support this feature. The server reuses the
-CLI crawler's link traversal, deduplication, robots.txt checks, and delay. It
-waits one second before each page fetch, defaults to 100 page visits (maximum
-1000), and stops after 30 minutes. Only one site crawl can run per server.
-Robots-blocked and skipped URLs can count toward the page limit. Discovery is
-capped at 10,000 URLs and each response at 5 MiB.
+The command starts at the current site's home page, limits discovered links to
+that origin, and sends indexed documents to the extension's configured Hister
+server using `--server-url`. It defaults to 100 page visits and a one-second
+delay. The normal CLI crawler behavior and configuration apply, including
+redirect handling, robots.txt settings, and handling of already indexed pages.
+The link filter is not a network isolation boundary.
 
-Crawls use the authenticated user's index and skip rules. Existing documents
-are preserved, but their pages are fetched again to discover links. Browser
-login cookies, custom crawl headers, and the **Submit as public documents**
-setting are not used. Only public HTTP(S) addresses on standard ports are
-allowed; links and redirects to other hostnames, including subdomains, are
-excluded. JavaScript is not executed and extraction uses the fetched HTML
-without network enrichers.
+For a remote Hister server, you can run the command on your own computer; you
+do not need to run it on the server. Configure `app.access_token` in your local
+Hister configuration if the server requires authentication. Browser sessions,
+extension access tokens, custom headers, and the **Submit as public documents**
+setting are not copied into the command. Document ownership follows your CLI
+credentials. If your server requires reverse proxy authentication, configure
+access separately; the CLI's `--header` option applies to crawled websites, not
+to the Hister server.
 
-This follows discoverable links; it does not guarantee every page on a domain
-will be found. Sitemap import, automatic retries, and resuming after a server
-restart are not supported by this control. Only the latest crawl's status is
-kept, until another crawl replaces it or the server restarts. Use the
-[CLI crawler](/docs/crawler) for persistent jobs and advanced configuration.
+Keep the terminal open while crawling and use Ctrl+C to stop. See the
+[CLI crawler](/docs/crawler) for configuration, persistent jobs, and resuming
+a crawl.
 
 ### Keyboard Shortcuts
 

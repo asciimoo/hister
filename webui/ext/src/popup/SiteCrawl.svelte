@@ -1,103 +1,46 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { Button } from '@hister/components/ui/button';
   import { Input } from '@hister/components/ui/input';
   import { Label } from '@hister/components/ui/label';
-  import { fetchAPI } from '../modules/network';
+  import { buildCrawlCommand } from './crawl-command';
 
   let {
     serverURL,
     tabURL,
-    customHeaders,
+    hasCustomHeaders,
   }: {
     serverURL: string;
     tabURL: string;
-    customHeaders: { name: string; value: string }[];
+    hasCustomHeaders: boolean;
   } = $props();
-
-  type Crawl = {
-    id: string;
-    url: string;
-    state: 'running' | 'finished' | 'stopped';
-    max_pages: number;
-    indexed: number;
-    skipped: number;
-    error?: string;
-  };
 
   let expanded = $state(false);
   let maxPages = $state(100);
-  let crawl = $state<Crawl | null>(null);
-  let error = $state('');
-  let busy = $state(false);
-  let supported = $state(true);
-  let disposed = false;
-  let revision = 0;
-  const apiURL = $derived(serverURL.replace(/\/$/, '') + '/api/crawl');
-  const siteURL = $derived.by(() => {
+  let delay = $state(1);
+  let feedback = $state('');
+  const result = $derived.by(() => {
     try {
-      const u = new URL(tabURL);
-      return ['http:', 'https:'].includes(u.protocol) ? u.origin + '/' : '';
+      return { ...buildCrawlCommand(serverURL, tabURL, maxPages, delay), error: '' };
+    } catch (error) {
+      return { command: '', siteURL: '', error: (error as Error).message };
+    }
+  });
+
+  $effect(() => {
+    result.command;
+    feedback = '';
+  });
+
+  async function copyCommand() {
+    const command = result.command;
+    if (!command) return;
+    try {
+      await navigator.clipboard.writeText(command);
+      if (result.command === command) feedback = 'Command copied. Run it in your terminal.';
     } catch {
-      return '';
-    }
-  });
-
-  async function status() {
-    const requestRevision = revision;
-    try {
-      const res = await fetchAPI(apiURL, { customHeaders });
-      if (disposed || requestRevision !== revision) return;
-      if (
-        res.status === 404 ||
-        (res.ok && !res.headers.get('content-type')?.includes('application/json'))
-      ) {
-        supported = false;
-        return;
+      if (result.command === command) {
+        feedback = 'Could not copy. Select the command below and copy it manually.';
       }
-      if (!res.ok) throw new Error(await res.text());
-      const result = await res.json();
-      if (disposed || requestRevision !== revision) return;
-      crawl = result;
-      if (crawl?.state === 'running') expanded = true;
-      error = '';
-    } catch (e) {
-      if (!disposed && requestRevision === revision) error = String(e);
-    }
-  }
-
-  onMount(() => {
-    let timer: ReturnType<typeof setTimeout>;
-    async function poll() {
-      if (!busy) await status();
-      if (!disposed) timer = setTimeout(poll, 2000);
-    }
-    void poll();
-    return () => {
-      disposed = true;
-      clearTimeout(timer);
-    };
-  });
-
-  async function submit(stop: boolean) {
-    busy = true;
-    revision++;
-    error = '';
-    try {
-      const res = await fetchAPI(
-        stop ? `${apiURL}/stop?id=${encodeURIComponent(crawl!.id)}` : apiURL,
-        {
-          method: 'POST',
-          body: stop ? {} : { url: siteURL, max_pages: maxPages },
-          customHeaders,
-        },
-      );
-      if (!res.ok) throw new Error(await res.text());
-      await status();
-    } catch (e) {
-      if (!disposed) error = String(e);
-    } finally {
-      if (!disposed) busy = false;
     }
   }
 </script>
@@ -113,42 +56,42 @@
   </Button>
   {#if expanded}
     <div class="mt-3 space-y-3 text-sm">
-      {#if !supported}
-        <p>Update your Hister server to a version with site crawling.</p>
+      <p>
+        Generate a command to run on your computer with Hister installed. Nothing starts until you
+        run it in a terminal (bash or zsh).
+      </p>
+      <Label for="crawl-limit">Page limit (1–1000)</Label>
+      <Input id="crawl-limit" type="number" min={1} max={1000} step={1} bind:value={maxPages} />
+      <Label for="crawl-delay">Request delay in seconds (1–60)</Label>
+      <Input id="crawl-delay" type="number" min={1} max={60} step={1} bind:value={delay} />
+      {#if result.error}
+        <p role="alert">{result.error}</p>
       {:else}
         <p>
-          Follow public page links from <strong class="break-all"
-            >{siteURL || 'an HTTP(S) site'}</strong
-          > on this hostname. Login cookies are not used. The crawl continues after this popup closes.
+          Start at <strong class="break-all">{result.siteURL}</strong> and follow links on this origin.
+          Results go to your configured Hister server. Normal CLI crawler settings apply.
         </p>
-        {#if crawl?.state === 'running'}
-          <p class="break-all">Crawling {crawl.url}</p>
-          <Button variant="outline" disabled={busy} onclick={() => submit(true)}>Stop crawl</Button>
-        {:else}
-          <Label for="crawl-limit">Page limit (1–1000)</Label>
-          <Input id="crawl-limit" type="number" min={1} max={1000} step={1} bind:value={maxPages} />
-          <Button
-            disabled={busy ||
-              !siteURL ||
-              !Number.isInteger(maxPages) ||
-              maxPages < 1 ||
-              maxPages > 1000}
-            onclick={() => submit(false)}
-          >
-            Start crawl
-          </Button>
-        {/if}
-        {#if crawl}
-          <p aria-live="polite">
-            {crawl.state}: {crawl.indexed} indexed, {crawl.skipped} already indexed or skipped. Limit:
-            {crawl.max_pages} pages.
-          </p>
-          {#if crawl.state !== 'running'}<p class="break-all">{crawl.url}</p>{/if}
-          {#if crawl.error}<p class="break-all" role="status">
-              Some pages could not be indexed: {crawl.error}
-            </p>{/if}
-        {/if}
-        {#if error}<p class="break-all" role="alert">{error}</p>{/if}
+        <Label for="crawl-command">Crawl command</Label>
+        <textarea
+          id="crawl-command"
+          readonly
+          rows={6}
+          class="border-brutal-border w-full resize-y border-2 p-2 font-mono text-xs"
+          value={result.command}
+          onclick={(event) => event.currentTarget.select()}></textarea>
+      {/if}
+      <Button disabled={!result.command} onclick={copyCommand}>Copy crawl command</Button>
+      {#if feedback}<p role="status">{feedback}</p>{/if}
+      <p>
+        If authentication is required, configure app.access_token in your local Hister
+        configuration. Extension credentials, browser sessions, and the public documents setting are
+        not copied. Keep the terminal open; use Ctrl+C to stop.
+      </p>
+      {#if hasCustomHeaders}
+        <p>
+          Your extension uses custom headers. Configure any required proxy access separately for the
+          CLI. Its --header option sends headers to crawled websites, not to Hister.
+        </p>
       {/if}
     </div>
   {/if}
