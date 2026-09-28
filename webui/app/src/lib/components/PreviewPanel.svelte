@@ -257,6 +257,7 @@
     extractor: string = '',
     versionId: number | null = null,
     selectedDocumentId: string = activeDocumentId,
+    prefetched?: Response,
   ) {
     const request = ++loadRequest;
     loading = true;
@@ -279,7 +280,9 @@
       const extra: Record<string, string> = {};
       if (extractor) extra.extractor = extractor;
       if (versionId != null) extra.version = String(versionId);
-      const resp = await apiFetch(documentRequestUrl('/preview', u, selectedDocumentId, extra));
+      const resp =
+        prefetched ??
+        (await apiFetch(documentRequestUrl('/preview', u, selectedDocumentId, extra)));
       if (request !== loadRequest) return;
       if (!resp.ok) {
         content = `<p class="text-hister-rose">Failed to load readable content. Status: ${resp.status}</p>`;
@@ -384,17 +387,17 @@
   }
 
   // Shows a flow entry in this panel, as if it had been focused from the results list.
-  function showEntry(entry: NavEntry) {
+  function showEntry(entry: NavEntry, prefetched?: Response) {
     activeUrl = entry.url;
     activeDocumentId = entry.documentId;
     activeHintTitle = entry.title;
     resetExtractors();
-    loadContent(entry.url, entry.title, '', null, entry.documentId);
+    loadContent(entry.url, entry.title, '', null, entry.documentId, prefetched);
     onnavigate?.(entry.url, entry.title, entry.documentId);
   }
 
   // Follows an in-content link: drops the pages ahead of the current one, like a browser does.
-  function openDocument(u: string, hint: string) {
+  function openDocument(u: string, hint: string, prefetched: Response) {
     const from = nav.index;
     const entry: NavEntry = { url: u, documentId: '', title: hint };
     nav.entries = [...nav.entries.slice(0, from + 1), entry];
@@ -417,7 +420,7 @@
         index: from + 1,
       });
     }
-    showEntry(entry);
+    showEntry(entry, prefetched);
   }
 
   // Moves through the flow with the panel arrows. In fullscreen, when both ends are mirrored in
@@ -472,19 +475,6 @@
     }
   }
 
-  async function isArchived(u: string): Promise<boolean> {
-    try {
-      // HEAD skips the document body server side: we only care about the status.
-      const resp = await apiFetch(documentRequestUrl('/document', u, ''), {
-        method: 'HEAD',
-        redirectOnForbidden: false,
-      });
-      return resp.ok;
-    } catch {
-      return false;
-    }
-  }
-
   function resolveContentHref(anchor: HTMLAnchorElement): URL | null {
     const href = anchor.getAttribute('href') ?? '';
     if (!href || href.startsWith('#')) return null;
@@ -504,8 +494,7 @@
     }
   }
 
-  // Links inside extracted content point at the live web. When the target is archived too we
-  // stay in the panel and show the stored copy; otherwise the click behaves like a plain anchor.
+  // If the clicked link is already saved in Hister's database, it will show the archived version. Otherwise, it follow the anchor behavior as standard.
   async function handleContentClick(event: MouseEvent) {
     if (event.defaultPrevented || event.button !== 0) return;
     if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
@@ -514,16 +503,19 @@
     const resolved = resolveContentHref(anchor);
     // In-page anchors and non-web schemes (mailto:, …) keep their native behavior.
     if (!resolved || (resolved.protocol !== 'http:' && resolved.protocol !== 'https:')) return;
-    // The lookup is asynchronous, so the navigation has to be cancelled up front and
-    // replayed below when the target turns out not to be archived.
+    // The lookup is asynchronous, so the navigation is cancelled up front and replayed below.
     event.preventDefault();
     resolved.hash = '';
 
     const target = resolved.href;
     const hint = anchor.textContent?.trim() || '';
 
-    if (await isArchived(target)) {
-      openDocument(target, hint);
+    const resp = await apiFetch(documentRequestUrl('/preview', target, ''), {
+      redirectOnForbidden: false,
+      signal: lookup.signal,
+    }).catch(() => null);
+    if (resp?.ok) {
+      openDocument(target, hint, resp);
     } else {
       followLink(anchor, target);
     }
