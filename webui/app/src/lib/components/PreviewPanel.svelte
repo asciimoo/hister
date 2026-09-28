@@ -126,6 +126,8 @@
 
   onMount(() => {
     showDocumentDetails = getStoredPreviewDetailsOpen();
+
+    return () => linkLookup?.abort();
   });
 
   function toggleDocumentDetails() {
@@ -259,6 +261,8 @@
     selectedDocumentId: string = activeDocumentId,
     prefetched?: Response,
   ) {
+    if (!prefetched) linkLookup?.abort();
+
     const request = ++loadRequest;
     loading = true;
     content = '';
@@ -461,7 +465,9 @@
 
   // Browser back/forward onto an entry of the current flow. The parent may have already handed
   // the entry over through the props (see the effect above), in which case it is only announced.
-  function handlePopState(event: PopStateEvent) {
+  function handlePopState(_: PopStateEvent) {
+    linkLookup?.abort();
+
     const tag = currentPanelNavTag();
     const entry = tag?.flow === nav.flow ? nav.entries[tag.index] : undefined;
     if (!tag || !entry) return;
@@ -494,6 +500,8 @@
     }
   }
 
+  let linkLookup: AbortController | null = null;
+
   // If the clicked link is already saved in Hister's database, it will show the archived version. Otherwise, it follow the anchor behavior as standard.
   async function handleContentClick(event: MouseEvent) {
     if (event.defaultPrevented || event.button !== 0) return;
@@ -510,10 +518,15 @@
     const target = resolved.href;
     const hint = anchor.textContent?.trim() || '';
 
+    linkLookup?.abort();
+    const lookup = (linkLookup = new AbortController());
+
     const resp = await apiFetch(documentRequestUrl('/preview', target, ''), {
       redirectOnForbidden: false,
       signal: lookup.signal,
     }).catch(() => null);
+    if (lookup.signal.aborted) return;
+
     if (resp?.ok) {
       openDocument(target, hint, resp);
     } else {
