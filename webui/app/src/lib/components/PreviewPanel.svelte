@@ -507,8 +507,8 @@
   // Links inside extracted content point at the live web. When the target is archived too we
   // stay in the panel and show the stored copy; otherwise the click behaves like a plain anchor.
   async function handleContentClick(event: MouseEvent) {
-    if (event.defaultprevented || event.button !== 0) return;
-    if (event.metakey || event.ctrlkey || event.shiftkey || event.altkey) return;
+    if (event.defaultPrevented || event.button !== 0) return;
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     const anchor = (event.target as Element | null)?.closest('a');
     if (!anchor) return;
     const resolved = resolveContentHref(anchor);
