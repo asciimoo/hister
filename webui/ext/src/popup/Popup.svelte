@@ -5,6 +5,7 @@
   import { Switch } from '@hister/components/ui/switch';
   import * as Card from '@hister/components/ui/card';
   import SettingsInput from '../options/SettingsInput.svelte';
+  import SiteCrawl from './SiteCrawl.svelte';
   import * as Tooltip from '@hister/components/ui/tooltip';
   import { SkipRuleActions, buildUrlSkipPattern, buildDomainSkipPattern } from '@hister/components';
   import { Settings, Sun, Moon, Save, Info, Check } from '@lucide/svelte';
@@ -443,6 +444,7 @@
         >
           Index this page now
         </Button>
+        <SiteCrawl serverURL={url} {tabURL} hasCustomHeaders={customHeaders.length > 0} />
       </div>
 
       <!-- Label section -->

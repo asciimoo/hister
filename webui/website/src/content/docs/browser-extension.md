@@ -127,6 +127,33 @@ index rebuild. It leaves your indexing rules and automatic indexing setting inta
 later automatic submissions still respect them. Sensitive content checks and
 normal access restrictions still apply.
 
+### Crawl a Site
+
+Open a page on the site and choose **Crawl this site**. Set a page limit and
+request delay, then choose **Copy crawl command**. Review and run the command
+in a POSIX shell such as bash or zsh on a machine with Hister installed.
+The extension only generates text; it does not start or monitor a crawl.
+
+The command starts at the current site's home page, limits discovered links to
+that origin, and sends indexed documents to the extension's configured Hister
+server using `--server-url`. It defaults to 100 page visits and a one-second
+delay. The normal CLI crawler behavior and configuration apply, including
+redirect handling, robots.txt settings, and handling of already indexed pages.
+The link filter is not a network isolation boundary.
+
+For a remote Hister server, you can run the command on your own computer; you
+do not need to run it on the server. Configure `app.access_token` in your local
+Hister configuration if the server requires authentication. Browser sessions,
+extension access tokens, custom headers, and the **Submit as public documents**
+setting are not copied into the command. Document ownership follows your CLI
+credentials. If your server requires reverse proxy authentication, configure
+access separately; the CLI's `--header` option applies to crawled websites, not
+to the Hister server.
+
+Keep the terminal open while crawling and use Ctrl+C to stop. See the
+[CLI crawler](/docs/crawler) for configuration, persistent jobs, and resuming
+a crawl.
+
 ### Keyboard Shortcuts
 
 The extension defines browser level shortcuts for common indexing actions.
