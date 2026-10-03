@@ -45,6 +45,61 @@ Release pages also contain a checksums file that can be used to verify the downl
 
 You may optionally move the binary to a directory on your `PATH`, such as `/usr/local/bin` or `~/.local/bin`.
 
+### Start automatically on macOS
+
+On macOS, Hister can run as a per-user `launchd` agent. It starts when you log
+in and is restarted if it exits unexpectedly.
+
+From a source checkout, build Hister first:
+
+```bash
+./manage.sh build
+```
+
+Install the agent with the helper in the repository:
+
+```bash
+contrib/launchd/hister-launchd.sh install
+```
+
+The helper uses the `hister` binary in the repository root. To use a binary in
+another location or a specific configuration file:
+
+```bash
+HISTER_BIN="$HOME/bin/hister" \
+HISTER_CONFIG="$HOME/Library/Preferences/hister/config.yml" \
+contrib/launchd/hister-launchd.sh install
+```
+
+Hister otherwise uses its normal configuration search paths. To override the
+data directory for this service, set `HISTER_DATA_DIR`. Relative paths are
+resolved when the agent is installed.
+
+The agent is installed at:
+
+```text
+~/Library/LaunchAgents/org.hister.server.plist
+```
+
+Use the helper to manage the agent:
+
+```bash
+contrib/launchd/hister-launchd.sh status
+contrib/launchd/hister-launchd.sh restart
+contrib/launchd/hister-launchd.sh stop
+contrib/launchd/hister-launchd.sh start
+contrib/launchd/hister-launchd.sh logs
+```
+
+To remove only the background service while preserving the indexed data:
+
+```bash
+contrib/launchd/hister-launchd.sh uninstall
+```
+
+The Nix Darwin and Home Manager modules provide their own `launchd`
+configuration for Nix installations.
+
 ## Building from source
 
 Building Hister requires Go 1.26, npm, and a C compiler for CGO dependencies.
