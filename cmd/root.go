@@ -323,6 +323,8 @@ func init() {
 	crawlCmd.AddCommand(crawlURLsCmd)
 	crawlCmd.AddCommand(crawlDeleteCmd)
 	companionCmd.AddCommand(companionQutebrowserCmd)
+	companionCmd.AddCommand(companionSafariCmd)
+	addSafariCompanionFlags(companionSafariCmd)
 	importCmd.AddCommand(importFileCmd)
 	importCmd.AddCommand(importSitemapCmd)
 	importCmd.AddCommand(importBrowserCmd)
