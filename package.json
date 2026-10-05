@@ -16,8 +16,8 @@
     "webui/ext"
   ],
   "devDependencies": {
-    "@types/node": "^26.6.2",
-    "fallow": "^3.28.0",
+    "@types/node": "^26.6.4",
+    "fallow": "^3.31.0",
     "prettier": "^3.9.9",
     "prettier-plugin-svelte": "^4.1.1",
     "prettier-plugin-tailwindcss": "^0.8.1"
