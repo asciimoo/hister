@@ -613,7 +613,7 @@ async function submitPageData(baseURL: string, request, sender, data): Promise<I
   if (!force) {
     // The status belongs to the URL that was navigated to, which is not
     // necessarily the submitted URL: a page can declare a canonical URL.
-    const sourceURL = sender.url ?? sender.tab?.url ?? request.pageData.url;
+    const sourceURL = request.sourceURL ?? sender.url ?? sender.tab?.url ?? request.pageData.url;
     if (tabId !== undefined) {
       const statusCode = await isErrorPage(tabId, sourceURL);
       if (statusCode !== undefined) {
