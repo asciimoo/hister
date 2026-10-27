@@ -213,6 +213,25 @@ test('automatic canonical submissions respect rules for both visited and canonic
   }
 });
 
+test('SPA submissions use the captured source URL instead of the initial document URL', async () => {
+  const b = browser({
+    sourceURL: 'https://example.com/?temporary-chat=true',
+    rules: { skip: ['temporary-chat'] },
+  });
+  for (const [sourceURL, expected] of [
+    ['https://example.com/c/normal', 201],
+    ['https://example.com/?temporary-chat=true', 406],
+  ]) {
+    const response = await b.message({
+      sourceURL,
+      pageData: { url: b.canonicalURL, title: 'Chat', text: 'Chat text', faviconURL: '' },
+    });
+    assert.equal(response.status_code, expected);
+  }
+  assert.equal(b.documents.length, 1);
+  assert.equal('sourceURL' in b.documents[0], false);
+});
+
 test('manual canonical submissions still bypass rules for the visited URL', async () => {
   const b = browser({ rules: { skip: ['/visited', '/clean'] } });
   const response = await b.submit(true);
