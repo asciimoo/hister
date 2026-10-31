@@ -1317,6 +1317,12 @@ func (i *Indexer) prepareDocumentWrite(ctx context.Context, d *document.Document
 		return nil, nil
 	}
 	state := i.getStoredDocumentState(d.ID())
+	// Extractor supplied summaries, such as search result snippets, must not
+	// replace richer content that is already indexed for the same URL.
+	if d.SummaryOnly && state.found {
+		log.Debug().Str("url", d.URL).Msg("skip summary document for already indexed URL")
+		return nil, nil
+	}
 	// Resolve the final URL and owner before looking up a saved correction.
 	// Resubmissions cannot replace a pin; the update API changes or clears it.
 	if state.languageOverride != "" {

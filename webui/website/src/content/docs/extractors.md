@@ -398,6 +398,50 @@ unsupported media content is ignored.
 `https://chatgpt.com/g/<gpt-id>/c/<conversation-id>` custom GPT conversation URLs
 (including `www.chatgpt.com`).
 
+### `duckduckgo`
+
+Indexes the organic results of a DuckDuckGo search page as one document per
+result. Each result is searchable by its title, snippet, and site right after
+the search, without visiting it. Promotional results and duplicate results are
+ignored, and outbound redirect links (`/l/?uddg=...`) are unwrapped. The search
+page itself is never indexed: a page that yields no parseable result, such as a
+JavaScript shell, a consent screen, or an empty search, is dropped instead of
+being stored as boilerplate. A result that points to an already indexed page
+keeps the richer existing document.
+
+The generated Search Assist answer is dropped with the page by default, because
+it only exists after the page has been asked to generate one. The opt-in
+`keep_answer` option stores it instead, as the search page's own document.
+
+**Matches:** search pages of `duckduckgo.com`, `www.duckduckgo.com`,
+`html.duckduckgo.com`, `lite.duckduckgo.com`, `noai.duckduckgo.com`, and
+`start.duckduckgo.com` that carry a `q` parameter.
+
+The selectors cover the HTML and Lite endpoints, which serve results without
+JavaScript, as well as the JavaScript front end, which links results directly
+and marks them with `data-testid` attributes. That front end renders its results
+in the browser and returns a shell without results to a plain HTTP client, so
+`duckduckgo.com/?q=` pages contribute results only when the rendered page is
+submitted from the browser extension; a plain fetch of the shell stores nothing.
+The live test covers the HTML endpoint; the JavaScript front end is covered by a
+unit test built from a browser rendered page.
+
+The robots.txt of `duckduckgo.com` disallows its `/html` and `/lite` paths while
+allowing `/?q=`, whereas `html.duckduckgo.com` and `lite.duckduckgo.com` allow
+crawling, which is why the live test uses the dedicated host.
+
+**Options:**
+
+- `max_results` (int, default `20`): maximum number of results recorded per
+  search page.
+- `keep_answer` (bool, default `false`): store the generated Search Assist
+  answer as the search page's own document. Unlike the interface around it, the
+  answer does not exist anywhere else, so it can be worth keeping. Only pages
+  that carry an answer are stored this way; a page without one is still dropped.
+  The answer text is stored without the source chips, which the page keeps next
+  to it, and the page is marked with `type: duckduckgo_answer` and the search
+  `query` metadata.
+
 ### `readability`
 
 Generic article extractor using the

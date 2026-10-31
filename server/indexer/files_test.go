@@ -1245,6 +1245,102 @@ func TestAddDocumentDoesNotIncrementAddCountForExtraDocuments(t *testing.T) {
 	}
 }
 
+func TestSummaryDocumentDoesNotReplaceIndexedContent(t *testing.T) {
+	idxCfg := testutil.Config(t)
+	idx := newTestIndexer(t, idxCfg)
+	defer idx.Close()
+
+	url := "https://example.com/visited"
+	if err := idx.Add(&document.Document{
+		URL:   url,
+		Title: "Full page",
+		Text:  "Full page content that must survive a later summary",
+		HTML:  "<html><body><p>Full page content</p></body></html>",
+	}); err != nil {
+		t.Fatalf("Add failed: %v", err)
+	}
+
+	// Search result pages contribute a short summary for URLs that may already
+	// be indexed; the summary must not replace the richer stored content.
+	if err := idx.Add(&document.Document{
+		URL:         url,
+		Title:       "Search snippet",
+		Text:        "Search snippet",
+		SummaryOnly: true,
+	}); err != nil {
+		t.Fatalf("Add summary failed: %v", err)
+	}
+
+	doc := idx.GetByURLAndUser(url, 0)
+	if doc == nil {
+		t.Fatal("indexed document not found")
+	}
+	if doc.Title != "Full page" {
+		t.Fatalf("Title = %q, want the indexed page title", doc.Title)
+	}
+	if !strings.Contains(doc.Text, "Full page content") {
+		t.Fatalf("Text = %q, want the indexed page content", doc.Text)
+	}
+	if doc.AddCount != 1 {
+		t.Fatalf("AddCount = %d, want 1", doc.AddCount)
+	}
+}
+
+func TestSummaryDocumentIsIndexedForNewURL(t *testing.T) {
+	idxCfg := testutil.Config(t)
+	idx := newTestIndexer(t, idxCfg)
+	defer idx.Close()
+
+	url := "https://example.com/search-result"
+	if err := idx.Add(&document.Document{
+		URL:         url,
+		Title:       "Search snippet",
+		Text:        "Search snippet",
+		SummaryOnly: true,
+	}); err != nil {
+		t.Fatalf("Add summary failed: %v", err)
+	}
+
+	doc := idx.GetByURLAndUser(url, 0)
+	if doc == nil {
+		t.Fatal("summary document was not indexed")
+	}
+	if doc.Title != "Search snippet" {
+		t.Fatalf("Title = %q, want the summary title", doc.Title)
+	}
+}
+
+func TestSkipIndexingDocumentIsNotStored(t *testing.T) {
+	idxCfg := testutil.Config(t)
+	idx := newTestIndexer(t, idxCfg)
+	defer idx.Close()
+
+	// Search result pages skip themselves, so that a page without parseable
+	// results cannot leave boilerplate behind while its results are indexed.
+	pageURL := "https://duckduckgo.com/?q=hister"
+	extraURL := "https://hister.org/"
+	if err := idx.Add(&document.Document{
+		URL:          pageURL,
+		Title:        "hister at DuckDuckGo",
+		Text:         "hister at DuckDuckGo",
+		SkipIndexing: true,
+		ExtraDocuments: []*document.Document{{
+			URL:   extraURL,
+			Title: "hister",
+			Text:  "hister\nA full text search engine for your browsing history",
+		}},
+	}); err != nil {
+		t.Fatalf("Add failed: %v", err)
+	}
+
+	if doc := idx.GetByURLAndUser(pageURL, 0); doc != nil {
+		t.Fatalf("result page was indexed: %#v", doc)
+	}
+	if doc := idx.GetByURLAndUser(extraURL, 0); doc == nil {
+		t.Fatal("extra document was not indexed")
+	}
+}
+
 func TestMultiBatchAddsExtraDocuments(t *testing.T) {
 	idxCfg := testutil.Config(t)
 	idx := newTestIndexer(t, idxCfg)
