@@ -11,7 +11,13 @@
 
     const hash = window.location.hash;
     if (hash) {
-      document.querySelector(hash)?.scrollIntoView();
+      let id: string;
+      try {
+        id = decodeURIComponent(hash.slice(1));
+      } catch {
+        return;
+      }
+      document.getElementById(id)?.scrollIntoView();
     }
   });
 </script>

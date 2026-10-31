@@ -4,6 +4,7 @@
   import ArrowRight from '@lucide/svelte/icons/arrow-right';
   import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
   import CopyIcon from '@lucide/svelte/icons/copy';
+  import LinkIcon from '@lucide/svelte/icons/link';
   import ListIcon from '@lucide/svelte/icons/list';
   import { Button, Separator } from '@hister/components';
   import ImageLightbox from '#lib/ImageLightbox.svelte';
@@ -102,6 +103,37 @@
     toc = nextToc;
     activeId = nextToc[0]?.id ?? '';
 
+    const permalinkCleanups = Array.from(
+      article.querySelectorAll<HTMLHeadingElement>('.doc-content :is(h2, h3, h4, h5, h6)[id]'),
+      (heading) => {
+        const text = heading.textContent?.trim() ?? '';
+        const originalLabel = heading.getAttribute('aria-label');
+        const label = document.createElement('span');
+        label.className = 'heading-text';
+        label.append(...heading.childNodes);
+
+        const link = document.createElement('a');
+        link.className = 'heading-permalink';
+        link.href = `#${encodeURIComponent(heading.id)}`;
+        link.title = 'Link to this section';
+        link.setAttribute('aria-label', `Link to ${text}`);
+        const icon = mount(LinkIcon, { target: link, props: { size: 16, 'aria-hidden': true } });
+
+        heading.classList.add('heading-with-permalink');
+        heading.setAttribute('aria-label', originalLabel ?? text);
+        heading.append(label, link);
+
+        return () => {
+          void unmount(icon);
+          link.remove();
+          label.replaceWith(...label.childNodes);
+          heading.classList.remove('heading-with-permalink');
+          if (originalLabel === null) heading.removeAttribute('aria-label');
+          else heading.setAttribute('aria-label', originalLabel);
+        };
+      },
+    );
+
     const observer = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
@@ -114,7 +146,10 @@
     );
 
     headings.forEach((h) => observer.observe(h));
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      permalinkCleanups.forEach((cleanup) => cleanup());
+    };
   });
 </script>
 
