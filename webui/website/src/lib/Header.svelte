@@ -51,7 +51,7 @@
           <a
             href={link.href}
             aria-current={ariaCurrent(link.href)}
-            class="font-space gap-4 px-8 py-8 font-semibold tracking-[1.5px] uppercase no-underline transition-colors hover:underline md:text-sm {isActive(
+            class="font-space gap-4 px-4 py-8 font-semibold tracking-[1.5px] uppercase no-underline transition-colors hover:underline md:text-sm lg:px-8 {isActive(
               link.href,
             )
               ? 'text-[var(--text-primary)]'
