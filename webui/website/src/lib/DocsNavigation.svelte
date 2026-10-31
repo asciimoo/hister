@@ -37,7 +37,7 @@
         <div class="mb-1.5 flex items-center gap-2 px-1">
           <span aria-hidden="true" class="h-2 w-2 shrink-0 bg-hister-{category.color}"></span>
           <h2
-            class="font-space text-[10px] font-bold tracking-[1.75px] uppercase {category.docs.some(
+            class="font-inter text-sm font-bold {category.docs.some(
               (doc) => doc.slug === currentSlug,
             )
               ? 'text-(--text-primary)'
@@ -54,7 +54,7 @@
               aria-current={doc.slug === currentSlug ? 'page' : undefined}
               class="font-inter flex items-center justify-between gap-2 border-l-[3px] px-3 py-2 text-sm no-underline transition-colors {doc.slug ===
               currentSlug
-                ? 'border-hister-indigo bg-hister-indigo/10 font-semibold text-(--text-primary)'
+                ? 'border-hister-indigo bg-hister-indigo/10 text-(--text-primary)'
                 : 'hover:border-brutal-border border-transparent text-(--text-secondary) hover:bg-(--muted-surface) hover:text-(--text-primary)'}"
             >
               <span>{doc.title}</span>

@@ -181,8 +181,7 @@
         >
           <ListIcon aria-hidden="true" size={18} class="text-hister-indigo shrink-0" />
           <span class="min-w-0 flex-1">
-            <span
-              class="font-space block text-[9px] font-bold tracking-[1.5px] text-(--text-secondary) uppercase"
+            <span class="font-inter block text-sm font-bold text-(--text-secondary)"
               >On this page</span
             >
             <span class="font-inter block truncate text-sm font-semibold text-(--text-primary)"
@@ -208,7 +207,7 @@
               3
                 ? 'pl-6'
                 : 'pl-3'} {activeId === entry.id
-                ? 'border-hister-indigo bg-hister-indigo/10 font-semibold text-(--text-primary)'
+                ? 'border-hister-indigo bg-hister-indigo/10 text-(--text-primary)'
                 : 'border-transparent text-(--text-secondary) hover:bg-(--muted-surface) hover:text-(--text-primary)'}"
             >
               {entry.text}
@@ -275,19 +274,18 @@
         aria-label="On this page"
         class="sticky top-6 flex max-h-[calc(100vh-3rem)] flex-col gap-0.5 overflow-y-auto pb-4"
       >
-        <span
-          class="font-space mb-3 text-[10px] font-bold tracking-[2px] text-(--text-secondary) uppercase"
-          >On This Page</span
+        <span class="font-inter mb-3 text-[13px] font-bold text-(--text-secondary)"
+          >On this page</span
         >
         {#each toc as entry}
           <Button
             variant="ghost"
             href="#{entry.id}"
             aria-current={activeId === entry.id ? 'location' : undefined}
-            class="font-inter h-auto justify-start rounded-none border-l-2 py-1 text-left text-[13px] whitespace-normal no-underline transition-colors
+            class="font-inter h-auto justify-start rounded-none border-l-2 py-1 text-left text-[13px] font-normal whitespace-normal no-underline transition-colors
               {entry.level === 3 ? 'pl-5' : 'pl-3'}
               {activeId === entry.id
-              ? 'border-hister-indigo font-medium text-(--text-primary)'
+              ? 'border-hister-indigo text-(--text-primary)'
               : 'hover:border-brutal-border border-transparent text-(--text-secondary) hover:text-(--text-primary)'}"
           >
             {entry.text}
