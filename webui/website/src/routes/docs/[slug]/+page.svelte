@@ -1,7 +1,9 @@
 <script lang="ts">
+  import { mount, unmount } from 'svelte';
   import ArrowLeft from '@lucide/svelte/icons/arrow-left';
   import ArrowRight from '@lucide/svelte/icons/arrow-right';
   import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
+  import CopyIcon from '@lucide/svelte/icons/copy';
   import ListIcon from '@lucide/svelte/icons/list';
   import { Button, Separator } from '@hister/components';
   import ImageLightbox from '#lib/ImageLightbox.svelte';
@@ -22,6 +24,66 @@
   function closePageNavigation(event: MouseEvent) {
     (event.currentTarget as HTMLElement).closest('details')?.removeAttribute('open');
   }
+
+  $effect(() => {
+    void data.content;
+
+    const cleanups: (() => void)[] = [];
+    for (const pre of document.querySelectorAll<HTMLPreElement>('.doc-content pre')) {
+      const code = pre.querySelector('code');
+      if (!code) continue;
+
+      const wrapper = document.createElement('div');
+      wrapper.className = 'code-block';
+      wrapper.style.backgroundColor = pre.style.backgroundColor;
+      const controls = document.createElement('div');
+      controls.className = 'code-controls';
+      const status = document.createElement('span');
+      status.setAttribute('role', 'status');
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.title = 'Copy code';
+      button.setAttribute('aria-label', 'Copy code block');
+      const icon = mount(CopyIcon, { target: button, props: { size: 16, 'aria-hidden': true } });
+
+      controls.append(status, button);
+      pre.before(wrapper);
+      wrapper.append(pre, controls);
+
+      let disposed = false;
+      let resetTimer: ReturnType<typeof setTimeout> | undefined;
+
+      async function copyCode() {
+        clearTimeout(resetTimer);
+        button.disabled = true;
+        status.textContent = 'Copying…';
+        try {
+          await navigator.clipboard.writeText(code?.textContent ?? '');
+          if (disposed) return;
+          status.textContent = 'Copied!';
+          resetTimer = setTimeout(() => {
+            status.textContent = '';
+          }, 3000);
+        } catch {
+          if (disposed) return;
+          status.textContent = 'Could not copy. Select the code and copy it manually.';
+        } finally {
+          if (!disposed) button.disabled = false;
+        }
+      }
+
+      button.addEventListener('click', copyCode);
+      cleanups.push(() => {
+        disposed = true;
+        clearTimeout(resetTimer);
+        button.removeEventListener('click', copyCode);
+        void unmount(icon);
+        wrapper.replaceWith(pre);
+      });
+    }
+
+    return () => cleanups.forEach((cleanup) => cleanup());
+  });
 
   $effect(() => {
     // Track data.content as a dependency so this re-runs when navigating between docs

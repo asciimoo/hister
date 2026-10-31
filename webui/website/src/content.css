@@ -132,6 +132,81 @@
   font-size: inherit;
 }
 
+.content.doc-content .code-block {
+  position: relative;
+  margin-bottom: 1.5em;
+  border: 2px solid var(--hister-indigo);
+  border-left-width: 5px;
+  box-shadow: 4px 4px 0 color-mix(in srgb, var(--hister-indigo) 25%, transparent);
+}
+
+.content.doc-content .code-block pre {
+  margin-right: 3rem;
+  margin-bottom: 0;
+  border: 0;
+  box-shadow: none;
+}
+
+.content.doc-content .code-controls {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  z-index: 1;
+}
+
+.content.doc-content .code-controls button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid transparent;
+  background-color: transparent;
+  color: #e1e4e8;
+  cursor: pointer;
+}
+
+.content.doc-content .code-controls button:hover,
+.content.doc-content .code-controls button:focus-visible {
+  border-color: var(--hister-indigo);
+  background-color: color-mix(in srgb, var(--hister-indigo) 20%, transparent);
+}
+
+.content.doc-content .code-controls button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.content.doc-content .code-controls [role='status'] {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 0.5rem);
+  width: max-content;
+  max-width: min(18rem, calc(100vw - 5rem));
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  pointer-events: none;
+}
+
+.content.doc-content .code-controls [role='status']:not(:empty) {
+  padding: 0.375rem 0.625rem;
+  border: 1px solid var(--hister-indigo);
+  background-color: var(--brutal-card);
+  color: var(--text-primary);
+  box-shadow: 2px 2px 0 color-mix(in srgb, var(--hister-indigo) 25%, transparent);
+}
+
+@media (pointer: coarse) {
+  .content.doc-content .code-block pre {
+    margin-right: 3.5rem;
+  }
+
+  .content.doc-content .code-controls button {
+    width: 2.5rem;
+    height: 2.5rem;
+  }
+}
+
 .content blockquote {
   border-left: 4px solid var(--hister-indigo);
   padding: 0.75rem 1.25rem;
