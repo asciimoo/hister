@@ -10,7 +10,6 @@ import screenshot from "#lib/assets/landing_screenshot.png";
 </script>
 
 The simplest way to use Hister requires no configuration. First [install the Hister binary](installing), then follow the steps below.
-When you are ready to customize it, start with [Creating a Config File](configuration#creating-a-config-file).
 
 ## Running the Server
 
@@ -52,6 +51,12 @@ In particular, they will never make requests to any site you are visiting (they 
 Type <http://localhost:4433> (or, equivalently, `http://127.0.0.1:4433`) into your browser's address bar, and you will access Hister's interface.
 There, you can perform searches, add indexing rules... feel free to look around!
 
+To find your first page:
+
+1. With the server running and the extension enabled, visit a page you want to keep.
+2. Open Hister at <http://127.0.0.1:4433> and refresh to check that the indexed page count has increased.
+3. Search for a few distinctive words from the page. Open the matching result or its stored preview.
+
 <img src={screenshot} alt="Screenshot of Hister's landing page" />
 
 As you visit more pages in your browser (with the extension enabled), the number of indexed pages should increase!
@@ -62,6 +67,7 @@ If you can't access the Web interface at all, check that [the server is running]
 
 ## Next Steps
 
+- [Create a config file to customize Hister](configuration#creating-a-config-file)
 - [Import browser history, browser bookmarks, files, or content from reading services](import)
 - [Index local directories](configuration#local-directory-indexing)
 - [Enable semantic search](configuration#semantic-search)

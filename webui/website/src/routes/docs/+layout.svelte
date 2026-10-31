@@ -25,11 +25,11 @@
   {@render children()}
 {:else}
   <!-- Dark header banner -->
-  <header class="w-full bg-(--text-primary) px-6 py-10 md:py-14">
+  <header class="w-full bg-(--text-primary) px-6 py-4 md:py-14">
     <div class="mx-auto max-w-[1920px]">
       <nav
         aria-label="Breadcrumb"
-        class="font-space mb-4 flex items-center gap-2 text-[11px] font-bold tracking-[2px] text-white/65 uppercase"
+        class="font-space mb-2 flex items-center gap-2 text-[11px] font-bold tracking-[2px] text-white/65 uppercase md:mb-4"
       >
         <a
           href="/docs"
@@ -44,7 +44,7 @@
       >
         {currentDoc?.title}
       </h1>
-      <div class="mt-7">
+      <div class="mt-4 md:mt-7">
         <DocsSearch tone="dark" />
       </div>
     </div>
@@ -83,7 +83,7 @@
     </details>
   </div>
 
-  <div class="mx-auto flex max-w-[1920px] flex-col gap-10 px-6 py-10 md:flex-row md:px-12">
+  <div class="mx-auto flex max-w-[1920px] flex-col gap-10 px-6 py-6 md:flex-row md:px-12 md:py-10">
     <aside class="hidden w-64 shrink-0 md:block">
       <div class="sticky top-6 max-h-[calc(100vh-3rem)] overflow-y-auto pr-2 pb-4">
         <DocsNavigation categories={data.categories} currentSlug={currentDoc?.slug ?? ''} />
