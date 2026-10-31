@@ -1,7 +1,7 @@
 import adapter from '@sveltejs/adapter-static';
 import { mdsvex, escapeSvelte } from 'mdsvex';
 import rehypeSlug from 'rehype-slug';
-import type { Element, Root } from 'hast';
+import type { Comment, Element, Root } from 'hast';
 import { createHighlighter } from 'shiki';
 import { sveltekit } from '@sveltejs/kit/vite';
 import tailwindcss from '@tailwindcss/vite';
@@ -27,12 +27,19 @@ function scrollableDocTables() {
     if (!file.filename?.replaceAll('\\', '/').includes('/src/content/docs/')) return;
 
     function wrapTables(parent: Root | Element) {
-      parent.children = parent.children.map((node) => {
-        if (node.type !== 'element') return node;
+      parent.children = parent.children.flatMap((node): Root['children'] => {
+        if (node.type !== 'element') return [node];
         wrapTables(node);
-        if (node.tagName !== 'table') return node;
+        if (node.tagName !== 'table') return [node];
 
-        return {
+        const exception =
+          ' svelte-ignore a11y_no_noninteractive_tabindex (Keyboard users need to focus this region to scroll wide tables.) ';
+        const focusException: Comment = {
+          type: 'comment',
+          // MDsveX emits root comment values verbatim; nested comments get delimiters.
+          value: parent.type === 'root' ? `<!--${exception}-->` : exception,
+        };
+        const wrapper: Element = {
           type: 'element',
           tagName: 'div',
           properties: {
@@ -43,6 +50,7 @@ function scrollableDocTables() {
           },
           children: [node],
         };
+        return [focusException, wrapper];
       });
     }
 

@@ -1,5 +1,6 @@
 <script lang="ts">
   import ArrowRightIcon from '@lucide/svelte/icons/arrow-right';
+  import ArrowUpRightIcon from '@lucide/svelte/icons/arrow-up-right';
   import Globe from '@lucide/svelte/icons/globe';
   import * as Card from '@hister/components/ui/card';
   import DocsSearch from '#lib/DocsSearch.svelte';
@@ -76,71 +77,197 @@
     </ol>
   </section>
 
-  {#each data.categories as category}
-    <div class="mb-8">
-      <div class="mb-3 flex items-center gap-2">
-        <div class="h-2.5 w-2.5 bg-hister-{category.color}"></div>
-        <span
-          class="font-space text-xs font-bold tracking-[2px] text-[var(--text-secondary)] uppercase"
-        >
-          {category.name}
-        </span>
+  {#each data.categories as category, i}
+    <section
+      aria-labelledby="docs-category-{i}"
+      class="docs-category"
+      style="--section-accent: var(--hister-{category.color})"
+    >
+      <div class="docs-category-heading">
+        <span class="docs-category-mark" aria-hidden="true"></span>
+        <h2 id="docs-category-{i}">{category.name}</h2>
+        <span class="docs-category-rule" aria-hidden="true"></span>
       </div>
 
-      <ul class="m-0 flex list-none flex-col gap-3 p-0">
+      <ul class="docs-list">
         {#each category.docs as doc}
           <li>
-            <Card.Root href="/docs/{doc.slug}" class="bg-brutal-card p-5">
-              <h2 class="font-space text-lg font-extrabold tracking-[0.5px] text-(--text-primary)">
-                {doc.title}
-              </h2>
-              {#if doc.description}
-                <p class="font-inter mt-2 text-sm leading-relaxed text-(--text-secondary)">
-                  {doc.description}
-                </p>
-              {/if}
-            </Card.Root>
+            <a href="/docs/{doc.slug}" class="docs-link">
+              <div class="docs-copy">
+                <h3>{doc.title}</h3>
+                {#if doc.description}
+                  <p>{doc.description}</p>
+                {/if}
+              </div>
+              <span class="docs-arrow" aria-hidden="true"><ArrowRightIcon size={18} /></span>
+            </a>
           </li>
         {/each}
       </ul>
-    </div>
+    </section>
   {/each}
 
-  <div class="mb-8">
-    <div class="mb-3 flex items-center gap-2">
-      <div class="bg-hister-indigo h-2.5 w-2.5"></div>
-      <span class="font-space text-xs font-bold tracking-[2px] text-(--text-secondary) uppercase">
-        Browser Extensions
-      </span>
+  <section
+    aria-labelledby="browser-extensions-heading"
+    class="docs-category"
+    style="--section-accent: var(--hister-indigo)"
+  >
+    <div class="docs-category-heading">
+      <span class="docs-category-mark" aria-hidden="true"></span>
+      <h2 id="browser-extensions-heading">Browser Extensions</h2>
+      <span class="docs-category-rule" aria-hidden="true"></span>
     </div>
 
-    <ul class="m-0 flex list-none flex-col gap-3 p-0">
+    <ul class="docs-list">
       <li>
-        <Card.Root
+        <a
           href="https://chromewebstore.google.com/detail/hister/cciilamhchpmbdnniabclekddabkifhb"
           target="_blank"
           rel="noopener noreferrer"
-          class="bg-brutal-card flex-row items-center gap-4 p-5"
+          class="docs-link"
         >
-          <Globe size={20} class="shrink-0 text-(--text-secondary)" />
-          <h2 class="font-space text-lg font-extrabold tracking-[0.5px] text-(--text-primary)">
-            Chrome Extension
-          </h2>
-        </Card.Root>
+          <Globe size={20} aria-hidden="true" class="shrink-0 text-(--section-accent)" />
+          <div class="docs-copy"><h3>Chrome Extension</h3></div>
+          <span class="docs-arrow" aria-hidden="true"><ArrowUpRightIcon size={18} /></span>
+          <span class="sr-only">(opens in a new tab)</span>
+        </a>
       </li>
       <li>
-        <Card.Root
+        <a
           href="https://addons.mozilla.org/en-US/firefox/addon/hister/"
           target="_blank"
           rel="noopener noreferrer"
-          class="bg-brutal-card flex-row items-center gap-4 p-5"
+          class="docs-link"
         >
-          <Globe size={20} class="shrink-0 text-(--text-secondary)" />
-          <h2 class="font-space text-lg font-extrabold tracking-[0.5px] text-(--text-primary)">
-            Firefox Add-on
-          </h2>
-        </Card.Root>
+          <Globe size={20} aria-hidden="true" class="shrink-0 text-(--section-accent)" />
+          <div class="docs-copy"><h3>Firefox Add-on</h3></div>
+          <span class="docs-arrow" aria-hidden="true"><ArrowUpRightIcon size={18} /></span>
+          <span class="sr-only">(opens in a new tab)</span>
+        </a>
       </li>
     </ul>
-  </div>
+  </section>
 </section>
+
+<style>
+  .docs-category {
+    margin-bottom: 2.75rem;
+  }
+
+  .docs-category-heading {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .docs-category-heading h2 {
+    font-family: var(--font-outfit);
+    font-size: 1.75rem;
+    font-weight: 800;
+    line-height: 1.2;
+    letter-spacing: -0.025em;
+  }
+
+  .docs-category-mark {
+    width: 0.35rem;
+    height: 1.75rem;
+    flex-shrink: 0;
+    background: var(--section-accent);
+  }
+
+  .docs-category-rule {
+    height: 1px;
+    flex: 1;
+    margin-left: 0.25rem;
+    background: color-mix(in srgb, var(--section-accent) 25%, transparent);
+  }
+
+  .docs-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .docs-list > li + li {
+    border-top: 1px solid color-mix(in srgb, var(--text-primary) 12%, transparent);
+  }
+
+  .docs-link {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-inline: -0.75rem;
+    padding: 1rem 0.75rem;
+    color: var(--text-primary);
+    text-decoration: none;
+    transition: background-color 160ms ease;
+  }
+
+  .docs-link::before {
+    position: absolute;
+    inset-block: 1rem;
+    left: 0;
+    width: 2px;
+    background: var(--section-accent);
+    content: '';
+    opacity: 0;
+    transition: opacity 160ms ease;
+  }
+
+  .docs-copy {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .docs-copy h3 {
+    font-family: var(--font-outfit);
+    font-size: 1.125rem;
+    font-weight: 700;
+    line-height: 1.4;
+  }
+
+  .docs-copy p {
+    margin-top: 0.25rem;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    line-height: 1.6;
+  }
+
+  .docs-arrow {
+    display: flex;
+    flex-shrink: 0;
+    color: var(--text-secondary);
+    opacity: 0.5;
+    transition:
+      color 160ms ease,
+      opacity 160ms ease,
+      translate 160ms ease;
+  }
+
+  .docs-link:hover,
+  .docs-link:focus-visible {
+    background: color-mix(in srgb, var(--section-accent) 7%, transparent);
+  }
+
+  .docs-link:hover::before,
+  .docs-link:focus-visible::before {
+    opacity: 1;
+  }
+
+  .docs-link:hover .docs-arrow,
+  .docs-link:focus-visible .docs-arrow {
+    color: var(--section-accent);
+    opacity: 1;
+    translate: 2px 0;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .docs-link,
+    .docs-link::before,
+    .docs-arrow {
+      transition: none;
+    }
+  }
+</style>

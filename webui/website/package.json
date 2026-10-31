@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test:markdown": "node tests/markdown.test.js",
     "test:browser": "playwright test",
     "build": "vite build",
     "dev": "vite dev",

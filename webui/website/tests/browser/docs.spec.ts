@@ -34,9 +34,13 @@ test('new users can follow the setup steps from installation to their first sear
 test('Start Here guides follow setup without a separate task section', async ({ page }) => {
   await page.goto('/docs');
   await expect(page.getByRole('region', { name: 'Common tasks' })).toHaveCount(0);
-  await expect(page.getByText('Start Here', { exact: true })).toBeVisible();
-  await expect(page.getByRole('heading', { level: 2 }).nth(1)).toHaveText('What Hister Is');
-  await page.getByRole('link', { name: /^Quickstart/ }).click();
+  await expect(page.getByRole('heading', { level: 2 }).nth(1)).toHaveText('Start Here');
+  const guides = page.getByRole('region', { name: 'Start Here', exact: true });
+  await expect(guides).toBeVisible();
+  await guides.getByRole('link', { name: /^What Hister Is/ }).focus();
+  await page.keyboard.press('Tab');
+  await expect(guides.getByRole('link', { name: /^Quickstart/ })).toBeFocused();
+  await page.keyboard.press('Enter');
   await expect(page.getByRole('heading', { name: 'Quickstart', level: 1 })).toBeVisible();
 });
 
