@@ -11,7 +11,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"regexp"
 	"slices"
 	"strings"
 
@@ -182,7 +181,8 @@ func (c *Config) Validate() error {
 	default:
 		return errors.New("crawler.backend must be http, chromedp, or bidi")
 	}
-	return nil
+	_, err := c.CompileSensitiveContentPatterns()
+	return err
 }
 
 // ValidateFields aggregates independent candidate errors without returning raw
@@ -219,12 +219,7 @@ func (c *Config) ValidateFields() []FieldError {
 	default:
 		check("crawler.backend", "Choose http, chromedp, or bidi.", errors.New("invalid backend"))
 	}
-	patterns := make([]string, 0, len(candidate.SensitiveContentPatterns))
-	for _, pattern := range candidate.SensitiveContentPatterns {
-		patterns = append(patterns, pattern)
-	}
-	slices.Sort(patterns)
-	_, err := regexp.Compile("(" + strings.Join(patterns, "|") + ")")
+	_, err := candidate.CompileSensitiveContentPatterns()
 	check("sensitive_content_patterns", "Use valid regular expressions that can be combined.", err)
 	// Keep the existing complete validator authoritative as more checks are added.
 	if err := candidate.Validate(); err != nil && len(fields) == 0 {

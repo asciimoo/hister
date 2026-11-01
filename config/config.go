@@ -896,6 +896,24 @@ func (c *Config) validateOAuth() error {
 	return nil
 }
 
+// CompileSensitiveContentPatterns validates each expression and combines them
+// with independent flag scopes in a stable order.
+func (c *Config) CompileSensitiveContentPatterns() (*regexp.Regexp, error) {
+	patterns := make([]string, 0, len(c.SensitiveContentPatterns))
+	for _, name := range slices.Sorted(maps.Keys(c.SensitiveContentPatterns)) {
+		pattern := c.SensitiveContentPatterns[name]
+		if _, err := regexp.Compile(pattern); err != nil {
+			return nil, fmt.Errorf("invalid sensitive content pattern %q", name)
+		}
+		patterns = append(patterns, "(?:"+pattern+")")
+	}
+	combined, err := regexp.Compile("(" + strings.Join(patterns, "|") + ")")
+	if err != nil {
+		return nil, errors.New("cannot combine sensitive content patterns")
+	}
+	return combined, nil
+}
+
 func (c *Config) ValidatePublicMode() error {
 	if !c.App.Public {
 		return nil

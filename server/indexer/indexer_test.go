@@ -33,6 +33,52 @@ func newTestIndexer(t *testing.T, cfg *config.Config) *Indexer {
 	return idx
 }
 
+func TestNewRejectsInvalidSensitivePatterns(t *testing.T) {
+	cfg := testutil.Config(t)
+	cfg.SensitiveContentPatterns = map[string]string{"broken": "[private_credential"}
+	idx, err := New(cfg)
+	if idx != nil {
+		idx.Close()
+		t.Fatal("created an indexer with an invalid sensitive pattern")
+	}
+	if err == nil {
+		t.Fatal("missing invalid sensitive pattern error")
+	}
+	if strings.Contains(err.Error(), "private_credential") {
+		t.Fatal("indexer error exposed a sensitive pattern")
+	}
+}
+
+func TestSensitivePatternFlagsAreIndependent(t *testing.T) {
+	cfg := testutil.Config(t)
+	cfg.SensitiveContentPatterns = map[string]string{
+		"a_folded": "(?i)^token$",
+		"z_exact":  "^SECRET$",
+	}
+	idx := newTestIndexer(t, cfg)
+	defer idx.Close()
+	for _, tc := range []struct {
+		text      string
+		sensitive bool
+	}{
+		{"token", true},
+		{"TOKEN", true},
+		{"SECRET", true},
+		{"secret", false},
+		{"ordinary text", false},
+	} {
+		doc := &document.Document{URL: "remote-file://client/" + tc.text + ".txt", Text: tc.text, Type: document.RemoteFile}
+		err := idx.Add(doc)
+		if tc.sensitive {
+			if !errors.Is(err, document.ErrSensitiveContent) {
+				t.Errorf("Add(%q) error = %v, want sensitive content rejection", tc.text, err)
+			}
+		} else if err != nil {
+			t.Errorf("Add(%q) error = %v, want success", tc.text, err)
+		}
+	}
+}
+
 func TestAddContextRejectsCanceledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

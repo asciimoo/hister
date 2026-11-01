@@ -440,11 +440,10 @@ func New(cfg *config.Config) (*Indexer, error) {
 	if err != nil {
 		return nil, err
 	}
-	sp := make([]string, 0, len(cfg.SensitiveContentPatterns))
-	for _, v := range cfg.SensitiveContentPatterns {
-		sp = append(sp, v)
+	sensitivePattern, err := cfg.CompileSensitiveContentPatterns()
+	if err != nil {
+		return nil, err
 	}
-	sensitivePattern := regexp.MustCompile(fmt.Sprintf("(%s)", strings.Join(sp, "|")))
 	embeddingFingerprint := cfg.SemanticSearch.EmbeddingFingerprint()
 	idx, err := initializeIndexer(cfg.FullPath(""), optionsFromConfig(cfg), "")
 	if err != nil {

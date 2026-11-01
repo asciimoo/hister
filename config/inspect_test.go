@@ -475,6 +475,35 @@ semantic_search:
 	}
 }
 
+func TestValidationRejectsIndividuallyInvalidSensitivePatterns(t *testing.T) {
+	for _, patterns := range []map[string]string{
+		{"opening": "[", "closing": "]"},
+		{"opening": "(", "closing": ")"},
+		{"opening": "[private_credential", "closing": "]"},
+	} {
+		c := CreateDefaultConfig()
+		c.SensitiveContentPatterns = patterns
+		if err := c.Validate(); err == nil {
+			t.Error("configuration accepted individually invalid sensitive patterns")
+		} else if strings.Contains(err.Error(), "private_credential") {
+			t.Error("configuration error exposed a sensitive pattern")
+		}
+		fields := c.ValidateFields()
+		found := false
+		for _, field := range fields {
+			if field.Path == "sensitive_content_patterns" {
+				found = true
+			}
+			if strings.Contains(field.Message, "private_credential") {
+				t.Error("field error exposed a sensitive pattern")
+			}
+		}
+		if !found {
+			t.Errorf("missing sensitive pattern validation error: %v", fields)
+		}
+	}
+}
+
 func TestInspectionUsesEnvironmentWithoutCreatingRuntimeFiles(t *testing.T) {
 	dir := t.TempDir()
 	filename := filepath.Join(dir, "config.yml")

@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"regexp"
-	"strings"
 	"sync"
 	"time"
 
@@ -317,11 +315,7 @@ func (r *serverRuntime) apply(ctx context.Context, lease *runtimeRequest, next *
 	if err != nil {
 		return http.StatusBadRequest, errors.New("invalid extractor configuration; active configuration retained")
 	}
-	patterns := make([]string, 0, len(next.SensitiveContentPatterns))
-	for _, pattern := range next.SensitiveContentPatterns {
-		patterns = append(patterns, pattern)
-	}
-	if _, err := regexp.Compile("(" + strings.Join(patterns, "|") + ")"); err != nil {
+	if _, err := next.CompileSensitiveContentPatterns(); err != nil {
 		return http.StatusBadRequest, errors.New("invalid sensitive content patterns; active configuration retained")
 	}
 	if next.App.Directory != old.cfg.App.Directory {
