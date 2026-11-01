@@ -94,6 +94,119 @@ func TestSettingsSavePersistsAndResets(t *testing.T) {
 	}
 }
 
+func TestSettingsSaveSkipsUnchangedSelections(t *testing.T) {
+	for _, tc := range []struct {
+		name, managed, edits string
+	}{
+		{"empty draft without file", "", `[]`},
+		{"empty draft with file", "# retain this comment\napp:\n  title: Saved\n", `[]`},
+		{"reset absent selection", "", `[{"path":"app.title","action":"reset"}]`},
+		{"same string", "# retain shadowed selections and secrets too\napp:\n  title: Saved\n  public: false\nsemantic_search:\n  api_key: retained-secret\n", `[{"path":"app.title","action":"set","value":"Saved"}]`},
+		{"same empty string", "app:\n  subtitle: ''\n", `[{"path":"app.subtitle","action":"set","value":""}]`},
+		{"same boolean", "app:\n  disable_previews: false\n", `[{"path":"app.disable_previews","action":"set","value":false}]`},
+		{"same integer", "app:\n  snippet_length: 123\n", `[{"path":"app.snippet_length","action":"set","value":123}]`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg, handler, write := newReloadTestServer(t, false)
+			write("")
+			managed := cfg.FullPath("config.web.yml")
+			var before os.FileInfo
+			if tc.managed != "" {
+				if err := os.WriteFile(managed, []byte(tc.managed), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				var err error
+				before, err = os.Stat(managed)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			if status := reloadRequest(t, handler, "secret"); status != http.StatusOK {
+				t.Fatalf("reload: %d", status)
+			}
+			headers := map[string]string{"Origin": "hister://", "X-Access-Token": "secret"}
+			revision, _ := readConfigurationState(t, handler, headers)
+			server := httptest.NewServer(handler)
+			defer server.Close()
+			conn, resp, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(server.URL, "http")+"/hister/search", http.Header{"Origin": {cfg.Server.BaseURL}, "X-Access-Token": {"secret"}})
+			if resp != nil {
+				defer func() { _ = resp.Body.Close() }()
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = conn.Close() }()
+			response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":%s}`, revision, tc.edits)), headers)
+			if response.Code != http.StatusOK {
+				t.Fatalf("unchanged save: %d %s", response.Code, response.Body)
+			}
+			fresh, _ := readConfigurationState(t, handler, headers)
+			if fresh != revision {
+				t.Error("unchanged save replaced the active revision")
+			}
+			if before == nil {
+				if _, err := os.Stat(managed); !os.IsNotExist(err) {
+					t.Error("unchanged save created a managed file")
+				}
+			} else {
+				after, err := os.Stat(managed)
+				if err != nil || !os.SameFile(before, after) {
+					t.Error("unchanged save replaced the managed file")
+				}
+				raw, err := os.ReadFile(managed)
+				if err != nil || string(raw) != tc.managed {
+					t.Error("unchanged save rewrote managed selections")
+				}
+			}
+			if err := conn.SetReadDeadline(time.Now().Add(5 * time.Second)); err != nil {
+				t.Fatal(err)
+			}
+			if err := conn.WriteJSON(map[string]string{"text": "retained connection"}); err != nil {
+				t.Fatal(err)
+			}
+			var result json.RawMessage
+			if err := conn.ReadJSON(&result); err != nil {
+				t.Fatalf("unchanged save interrupted the search WebSocket: %v", err)
+			}
+		})
+	}
+}
+
+func TestSettingsSavePersistsDefaultSelections(t *testing.T) {
+	cfg, handler, write := newReloadTestServer(t, false)
+	write("")
+	if status := reloadRequest(t, handler, "secret"); status != http.StatusOK {
+		t.Fatalf("reload: %d", status)
+	}
+	headers := map[string]string{"Origin": "hister://", "X-Access-Token": "secret"}
+	revision, values := readConfigurationState(t, handler, headers)
+	title := values["app.title"].Value
+	for _, action := range []string{"set", "reset"} {
+		edit := map[string]any{"path": "app.title", "action": action}
+		if action == "set" {
+			edit["value"] = title
+		}
+		raw, err := json.Marshal(map[string]any{"revision": revision, "edits": []any{edit}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(string(raw)), headers)
+		if response.Code != http.StatusOK {
+			t.Fatalf("%s default selection: %d %s", action, response.Code, response.Body)
+		}
+		fresh, values := readConfigurationState(t, handler, headers)
+		selected := action == "set"
+		if fresh == revision || values["app.title"].Value != title || values["app.title"].Source.WebSelected != selected {
+			t.Fatalf("%s did not change the source while preserving its value: %+v", action, values["app.title"])
+		}
+		loaded, _, err := config.LoadForInspection(cfg.Filename(), true)
+		if err != nil || loaded.Source("app.title").WebSelected != selected || loaded.App.Title != title {
+			t.Fatalf("%s did not persist the default selection: %v", action, err)
+		}
+		revision = fresh
+	}
+}
+
 func TestSettingsConcurrentSavesAndReloads(t *testing.T) {
 	cfg, handler, _ := newReloadTestServer(t, false)
 	headers := map[string]string{"Origin": "hister://", "X-Access-Token": "secret"}
@@ -466,6 +579,8 @@ func TestSettingsSaveRejectsInvalidDraftsAndDiskFailures(t *testing.T) {
 	revision, before := readConfigurationState(t, handler, headers)
 	for _, edits := range []string{
 		`[{"path":"app.title","action":"set","value":"Locked"}]`,
+		`[{"path":"app.title","action":"set","value":"Original"}]`,
+		`[{"path":"app.title","action":"reset"}]`,
 		`[{"path":"app.subtitle","action":"set","value":7}]`,
 		`[{"path":"app.access_token","action":"set","value":"sensitive"}]`,
 		`[{"path":"app","action":"set","value":{"subtitle":"Bypass"}}]`,

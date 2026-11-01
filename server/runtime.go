@@ -258,6 +258,9 @@ func (r *serverRuntime) save(lease *runtimeRequest, edits []config.SettingEdit) 
 	if len(fields) > 0 {
 		return http.StatusUnprocessableEntity, map[string]any{"code": "invalid_settings", "errors": fields}
 	}
+	if old.ManagedSelectionsEqual(next) {
+		return http.StatusOK, map[string]bool{"saved": true}
+	}
 	staged, err := next.StageManaged()
 	if err != nil {
 		if errors.Is(err, config.ErrManagedConflict) {

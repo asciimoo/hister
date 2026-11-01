@@ -117,6 +117,8 @@ authorization, CSRF protection for writes, and `Cache-Control: no-store`.
 
 The runtime serializes saves with reloads, drains requests, stages private YAML
 beside `config.web.yml`, and commits it before publishing the replacement runtime.
+Saves with unchanged web selections preserve the file, runtime, and revision.
+Adding or removing an explicit selection is saved even when its value equals the default.
 The main file is never rewritten. Conflicts return `409`; field errors return
 `422`. Read settings again after success or a lost response. Persistence or
 activation failures restore the previous configuration when possible; failed

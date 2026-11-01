@@ -28,6 +28,14 @@ type configComposition struct {
 	managedDigest [32]byte
 }
 
+// ManagedSelectionsEqual compares stored web selections, including their presence.
+// Selecting a default value still differs from inheriting it. Configurations
+// without loaded inputs cannot be compared; nil and empty selection maps agree.
+func (c *Config) ManagedSelectionsEqual(other *Config) bool {
+	return c != nil && other != nil && c.composition != nil && other.composition != nil &&
+		maps.EqualFunc(c.composition.managed, other.composition.managed, reflect.DeepEqual)
+}
+
 // ErrManagedRecovery means the confirmed file could not be durably restored.
 var ErrManagedRecovery = errors.New("managed configuration recovery failed; inspect config.web.yml before restarting")
 
