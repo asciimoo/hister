@@ -130,6 +130,7 @@ func TestSettingsCycleAndPersistAppearance(t *testing.T) {
 	t.Setenv("NO_COLOR", "")
 	configHome := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", configHome)
+	t.Setenv("LOCALAPPDATA", configHome)
 	m := handleTestModel(t)
 	m.State = model.StateSettings
 	m.SettingsIdx = 0
@@ -168,6 +169,7 @@ func TestSettingsOpenThemePickerAndReturn(t *testing.T) {
 func TestSettingsKeybindingEditUsesBindingIndex(t *testing.T) {
 	configHome := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", configHome)
+	t.Setenv("LOCALAPPDATA", configHome)
 	m := handleTestModel(t)
 	m.State = model.StateSettings
 	items := m.SortedSettingsItems()

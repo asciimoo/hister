@@ -281,17 +281,19 @@ func (w *Watcher) Run(ctx context.Context, onChange, onRemove func(string)) erro
 					onRemove(name)
 				}
 			}
-			if event.Has(fsnotify.Create) {
+			if event.Has(fsnotify.Write) || event.Has(fsnotify.Create) {
 				info, err := os.Stat(event.Name)
-				if err == nil && info.IsDir() && w.matchesDirectory(name) {
-					if err := w.scanDirectory(name, schedule); err != nil && !errors.Is(err, fs.ErrNotExist) {
-						return err
+				if err == nil && info.IsDir() {
+					if event.Has(fsnotify.Create) && w.matchesDirectory(name) {
+						if err := w.scanDirectory(name, schedule); err != nil && !errors.Is(err, fs.ErrNotExist) {
+							return err
+						}
 					}
 					continue
 				}
-			}
-			if (event.Has(fsnotify.Write) || event.Has(fsnotify.Create)) && w.matches(name) {
-				schedule(name)
+				if w.matches(name) {
+					schedule(name)
+				}
 			}
 		case err, ok := <-w.watcher.Errors:
 			if !ok {

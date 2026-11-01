@@ -433,7 +433,7 @@ func (i reindexCloseHook) Close() error {
 	return err
 }
 
-func TestReindexClosesVectorStoreAfterSwapFailure(t *testing.T) {
+func TestReindexClosesVectorStoreAfterReplacementOpenFailure(t *testing.T) {
 	cfg := testutil.Config(t)
 	idx := newTestIndexer(t, cfg)
 	store := &metadataVectorStore{}
@@ -445,29 +445,29 @@ func TestReindexClosesVectorStoreAfterSwapFailure(t *testing.T) {
 			t.Errorf("vector store closed %d times, want once at shutdown", store.closeCount)
 		}
 	}()
-
-	// Make replacement installation fail after the live Bleve indexes close.
-	// The remaining services must still be owned and closed by the indexer.
-	var moveErr error
+	// Add an invalid language index after the source indexes are captured.
+	// Reopening the replacement must fail without moving any open files.
+	var setupErr error
 	idx.indexesMu.Lock()
 	idx.indexers[defaultIndexerName] = reindexCloseHook{
 		bleveIndex: idx.indexers[defaultIndexerName],
 		afterClose: func() {
-			path := filepath.Join(cfg.App.Directory, "reindex")
-			moveErr = os.Rename(path, path+"-moved")
+			path := filepath.Join(cfg.App.Directory, indexNameForLanguage("en"))
+			setupErr = os.Mkdir(path, 0o700)
 		},
 	}
 	idx.indexesMu.Unlock()
-	if err := idx.Reindex(&config.Rules{}, false, false, false, nil); err == nil {
-		t.Fatal("reindex succeeded after replacement indexes disappeared")
+	err := idx.Reindex(&config.Rules{}, false, false, false, nil)
+	if setupErr != nil {
+		t.Fatalf("create invalid language index: %v", setupErr)
 	}
-	if moveErr != nil {
-		t.Fatalf("move replacement indexes: %v", moveErr)
+	if !errors.Is(err, bleve.ErrorIndexMetaMissing) {
+		t.Fatalf("Reindex error = %v, want failure reopening the replacement", err)
 	}
 	if store.closeCount != 0 {
 		t.Fatal("reindex closed the live vector store")
 	}
 	if idx.reindexInProgress.Load() {
-		t.Fatal("reindex remains in progress after swap failure")
+		t.Fatal("reindex remains in progress after replacement failure")
 	}
 }

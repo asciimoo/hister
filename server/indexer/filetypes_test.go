@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -160,11 +162,11 @@ func TestExternalPDFParserCancellationAndMissingCommand(t *testing.T) {
 	if err := idx.AddPDFContext(ctx, &document.Document{URL: "https://example.com/canceled.pdf"}, []byte("%PDF-1.4 test bytes")); !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("error = %v, want the caller's deadline", err)
 	}
-	cfg.Indexer.PDFParser.Command = t.TempDir() + "/missing-parser"
+	cfg.Indexer.PDFParser.Command = filepath.Join(t.TempDir(), "missing-parser")
 	cfg.App.Directory = t.TempDir()
 	missing := newTestIndexer(t, cfg)
 	t.Cleanup(missing.Close)
-	if err := missing.AddPDF(&document.Document{URL: "https://example.com/missing.pdf"}, []byte("%PDF-1.4 test bytes")); !errors.Is(err, os.ErrNotExist) {
+	if err := missing.AddPDF(&document.Document{URL: "https://example.com/missing.pdf"}, []byte("%PDF-1.4 test bytes")); !errors.Is(err, os.ErrNotExist) && !errors.Is(err, exec.ErrNotFound) {
 		t.Fatalf("error = %v, want missing executable error", err)
 	}
 }

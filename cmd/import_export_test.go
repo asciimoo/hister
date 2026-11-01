@@ -437,7 +437,7 @@ func TestRemoteFileURL(t *testing.T) {
 	if err != nil {
 		t.Fatalf("remoteFileURL() unexpected error: %v", err)
 	}
-	want := "remote-file://alice-s-laptop" + filepath.ToSlash(filepath.Dir(inputFile)) + "/My%20note.md"
+	want := "remote-file://alice-s-laptop/" + strings.TrimPrefix(filepath.ToSlash(filepath.Dir(inputFile)), "/") + "/My%20note.md"
 	if got != want {
 		t.Fatalf("remoteFileURL() = %q, want %q", got, want)
 	}

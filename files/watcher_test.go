@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fsnotify/fsnotify"
+
 	"github.com/asciimoo/hister/config"
 )
 
@@ -48,6 +50,47 @@ func waitForFileEvent(t *testing.T, events <-chan string, path string) {
 	case <-time.After(5 * time.Second):
 		t.Fatalf("no event for %s", path)
 	}
+}
+
+func TestWatcherIgnoresDirectoryWrites(t *testing.T) {
+	root := t.TempDir()
+	nested := filepath.Join(root, "chapters")
+	if err := os.Mkdir(nested, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(nested, "note.txt")
+	if err := os.WriteFile(path, []byte("initial"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	w, err := NewWatcher([]*config.Directory{{Path: root}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	changed := make(chan string, 4)
+	done := make(chan error, 1)
+	go func() {
+		done <- w.Run(ctx, func(path string) { changed <- path }, nil)
+	}()
+	t.Cleanup(func() {
+		cancel()
+		if err := <-done; !errors.Is(err, context.Canceled) {
+			t.Errorf("watcher stopped: %v", err)
+		}
+		if err := w.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+
+	// Windows can report a write to the parent directory when a child changes.
+	w.watcher.Events <- fsnotify.Event{Name: nested, Op: fsnotify.Write}
+	select {
+	case got := <-changed:
+		t.Fatalf("directory write reported as a changed file: %s", got)
+	case <-time.After(2 * debounceTime):
+	}
+	w.watcher.Events <- fsnotify.Event{Name: path, Op: fsnotify.Write}
+	waitForFileEvent(t, changed, path)
 }
 
 func TestWatcherExplicitFileSurvivesReplacement(t *testing.T) {

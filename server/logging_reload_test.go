@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -37,9 +38,10 @@ func readLog(t *testing.T, path string) string {
 }
 
 func TestFullReloadLogFileAndFormat(t *testing.T) {
+	dir := t.TempDir()
 	useReloadLogger(t)
 	c, write, request := startRuntimeTestServer(t)
-	c.App.LogFile = filepath.Join(t.TempDir(), "hister.log")
+	c.App.LogFile = filepath.Join(dir, "hister.log")
 	c.App.LogFormat = "json"
 	write()
 	if status, body := request(c.Server.BaseURL, "/api/reload", "secret", ""); status != http.StatusOK {
@@ -51,22 +53,27 @@ func TestFullReloadLogFileAndFormat(t *testing.T) {
 			t.Fatalf("expected JSON log record: %s", line)
 		}
 	}
-	rotated := c.App.LogFile + ".1"
-	if err := os.Rename(c.App.LogFile, rotated); err != nil {
-		t.Fatal(err)
-	}
-	if status, body := request(c.Server.BaseURL, "/api/reload", "secret", ""); status != http.StatusOK {
-		t.Fatalf("reopen rotated log: %d %s", status, body)
-	}
-	log.Info().Msg("after-rotation")
-	if raw := readLog(t, rotated); !strings.Contains(raw, "before-rotation") || strings.Contains(raw, "after-rotation") {
-		t.Fatalf("unexpected rotated log: %s", raw)
-	}
-	if raw := readLog(t, c.App.LogFile); !strings.Contains(raw, "after-rotation") || strings.Contains(raw, "before-rotation") {
-		t.Fatalf("log path was not reopened: %s", raw)
-	}
+	t.Run("rename rotation", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("Windows does not allow renaming an open log file")
+		}
+		rotated := c.App.LogFile + ".1"
+		if err := os.Rename(c.App.LogFile, rotated); err != nil {
+			t.Fatal(err)
+		}
+		if status, body := request(c.Server.BaseURL, "/api/reload", "secret", ""); status != http.StatusOK {
+			t.Fatalf("reopen rotated log: %d %s", status, body)
+		}
+		log.Info().Msg("after-rotation")
+		if raw := readLog(t, rotated); !strings.Contains(raw, "before-rotation") || strings.Contains(raw, "after-rotation") {
+			t.Fatalf("unexpected rotated log: %s", raw)
+		}
+		if raw := readLog(t, c.App.LogFile); !strings.Contains(raw, "after-rotation") || strings.Contains(raw, "before-rotation") {
+			t.Fatalf("log path was not reopened: %s", raw)
+		}
+	})
 	previous := c.App.LogFile
-	c.App.LogFile = filepath.Join(t.TempDir(), "replacement.log")
+	c.App.LogFile = filepath.Join(dir, "replacement.log")
 	c.App.LogFormat = "text"
 	write()
 	if status, body := request(c.Server.BaseURL, "/api/reload", "secret", ""); status != http.StatusOK {
@@ -84,9 +91,10 @@ func TestFullReloadLogFileAndFormat(t *testing.T) {
 func TestFullReloadRetainsLoggingOnFailure(t *testing.T) {
 	for _, failure := range []string{"log file", "database"} {
 		t.Run(failure, func(t *testing.T) {
+			dir := t.TempDir()
 			useReloadLogger(t)
 			c, write, request := startRuntimeTestServer(t)
-			original := filepath.Join(t.TempDir(), "original.log")
+			original := filepath.Join(dir, "original.log")
 			c.App.LogFile, c.App.LogFormat = original, "json"
 			write()
 			if status, body := request(c.Server.BaseURL, "/api/reload", "secret", ""); status != http.StatusOK {
@@ -94,10 +102,10 @@ func TestFullReloadRetainsLoggingOnFailure(t *testing.T) {
 			}
 			c.App.Title = "Must not apply"
 			c.App.LogLevel = "error"
-			c.App.LogFile = filepath.Join(t.TempDir(), "candidate.log")
+			c.App.LogFile = filepath.Join(dir, "candidate.log")
 			want := http.StatusInternalServerError
 			if failure == "log file" {
-				c.App.LogFile = filepath.Join(t.TempDir(), "missing", "hister.log")
+				c.App.LogFile = filepath.Join(dir, "missing", "hister.log")
 				want = http.StatusBadRequest
 			} else {
 				c.Server.Database = filepath.Join("missing", "db.sqlite3")

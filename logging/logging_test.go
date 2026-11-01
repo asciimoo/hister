@@ -73,6 +73,7 @@ func (w *blockedOutput) Write(p []byte) (int, error) {
 }
 
 func TestApplyWaitsForActiveWrite(t *testing.T) {
+	dir := t.TempDir()
 	output := &blockedOutput{make(chan struct{}), make(chan struct{})}
 	m := testManager(t, output)
 	applyLogging(t, m, config.App{LogFormat: "json", LogLevel: "info"})
@@ -83,7 +84,7 @@ func TestApplyWaitsForActiveWrite(t *testing.T) {
 		logger.Info().Msg("pending")
 	}()
 	<-output.entered
-	change, err := m.Prepare(config.App{LogFile: filepath.Join(t.TempDir(), "next.log"), LogFormat: "json", LogLevel: "info"})
+	change, err := m.Prepare(config.App{LogFile: filepath.Join(dir, "next.log"), LogFormat: "json", LogLevel: "info"})
 	if err != nil {
 		close(output.release)
 		t.Fatal(err)
@@ -109,8 +110,8 @@ func TestApplyWaitsForActiveWrite(t *testing.T) {
 }
 
 func TestConcurrentLoggingSurvivesOutputChanges(t *testing.T) {
-	m := testManager(t, io.Discard)
 	dir := t.TempDir()
+	m := testManager(t, io.Discard)
 	paths := []string{filepath.Join(dir, "one.log"), filepath.Join(dir, "two.log")}
 	applyLogging(t, m, config.App{LogFile: paths[0], LogFormat: "json", LogLevel: "info"})
 	logger := zerolog.New(m)
