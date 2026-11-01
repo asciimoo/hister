@@ -6,9 +6,121 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/asciimoo/hister/config"
 	"github.com/asciimoo/hister/server/model"
 	"github.com/asciimoo/hister/server/testutil"
 )
+
+func TestOIDCRequiresIndependentRecoveryAdministrator(t *testing.T) {
+	cfg := testutil.Config(t)
+	cfg.App.UserHandling = true
+	cfg.Server.OAuthOnly = true
+	cfg.Server.OAuth = map[string]*config.OAuthEntry{"oidc": {AdminGroups: []string{"owners"}}}
+	testutil.InitModelWithConfig(t, cfg)
+	providerUser, err := model.CreateOAuthUser("provider", "oidc-owner@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := model.SyncOAuthAdmin(providerUser.OAuthID, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := model.CheckAdministratorAvailability(cfg); err == nil {
+		t.Fatal("OIDC administrator alone cannot guarantee recovery after role revocation")
+	}
+	local, err := model.CreateUser("recovery", "password123", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Password login is disabled, but the offline recovery token remains usable.
+	if err := model.CheckAdministratorAvailability(cfg); err != nil {
+		t.Fatal(err)
+	}
+	no := false
+	for _, remove := range []func() error{
+		func() error { return model.CheckUserDeletion(local.ID) },
+		func() error { return model.DeleteUserByID(local.ID) },
+		func() error { return model.DeleteUser(local.Username) },
+		func() error { _, err := model.ToggleAdmin(local.Username); return err },
+		func() error {
+			_, err := model.UpdateUser(local.ID, local.ID, local.Revision, model.UserChanges{IsAdmin: &no})
+			return err
+		},
+	} {
+		if err := remove(); err == nil {
+			t.Fatal("removed the independent recovery administrator")
+		}
+	}
+	if user, err := model.SyncOAuthAdmin(providerUser.OAuthID, false); err != nil || user.IsAdmin {
+		t.Fatalf("provider revocation was not authoritative: %v", err)
+	}
+	if _, err := model.GetUserByToken(local.Token); err != nil {
+		t.Fatalf("recovery credential no longer works: %v", err)
+	}
+}
+
+func TestConcurrentRecoveryAdministratorRemoval(t *testing.T) {
+	cfg := testutil.Config(t)
+	cfg.App.UserHandling = true
+	cfg.Server.OAuth = map[string]*config.OAuthEntry{"oidc": {AdminGroups: []string{"owners"}}}
+	testutil.InitModelWithConfig(t, cfg)
+	for _, name := range []string{"first", "second"} {
+		if _, err := model.CreateUser(name, "password123", true); err != nil {
+			t.Fatal(err)
+		}
+	}
+	provider, err := model.CreateOAuthUser("provider", "oidc-owner@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := model.SyncOAuthAdmin(provider.OAuthID, true); err != nil {
+		t.Fatal(err)
+	}
+	start, results := make(chan struct{}), make(chan error, 2)
+	go func() { <-start; results <- model.DeleteUser("first") }()
+	go func() { <-start; _, err := model.ToggleAdmin("second"); results <- err }()
+	close(start)
+	var success, blocked int
+	for range 2 {
+		err := <-results
+		switch {
+		case err == nil:
+			success++
+		case errors.Is(err, model.ErrLastRecoveryAdmin):
+			blocked++
+		default:
+			t.Fatalf("unexpected removal error: %v", err)
+		}
+	}
+	if success != 1 || blocked != 1 {
+		t.Fatalf("success = %d, blocked = %d", success, blocked)
+	}
+	if _, err := model.SyncOAuthAdmin(provider.OAuthID, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := model.CheckAdministratorAvailability(cfg); err != nil {
+		t.Fatalf("concurrent mutations lost recovery access: %v", err)
+	}
+}
+
+func TestAdministratorAvailabilityRequiresUsableCredential(t *testing.T) {
+	cfg := testutil.InitModel(t)
+	cfg.App.UserHandling = true
+	admin, err := model.CreateUser("owner", "password123", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Represent an existing account whose only credential is its password.
+	if err := model.DB.Model(admin).Update("token", "").Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := model.CheckAdministratorAvailability(cfg); err != nil {
+		t.Fatal(err)
+	}
+	cfg.Server.OAuthOnly = true
+	if err := model.CheckAdministratorAvailability(cfg); err == nil {
+		t.Fatal("a role flag alone allowed disabling the administrator's only credential")
+	}
+}
 
 func TestUpdatePassword(t *testing.T) {
 	testutil.InitModel(t)

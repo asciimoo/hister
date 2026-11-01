@@ -105,6 +105,34 @@ Bind a CLI flag to its configuration path with `bindConfigFlag` beside its regis
 Only explicitly supplied flags become overrides. This metadata does not grant editing
 permission or replace field validation.
 
+### Configuration editing API
+
+`GET /api/settings` returns redacted field state and an opaque revision.
+`POST /api/settings/validate` checks a draft without side effects.
+`POST /api/settings/apply` saves and applies ordinary App edits. Both POST
+operations accept `revision` and an `edits` array with explicit `path`, `action`
+(`set` or `reset`), and a typed `value` for `set`. Authentication settings and
+other unsupported fields remain read only. These routes use administrative
+authorization, CSRF protection for writes, and `Cache-Control: no-store`.
+
+The runtime serializes saves with reloads, drains requests, stages private YAML
+beside `config.web.yml`, and commits it before publishing the replacement runtime.
+The main file is never rewritten. Conflicts return `409`; field errors return
+`422`. Read settings again after success or a lost response. Persistence or
+activation failures restore the previous configuration when possible; failed
+recovery returns `503` and requires restarting the server. Rollback does not undo
+indexed documents or other background work.
+
+Startup discards abandoned staging files. If restoring the managed file fails,
+inspect `config.web.yml` and the private `.config.web-recovery-*` copies before
+restarting.
+
+Administrator availability is checked against the selected database before
+startup and activation, outside pure configuration loading. OIDC role management
+also requires an independent local recovery administrator. Account mutations
+protect that account under the existing database write lock, while provider
+revocations remain authoritative.
+
 ## Development Commands
 
 Install the frontend dependencies once before running frontend commands:
@@ -364,6 +392,7 @@ Handler errors use the JSON `code` and `error` fields:
 | `409`  | `stale_revision`         | The account changed since it was read                      |
 | `409`  | `username_exists`        | Another account already uses the requested username        |
 | `409`  | `last_admin`             | The change would remove the last administrator             |
+| `409`  | `last_recovery_admin`    | OIDC role management requires this local recovery account  |
 | `413`  | `request_too_large`      | The request exceeds the body limit                         |
 | `500`  | `internal_error`         | The update could not be saved                              |
 

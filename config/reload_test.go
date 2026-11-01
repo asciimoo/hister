@@ -2,12 +2,159 @@ package config
 
 import (
 	"bytes"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestManagedPersistenceDurabilityFailures(t *testing.T) {
+	for _, existing := range []bool{false, true} {
+		for _, recoveryFails := range []bool{false, true} {
+			t.Run(fmt.Sprintf("existing_%t_recovery_failure_%t", existing, recoveryFails), func(t *testing.T) {
+				dir := t.TempDir()
+				t.Setenv("HISTER_DATA_DIR", dir)
+				main := filepath.Join(dir, "config.yml")
+				if err := os.WriteFile(main, []byte("# only reference values\n"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				path := filepath.Join(dir, "config.web.yml")
+				const previous = "# preserve confirmed bytes on failure\napp:\n  title: Confirmed\n"
+				if existing {
+					if err := os.WriteFile(path, []byte(previous), 0o600); err != nil {
+						t.Fatal(err)
+					}
+				}
+				cfg, _, err := LoadForInspection(main, true)
+				if err != nil {
+					t.Fatal(err)
+				}
+				next, fields := cfg.PrepareDraft([]SettingEdit{{Path: "app.title", Action: "set", Value: json.RawMessage(`"Candidate"`)}})
+				if len(fields) != 0 {
+					t.Fatal(fields)
+				}
+				staged, err := next.StageManaged()
+				if err != nil {
+					t.Fatal(err)
+				}
+				// Inject a disk durability failure at the filesystem boundary.
+				calls := 0
+				staged.syncDirectory = func() error {
+					calls++
+					if calls == 1 || recoveryFails {
+						return errors.New("disk sync failed")
+					}
+					return staged.directory.Sync()
+				}
+				err = staged.Commit()
+				if err == nil || errors.Is(err, ErrManagedRecovery) != recoveryFails {
+					t.Fatalf("incorrect durability result: %v", err)
+				}
+				raw, err := os.ReadFile(path)
+				if existing && (err != nil || string(raw) != previous) {
+					t.Fatalf("previous bytes not restored: %q %v", raw, err)
+				}
+				if !existing && !os.IsNotExist(err) {
+					t.Fatalf("unconfirmed file survived: %v", err)
+				}
+				if err := staged.Close(); err != nil {
+					t.Fatal(err)
+				}
+			})
+		}
+	}
+}
+
+func TestManagedCommitRejectsExternalReplacement(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HISTER_DATA_DIR", dir)
+	main := filepath.Join(dir, "config.yml")
+	if err := os.WriteFile(main, []byte("# reference\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, _, err := LoadForInspection(main, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	next, fields := cfg.PrepareDraft([]SettingEdit{{Path: "app.title", Action: "set", Value: json.RawMessage(`"Candidate"`)}})
+	if len(fields) != 0 {
+		t.Fatal(fields)
+	}
+	staged, err := next.StageManaged()
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "config.web.yml")
+	const external = "app:\n  title: External\n"
+	if err := os.WriteFile(path, []byte(external), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := staged.Commit(); err == nil {
+		t.Error("commit overwrote an unseen external configuration")
+	}
+	if err := staged.Close(); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil || string(raw) != external {
+		t.Fatalf("external configuration changed: %q %v", raw, err)
+	}
+}
+
+func TestManagedPersistenceRetainsRecoveryCopyOnRestoreFailure(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HISTER_DATA_DIR", dir)
+	main := filepath.Join(dir, "config.yml")
+	if err := os.WriteFile(main, []byte("# reference\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	const previous = "app:\n  title: Confirmed\n"
+	if err := os.WriteFile(filepath.Join(dir, "config.web.yml"), []byte(previous), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, _, err := LoadForInspection(main, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	next, fields := cfg.PrepareDraft([]SettingEdit{{Path: "app.title", Action: "set", Value: json.RawMessage(`"Candidate"`)}})
+	if len(fields) > 0 {
+		t.Fatal(fields)
+	}
+	staged, err := next.StageManaged()
+	if err != nil {
+		t.Fatal(err)
+	}
+	staged.syncDirectory = func() error {
+		if err := os.Chmod(dir, 0o500); err != nil {
+			t.Fatal(err)
+		}
+		return errors.New("disk failure after replacement")
+	}
+	err = staged.Commit()
+	if chmodErr := os.Chmod(dir, 0o700); chmodErr != nil {
+		t.Fatal(chmodErr)
+	}
+	if !errors.Is(err, ErrManagedRecovery) {
+		t.Fatalf("restore failure not reported: %v", err)
+	}
+	if err := staged.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := cfg.DiscardManagedStaging(); err != nil {
+		t.Fatal(err)
+	}
+	recovery, err := filepath.Glob(filepath.Join(dir, ".config.web-recovery-*"))
+	if err != nil || len(recovery) != 1 {
+		t.Fatalf("confirmed configuration recovery copy was lost: %v %v", recovery, err)
+	}
+	raw, err := os.ReadFile(recovery[0])
+	if err != nil || string(raw) != previous {
+		t.Fatalf("incorrect recovery bytes: %q %v", raw, err)
+	}
+}
 
 func TestManagedConfigurationSourcesAndReset(t *testing.T) {
 	dir := t.TempDir()

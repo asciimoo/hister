@@ -49,33 +49,8 @@ func serveSettings(c *webContext) {
 }
 
 func serveValidateSettings(c *webContext) {
-	var revision string
-	var rawEdits []json.RawMessage
-	if err := decodeSettingsObject(c.Request.Body, map[string]any{"revision": &revision, "edits": &rawEdits}); err != nil {
-		if !requestBodyTooLarge(c, err) {
-			c.JSONStatus(http.StatusBadRequest, map[string]string{"code": "invalid_request", "error": "Supply a settings revision and edits array."})
-		}
-		return
-	}
-	if revision == "" || rawEdits == nil {
-		c.JSONStatus(http.StatusBadRequest, map[string]string{"code": "invalid_request", "error": "Supply a settings revision and edits array."})
-		return
-	}
-	edits := make([]config.SettingEdit, 0, len(rawEdits))
-	for _, raw := range rawEdits {
-		var edit config.SettingEdit
-		if err := decodeSettingsObject(bytes.NewReader(raw), map[string]any{"path": &edit.Path, "action": &edit.Action, "value": &edit.Value}); err != nil || edit.Path == "" || edit.Action == "" {
-			c.JSONStatus(http.StatusBadRequest, map[string]string{"code": "invalid_request", "error": "Each edit requires a path, an action, and an optional value."})
-			return
-		}
-		edits = append(edits, edit)
-	}
-	if revision != c.reloader.revision {
-		c.JSONStatus(http.StatusConflict, map[string]string{"code": "stale_revision", "error": "Read the current settings before validating the draft."})
-		return
-	}
-	if !c.Config.SourcesUnchanged(c.reloader.overrides...) {
-		c.JSONStatus(http.StatusConflict, map[string]string{"code": "sources_changed", "error": "Configuration sources changed or cannot be read. Reload the server configuration and read settings again."})
+	edits, ok := readSettingsDraft(c)
+	if !ok {
 		return
 	}
 	candidate, fields := prepareConfigurationDraft(c.Config, edits)
@@ -84,6 +59,55 @@ func serveValidateSettings(c *webContext) {
 		return
 	}
 	c.JSON(map[string]any{"revision": c.reloader.revision, "values": configurationStates(candidate)})
+}
+
+func serveApplySettings(c *webContext) {
+	edits, ok := readSettingsDraft(c)
+	if !ok {
+		return
+	}
+	lease, ok := c.Request.Context().Value(runtimeRequestKey{}).(*runtimeRequest)
+	if !ok {
+		c.JSONStatus(http.StatusServiceUnavailable, map[string]string{"code": "unavailable", "error": "Server runtime is unavailable."})
+		return
+	}
+	c.releaseConfig()
+	lease.actorID = c.UserID
+	status, result := lease.runtime.save(lease, edits)
+	c.JSONStatus(status, result)
+}
+
+func readSettingsDraft(c *webContext) ([]config.SettingEdit, bool) {
+	var revision string
+	var rawEdits []json.RawMessage
+	if err := decodeSettingsObject(c.Request.Body, map[string]any{"revision": &revision, "edits": &rawEdits}); err != nil {
+		if !requestBodyTooLarge(c, err) {
+			c.JSONStatus(http.StatusBadRequest, map[string]string{"code": "invalid_request", "error": "Supply a settings revision and edits array."})
+		}
+		return nil, false
+	}
+	if revision == "" || rawEdits == nil {
+		c.JSONStatus(http.StatusBadRequest, map[string]string{"code": "invalid_request", "error": "Supply a settings revision and edits array."})
+		return nil, false
+	}
+	edits := make([]config.SettingEdit, 0, len(rawEdits))
+	for _, raw := range rawEdits {
+		var edit config.SettingEdit
+		if err := decodeSettingsObject(bytes.NewReader(raw), map[string]any{"path": &edit.Path, "action": &edit.Action, "value": &edit.Value}); err != nil || edit.Path == "" || edit.Action == "" {
+			c.JSONStatus(http.StatusBadRequest, map[string]string{"code": "invalid_request", "error": "Each edit requires a path, an action, and an optional value."})
+			return nil, false
+		}
+		edits = append(edits, edit)
+	}
+	if revision != c.reloader.revision {
+		c.JSONStatus(http.StatusConflict, map[string]string{"code": "stale_revision", "error": "Read the current settings before validating the draft."})
+		return nil, false
+	}
+	if !c.Config.SourcesUnchanged(c.reloader.overrides...) {
+		c.JSONStatus(http.StatusConflict, map[string]string{"code": "sources_changed", "error": "Configuration sources changed or cannot be read. Reload the server configuration and read settings again."})
+		return nil, false
+	}
+	return edits, true
 }
 
 // Decode exact object keys once each. encoding/json's struct decoder accepts
@@ -178,6 +202,7 @@ func serveReload(c *webContext) {
 		return
 	}
 	c.releaseConfig()
+	lease.actorID = c.UserID
 	status, err := lease.runtime.reload(c.Request, lease, next)
 	if err != nil {
 		http.Error(c.Response, err.Error(), status)

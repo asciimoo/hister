@@ -67,6 +67,7 @@ type runtimeRequest struct {
 	generation *runtimeGeneration
 	sockets    context.Context
 	finish     func()
+	actorID    uint
 }
 
 func (r *serverRuntime) ServeHTTP(w http.ResponseWriter, req *http.Request) {
@@ -119,6 +120,9 @@ func (r *serverRuntime) startListener(listener net.Listener) *runtimeListener {
 }
 
 func (r *serverRuntime) generation(cfg *config.Config, idx *indexer.Indexer) (*runtimeGeneration, error) {
+	if err := model.CheckAdministratorAvailability(cfg); err != nil {
+		return nil, err
+	}
 	db, err := model.DB.DB()
 	if err != nil {
 		return nil, err
@@ -234,19 +238,66 @@ func closeRuntimeDatabase() {
 	}
 }
 
+// save shares the runtime owner's lock with explicit reloads. Once accepted,
+// completion is independent of the HTTP connection, including a lost response.
+func (r *serverRuntime) save(lease *runtimeRequest, edits []config.SettingEdit) (int, any) {
+	lease.finish()
+	r.reloadMu.Lock()
+	defer r.reloadMu.Unlock()
+	failure := func(status int, code, message string) (int, any) {
+		return status, map[string]string{"code": code, "error": message}
+	}
+	if !r.isCurrent(lease) {
+		return failure(http.StatusConflict, "stale_revision", "Server configuration changed; read settings again.")
+	}
+	old := lease.generation.cfg
+	if !old.SourcesUnchanged(r.overrides...) {
+		return failure(http.StatusConflict, "sources_changed", "Configuration sources changed; reload and read settings again.")
+	}
+	next, fields := prepareConfigurationDraft(old, edits)
+	if len(fields) > 0 {
+		return http.StatusUnprocessableEntity, map[string]any{"code": "invalid_settings", "errors": fields}
+	}
+	staged, err := next.StageManaged()
+	if err != nil {
+		if errors.Is(err, config.ErrManagedConflict) {
+			return failure(http.StatusConflict, "sources_changed", err.Error())
+		}
+		return failure(http.StatusInternalServerError, "persistence_failed", "Cannot stage managed configuration; active configuration retained.")
+	}
+	defer func() {
+		if err := staged.Close(); err != nil {
+			log.Warn().Msg("Cannot remove configuration staging files")
+		}
+	}()
+	status, err := r.apply(r.ctx, lease, next, staged)
+	if err != nil {
+		return failure(status, "apply_failed", err.Error())
+	}
+	return http.StatusOK, map[string]bool{"saved": true}
+}
+
+func (r *serverRuntime) isCurrent(lease *runtimeRequest) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return !r.paused && r.current == lease.generation && r.ctx.Err() == nil
+}
+
 // reload is called after authorization. Release this request's generation
 // lease before draining; the rest of this handler only writes its response.
 func (r *serverRuntime) reload(req *http.Request, lease *runtimeRequest, next *config.Config) (int, error) {
 	lease.finish()
 	r.reloadMu.Lock()
 	defer r.reloadMu.Unlock()
-	r.mu.Lock()
-	old := r.current
-	stale := r.paused || old != lease.generation || r.ctx.Err() != nil
-	r.mu.Unlock()
-	if stale {
+	if !r.isCurrent(lease) {
 		return http.StatusConflict, errors.New("server configuration changed; retry reload")
 	}
+	return r.apply(req.Context(), lease, next, nil)
+}
+
+// apply runs under reloadMu and publishes only after persistence has committed.
+func (r *serverRuntime) apply(ctx context.Context, lease *runtimeRequest, next *config.Config, staged *config.ManagedWrite) (int, error) {
+	old := lease.generation
 	registry, err := diagnostics.Extractors(next)
 	if err != nil {
 		return http.StatusBadRequest, errors.New("invalid extractor configuration; active configuration retained")
@@ -290,7 +341,7 @@ func (r *serverRuntime) reload(req *http.Request, lease *runtimeRequest, next *c
 	old.closeSockets()
 	drained := old.drained
 	r.mu.Unlock()
-	drainCtx, cancelDrain := context.WithTimeout(req.Context(), 30*time.Second)
+	drainCtx, cancelDrain := context.WithTimeout(ctx, 30*time.Second)
 	defer cancelDrain()
 	select {
 	case <-drained:
@@ -300,18 +351,54 @@ func (r *serverRuntime) reload(req *http.Request, lease *runtimeRequest, next *c
 	case <-r.ctx.Done():
 		return http.StatusServiceUnavailable, errors.New("server is shutting down")
 	}
+	if old.cfg.App.UserHandling {
+		actor, err := model.GetUserByID(lease.actorID)
+		if err != nil || !actor.IsAdmin {
+			r.resume(old)
+			return http.StatusForbidden, errors.New("administrator privileges are no longer available")
+		}
+	}
+	if next.App.Directory == old.cfg.App.Directory && next.Server.Database == old.cfg.Server.Database {
+		if err := model.CheckAdministratorAvailability(next); err != nil {
+			r.resume(old)
+			return http.StatusBadRequest, err
+		}
+	}
 	// Include rule writes that completed while this reload was draining.
 	if err := next.ReadRules(); err != nil {
 		r.resume(old)
 		return http.StatusBadRequest, errors.New("cannot reload rules.json; active configuration retained")
 	}
+	// Recovery must include rule writes completed during request draining too.
+	if old.cfg.App.Directory == next.App.Directory {
+		old.cfg.Rules = next.Rules
+	} else if err := old.cfg.ReadRules(); err != nil {
+		r.resume(old)
+		return http.StatusBadRequest, errors.New("cannot read previous rules.json; active configuration retained")
+	}
+	if staged != nil && !old.cfg.SourcesUnchanged(r.overrides...) {
+		r.resume(old)
+		return http.StatusConflict, errors.New("configuration sources changed; active configuration retained")
+	}
 	old.close()
 	g, err := r.open(next, registry)
+	if err == nil && staged != nil {
+		if !old.cfg.SourcesUnchanged(r.overrides...) {
+			err = config.ErrManagedConflict
+		} else if commitErr := staged.Commit(); commitErr != nil {
+			err = fmt.Errorf("cannot commit managed configuration: %w", commitErr)
+		}
+		if err != nil {
+			g.close()
+		}
+	}
 	if err != nil {
 		log.Error().Err(err).Msg("Runtime reload failed; restoring previous configuration")
 		previousRegistry, registryErr := diagnostics.Extractors(old.cfg)
 		var restoreErr error
-		if registryErr == nil {
+		if errors.Is(err, config.ErrManagedRecovery) {
+			restoreErr = err
+		} else if registryErr == nil {
 			g, restoreErr = r.open(old.cfg, previousRegistry)
 		} else {
 			restoreErr = registryErr
@@ -320,15 +407,22 @@ func (r *serverRuntime) reload(req *http.Request, lease *runtimeRequest, next *c
 			r.mu.Lock()
 			r.current = nil
 			r.mu.Unlock()
+			failure := errors.New("reload and recovery failed; restart the server")
+			if errors.Is(err, config.ErrManagedRecovery) {
+				failure = errors.New("managed configuration recovery failed; inspect config.web.yml and .config.web-recovery files before restarting the server")
+			}
 			select {
-			case r.failures <- errors.New("reload and recovery failed; restart the server"):
+			case r.failures <- failure:
 			default:
 			}
-			return http.StatusServiceUnavailable, errors.New("reload and recovery failed; restart the server")
+			return http.StatusServiceUnavailable, failure
 		}
 		r.mu.Lock()
 		r.current, r.paused = g, false
 		r.mu.Unlock()
+		if errors.Is(err, config.ErrManagedConflict) {
+			return http.StatusConflict, errors.New("configuration sources changed; previous runtime restored; reload and read settings again")
+		}
 		return http.StatusInternalServerError, errors.New("reload failed; previous configuration restored")
 	}
 	if replacement != nil {
@@ -388,6 +482,11 @@ func (r *serverRuntime) close() {
 
 func listenRuntime(ctx context.Context, cfg *config.Config, idx *indexer.Indexer, overrides ...config.Override) error {
 	r := &serverRuntime{ctx: ctx, overrides: overrides, failures: make(chan error, 1)}
+	if err := cfg.DiscardManagedStaging(); err != nil {
+		idx.Close()
+		closeRuntimeDatabase()
+		return errors.New("cannot discard abandoned configuration staging files")
+	}
 	listener, err := newListener(cfg.Server)
 	if err != nil {
 		idx.Close()

@@ -28,6 +28,180 @@ type configComposition struct {
 	managedDigest [32]byte
 }
 
+// ErrManagedRecovery means the confirmed file could not be durably restored.
+var ErrManagedRecovery = errors.New("managed configuration recovery failed; inspect config.web.yml before restarting")
+
+// ErrManagedConflict prevents replacing an unseen external selection.
+var ErrManagedConflict = errors.New("configuration sources changed; reload and read settings again")
+
+// ManagedWrite owns private staging files until Commit or Close. The runtime
+// owner must serialize it with reloads and keep requests paused during Commit.
+type ManagedWrite struct {
+	candidate     *Config
+	staged        string
+	previous      string
+	directory     *os.File
+	digest        [32]byte
+	syncDirectory func() error
+	keepRecovery  bool
+}
+
+// StageManaged prepares a replacement without changing the confirmed file.
+func (c *Config) StageManaged() (*ManagedWrite, error) {
+	if c.composition == nil {
+		return nil, errors.New("configuration was not loaded")
+	}
+	root := make(map[string]any)
+	for path, value := range c.composition.managed {
+		parts := strings.Split(path, ".")
+		parent := root
+		for _, part := range parts[:len(parts)-1] {
+			child, ok := parent[part].(map[string]any)
+			if !ok {
+				child = make(map[string]any)
+				parent[part] = child
+			}
+			parent = child
+		}
+		parent[parts[len(parts)-1]] = value
+	}
+	raw, err := yaml.Marshal(root)
+	if err != nil {
+		return nil, err
+	}
+	previous, exists, err := readManagedFile(c.FullPath("config.web.yml"))
+	if err != nil {
+		return nil, err
+	}
+	if managedFileDigest(previous, exists) != c.composition.managedDigest {
+		return nil, ErrManagedConflict
+	}
+	directory, err := os.Open(c.App.Directory)
+	if err != nil {
+		return nil, err
+	}
+	w := &ManagedWrite{candidate: c, directory: directory, digest: sha256.Sum256(raw), syncDirectory: directory.Sync}
+	w.staged, err = stageManagedFile(c.App.Directory, ".config.web-*", raw)
+	if err == nil && exists {
+		w.previous, err = stageManagedFile(c.App.Directory, ".config.web-recovery-*", previous)
+	}
+	if err != nil {
+		_ = w.Close()
+		return nil, err
+	}
+	return w, nil
+}
+
+func readManagedFile(path string) ([]byte, bool, error) {
+	info, err := os.Lstat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	if !info.Mode().IsRegular() {
+		return nil, false, errors.New("managed configuration must be a regular file")
+	}
+	raw, err := os.ReadFile(path)
+	return raw, true, err
+}
+
+func managedFileDigest(raw []byte, exists bool) [32]byte {
+	if !exists {
+		return [32]byte{}
+	}
+	return sha256.Sum256(raw)
+}
+
+func stageManagedFile(directory, pattern string, raw []byte) (string, error) {
+	f, err := os.CreateTemp(directory, pattern)
+	if err != nil {
+		return "", err
+	}
+	_, writeErr := f.Write(raw)
+	err = errors.Join(writeErr, f.Sync(), f.Close())
+	if err != nil {
+		_ = os.Remove(f.Name())
+		return "", err
+	}
+	return f.Name(), nil
+}
+
+// Commit atomically replaces the file and synchronizes its directory. If that
+// synchronization fails, restore the previous bytes before returning an error.
+func (w *ManagedWrite) Commit() error {
+	path := w.candidate.FullPath("config.web.yml")
+	raw, exists, err := readManagedFile(path)
+	if err != nil {
+		return err
+	}
+	if managedFileDigest(raw, exists) != w.candidate.composition.managedDigest {
+		return ErrManagedConflict
+	}
+	if err := os.Rename(w.staged, path); err != nil {
+		return err
+	}
+	w.staged = ""
+	if err := w.syncDirectory(); err != nil {
+		var restoreErr error
+		if w.previous != "" {
+			restoreErr = os.Rename(w.previous, path)
+			if restoreErr == nil {
+				w.previous = ""
+			}
+		} else {
+			restoreErr = os.Remove(path)
+		}
+		if restoreErr = errors.Join(restoreErr, w.syncDirectory()); restoreErr != nil {
+			w.keepRecovery = true
+			return errors.Join(ErrManagedRecovery, err, restoreErr)
+		}
+		return err
+	}
+	composition := *w.candidate.composition
+	composition.managedDigest = w.digest
+	w.candidate.composition = &composition
+	return nil
+}
+
+// Close discards staging files, retaining recovery bytes if restoration failed.
+func (w *ManagedWrite) Close() error {
+	var err error
+	paths := []string{w.staged}
+	if !w.keepRecovery {
+		paths = append(paths, w.previous)
+	}
+	for _, path := range paths {
+		if path != "" {
+			if removeErr := os.Remove(path); !errors.Is(removeErr, os.ErrNotExist) {
+				err = errors.Join(err, removeErr)
+			}
+		}
+	}
+	return errors.Join(err, w.directory.Close())
+}
+
+// DiscardManagedStaging removes interrupted, unconfirmed writes on startup.
+// Call only after acquiring exclusive runtime storage. Recovery copies are kept
+// for manual repair and neither kind of file is an input to configuration loading.
+func (c *Config) DiscardManagedStaging() error {
+	entries, err := os.ReadDir(c.App.Directory)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		suffix, ok := strings.CutPrefix(entry.Name(), ".config.web-")
+		if !ok || suffix == "" || strings.Trim(suffix, "0123456789") != "" || !entry.Type().IsRegular() {
+			continue
+		}
+		if err := os.Remove(c.FullPath(entry.Name())); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	}
+	return nil
+}
+
 // loadManaged adds sparse web selections only where no authoritative source
 // selects the setting. Reading configuration never rewrites either file.
 func (inputs *configInputs) loadManaged(directory string) error {
@@ -94,6 +268,8 @@ func (c *Config) composeDraft(selections map[string]any) (*Config, error) {
 		return nil, err
 	}
 	next.fname = c.fname
+	next.secretKey, next.TUI, next.tuiPath = c.secretKey, c.TUI, c.tuiPath
+	next.Hotkeys.TUI = c.Hotkeys.TUI
 	next.composition = &configComposition{defaults: c.composition.defaults, authoritative: c.composition.authoritative, sources: c.composition.sources, managed: inputs.managed, mainDigest: c.composition.mainDigest, managedDigest: c.composition.managedDigest}
 	return next, next.normalize()
 }

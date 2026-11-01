@@ -19,6 +19,69 @@ import (
 	"gorm.io/gorm/clause"
 )
 
+type accountPolicy struct {
+	userHandling  bool
+	passwordLogin bool
+	proxyLogin    bool
+	localRecovery bool
+}
+
+// The database owner installs this immutable policy with each connection.
+// Inspection and offline account creation do not enforce startup prerequisites.
+var activeAccountPolicy accountPolicy
+
+func accountPolicyFor(c *config.Config) accountPolicy {
+	oidc := c.Server.OAuth["oidc"]
+	return accountPolicy{
+		userHandling: c.App.UserHandling, passwordLogin: !c.Server.OAuthOnly,
+		proxyLogin:    c.Server.ProxyAuthHeader != "",
+		localRecovery: c.App.UserHandling && oidc != nil && len(oidc.AdminGroups) > 0,
+	}
+}
+
+// CheckAdministratorAvailability is a runtime prerequisite, not a loading or
+// migration prerequisite, so offline administrator recovery remains possible.
+func CheckAdministratorAvailability(c *config.Config) error {
+	if !c.App.UserHandling {
+		return nil
+	}
+	if DB == nil {
+		return errors.New("cannot verify administrator availability: database unavailable")
+	}
+	var count int64
+	policy := accountPolicyFor(c)
+	if err := usableAdministrators(DB, policy, false).Count(&count).Error; err != nil {
+		return errors.New("cannot verify administrator availability: database query failed")
+	}
+	if count == 0 {
+		return errors.New("user handling requires an administrator with a usable credential; stop the server and run hister user create --offline --admin USERNAME")
+	}
+	if policy.localRecovery {
+		if err := usableAdministrators(DB, policy, true).Count(&count).Error; err != nil {
+			return errors.New("cannot verify recovery administrator availability: database query failed")
+		}
+		if count == 0 {
+			return errors.New("OIDC role synchronization requires an independent local administrator with a usable password or API token; stop the server and run hister user create --offline --admin USERNAME")
+		}
+	}
+	return nil
+}
+
+func usableAdministrators(db *gorm.DB, policy accountPolicy, local bool) *gorm.DB {
+	credentials := db.Where("token <> ?", "")
+	if policy.passwordLogin {
+		credentials = credentials.Or("password <> ?", "")
+	}
+	if policy.proxyLogin && !local {
+		credentials = credentials.Or("username <> ?", "")
+	}
+	query := db.Model(&User{}).Where("is_admin = ?", true).Where(credentials)
+	if local {
+		query = query.Where("o_auth_id = ?", "")
+	}
+	return query
+}
+
 var (
 	ErrUserNotFound      = errors.New("user not found")
 	ErrInvalidPassword   = errors.New("invalid password")
@@ -27,6 +90,7 @@ var (
 	ErrInvalidUserUpdate = errors.New("invalid user update")
 	ErrStaleUserRevision = errors.New("user revision has changed")
 	ErrLastAdmin         = errors.New("cannot remove the last administrator")
+	ErrLastRecoveryAdmin = errors.New("cannot remove the last independent local recovery administrator")
 	ErrAdminRequired     = errors.New("administrator privileges required")
 )
 
@@ -82,6 +146,22 @@ func checkAdminRemoval(tx *gorm.DB, user *User) error {
 	}
 	if count <= 1 {
 		return ErrLastAdmin
+	}
+	if activeAccountPolicy.userHandling {
+		if err := usableAdministrators(tx, activeAccountPolicy, false).Where("id <> ?", user.ID).Count(&count).Error; err != nil {
+			return err
+		}
+		if count == 0 {
+			return ErrLastAdmin
+		}
+	}
+	if activeAccountPolicy.localRecovery {
+		if err := usableAdministrators(tx, activeAccountPolicy, true).Where("id <> ?", user.ID).Count(&count).Error; err != nil {
+			return err
+		}
+		if count == 0 {
+			return ErrLastRecoveryAdmin
+		}
 	}
 	return nil
 }
@@ -409,8 +489,9 @@ func CreateOAuthUser(username, oauthID string) (*User, error) {
 }
 
 // SyncOAuthAdmin applies the role from an authenticated provider identity.
-// Unlike local administrative updates, this may demote the last administrator:
-// the identity provider owns the role and can grant it again on the next login.
+// Provider revocations remain authoritative. Runtime startup and local account
+// mutations require and protect an independent recovery administrator when OIDC
+// manages roles, rather than preserving a revoked provider privilege.
 func SyncOAuthAdmin(oauthID string, isAdmin bool) (*User, error) {
 	if oauthID == "" {
 		return nil, ErrUserNotFound

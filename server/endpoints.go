@@ -2318,6 +2318,8 @@ func userUpdateFailed(c *webContext, err error) bool {
 		userAPIError(c, http.StatusConflict, "username_exists", "username already exists")
 	case errors.Is(err, model.ErrLastAdmin):
 		userAPIError(c, http.StatusConflict, "last_admin", "cannot remove the last administrator")
+	case errors.Is(err, model.ErrLastRecoveryAdmin):
+		userAPIError(c, http.StatusConflict, "last_recovery_admin", err.Error())
 	case errors.Is(err, model.ErrAdminRequired):
 		userAPIError(c, http.StatusForbidden, "admin_required", "administrator privileges required")
 	case errors.Is(err, model.ErrUserNotFound):
@@ -2382,6 +2384,8 @@ func userDeletionFailed(c *webContext, err error) bool {
 	switch {
 	case errors.Is(err, model.ErrLastAdmin):
 		userAPIError(c, http.StatusConflict, "last_admin", "cannot remove the last administrator")
+	case errors.Is(err, model.ErrLastRecoveryAdmin):
+		userAPIError(c, http.StatusConflict, "last_recovery_admin", err.Error())
 	case errors.Is(err, model.ErrUserNotFound):
 		userAPIError(c, http.StatusNotFound, "user_not_found", "user not found")
 	default:

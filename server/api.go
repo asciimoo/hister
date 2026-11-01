@@ -149,6 +149,20 @@ func init() {
 			},
 		},
 		{
+			Name:         "ApplySettings",
+			Path:         "/api/settings/apply",
+			Method:       POST,
+			AdminOnly:    true,
+			NoStore:      true,
+			CSRFRequired: true,
+			Handler:      serveApplySettings,
+			Description:  "Save and apply ordinary App settings. Uses the revision and explicit edits format of POST /api/settings/validate. Briefly interrupts service. Returns 409 for changed sources or an outdated revision and 422 for invalid settings. Read GET /api/settings after success or a lost response to obtain the active revision. Sensitive access settings remain read only.",
+			JSONSchema: []*JSONSchemaField{
+				{Name: "revision", Type: "string", Required: true, Description: "Revision returned by GET /api/settings."},
+				{Name: "edits", Type: "array", Required: true, Description: "Explicit setting operations using path, action (set or reset), and value for set."},
+			},
+		},
+		{
 			Name:        "Search",
 			Path:        "/search",
 			Method:      GET,

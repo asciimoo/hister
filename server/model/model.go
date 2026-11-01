@@ -46,6 +46,7 @@ func InitReadOnly(c *config.Config) error {
 }
 
 func initDatabase(c *config.Config, accessMode AccessMode) error {
+	activeAccountPolicy = accountPolicyFor(c)
 	dbCfg := &gorm.Config{
 		// SQLite keeps whatever offset a time value carries and compares those
 		// values as text, so a timestamp written at a local offset does not

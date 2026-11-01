@@ -95,9 +95,11 @@ func TestConfigurationReadAuthorization(t *testing.T) {
 						t.Fatalf("read status = %d, want %d: %s", response.Code, want, response.Body)
 					}
 					if !caller.allowed {
-						denied := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/validate", strings.NewReader(`{"revision":"unknown","edits":[]}`), caller.headers)
-						if denied.Code != http.StatusForbidden || denied.Header().Get("Cache-Control") != "no-store" {
-							t.Fatalf("unauthorized validation: %d %s", denied.Code, denied.Body)
+						for _, operation := range []string{"validate", "apply"} {
+							denied := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/"+operation, strings.NewReader(`{"revision":"unknown","edits":[]}`), caller.headers)
+							if denied.Code != http.StatusForbidden || denied.Header().Get("Cache-Control") != "no-store" {
+								t.Fatalf("unauthorized %s: %d %s", operation, denied.Code, denied.Body)
+							}
 						}
 						return
 					}
@@ -302,35 +304,39 @@ func TestConfigurationDraftValidation(t *testing.T) {
 }
 
 func TestConfigurationRequestShape(t *testing.T) {
-	_, handler := newConfigurationTestServer(t, "none", "")
-	revision, _ := readConfigurationState(t, handler, nil)
-	for _, body := range []string{
-		`null`, `{}`, `[]`, `{"revision":%q}`, `{"revision":%q,"edits":null}`,
-		`{"revision":%q,"edits":[],"unknown":"private-input"}`,
-		`{"revision":%q,"edits":[]} {}`,
-		`{"revision":%q,"edits":[{"path":"app.title","action":"set","value":"title","unknown":"private-input"}]}`,
-		`{"revision":%q,"edits":[],"edits":[]}`,
-		`{"revision":%q,"edits":[{"path":"app.subtitle","path":"app.title","action":"set","value":"title"}]}`,
-		`{"Revision":%q,"edits":[]}`,
-	} {
-		body = strings.Replace(body, "%q", fmt.Sprintf("%q", revision), 1)
-		response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/validate", strings.NewReader(body), map[string]string{"Origin": "hister://", "Content-Type": "application/json"})
-		if response.Code != http.StatusBadRequest || strings.Contains(response.Body.String(), "private-input") {
-			t.Errorf("body %s: %d %s", body, response.Code, response.Body)
-		}
-	}
-	for _, chunked := range []bool{false, true} {
-		body := fmt.Sprintf(`{"revision":%q,"edits":[]}`, revision) + strings.Repeat(" ", int(maxRequestBodyBytes))
-		request := httptest.NewRequest(http.MethodPost, "/hister/api/settings/validate", strings.NewReader(body))
-		request.Header.Set("Origin", "hister://")
-		if chunked {
-			request.ContentLength = -1
-		}
-		response := httptest.NewRecorder()
-		handler.ServeHTTP(response, request)
-		if response.Code != http.StatusRequestEntityTooLarge {
-			t.Fatalf("oversized body: %d", response.Code)
-		}
+	for _, operation := range []string{"validate", "apply"} {
+		t.Run(operation, func(t *testing.T) {
+			_, handler := newConfigurationTestServer(t, "none", "")
+			revision, _ := readConfigurationState(t, handler, nil)
+			for _, body := range []string{
+				`null`, `{}`, `[]`, `{"revision":%q}`, `{"revision":%q,"edits":null}`,
+				`{"revision":%q,"edits":[],"unknown":"private-input"}`,
+				`{"revision":%q,"edits":[]} {}`,
+				`{"revision":%q,"edits":[{"path":"app.title","action":"set","value":"title","unknown":"private-input"}]}`,
+				`{"revision":%q,"edits":[],"edits":[]}`,
+				`{"revision":%q,"edits":[{"path":"app.subtitle","path":"app.title","action":"set","value":"title"}]}`,
+				`{"Revision":%q,"edits":[]}`,
+			} {
+				body = strings.Replace(body, "%q", fmt.Sprintf("%q", revision), 1)
+				response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/"+operation, strings.NewReader(body), map[string]string{"Origin": "hister://", "Content-Type": "application/json"})
+				if response.Code != http.StatusBadRequest || strings.Contains(response.Body.String(), "private-input") {
+					t.Errorf("body %s: %d %s", body, response.Code, response.Body)
+				}
+			}
+			for _, chunked := range []bool{false, true} {
+				body := fmt.Sprintf(`{"revision":%q,"edits":[]}`, revision) + strings.Repeat(" ", int(maxRequestBodyBytes))
+				request := httptest.NewRequest(http.MethodPost, "/hister/api/settings/"+operation, strings.NewReader(body))
+				request.Header.Set("Origin", "hister://")
+				if chunked {
+					request.ContentLength = -1
+				}
+				response := httptest.NewRecorder()
+				handler.ServeHTTP(response, request)
+				if response.Code != http.StatusRequestEntityTooLarge {
+					t.Fatalf("oversized body: %d", response.Code)
+				}
+			}
+		})
 	}
 }
 
@@ -448,54 +454,61 @@ func TestConfigurationSecretsAndExtractorStates(t *testing.T) {
 }
 
 func TestConfigurationSessionAndCSRF(t *testing.T) {
-	for _, mode := range []string{"none", "token", "user"} {
-		t.Run(mode, func(t *testing.T) {
-			_, handler := newConfigurationTestServer(t, mode, "")
-			var cookie *http.Cookie
-			if mode != "none" {
-				path, body := "/api/token-login", `{"token":"private-token"}`
-				if mode == "user" {
-					if _, err := model.CreateUser("admin", "password123", true); err != nil {
-						t.Fatal(err)
+	for _, operation := range []string{"validate", "apply"} {
+		t.Run(operation, func(t *testing.T) {
+			for _, mode := range []string{"none", "token", "user"} {
+				t.Run(mode, func(t *testing.T) {
+					_, handler := newConfigurationTestServer(t, mode, "")
+					var cookie *http.Cookie
+					if mode != "none" {
+						path, body := "/api/token-login", `{"token":"private-token"}`
+						if mode == "user" {
+							if _, err := model.CreateUser("admin", "password123", true); err != nil {
+								t.Fatal(err)
+							}
+							path, body = "/api/login", `{"username":"admin","password":"password123"}`
+						}
+						login := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister"+path, strings.NewReader(body), map[string]string{"Origin": "hister://"})
+						if login.Code != http.StatusOK {
+							t.Fatalf("login: %d %s", login.Code, login.Body)
+						}
+						cookie = responseSessionCookie(t, login)
 					}
-					path, body = "/api/login", `{"username":"admin","password":"password123"}`
-				}
-				login := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister"+path, strings.NewReader(body), map[string]string{"Origin": "hister://"})
-				if login.Code != http.StatusOK {
-					t.Fatalf("login: %d %s", login.Code, login.Body)
-				}
-				cookie = responseSessionCookie(t, login)
-			}
-			request := httptest.NewRequest(http.MethodGet, "/hister/api/config", nil)
-			if cookie != nil {
-				request.AddCookie(cookie)
-			}
-			public := httptest.NewRecorder()
-			handler.ServeHTTP(public, request)
-			cookie = responseSessionCookie(t, public)
-			revision, _ := readConfigurationState(t, handler, map[string]string{"Cookie": cookie.String()})
-			for _, origin := range []string{"", "https://other.example", "moz-extension://extension", "chrome-extension://extension", "safari-web-extension://extension"} {
-				for _, csrf := range []string{"", "wrong", public.Header().Get("X-CSRF-Token")} {
-					request := httptest.NewRequest(http.MethodPost, "/hister/api/settings/validate", strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":[]}`, revision)))
-					request.AddCookie(cookie)
-					request.Header.Set("Content-Type", "application/json")
-					request.Header.Set("Origin", origin)
-					request.Header.Set("X-CSRF-Token", csrf)
-					response := httptest.NewRecorder()
-					handler.ServeHTTP(response, request)
-					want := http.StatusForbidden
-					if csrf != "" && csrf != "wrong" {
-						want = http.StatusOK
+					request := httptest.NewRequest(http.MethodGet, "/hister/api/config", nil)
+					if cookie != nil {
+						request.AddCookie(cookie)
 					}
-					if response.Code != want {
-						t.Fatalf("origin %q csrf %q: %d %s", origin, csrf, response.Code, response.Body)
+					public := httptest.NewRecorder()
+					handler.ServeHTTP(public, request)
+					cookie = responseSessionCookie(t, public)
+					revision, _ := readConfigurationState(t, handler, map[string]string{"Cookie": cookie.String()})
+					for _, origin := range []string{"", "https://other.example", "moz-extension://extension", "chrome-extension://extension", "safari-web-extension://extension"} {
+						for _, csrf := range []string{"", "wrong", public.Header().Get("X-CSRF-Token")} {
+							request := httptest.NewRequest(http.MethodPost, "/hister/api/settings/"+operation, strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":[]}`, revision)))
+							request.AddCookie(cookie)
+							request.Header.Set("Content-Type", "application/json")
+							request.Header.Set("Origin", origin)
+							request.Header.Set("X-CSRF-Token", csrf)
+							response := httptest.NewRecorder()
+							handler.ServeHTTP(response, request)
+							want := http.StatusForbidden
+							if csrf != "" && csrf != "wrong" {
+								want = http.StatusOK
+								if operation == "apply" {
+									want = http.StatusServiceUnavailable
+								}
+							}
+							if response.Code != want {
+								t.Fatalf("origin %q csrf %q: %d %s", origin, csrf, response.Code, response.Body)
+							}
+							// Successful requests rotate the CSRF token.
+							if want != http.StatusForbidden {
+								public = response
+								cookie = responseSessionCookie(t, response)
+							}
+						}
 					}
-					// Successful requests rotate the CSRF token.
-					if want == http.StatusOK {
-						public = response
-						cookie = responseSessionCookie(t, response)
-					}
-				}
+				})
 			}
 		})
 	}
@@ -578,6 +591,16 @@ func newReloadTestServer(t *testing.T, multiUser bool) (*config.Config, http.Han
 		t.Fatal(err)
 	}
 	testutil.InitModelWithConfig(t, cfg)
+	if multiUser {
+		if _, err := model.CreateUser("runtime-owner", "password123", true); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return cfg, startReloadTestRuntime(t, cfg), write
+}
+
+func startReloadTestRuntime(t *testing.T, cfg *config.Config) http.Handler {
+	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	runtime := &serverRuntime{ctx: ctx, failures: make(chan error, 1)}
 	listener, err := newListener(cfg.Server)
@@ -593,7 +616,7 @@ func newReloadTestServer(t *testing.T, multiUser bool) (*config.Config, http.Han
 	}
 	runtime.serving = runtime.startListener(listener)
 	t.Cleanup(func() { cancel(); runtime.close() })
-	return cfg, runtime, write
+	return runtime
 }
 
 func reloadRequest(t *testing.T, handler http.Handler, token string) int {

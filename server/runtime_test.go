@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -26,8 +27,474 @@ import (
 	"github.com/asciimoo/hister/server/extractor"
 	"github.com/asciimoo/hister/server/indexer"
 	"github.com/asciimoo/hister/server/model"
+	"github.com/asciimoo/hister/server/testutil"
 	"github.com/asciimoo/hister/server/types"
 )
+
+func TestSettingsSavePersistsAndResets(t *testing.T) {
+	cfg, handler, write := newReloadTestServer(t, false)
+	write("") // Leave ordinary App settings to the web editor.
+	if err := os.WriteFile(cfg.FullPath("config.web.yml"), []byte("app:\n  public: false\nsemantic_search:\n  api_key: retained-private-key\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if status := reloadRequest(t, handler, "secret"); status != http.StatusOK {
+		t.Fatalf("reload: %d", status)
+	}
+	mainPath := filepath.Join(cfg.App.Directory, "config.yml")
+	mainBefore, err := os.ReadFile(mainPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	headers := map[string]string{"Origin": "hister://", "X-Access-Token": "secret"}
+	login := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/token-login", strings.NewReader(`{"token":"secret"}`), headers)
+	if login.Code != http.StatusOK {
+		t.Fatalf("login: %d %s", login.Code, login.Body)
+	}
+	cookie := responseSessionCookie(t, login)
+	revision, _ := readConfigurationState(t, handler, headers)
+	for _, edits := range []string{
+		`[{"path":"app.title","action":"set","value":"Saved title"},{"path":"app.disable_previews","action":"set","value":true}]`,
+		`[{"path":"app.title","action":"reset"}]`,
+	} {
+		body := fmt.Sprintf(`{"revision":%q,"edits":%s}`, revision, edits)
+		response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(body), headers)
+		if response.Code != http.StatusOK {
+			t.Fatalf("save: %d %s", response.Code, response.Body)
+		}
+		fresh, values := readConfigurationState(t, handler, headers)
+		if fresh == revision || values["app.disable_previews"].Value != true {
+			t.Fatalf("save did not publish a new configuration: %s %+v", fresh, values["app.disable_previews"])
+		}
+		// A client that lost the response must read state, not replay its old draft.
+		replay := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(body), headers)
+		if replay.Code != http.StatusConflict {
+			t.Fatalf("replayed save: %d %s", replay.Code, replay.Body)
+		}
+		loaded, _, err := config.LoadForInspection(mainPath, true)
+		if err != nil || loaded.App.Title != values["app.title"].Value || !loaded.App.DisablePreviews || loaded.SemanticSearch.APIKey != "retained-private-key" || !loaded.App.Public || !loaded.Source("app.public").WebSelected {
+			t.Fatalf("persisted configuration differs from running configuration: %v", err)
+		}
+		info, err := os.Stat(filepath.Join(cfg.App.Directory, "config.web.yml"))
+		if err != nil || info.Mode().Perm() != 0o600 {
+			t.Fatalf("managed file must be private: %v", err)
+		}
+		session := testutil.ServeHTTP(t, handler, http.MethodGet, "/hister/api/history", nil, map[string]string{"Cookie": cookie.String()})
+		if session.Code != http.StatusOK {
+			t.Fatalf("save invalidated the authenticated session: %d %s", session.Code, session.Body)
+		}
+		revision = fresh
+	}
+	_, values := readConfigurationState(t, handler, headers)
+	if values["app.title"].Value != "Hister" || values["app.title"].Source.WebSelected {
+		t.Fatalf("reset did not expose inherited title: %+v", values["app.title"])
+	}
+	mainAfter, err := os.ReadFile(mainPath)
+	if err != nil || string(mainAfter) != string(mainBefore) {
+		t.Fatal("save changed the main file")
+	}
+}
+
+func TestSettingsConcurrentSavesAndReloads(t *testing.T) {
+	cfg, handler, _ := newReloadTestServer(t, false)
+	headers := map[string]string{"Origin": "hister://", "X-Access-Token": "secret"}
+	for round := range 4 {
+		revision, _ := readConfigurationState(t, handler, headers)
+		start := make(chan struct{})
+		results := make(chan int, 3)
+		for worker := range 3 {
+			go func() {
+				<-start
+				path, body := "/hister/api/reload", ""
+				if worker != 2 {
+					path = "/hister/api/settings/apply"
+					body = fmt.Sprintf(`{"revision":%q,"edits":[{"path":"app.subtitle","action":"set","value":"Round %d worker %d"}]}`, revision, round, worker)
+				}
+				response := testutil.ServeHTTP(t, handler, http.MethodPost, path, strings.NewReader(body), headers)
+				if response.Code != http.StatusOK && response.Code != http.StatusConflict && response.Code != http.StatusServiceUnavailable {
+					t.Errorf("concurrent operation: %d %s", response.Code, response.Body)
+				}
+				results <- response.Code
+			}()
+		}
+		close(start)
+		var succeeded int
+		for range 3 {
+			if <-results == http.StatusOK {
+				succeeded++
+			}
+		}
+		if succeeded == 0 {
+			t.Fatal("no configuration operation completed")
+		}
+		_, values := readConfigurationState(t, handler, headers)
+		persisted, _, err := config.LoadForInspection(cfg.Filename(), true)
+		if err != nil || persisted.App.Subtitle != values["app.subtitle"].Value {
+			t.Fatalf("concurrent operations split persisted and running state: %v", err)
+		}
+	}
+}
+
+func TestFullReloadRequiresAdministrator(t *testing.T) {
+	for _, account := range []string{"empty", "ordinary", "administrator", "proxy"} {
+		t.Run(account, func(t *testing.T) {
+			cfg, handler, _ := newReloadTestServer(t, false)
+			var admin *model.User
+			if account == "ordinary" || account == "administrator" {
+				var err error
+				admin, err = model.CreateUser("owner", "password123", account == "administrator")
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			raw, err := os.ReadFile(cfg.Filename())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if account == "proxy" {
+				raw = []byte(strings.Replace(string(raw), "server:\n", "server:\n  proxy_auth_header: X-Remote-User\n", 1))
+			} else {
+				raw = []byte(strings.Replace(string(raw), "user_handling: false", "user_handling: true", 1))
+			}
+			if err := os.WriteFile(cfg.Filename(), raw, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/reload", nil, map[string]string{"Origin": "hister://", "X-Access-Token": "secret"})
+			if account != "administrator" {
+				if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "administrator") {
+					t.Fatalf("unusable administration accepted: %d %s", response.Code, response.Body)
+				}
+				return
+			}
+			if response.Code != http.StatusOK {
+				t.Fatalf("valid administrator rejected: %d %s", response.Code, response.Body)
+			}
+			// Recheck availability even when user handling stays enabled.
+			headers := map[string]string{"Origin": "hister://", "X-Access-Token": admin.Token}
+			revision, _ := readConfigurationState(t, handler, headers)
+			response = testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":[{"path":"app.subtitle","action":"set","value":"Still multiuser"}]}`, revision)), headers)
+			if response.Code != http.StatusOK {
+				t.Fatalf("ordinary multiuser save: %d %s", response.Code, response.Body)
+			}
+		})
+	}
+}
+
+func TestRuntimeRequiresAdministratorBeforeServing(t *testing.T) {
+	for _, account := range []string{"empty", "ordinary", "administrator", "database error"} {
+		t.Run(account, func(t *testing.T) {
+			cfg := testutil.Config(t)
+			cfg.App.UserHandling = true
+			cfg.Server.Address = "127.0.0.1:0"
+			testutil.InitModelWithConfig(t, cfg)
+			if account == "ordinary" || account == "administrator" {
+				if _, err := model.CreateUser("owner", "password123", account == "administrator"); err != nil {
+					t.Fatal(err)
+				}
+			}
+			idx := newServerTestIndexer(t, cfg)
+			if account == "database error" {
+				db, err := model.DB.DB()
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := db.Close(); err != nil {
+					t.Fatal(err)
+				}
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+			err := Listen(ctx, cfg, idx)
+			if account == "administrator" {
+				if err != nil {
+					t.Fatal(err)
+				}
+			} else if err == nil || !strings.Contains(err.Error(), "administrator") {
+				t.Fatalf("runtime accepted unavailable administration: %v", err)
+			}
+		})
+	}
+}
+
+func TestRuntimeDiscardsAbandonedConfigurationStaging(t *testing.T) {
+	cfg := testutil.Config(t)
+	cfg.Server.Address = "127.0.0.1:0"
+	testutil.InitModelWithConfig(t, cfg)
+	files := map[string]bool{
+		".config.web-12345":          true,
+		".config.web-recovery-12345": false,
+		".config.web-notes":          false,
+		"config.web.yml":             false,
+	}
+	for name := range files {
+		if err := os.WriteFile(cfg.FullPath(name), []byte("app:\n  title: Interrupted\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := Listen(ctx, cfg, newServerTestIndexer(t, cfg)); err != nil {
+		t.Fatal(err)
+	}
+	for name, discarded := range files {
+		_, err := os.Stat(cfg.FullPath(name))
+		if os.IsNotExist(err) != discarded {
+			t.Fatalf("staging cleanup for %s: %v", name, err)
+		}
+	}
+}
+
+func TestSettingsSaveRechecksActorAfterDraining(t *testing.T) {
+	entered, release := make(chan struct{}), make(chan struct{})
+	unblock := sync.OnceFunc(func() { close(release) })
+	defer unblock()
+	oldEndpoints := Endpoints
+	Endpoints = append(append([]*Endpoint(nil), Endpoints...), &Endpoint{
+		Path: "/api/test-demote", Method: GET,
+		Handler: func(c *webContext) {
+			close(entered)
+			<-release
+			if _, err := model.ToggleAdmin("saving-admin"); err != nil {
+				t.Error(err)
+			}
+			serve200(c)
+		},
+	})
+	t.Cleanup(func() { Endpoints = oldEndpoints })
+	cfg, handler, _ := newReloadTestServer(t, true)
+	actor, err := model.CreateUser("saving-admin", "password123", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	headers := map[string]string{"Origin": "hister://", "X-Access-Token": actor.Token}
+	revision, _ := readConfigurationState(t, handler, headers)
+	held := make(chan struct{})
+	go func() {
+		testutil.ServeHTTP(t, handler, http.MethodGet, "/hister/api/test-demote", nil, headers)
+		close(held)
+	}()
+	<-entered
+	result := make(chan *httptest.ResponseRecorder, 1)
+	go func() {
+		result <- testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":[{"path":"app.subtitle","action":"set","value":"Unauthorized"}]}`, revision)), headers)
+	}()
+	waitRuntimePause(t, handler)
+	unblock()
+	<-held
+	response := <-result
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("demoted actor applied settings: %d %s", response.Code, response.Body)
+	}
+	if _, err := os.Stat(filepath.Join(cfg.App.Directory, "config.web.yml")); !os.IsNotExist(err) {
+		t.Fatal("denied save changed the managed file")
+	}
+}
+
+func waitRuntimePause(t *testing.T, handler http.Handler) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if response := testutil.ServeHTTP(t, handler, http.MethodGet, "/hister/health", nil, nil); response.Code == http.StatusServiceUnavailable {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("configuration apply did not pause requests")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func TestSettingsSaveDrainingAndRecovery(t *testing.T) {
+	for _, scenario := range []string{"lost response", "external edit", "commit failure", "recovery failure"} {
+		t.Run(scenario, func(t *testing.T) {
+			entered, release := make(chan struct{}), make(chan struct{})
+			unblock := sync.OnceFunc(func() { close(release) })
+			defer unblock()
+			oldEndpoints := Endpoints
+			Endpoints = append(append([]*Endpoint(nil), Endpoints...), &Endpoint{
+				Path: "/api/test-held", Method: GET,
+				Handler: func(c *webContext) {
+					close(entered)
+					<-release
+					// Model a rule write finishing while the save drains requests.
+					c.Config.Rules.Aliases["retained"] = "rule update"
+					if err := c.Config.SaveRules(); err != nil {
+						t.Error(err)
+					}
+					serve200(c)
+				},
+			})
+			t.Cleanup(func() { Endpoints = oldEndpoints })
+			cfg, handler, _ := newReloadTestServer(t, false)
+			headers := map[string]string{"Origin": "hister://", "X-Access-Token": "secret"}
+			revision, _ := readConfigurationState(t, handler, headers)
+			held := make(chan struct{})
+			go func() {
+				testutil.ServeHTTP(t, handler, http.MethodGet, "/hister/api/test-held", nil, headers)
+				close(held)
+			}()
+			<-entered
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			request := httptest.NewRequest(http.MethodPost, "/hister/api/settings/apply", strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":[{"path":"app.subtitle","action":"set","value":"Saved subtitle"}]}`, revision))).WithContext(ctx)
+			for key, value := range headers {
+				request.Header.Set(key, value)
+			}
+			response := httptest.NewRecorder()
+			done := make(chan struct{})
+			go func() { handler.ServeHTTP(response, request); close(done) }()
+			waitRuntimePause(t, handler)
+			managed := cfg.FullPath("config.web.yml")
+			if _, err := os.Stat(managed); !os.IsNotExist(err) {
+				t.Fatal("staging changed the confirmed configuration")
+			}
+			staging, err := filepath.Glob(cfg.FullPath(".config.web-*"))
+			if err != nil || len(staging) != 1 {
+				t.Fatalf("missing staged configuration: %v %v", staging, err)
+			}
+			info, err := os.Stat(staging[0])
+			if err != nil || info.Mode().Perm() != 0o600 {
+				t.Fatal("staged secrets are not private")
+			}
+			for _, path := range []string{"/api/settings", "/api/reload", "/api/settings/apply"} {
+				method := http.MethodGet
+				if path != "/api/settings" {
+					method = http.MethodPost
+				}
+				if reply := testutil.ServeHTTP(t, handler, method, "/hister"+path, nil, headers); reply.Code != http.StatusServiceUnavailable {
+					t.Fatalf("request observed partial apply: %s %d", path, reply.Code)
+				}
+			}
+			want := http.StatusOK
+			switch scenario {
+			case "lost response":
+				cancel()
+			case "external edit":
+				if err := os.WriteFile(managed, []byte("app:\n  subtitle: External\n"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				want = http.StatusConflict
+			case "commit failure":
+				// Simulate staging storage disappearing before atomic replacement.
+				if err := os.Remove(staging[0]); err != nil {
+					t.Fatal(err)
+				}
+				want = http.StatusInternalServerError
+			case "recovery failure":
+				// Both candidate activation and recovery must report unavailable
+				// when the database path becomes unusable during draining.
+				database := cfg.FullPath(cfg.Server.Database)
+				if err := os.Rename(database, database+".saved"); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Mkdir(database, 0o700); err != nil {
+					t.Fatal(err)
+				}
+				want = http.StatusServiceUnavailable
+			}
+			unblock()
+			<-held
+			<-done
+			if response.Code != want {
+				t.Fatalf("save: %d %s, want %d", response.Code, response.Body, want)
+			}
+			if scenario == "recovery failure" {
+				if !strings.Contains(response.Body.String(), "recovery failed") || !strings.Contains(response.Body.String(), "restart") {
+					t.Fatal("response promised recovery that did not happen")
+				}
+				if reply := testutil.ServeHTTP(t, handler, http.MethodGet, "/hister/health", nil, nil); reply.Code != http.StatusServiceUnavailable {
+					t.Fatal("failed runtime still accepts requests")
+				}
+			} else {
+				_, values := readConfigurationState(t, handler, headers)
+				if (values["app.subtitle"].Value == "Saved subtitle") != (scenario == "lost response") {
+					t.Fatalf("unexpected active subtitle: %+v", values["app.subtitle"])
+				}
+				rules := testutil.ServeHTTP(t, handler, http.MethodGet, "/hister/api/rules", nil, headers)
+				if rules.Code != http.StatusOK || !strings.Contains(rules.Body.String(), "rule update") {
+					t.Fatalf("lost drained rule write: %d %s", rules.Code, rules.Body)
+				}
+			}
+			if scenario == "commit failure" || scenario == "recovery failure" {
+				if _, err := os.Stat(managed); !os.IsNotExist(err) {
+					t.Fatal("failed save replaced confirmed file")
+				}
+			}
+			if staging, err := filepath.Glob(cfg.FullPath(".config.web-*")); err != nil || len(staging) != 0 {
+				t.Fatalf("abandoned staging files: %v %v", staging, err)
+			}
+		})
+	}
+}
+
+func TestSettingsSaveWithoutMainFile(t *testing.T) {
+	for _, token := range []string{"", "secret"} {
+		t.Run("token_"+token, func(t *testing.T) {
+			dir := t.TempDir()
+			t.Setenv("HISTER_DATA_DIR", dir)
+			t.Setenv("XDG_CONFIG_HOME", dir)
+			t.Setenv("LOCALAPPDATA", dir)
+			t.Setenv("HISTER__SERVER__ADDRESS", "127.0.0.1:0")
+			t.Setenv("HISTER__SERVER__BASE_URL", "http://127.0.0.1:4433/hister")
+			t.Setenv("HISTER__APP__ACCESS_TOKEN", token)
+			t.Setenv("HISTER__INDEXER__DETECT_LANGUAGES", "false")
+			cfg, err := config.Load("")
+			if err != nil || cfg.Filename() != "*Default Config*" {
+				t.Fatalf("load without main file: %v", err)
+			}
+			testutil.InitModelWithConfig(t, cfg)
+			handler := startReloadTestRuntime(t, cfg)
+			headers := map[string]string{"Origin": "hister://", "X-Access-Token": token}
+			revision, _ := readConfigurationState(t, handler, headers)
+			response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":[{"path":"app.title","action":"set","value":"No main file"}]}`, revision)), headers)
+			if response.Code != http.StatusOK {
+				t.Fatalf("save: %d %s", response.Code, response.Body)
+			}
+			restarted, err := config.Load("")
+			if err != nil || restarted.App.Title != "No main file" {
+				t.Fatalf("restart did not retain settings: %v", err)
+			}
+			if status := reloadRequest(t, handler, token); status != http.StatusOK {
+				t.Fatalf("reload without main file: %d", status)
+			}
+		})
+	}
+}
+
+func TestSettingsSaveRejectsInvalidDraftsAndDiskFailures(t *testing.T) {
+	cfg, handler, _ := newReloadTestServer(t, false)
+	headers := map[string]string{"Origin": "hister://", "X-Access-Token": "secret"}
+	revision, before := readConfigurationState(t, handler, headers)
+	for _, edits := range []string{
+		`[{"path":"app.title","action":"set","value":"Locked"}]`,
+		`[{"path":"app.subtitle","action":"set","value":7}]`,
+		`[{"path":"app.access_token","action":"set","value":"sensitive"}]`,
+		`[{"path":"app","action":"set","value":{"subtitle":"Bypass"}}]`,
+		`[{"path":"app.subtitle","action":"reset"},{"path":"app.subtitle","action":"set","value":"Duplicate"}]`,
+	} {
+		response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":%s}`, revision, edits)), headers)
+		if response.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("invalid save: %d %s", response.Code, response.Body)
+		}
+	}
+	if err := os.Chmod(cfg.App.Directory, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(cfg.App.Directory, 0o700) })
+	response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":[{"path":"app.subtitle","action":"set","value":"Cannot stage"}]}`, revision)), headers)
+	if response.Code != http.StatusInternalServerError || !strings.Contains(response.Body.String(), "persistence_failed") {
+		t.Fatalf("staging failure: %d %s", response.Code, response.Body)
+	}
+	if err := os.Chmod(cfg.App.Directory, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	fresh, after := readConfigurationState(t, handler, headers)
+	if fresh != revision || after["app.subtitle"].Value != before["app.subtitle"].Value {
+		t.Fatal("rejected settings changed the runtime")
+	}
+	if _, err := os.Stat(cfg.FullPath("config.web.yml")); !os.IsNotExist(err) {
+		t.Fatal("rejected settings changed the managed file")
+	}
+}
 
 func runtimeTestAddress(t *testing.T) string {
 	t.Helper()
