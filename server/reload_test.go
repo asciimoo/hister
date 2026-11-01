@@ -377,9 +377,19 @@ func TestConfigurationStaleSources(t *testing.T) {
 				}
 				handler = registerEndpoints(next, nil)
 			}
-			response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/validate", strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":[{"path":"app.title","action":"set","value":"Candidate"}]}`, revision)), map[string]string{"Origin": "hister://"})
-			if response.Code != http.StatusConflict || strings.Contains(response.Body.String(), "private-input") {
-				t.Fatalf("stale draft: %d %s", response.Code, response.Body)
+			wantCode := "sources_changed"
+			if change == "revision" || change == "reload" {
+				wantCode = "stale_revision"
+			}
+			for _, operation := range []string{"validate", "apply"} {
+				response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/"+operation, strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":[{"path":"app.title","action":"set","value":"Candidate"}]}`, revision)), map[string]string{"Origin": "hister://"})
+				if response.Code != http.StatusConflict || strings.Contains(response.Body.String(), "private-input") {
+					t.Fatalf("stale draft: %d %s", response.Code, response.Body)
+				}
+				var failure struct{ Code string }
+				if err := json.Unmarshal(response.Body.Bytes(), &failure); err != nil || failure.Code != wantCode {
+					t.Fatalf("%s failure code: %s (%v), want %q", operation, response.Body, err, wantCode)
+				}
 			}
 		})
 	}

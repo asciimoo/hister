@@ -398,6 +398,10 @@ func TestSettingsSaveRechecksActorAfterDraining(t *testing.T) {
 	if response.Code != http.StatusForbidden {
 		t.Fatalf("demoted actor applied settings: %d %s", response.Code, response.Body)
 	}
+	var failure struct{ Code string }
+	if err := json.Unmarshal(response.Body.Bytes(), &failure); err != nil || failure.Code != "admin_required" {
+		t.Fatalf("demoted actor failure code: %s (%v)", response.Body, err)
+	}
 	if _, err := os.Stat(filepath.Join(cfg.App.Directory, "config.web.yml")); !os.IsNotExist(err) {
 		t.Fatal("denied save changed the managed file")
 	}
@@ -478,7 +482,7 @@ func TestSettingsSaveDrainingAndRecovery(t *testing.T) {
 					t.Fatalf("request observed partial apply: %s %d", path, reply.Code)
 				}
 			}
-			want := http.StatusOK
+			want, wantCode := http.StatusOK, ""
 			switch scenario {
 			case "lost response":
 				cancel()
@@ -486,13 +490,13 @@ func TestSettingsSaveDrainingAndRecovery(t *testing.T) {
 				if err := os.WriteFile(managed, []byte("app:\n  subtitle: External\n"), 0o600); err != nil {
 					t.Fatal(err)
 				}
-				want = http.StatusConflict
+				want, wantCode = http.StatusConflict, "sources_changed"
 			case "commit failure":
 				// Simulate staging storage disappearing before atomic replacement.
 				if err := os.Remove(staging[0]); err != nil {
 					t.Fatal(err)
 				}
-				want = http.StatusInternalServerError
+				want, wantCode = http.StatusInternalServerError, "persistence_failed"
 			case "recovery failure":
 				// Both candidate activation and recovery must report unavailable
 				// when the database path becomes unusable during draining.
@@ -511,13 +515,17 @@ func TestSettingsSaveDrainingAndRecovery(t *testing.T) {
 				if err := os.Mkdir(database, 0o700); err != nil {
 					t.Fatal(err)
 				}
-				want = http.StatusServiceUnavailable
+				want, wantCode = http.StatusServiceUnavailable, "recovery_failed"
 			}
 			unblock()
 			<-held
 			<-done
 			if response.Code != want {
 				t.Fatalf("save: %d %s, want %d", response.Code, response.Body, want)
+			}
+			var result struct{ Code string }
+			if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil || result.Code != wantCode {
+				t.Errorf("save failure code: %s (%v), want %q", response.Body, err, wantCode)
 			}
 			if scenario == "recovery failure" {
 				if !strings.Contains(response.Body.String(), "recovery failed") || !strings.Contains(response.Body.String(), "restart") {
@@ -619,6 +627,28 @@ func TestSettingsSaveRejectsInvalidDraftsAndDiskFailures(t *testing.T) {
 	}
 	if _, err := os.Stat(cfg.FullPath("config.web.yml")); !os.IsNotExist(err) {
 		t.Fatal("rejected settings changed the managed file")
+	}
+}
+
+func TestSettingsSaveReportsOtherApplyFailures(t *testing.T) {
+	cfg, handler, _ := newReloadTestServer(t, false)
+	headers := map[string]string{"Origin": "hister://", "X-Access-Token": "secret"}
+	revision, before := readConfigurationState(t, handler, headers)
+	// Rules are read during activation, after the managed file has been staged.
+	if err := os.Remove(cfg.RulesPath()); err != nil {
+		t.Fatal(err)
+	}
+	response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":[{"path":"app.subtitle","action":"set","value":"Candidate"}]}`, revision)), headers)
+	var failure struct{ Code string }
+	if err := json.Unmarshal(response.Body.Bytes(), &failure); err != nil || response.Code != http.StatusBadRequest || failure.Code != "apply_failed" {
+		t.Fatalf("activation failure misclassified: %d %s (%v)", response.Code, response.Body, err)
+	}
+	fresh, after := readConfigurationState(t, handler, headers)
+	if fresh != revision || after["app.subtitle"].Value != before["app.subtitle"].Value {
+		t.Fatal("failed activation changed the runtime")
+	}
+	if _, err := os.Stat(cfg.FullPath("config.web.yml")); !os.IsNotExist(err) {
+		t.Fatal("failed activation changed the managed file")
 	}
 }
 

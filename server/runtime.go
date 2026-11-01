@@ -70,6 +70,14 @@ type runtimeRequest struct {
 	actorID    uint
 }
 
+// runtimeApplyError carries a stable failure code through runtime recovery.
+// Its message is safe for callers; underlying resource errors stay in logs.
+type runtimeApplyError struct {
+	code, message string
+}
+
+func (e *runtimeApplyError) Error() string { return e.message }
+
 func (r *serverRuntime) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	r.mu.Lock()
 	if r.paused || r.current == nil || r.ctx.Err() != nil {
@@ -275,7 +283,11 @@ func (r *serverRuntime) save(lease *runtimeRequest, edits []config.SettingEdit) 
 	}()
 	status, err := r.apply(r.ctx, lease, next, staged)
 	if err != nil {
-		return failure(status, "apply_failed", err.Error())
+		code := "apply_failed"
+		if applyErr, ok := errors.AsType[*runtimeApplyError](err); ok {
+			code = applyErr.code
+		}
+		return failure(status, code, err.Error())
 	}
 	return http.StatusOK, map[string]bool{"saved": true}
 }
@@ -358,7 +370,7 @@ func (r *serverRuntime) apply(ctx context.Context, lease *runtimeRequest, next *
 		actor, err := model.GetUserByID(lease.actorID)
 		if err != nil || !actor.IsAdmin {
 			r.resume(old)
-			return http.StatusForbidden, errors.New("administrator privileges are no longer available")
+			return http.StatusForbidden, &runtimeApplyError{code: "admin_required", message: "administrator privileges are no longer available"}
 		}
 	}
 	if next.App.Directory == old.cfg.App.Directory && next.Server.Database == old.cfg.Server.Database {
@@ -381,14 +393,16 @@ func (r *serverRuntime) apply(ctx context.Context, lease *runtimeRequest, next *
 	}
 	if staged != nil && !old.cfg.SourcesUnchanged(r.overrides...) {
 		r.resume(old)
-		return http.StatusConflict, errors.New("configuration sources changed; active configuration retained")
+		return http.StatusConflict, &runtimeApplyError{code: "sources_changed", message: "configuration sources changed; active configuration retained"}
 	}
 	old.close()
+	failureCode := "apply_failed"
 	g, err := r.open(next, registry)
 	if err == nil && staged != nil {
 		if !old.cfg.SourcesUnchanged(r.overrides...) {
 			err = config.ErrManagedConflict
 		} else if commitErr := staged.Commit(); commitErr != nil {
+			failureCode = "persistence_failed"
 			err = fmt.Errorf("cannot commit managed configuration: %w", commitErr)
 		}
 		if err != nil {
@@ -410,9 +424,9 @@ func (r *serverRuntime) apply(ctx context.Context, lease *runtimeRequest, next *
 			r.mu.Lock()
 			r.current = nil
 			r.mu.Unlock()
-			failure := errors.New("reload and recovery failed; restart the server")
+			failure := &runtimeApplyError{code: "recovery_failed", message: "reload and recovery failed; restart the server"}
 			if errors.Is(err, config.ErrManagedRecovery) {
-				failure = errors.New("managed configuration recovery failed; inspect config.web.yml and .config.web-recovery files before restarting the server")
+				failure.message = "managed configuration recovery failed; inspect config.web.yml and .config.web-recovery files before restarting the server"
 			}
 			select {
 			case r.failures <- failure:
@@ -424,9 +438,13 @@ func (r *serverRuntime) apply(ctx context.Context, lease *runtimeRequest, next *
 		r.current, r.paused = g, false
 		r.mu.Unlock()
 		if errors.Is(err, config.ErrManagedConflict) {
-			return http.StatusConflict, errors.New("configuration sources changed; previous runtime restored; reload and read settings again")
+			return http.StatusConflict, &runtimeApplyError{code: "sources_changed", message: "configuration sources changed; previous runtime restored; reload and read settings again"}
 		}
-		return http.StatusInternalServerError, errors.New("reload failed; previous configuration restored")
+		message := "reload failed; previous configuration restored"
+		if failureCode == "persistence_failed" {
+			message = "cannot save managed configuration; previous configuration restored"
+		}
+		return http.StatusInternalServerError, &runtimeApplyError{code: failureCode, message: message}
 	}
 	if replacement != nil {
 		previous := r.serving

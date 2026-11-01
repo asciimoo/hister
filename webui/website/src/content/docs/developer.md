@@ -125,6 +125,18 @@ activation failures restore the previous configuration when possible; failed
 recovery returns `503` and requires restarting the server. Rollback does not undo
 indexed documents or other background work.
 
+Runtime and persistence failures include a `code` and a safe `error` message:
+
+| Code                 | HTTP status | Meaning                                                              |
+| -------------------- | ----------- | -------------------------------------------------------------------- |
+| `sources_changed`    | `409`       | Sources changed, including during activation or persistence.         |
+| `admin_required`     | `403`       | The saving user lost administrator access while requests drained.    |
+| `persistence_failed` | `500`       | Staging or commit failed; the previous configuration remains active. |
+| `recovery_failed`    | `503`       | Recovery failed; the server requires manual recovery and restart.    |
+
+Other activation failures use `apply_failed`. An outdated editor revision uses
+`stale_revision`, separately from source changes.
+
 Startup discards abandoned staging files. If restoring the managed file fails,
 inspect `config.web.yml` and the private `.config.web-recovery-*` copies before
 restarting.
