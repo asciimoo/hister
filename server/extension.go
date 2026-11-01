@@ -2,6 +2,7 @@ package server
 
 import (
 	"net/http"
+	"net/url"
 	"strings"
 )
 
@@ -41,8 +42,21 @@ func browserExtensionAPIPath(path string) bool {
 	return ok
 }
 
-func browserExtensionRequest(origin, path string) bool {
-	return trustedBrowserExtensionOrigin(origin) && browserExtensionAPIPath(path)
+func browserExtensionRequest(r *http.Request) bool {
+	if !browserExtensionAPIPath(r.URL.Path) {
+		return false
+	}
+	if origin := r.Header.Get("Origin"); origin != "" {
+		return trustedBrowserExtensionOrigin(origin)
+	}
+	// Orion on iOS omits Origin but supplies the extension's background page
+	// as Referer. Only fall back when Origin is empty, and compare the parsed
+	// origin so a path or a similar Chrome extension ID cannot grant access.
+	referrer, err := url.Parse(r.Referer())
+	if err != nil || referrer.Host == "" || referrer.User != nil {
+		return false
+	}
+	return trustedBrowserExtensionOrigin(referrer.Scheme + "://" + referrer.Host)
 }
 
 // extensionCORSAllowHeaders returns the response Access-Control-Allow-Headers
@@ -69,7 +83,7 @@ func extensionCORSAllowHeaders(r *http.Request) string {
 func withExtensionCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
-		if !browserExtensionRequest(origin, r.URL.Path) {
+		if origin == "" || !browserExtensionRequest(r) {
 			next.ServeHTTP(w, r)
 			return
 		}

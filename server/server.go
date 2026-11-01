@@ -387,9 +387,9 @@ func withCSRF(handler endpointHandler) endpointHandler {
 			return
 		}
 		// Allow the browser extensions to call their API surface without a
-		// web-session CSRF token. Origin is browser-controlled, so a web
-		// page cannot spoof moz-extension:// / safari-web-extension://.
-		if browserExtensionRequest(c.Request.Header.Get("Origin"), c.Request.URL.Path) {
+		// web-session CSRF token. Origin and Referer are browser-controlled,
+		// so a web page cannot spoof an extension URL in either header.
+		if browserExtensionRequest(c.Request) {
 			handler(c)
 			return
 		}
