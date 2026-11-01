@@ -1,7 +1,10 @@
-name: PR Test
+name: Test
 
 on:
   pull_request:
+  push:
+    branches:
+      - master
 
 jobs:
   go-test:
@@ -27,6 +30,7 @@ jobs:
           persist-credentials: false
 
       - name: Check for Go/frontend changes
+        if: github.event_name == 'pull_request'
         id: changes
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -71,6 +75,7 @@ jobs:
           persist-credentials: false
 
       - name: Check for app/component changes
+        if: github.event_name == 'pull_request'
         id: changes
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -125,6 +130,7 @@ jobs:
           persist-credentials: false
 
       - name: Check for extension/component changes
+        if: github.event_name == 'pull_request'
         id: changes
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
