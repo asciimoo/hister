@@ -14,7 +14,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    timeout-minutes: 45
     permissions:
       contents: read
     defaults:
@@ -59,7 +59,8 @@ jobs:
 
       - name: Run Go tests
         if: steps.changes.outputs.skip != 'true'
-        run: go test -race -cover ./...
+        # Windows race tests can exceed Go's default 10 minute package timeout.
+        run: go test -race -cover -timeout 30m ./...
 
   app-browser-test:
     name: App browser tests
