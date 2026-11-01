@@ -7,9 +7,67 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
+
+func TestManagedPersistenceRoundTrip(t *testing.T) {
+	for _, existing := range []bool{false, true} {
+		for _, longPath := range []bool{false, true} {
+			t.Run(fmt.Sprintf("existing_%t_long_path_%t", existing, longPath), func(t *testing.T) {
+				dir := t.TempDir()
+				if longPath {
+					for range 4 {
+						dir = filepath.Join(dir, strings.Repeat("settings", 10))
+					}
+					if err := os.MkdirAll(dir, 0o700); err != nil {
+						t.Fatal(err)
+					}
+				}
+				t.Setenv("HISTER_DATA_DIR", dir)
+				main := filepath.Join(dir, "config.yml")
+				if err := os.WriteFile(main, []byte("# reference\n"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				path := filepath.Join(dir, "config.web.yml")
+				if existing {
+					if err := os.WriteFile(path, []byte("app:\n  title: Confirmed\n  subtitle: Retained\n"), 0o600); err != nil {
+						t.Fatal(err)
+					}
+				}
+				cfg, _, err := LoadForInspection(main, true)
+				if err != nil {
+					t.Fatal(err)
+				}
+				next, fields := cfg.PrepareDraft([]SettingEdit{{Path: "app.title", Action: "set", Value: json.RawMessage(`"Saved"`)}})
+				if len(fields) != 0 {
+					t.Fatal(fields)
+				}
+				staged, err := next.StageManaged()
+				if err != nil {
+					t.Fatal(err)
+				}
+				err = staged.Commit()
+				closeErr := staged.Close()
+				if err != nil || closeErr != nil {
+					t.Fatalf("save managed settings: %v, cleanup: %v", err, closeErr)
+				}
+				restarted, _, err := LoadForInspection(main, true)
+				if err != nil || restarted.App.Title != "Saved" || restarted.App.Subtitle != cfg.App.Subtitle {
+					t.Fatalf("restart did not retain the saved settings: %v", err)
+				}
+				if !next.SourcesUnchanged() {
+					t.Fatal("successful save immediately conflicts with the managed file")
+				}
+				staging, err := filepath.Glob(filepath.Join(dir, ".config.web-*"))
+				if err != nil || len(staging) != 0 {
+					t.Fatalf("successful save retained temporary files: %v %v", staging, err)
+				}
+			})
+		}
+	}
+}
 
 func TestManagedPersistenceDurabilityFailures(t *testing.T) {
 	for _, existing := range []bool{false, true} {
@@ -41,13 +99,14 @@ func TestManagedPersistenceDurabilityFailures(t *testing.T) {
 					t.Fatal(err)
 				}
 				// Inject a disk durability failure at the filesystem boundary.
+				syncDirectory := staged.syncDirectory
 				calls := 0
 				staged.syncDirectory = func() error {
 					calls++
 					if calls == 1 || recoveryFails {
 						return errors.New("disk sync failed")
 					}
-					return staged.directory.Sync()
+					return syncDirectory()
 				}
 				err = staged.Commit()
 				if err == nil || errors.Is(err, ErrManagedRecovery) != recoveryFails {
@@ -105,6 +164,9 @@ func TestManagedCommitRejectsExternalReplacement(t *testing.T) {
 }
 
 func TestManagedPersistenceRetainsRecoveryCopyOnRestoreFailure(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Chmod does not enforce directory write permissions on Windows")
+	}
 	dir := t.TempDir()
 	t.Setenv("HISTER_DATA_DIR", dir)
 	main := filepath.Join(dir, "config.yml")

@@ -80,7 +80,10 @@ func (c *Config) StageManaged() (*ManagedWrite, error) {
 	if err != nil {
 		return nil, err
 	}
-	w := &ManagedWrite{candidate: c, directory: directory, digest: sha256.Sum256(raw), syncDirectory: directory.Sync}
+	w := &ManagedWrite{
+		candidate: c, directory: directory, digest: sha256.Sum256(raw),
+		syncDirectory: func() error { return syncManagedDirectory(directory) },
+	}
 	w.staged, err = stageManagedFile(c.App.Directory, ".config.web-*", raw)
 	if err == nil && exists {
 		w.previous, err = stageManagedFile(c.App.Directory, ".config.web-recovery-*", previous)
@@ -128,8 +131,8 @@ func stageManagedFile(directory, pattern string, raw []byte) (string, error) {
 	return f.Name(), nil
 }
 
-// Commit atomically replaces the file and synchronizes its directory. If that
-// synchronization fails, restore the previous bytes before returning an error.
+// Commit replaces the file using the platform's persistence barriers. If the
+// directory synchronization fails, restore the previous bytes before returning.
 func (w *ManagedWrite) Commit() error {
 	path := w.candidate.FullPath("config.web.yml")
 	raw, exists, err := readManagedFile(path)
@@ -139,14 +142,14 @@ func (w *ManagedWrite) Commit() error {
 	if managedFileDigest(raw, exists) != w.candidate.composition.managedDigest {
 		return ErrManagedConflict
 	}
-	if err := os.Rename(w.staged, path); err != nil {
+	if err := replaceManagedFile(w.staged, path); err != nil {
 		return err
 	}
 	w.staged = ""
 	if err := w.syncDirectory(); err != nil {
 		var restoreErr error
 		if w.previous != "" {
-			restoreErr = os.Rename(w.previous, path)
+			restoreErr = replaceManagedFile(w.previous, path)
 			if restoreErr == nil {
 				w.previous = ""
 			}
