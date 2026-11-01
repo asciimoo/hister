@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -75,7 +76,7 @@ func TestSettingsSavePersistsAndResets(t *testing.T) {
 			t.Fatalf("persisted configuration differs from running configuration: %v", err)
 		}
 		info, err := os.Stat(filepath.Join(cfg.App.Directory, "config.web.yml"))
-		if err != nil || info.Mode().Perm() != 0o600 {
+		if err != nil || (runtime.GOOS != "windows" && info.Mode().Perm() != 0o600) {
 			t.Fatalf("managed file must be private: %v", err)
 		}
 		session := testutil.ServeHTTP(t, handler, http.MethodGet, "/hister/api/history", nil, map[string]string{"Cookie": cookie.String()})
@@ -465,7 +466,7 @@ func TestSettingsSaveDrainingAndRecovery(t *testing.T) {
 				t.Fatalf("missing staged configuration: %v %v", staging, err)
 			}
 			info, err := os.Stat(staging[0])
-			if err != nil || info.Mode().Perm() != 0o600 {
+			if err != nil || (runtime.GOOS != "windows" && info.Mode().Perm() != 0o600) {
 				t.Fatal("staged secrets are not private")
 			}
 			for _, path := range []string{"/api/settings", "/api/reload", "/api/settings/apply"} {
@@ -495,6 +496,14 @@ func TestSettingsSaveDrainingAndRecovery(t *testing.T) {
 			case "recovery failure":
 				// Both candidate activation and recovery must report unavailable
 				// when the database path becomes unusable during draining.
+				// Close the connection before moving its file on Windows too.
+				db, err := model.DB.DB()
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := db.Close(); err != nil {
+					t.Fatal(err)
+				}
 				database := cfg.FullPath(cfg.Server.Database)
 				if err := os.Rename(database, database+".saved"); err != nil {
 					t.Fatal(err)
@@ -591,17 +600,19 @@ func TestSettingsSaveRejectsInvalidDraftsAndDiskFailures(t *testing.T) {
 			t.Fatalf("invalid save: %d %s", response.Code, response.Body)
 		}
 	}
-	if err := os.Chmod(cfg.App.Directory, 0o500); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chmod(cfg.App.Directory, 0o700) })
-	response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":[{"path":"app.subtitle","action":"set","value":"Cannot stage"}]}`, revision)), headers)
-	if response.Code != http.StatusInternalServerError || !strings.Contains(response.Body.String(), "persistence_failed") {
-		t.Fatalf("staging failure: %d %s", response.Code, response.Body)
-	}
-	if err := os.Chmod(cfg.App.Directory, 0o700); err != nil {
-		t.Fatal(err)
-	}
+	t.Run("staging permission failure", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("Chmod does not enforce directory write permissions on Windows")
+		}
+		if err := os.Chmod(cfg.App.Directory, 0o500); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = os.Chmod(cfg.App.Directory, 0o700) })
+		response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":[{"path":"app.subtitle","action":"set","value":"Cannot stage"}]}`, revision)), headers)
+		if response.Code != http.StatusInternalServerError || !strings.Contains(response.Body.String(), "persistence_failed") {
+			t.Fatalf("staging failure: %d %s", response.Code, response.Body)
+		}
+	})
 	fresh, after := readConfigurationState(t, handler, headers)
 	if fresh != revision || after["app.subtitle"].Value != before["app.subtitle"].Value {
 		t.Fatal("rejected settings changed the runtime")

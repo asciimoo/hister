@@ -18,7 +18,7 @@ import (
 func TestUpdateDocumentsAuthorizationScopeAndVersionMove(t *testing.T) {
 	cfg := testutil.Config(t)
 	cfg.App.UserHandling = true
-	cfg.Server.Database = "file::memory:"
+	cfg.Server.Database = "test.sqlite3"
 	cfg.Server.Address = "127.0.0.1:4433"
 	if err := cfg.UpdateBaseURL("http://127.0.0.1:4433"); err != nil {
 		t.Fatal(err)

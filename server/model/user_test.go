@@ -198,7 +198,7 @@ func TestCreateUserConcurrentDuplicate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Keep the in-memory SQLite database on a single connection.
+	// Serialize inserts through a single test connection.
 	db.SetMaxOpenConns(1)
 	const attempts = 4
 	start := make(chan struct{})

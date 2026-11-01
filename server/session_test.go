@@ -211,7 +211,7 @@ func TestUserSessionStoresAccountReferenceAndRejectsDeletedUser(t *testing.T) {
 	if err := cfg.UpdateBaseURL("http://127.0.0.1:4433"); err != nil {
 		t.Fatal(err)
 	}
-	cfg.Server.Database = "file::memory:"
+	cfg.Server.Database = "test.sqlite3"
 	if err := cfg.SaveRules(); err != nil {
 		t.Fatal(err)
 	}

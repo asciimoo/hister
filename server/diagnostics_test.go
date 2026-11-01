@@ -43,7 +43,7 @@ func TestDiagnosticsRequiresAdminInMultiUserMode(t *testing.T) {
 	cfg := testutil.Config(t)
 	cfg.App.UserHandling = true
 	cfg.App.Public = true
-	cfg.Server.Database = "file::memory:"
+	cfg.Server.Database = "test.sqlite3"
 	if err := cfg.UpdateBaseURL("http://127.0.0.1:4433"); err != nil {
 		t.Fatal(err)
 	}

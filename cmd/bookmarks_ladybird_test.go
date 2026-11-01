@@ -38,6 +38,7 @@ func TestLadybirdBookmarkSourceListURLs(t *testing.T) {
 func TestLadybirdDetectBothRootsAndProfiles(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 
 	want := []string{
 		filepath.Join(home, ".config", "Ladybird", "Bookmarks.json"),

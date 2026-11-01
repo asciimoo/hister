@@ -78,7 +78,7 @@ func TestSaveUserRulesPreservesOmittedRuleGroups(t *testing.T) {
 	if err := cfg.SaveRules(); err != nil {
 		t.Fatal(err)
 	}
-	cfg.Server.Database = "file::memory:"
+	cfg.Server.Database = "test.sqlite3"
 	testutil.InitModelWithConfig(t, cfg)
 	sessionStore = newSessionStore([]byte(strings.Repeat("x", 32)), cfg.BaseURL(""), sessionMaxAge)
 	user := testutil.CreateUser(t, "alice")
@@ -236,7 +236,7 @@ func TestIndexingRulesFilterExtractedDocuments(t *testing.T) {
 				cfg := testutil.Config(t)
 				cfg.App.UserHandling = multiUser
 				cfg.App.AccessToken = "secret"
-				cfg.Server.Database = "file::memory:"
+				cfg.Server.Database = "test.sqlite3"
 				if err := cfg.SaveRules(); err != nil {
 					t.Fatal(err)
 				}
@@ -343,7 +343,7 @@ func TestIndexingRulesFilterExtractedDocuments(t *testing.T) {
 func TestReindexAppliesDocumentOwnerRules(t *testing.T) {
 	cfg := testutil.Config(t)
 	cfg.App.UserHandling = true
-	cfg.Server.Database = "file::memory:"
+	cfg.Server.Database = "test.sqlite3"
 	if err := cfg.SaveRules(); err != nil {
 		t.Fatal(err)
 	}

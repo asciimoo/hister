@@ -51,7 +51,7 @@ func newTokenTestServerWithProfiler(t *testing.T, public, profiler bool) (*confi
 	if err := cfg.SaveRules(); err != nil {
 		t.Fatal(err)
 	}
-	cfg.Server.Database = "file::memory:"
+	cfg.Server.Database = "test.sqlite3"
 	testutil.InitModelWithConfig(t, cfg)
 	sessionStore = newSessionStore([]byte(strings.Repeat("x", 32)), cfg.BaseURL(""), sessionMaxAge)
 	return cfg, registerEndpoints(cfg, newServerTestIndexer(t, cfg))
@@ -137,7 +137,7 @@ func TestMetricsRequiresTokenAndHonorsBasePath(t *testing.T) {
 	cfg := testutil.Config(t)
 	cfg.App.AccessToken = "secret"
 	cfg.Server.Metrics = true
-	cfg.Server.Database = "file::memory:"
+	cfg.Server.Database = "test.sqlite3"
 	if err := cfg.UpdateBaseURL("http://127.0.0.1:4433/hister"); err != nil {
 		t.Fatal(err)
 	}

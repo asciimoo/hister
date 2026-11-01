@@ -22,7 +22,7 @@ func Config(t testing.TB) *config.Config {
 func ModelConfig(t testing.TB) *config.Config {
 	t.Helper()
 	cfg := Config(t)
-	cfg.Server.Database = "file::memory:"
+	cfg.Server.Database = "test.sqlite3"
 	return cfg
 }
 

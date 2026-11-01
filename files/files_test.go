@@ -145,12 +145,13 @@ func TestFindDirUser(t *testing.T) {
 	testutil.InitModel(t)
 
 	u1 := testutil.CreateUser(t, "alice")
+	root := t.TempDir()
 
 	dirs := []*config.Directory{
-		{Path: "/home/alice/docs", User: "alice"},
-		{Path: "/home/charlie/docs", User: "charlie"},
-		{Path: "/shared/docs", User: ""},
-		{Path: "/tmp", User: ""},
+		{Path: filepath.Join(root, "home", "alice", "docs"), User: "alice"},
+		{Path: filepath.Join(root, "home", "charlie", "docs"), User: "charlie"},
+		{Path: filepath.Join(root, "shared", "docs"), User: ""},
+		{Path: filepath.Join(root, "tmp"), User: ""},
 	}
 
 	tests := []struct {
@@ -161,37 +162,37 @@ func TestFindDirUser(t *testing.T) {
 	}{
 		{
 			name:    "file in alice's directory",
-			path:    "/home/alice/docs/file.txt",
+			path:    filepath.Join(root, "home", "alice", "docs", "file.txt"),
 			wantID:  u1.ID,
 			wantErr: false,
 		},
 		{
 			name:    "file in nested alice directory",
-			path:    "/home/alice/docs/subdir/file.txt",
+			path:    filepath.Join(root, "home", "alice", "docs", "subdir", "file.txt"),
 			wantID:  u1.ID,
 			wantErr: false,
 		},
 		{
 			name:    "file in shared global directory",
-			path:    "/shared/docs/file.txt",
+			path:    filepath.Join(root, "shared", "docs", "file.txt"),
 			wantID:  0,
 			wantErr: false,
 		},
 		{
 			name:    "file in tmp global directory",
-			path:    "/tmp/file.txt",
+			path:    filepath.Join(root, "tmp", "file.txt"),
 			wantID:  0,
 			wantErr: false,
 		},
 		{
 			name:    "file not in any directory",
-			path:    "/other/path/file.txt",
+			path:    filepath.Join(root, "other", "path", "file.txt"),
 			wantID:  0,
 			wantErr: false,
 		},
 		{
 			name:    "non-existent user in config",
-			path:    "/home/charlie/docs/file.txt",
+			path:    filepath.Join(root, "home", "charlie", "docs", "file.txt"),
 			wantID:  0,
 			wantErr: true,
 		},

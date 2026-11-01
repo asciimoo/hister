@@ -5,19 +5,33 @@ on:
 
 jobs:
   go-test:
-    name: Go test
-    runs-on: ubuntu-latest
+    name: Go test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
+    env:
+      CGO_ENABLED: '1'
     steps:
       - name: Checkout
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Check for Go/frontend changes
         id: changes
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
-          FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD -- '*.go' 'cmd/testdata/zim/**' 'go.mod' 'go.sum' 'webui/**' 'package.json' 'package-lock.json' '.github/workflows/test.yml')
-          if [ -z "$FILES" ]; then
+          if git diff --quiet "$BASE_SHA" HEAD -- '*.go' 'cmd/testdata/zim/**' 'go.mod' 'go.sum' 'webui/**' 'package.json' 'package-lock.json' '.github/workflows/test.yml'; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"

@@ -9,6 +9,8 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -116,54 +118,63 @@ really really long trunks
 
 const fakeBinaryTimeoutSeconds = 30
 
-// writeFakeBinary creates a shell script that handles both --dump-json and
-// --write-sub/--write-auto-sub invocations, returning its path.
-// The subtitle file is named using the --sub-lang value so that auto-mode
-// tests work correctly with any detected language.
+// Use the test executable as the subprocess fixture on every platform.
+func TestMain(m *testing.M) {
+	if os.Getenv("HISTER_TEST_YTDLP_HELPER") != "1" {
+		os.Exit(m.Run())
+	}
+	if err := runFakeYtdlp(); err != nil {
+		_, _ = fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	os.Exit(0)
+}
+
+func runFakeYtdlp() error {
+	args := os.Args[1:]
+	if slices.Contains(args, "--dump-json") {
+		if counter := os.Getenv("HISTER_TEST_YTDLP_COUNTER"); counter != "" {
+			raw, err := os.ReadFile(counter)
+			if err != nil {
+				return err
+			}
+			count, err := strconv.Atoi(strings.TrimSpace(string(raw)))
+			if err != nil {
+				return err
+			}
+			if err := os.WriteFile(counter, []byte(strconv.Itoa(count+1)), 0o600); err != nil {
+				return err
+			}
+		}
+		_, err := fmt.Fprintln(os.Stdout, os.Getenv("HISTER_TEST_YTDLP_JSON"))
+		return err
+	}
+	if slices.Contains(args, "--write-sub") || slices.Contains(args, "--write-auto-sub") {
+		output, language := "", "en"
+		for i := 0; i+1 < len(args); i++ {
+			switch args[i] {
+			case "-o":
+				output = args[i+1]
+			case "--sub-lang":
+				language = args[i+1]
+			}
+		}
+		if output != "" {
+			return os.WriteFile(output+"."+language+".vtt", []byte(sampleVTT), 0o600)
+		}
+	}
+	return nil
+}
+
 func writeFakeBinary(t *testing.T, jsonContent string) string {
 	t.Helper()
-	dir := t.TempDir()
-	bin := filepath.Join(dir, "fake-yt-dlp")
-	// When called with --dump-json, output JSON.
-	// When called with --write-sub or --write-auto-sub, write a .vtt file
-	// next to the -o path, using the --sub-lang value as the file extension.
-	script := `#!/bin/sh
-case "$*" in
-  *--dump-json*)
-    cat <<'YTDLP_EOF'
-` + jsonContent + `
-YTDLP_EOF
-    ;;
-  *--write-sub*|*--write-auto-sub*)
-    out=""
-    lang="en"
-    next=0
-    lang_next=0
-    for arg in "$@"; do
-      if [ "$next" = 1 ]; then
-        out="$arg"
-        next=0
-      fi
-      if [ "$lang_next" = 1 ]; then
-        lang="$arg"
-        lang_next=0
-      fi
-      case "$arg" in
-        -o) next=1 ;;
-        --sub-lang) lang_next=1 ;;
-      esac
-    done
-    if [ -n "$out" ]; then
-      cat > "${out}.${lang}.vtt" <<'VTT_EOF'
-` + sampleVTT + `
-VTT_EOF
-    fi
-    ;;
-esac
-`
-	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+	bin, err := os.Executable()
+	if err != nil {
 		t.Fatal(err)
 	}
+	t.Setenv("HISTER_TEST_YTDLP_HELPER", "1")
+	t.Setenv("HISTER_TEST_YTDLP_JSON", jsonContent)
+	t.Setenv("HISTER_TEST_YTDLP_COUNTER", "")
 	return bin
 }
 
@@ -210,39 +221,8 @@ func newTestExtractor(t *testing.T, fetchSubs bool) (*YtdlpExtractor, *httptest.
 // writeFakeBinaryCounter creates a fake binary that counts invocations of --dump-json calls.
 func writeFakeBinaryCounter(t *testing.T, jsonContent, counterFile string) string {
 	t.Helper()
-	dir := t.TempDir()
-	bin := filepath.Join(dir, "fake-yt-dlp")
-	script := fmt.Sprintf(`#!/bin/sh
-case "$*" in
-  *--dump-json*)
-    count=$(cat %q)
-    count=$((count + 1))
-    echo "$count" > %q
-    cat <<'YTDLP_EOF'
-%s
-YTDLP_EOF
-    ;;
-  *--write-sub*|*--write-auto-sub*)
-    out=""
-    next=0
-    for arg in "$@"; do
-      if [ "$next" = 1 ]; then
-        out="$arg"
-        next=0
-      fi
-      case "$arg" in -o) next=1 ;; esac
-    done
-    if [ -n "$out" ]; then
-      cat > "${out}.en.vtt" <<'VTT_EOF'
-%s
-VTT_EOF
-    fi
-    ;;
-esac
-`, counterFile, counterFile, jsonContent, sampleVTT)
-	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	bin := writeFakeBinary(t, jsonContent)
+	t.Setenv("HISTER_TEST_YTDLP_COUNTER", counterFile)
 	return bin
 }
 
