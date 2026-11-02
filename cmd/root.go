@@ -404,8 +404,16 @@ func initialize(cmd *cobra.Command) {
 }
 
 func initConfig(cmd *cobra.Command) {
-	filename, explicit := inspectionConfigSource()
-	name, err := config.ResolvePath(filename, explicit)
+	// Runtime startup accepts the first found configuration: a missing --config
+	// or HISTER_CONFIG path falls back to the platform search paths and defaults.
+	// Only the inspection commands require an explicit path to exist.
+	filename := cfgFile
+	if !rootCmd.PersistentFlags().Changed("config") {
+		if envConfig := os.Getenv("HISTER_CONFIG"); envConfig != "" {
+			filename = envConfig
+		}
+	}
+	name, err := config.ResolvePath(filename, false)
 	if err != nil {
 		exit(1, "Failed to initialize config: "+err.Error())
 	}

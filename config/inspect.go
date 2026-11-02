@@ -24,11 +24,11 @@ import (
 func ResolvePath(filename string, explicit bool) (string, error) {
 	paths := []string{filename}
 	if !explicit {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", err
+		// Without a home directory the platform search paths are unavailable;
+		// fall back to defaults and environment variables.
+		if home, err := os.UserHomeDir(); err == nil {
+			paths = append(paths, getConfigSearchPaths(home)...)
 		}
-		paths = append(paths, getConfigSearchPaths(home)...)
 	}
 	for _, name := range paths {
 		info, err := os.Stat(name)
