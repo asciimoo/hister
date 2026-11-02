@@ -83,7 +83,7 @@ LABEL org.opencontainers.image.title="Hister" \
       org.opencontainers.image.source="https://github.com/asciimoo/hister" \
       org.opencontainers.image.licenses="AGPL-3.0"
 
-WORKDIR /hister
+WORKDIR /hister/data
 
 RUN adduser -D -u 65532 hister \
     && mkdir -p /hister/data \
@@ -92,8 +92,7 @@ RUN adduser -D -u 65532 hister \
 COPY --link --from=ytdlp /usr/local/bin/yt-dlp /usr/local/bin/yt-dlp
 COPY --link --from=builder /out/hister /hister/hister
 
-ENV HISTER_DATA_DIR=/hister/data \
-    HISTER_CONFIG=/hister/data/config.yml
+ENV HISTER_DATA_DIR=/hister/data
 
 EXPOSE 4433
 

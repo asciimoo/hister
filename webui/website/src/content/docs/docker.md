@@ -16,6 +16,8 @@ The `latest` image runs as the nonroot user with UID and GID `65532`. The exampl
 Hister can be fully [configured using environment variables](configuration#environment-variables).
 This is the **recommended approach for containerized environments** (Docker, Kubernetes, etc.) as it avoids the need to manage configuration files inside the container or mounted volumes.
 
+The container loads `/hister/data/config.yml` if it exists. Without that file, it uses defaults and environment variables. Relative paths resolve from `/hister/data`. To require a specific config file, set `HISTER_CONFIG` or pass `--config`; a missing file then prevents startup.
+
 If you prefer using a configuration file instead of environment variables, generate a commented reference using Docker:
 
 ```bash

@@ -148,6 +148,24 @@ jobs:
             release.output=type=docker
             release.cache-to=type=gha,mode=max,scope=${{ env.CACHE_SCOPE }},ignore-error=true
 
+      - name: Verify Docker configuration discovery
+        if: github.event_name == 'pull_request'
+        env:
+          HISTER_IMAGE: hister:ci
+        run: |
+          test "$(docker run --rm --network none "$HISTER_IMAGE" config path)" = '(defaults)'
+
+          config_dir="$(mktemp -d)"
+          trap 'rm -rf "$config_dir"' EXIT
+          chmod 0755 "$config_dir"
+          printf 'app:\n  title: Docker configuration test\n' > "$config_dir/config.yml"
+          chmod 0644 "$config_dir/config.yml"
+
+          output="$(docker run --rm --network none \
+            --mount "type=bind,source=$config_dir/config.yml,target=/hister/data/config.yml,readonly" \
+            "$HISTER_IMAGE" config show)"
+          printf '%s\n' "$output" | grep -Fx '  title: Docker configuration test'
+
       - name: Smoke test Compose service
         if: github.event_name == 'pull_request'
         env:
