@@ -8,6 +8,7 @@ async function mockLogin(page: Page, authMode: 'token' | 'user', publicMode = fa
     authMode,
     authenticated: false,
     canWrite: false,
+    canConfigure: false,
     public: publicMode,
     oauthProviders: ['oidc'],
   };
@@ -20,6 +21,7 @@ async function mockLogin(page: Page, authMode: 'token' | 'user', publicMode = fa
     }
     config.authenticated = true;
     config.canWrite = true;
+    config.canConfigure = true;
     await route.fulfill({ json: { username: 'alice' } });
   });
   return config;
@@ -32,6 +34,23 @@ async function signIn(page: Page, mode: 'token' | 'user', password = 'correct') 
 }
 
 for (const mode of ['token', 'user'] as const) {
+  test(`${mode} login protects settings discovery and returns to Settings`, async ({ page }) => {
+    const config = await mockLogin(page, mode, true);
+    let anonymousReads = 0;
+    page.on('request', (request) => {
+      if (!config.authenticated && new URL(request.url()).pathname === '/api/settings')
+        anonymousReads++;
+    });
+    await page.goto('/settings');
+    await expect(page).toHaveURL(
+      (url) => url.pathname === '/auth' && url.searchParams.get('return_to') === '/settings',
+    );
+    expect(anonymousReads).toBe(0);
+    await signIn(page, mode);
+    await expect(page).toHaveURL('http://127.0.0.1:4174/settings');
+    await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
+  });
+
   test(`${mode} login returns to a protected preview after a failed attempt`, async ({ page }) => {
     const config = await mockLogin(page, mode);
     await page.route('**/api/preview?*', async (route) => {
@@ -51,7 +70,7 @@ for (const mode of ['token', 'user'] as const) {
   });
 }
 
-for (const path of ['/add', '/rules', '/profile']) {
+for (const path of ['/add', '/rules', '/profile', '/settings']) {
   test(`public mode login returns to ${path}`, async ({ page }) => {
     await mockLogin(page, 'user', true);
     const target = path + '?source=bookmark#saved-section';
@@ -123,6 +142,7 @@ test('token mode does not send the unavailable profile page through a login loop
 });
 
 for (const [target, expected] of [
+  ['/hister/settings#server', '/hister/settings#server'],
   ['/hister/preview?id=article#saved-section', '/hister/preview?id=article#saved-section'],
   ['/preview', '/hister/'],
   ['/hister-other/preview', '/hister/'],

@@ -266,6 +266,7 @@ func TestOAuthReturnDestination(t *testing.T) {
 		{"preview", "/hister/preview?id=https%3A%2F%2Fexample.com%2Farticle#saved-section", "/preview?id=https%3A%2F%2Fexample.com%2Farticle#saved-section"},
 		{"search", "/hister/?q=needle+label%3Aresearch#results", "/?q=needle+label%3Aresearch#results"},
 		{"rules", "/hister/rules#aliases", "/rules#aliases"},
+		{"settings", "/hister/settings#server", "/settings#server"},
 		{"default", "", "/"},
 		{"external", "https://outside.example/", "/"},
 		{"scheme relative", "//outside.example/", "/"},

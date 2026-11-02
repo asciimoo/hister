@@ -1,0 +1,154 @@
+<script lang="ts">
+  import { Button } from '@hister/components/ui/button';
+  import { Input } from '@hister/components/ui/input';
+  import { Switch } from '@hister/components/ui/switch';
+  import {
+    canEditSetting,
+    sourceLabel,
+    type SettingField,
+    type SettingValue,
+    type SettingEdit,
+  } from '#lib/settings.js';
+
+  let {
+    field,
+    active,
+    edit,
+    errors = [],
+    disabled = false,
+    onEdit,
+  }: {
+    field: SettingField;
+    active: SettingValue;
+    edit?: SettingEdit;
+    errors?: string[];
+    disabled?: boolean;
+    onEdit: (edit: SettingEdit | undefined) => void;
+  } = $props();
+  const editable = $derived(canEditSetting(field, active));
+  const value = $derived(
+    edit?.action === 'set' ? edit.value : edit?.action === 'reset' ? field.default : active.value,
+  );
+  const id = $derived(`setting-${field.path}`);
+  const description = $derived(
+    `${id}-description ${id}-source${errors.length ? ` ${id}-errors` : ''}`,
+  );
+  function set(value: unknown) {
+    onEdit({ path: field.path, action: 'set', value });
+  }
+  function display(value: unknown): string {
+    if (value === undefined || value === null) return 'Not available';
+    if (value === '') return 'Empty';
+    if (typeof value === 'boolean') return value ? 'Enabled' : 'Disabled';
+    return String(value);
+  }
+</script>
+
+<section
+  aria-label={field.label}
+  class="border-border-brand-muted space-y-3 border-b py-5 last:border-0"
+>
+  <div class="flex flex-wrap items-center justify-between gap-2">
+    <label for={id} class="font-space text-text-brand font-bold">{field.label}</label>
+    {#if active.source.locked}<span class="text-text-brand-muted text-xs font-semibold">Locked</span
+      >{:else if !editable}<span class="text-text-brand-muted text-xs">Read only</span>{/if}
+  </div>
+  <p id={`${id}-description`} class="text-text-brand-muted text-sm">{field.description}</p>
+  {#if field.schema.sensitivity !== 'none'}
+    <p {id} class="text-text-brand text-sm">
+      {active.secret_present ? 'Value stored (hidden)' : 'No stored value'}
+    </p>
+  {:else if field.schema.control === 'switch'}
+    <Switch
+      {id}
+      checked={value === true}
+      onCheckedChange={set}
+      disabled={disabled || !editable}
+      aria-describedby={description}
+      aria-invalid={errors.length > 0}
+    />
+  {:else if field.schema.control === 'select'}
+    <select
+      {id}
+      value={String(value ?? '')}
+      onchange={(event) => set(event.currentTarget.value)}
+      disabled={disabled || !editable}
+      aria-describedby={description}
+      aria-invalid={errors.length > 0}
+      class="border-brutal-border bg-page-bg text-text-brand w-full border-2 p-2 disabled:opacity-60"
+    >
+      {#each field.schema.choices ?? [] as choice}<option value={choice}
+          >{choice || 'Default'}</option
+        >{/each}
+    </select>
+  {:else if field.schema.control === 'number'}
+    <Input
+      {id}
+      type="number"
+      value={typeof value === 'number' ? value : undefined}
+      min={field.schema.min}
+      max={field.schema.max}
+      step="1"
+      oninput={(event) =>
+        set(event.currentTarget.value === '' ? null : Number(event.currentTarget.value))}
+      disabled={disabled || !editable}
+      aria-describedby={description}
+      aria-invalid={errors.length > 0}
+    />
+  {:else if field.schema.control === 'text'}
+    <Input
+      {id}
+      value={String(value ?? '')}
+      maxlength={field.schema.max_length}
+      oninput={(event) => set(event.currentTarget.value)}
+      disabled={disabled || !editable}
+      aria-describedby={description}
+      aria-invalid={errors.length > 0}
+    />
+  {:else}
+    <p {id} class="text-text-brand text-sm">{display(active.value)}</p>
+  {/if}
+  <div id={`${id}-source`} class="text-text-brand-muted space-y-1 text-xs break-words">
+    <p>
+      Source: {sourceLabel(active.source)}{active.source.name ? ` (${active.source.name})` : ''}
+    </p>
+    {#if edit}<p>
+        Current value: {display(active.value)}. {edit.action === 'reset'
+          ? 'Reset to the inherited value on save.'
+          : 'Unsaved change.'}
+      </p>{/if}
+    {#if active.reason}<p>{active.reason}</p>{/if}
+    {#if active.source.locked && active.source.web_selected}<p>
+        A stored web selection is overridden by this source.
+      </p>{/if}
+    {#if editable}<p>Applies after saving.</p>{/if}
+  </div>
+  {#if errors.length}<div id={`${id}-errors`} class="text-hister-rose text-sm">
+      {#each errors as error}<p>{error}</p>{/each}
+    </div>{/if}
+  {#if editable}
+    <div class="flex flex-wrap gap-2">
+      {#if field.schema.type === 'string' && (!field.schema.choices || field.schema.choices.includes(''))}
+        <Button type="button" variant="outline" size="sm" {disabled} onclick={() => set('')}
+          >Clear {field.label}</Button
+        >
+      {/if}
+      {#if active.source.web_selected}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={disabled || edit?.action === 'reset'}
+          onclick={() => onEdit({ path: field.path, action: 'reset' })}>Reset {field.label}</Button
+        >
+      {/if}
+      {#if edit}<Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          {disabled}
+          onclick={() => onEdit(undefined)}>Undo {field.label}</Button
+        >{/if}
+    </div>
+  {/if}
+</section>

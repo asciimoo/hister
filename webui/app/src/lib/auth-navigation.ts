@@ -12,6 +12,7 @@ const returnPages = new Set([
   '/api-docs',
   '/preview',
   '/extractors',
+  '/settings',
 ]);
 
 export function authReturnPath(target: string | null, basePath = resolve('/')): string {

@@ -1,9 +1,10 @@
 <script lang="ts">
-  import { onMount, tick } from 'svelte';
+  import { onMount, tick, untrack } from 'svelte';
   import { ModeWatcher, setMode } from 'mode-watcher';
   import SiteHeader from '#lib/components/SiteHeader.svelte';
   import { Toaster, toast } from '@hister/components/ui/sonner';
-  import { fetchConfig, logout, resetConfig, type AppConfig } from '#lib/api.js';
+  import { fetchConfig, logout, resetConfig } from '#lib/api.js';
+  import { publicConfig } from '#lib/stores.js';
   import { setFlashMessage, showFlashMessage } from '#lib/flash.js';
   import { getStoredThemePreference } from '#lib/theme.js';
   import { resolve } from '$app/paths';
@@ -11,20 +12,20 @@
 
   let { children } = $props();
 
-  let config = $state<AppConfig | null>(null);
+  const config = $derived($publicConfig);
   const storedThemePreference = getStoredThemePreference();
 
   onMount(() => {
     void showQueuedNotice();
 
-    fetchConfig()
-      .then((c) => {
-        config = c;
-        setMode(
-          storedThemePreference ?? (c.colorScheme === 'automatic' ? 'system' : c.colorScheme),
-        );
-      })
-      .catch(() => {});
+    fetchConfig().catch(() => {});
+  });
+
+  $effect(() => {
+    if (config) {
+      const mode = config.colorScheme === 'automatic' ? 'system' : config.colorScheme;
+      untrack(() => setMode(getStoredThemePreference() ?? mode));
+    }
   });
 
   async function showQueuedNotice() {
@@ -43,7 +44,7 @@
     await logout();
     const isPublic = config?.public;
     resetConfig();
-    config = null;
+    publicConfig.set(null);
     setFlashMessage('You have been logged out.');
     window.location.href = isPublic ? resolve('/') : resolve('auth');
   }

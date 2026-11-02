@@ -1,6 +1,7 @@
 import { resolve } from '$app/paths';
 import type { SearchCapabilities } from '#lib/search-schema.js';
 import { redirectToAuth } from '#lib/auth-navigation.js';
+import { publicConfig } from '#lib/stores.js';
 
 export interface AppConfig {
   basePath?: string;
@@ -16,6 +17,7 @@ export interface AppConfig {
   authenticated: boolean;
   public: boolean;
   canWrite: boolean;
+  canConfigure: boolean;
   historyEnabled: boolean;
   username?: string;
   userId?: number;
@@ -91,6 +93,7 @@ export async function fetchConfig(): Promise<AppConfig> {
       redirectToAuth();
       throw new Error('Authentication required');
     }
+    if (!res.ok) throw new Error('Failed to load configuration', { cause: res.status });
     const tok = res.headers.get('X-CSRF-Token');
     if (tok) _csrf = tok;
     return (await res.json()) as AppConfig;
@@ -99,7 +102,10 @@ export async function fetchConfig(): Promise<AppConfig> {
 
   try {
     const config = await request;
-    if (_configRequest === request) _config = config;
+    if (_configRequest === request) {
+      _config = config;
+      publicConfig.set(config);
+    }
     return config;
   } finally {
     if (_configRequest === request) _configRequest = null;

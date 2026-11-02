@@ -719,8 +719,9 @@ app:
 ```
 
 The examples reflect your installed version. Defaults can change after an upgrade. Existing
-active configuration files keep their meaning; comment out or remove a selected key to use
-its default again, unless an environment variable or command line flag overrides it.
+active configuration files keep their meaning. To hand an editable setting to the web editor,
+comment out or remove that key and reload Hister. A stored web selection then takes effect,
+or the default if no web selection exists. Environment variables and startup flags still take precedence.
 
 Use `--full` to write all defaults as active YAML values:
 
@@ -750,6 +751,25 @@ You can also specify a custom config location using the `--config` flag:
 ```bash
 hister listen --config /path/to/my/config.yml
 ```
+
+## Settings in the Web Interface
+
+Open **Settings** from the navigation menu to change appearance, snippet length, search
+behavior, and log level or format. Administrators can configure multi user instances.
+Token protected instances require signing in; instances without authentication need no login.
+
+Keep one draft across category tabs, then choose **Save and apply**. Saving briefly interrupts
+service and refreshes the interface. Validation errors preserve your draft. If settings changed
+elsewhere or a save response was lost, reload settings and check the active values before retrying.
+
+Each setting shows its source. Explicit values in the main config, environment, or startup
+flags are locked, even when they equal a default. Commented examples do not lock settings.
+**Reset** removes a web selection and restores the inherited value. **Clear** selects an empty
+value. A locked setting can retain a web selection that takes effect when its overriding source is removed.
+
+Web selections persist in `config.web.yml` inside the data directory, including when there is
+no main config file. Saving does not rewrite your main configuration. Other categories and
+connection or authentication settings are currently read only. Stored credentials stay hidden.
 
 ## Reloading a Running Server
 

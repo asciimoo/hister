@@ -67,7 +67,7 @@ func TestFieldCatalogPreservesEditorContract(t *testing.T) {
 		if field.Label == "" || field.Description == "" || field.Category != category {
 			t.Fatalf("incomplete description for %s", field.Path)
 		}
-		if field.Category != "app" {
+		if field.Category != "app" && field.Path != "server.address" {
 			if field.Schema.Type != "unknown" || field.Schema.Sensitivity != "unknown" || field.Default != nil || field.ReadOnlyReason == "" {
 				t.Fatalf("unsupported setting %s gained editing support or exposed defaults", field.Path)
 			}
@@ -112,6 +112,39 @@ func TestFieldCatalogPreservesEditorContract(t *testing.T) {
 	}
 	if fields["app.directory"].ReadOnlyReason == "" || fields["app.log_file"].ReadOnlyReason == "" {
 		t.Fatal("storage locations became editable")
+	}
+}
+
+func TestListenAddressSourceInEditor(t *testing.T) {
+	for _, explicit := range []bool{false, true} {
+		t.Run(map[bool]string{false: "commented", true: "explicit"}[explicit], func(t *testing.T) {
+			dir := t.TempDir()
+			t.Setenv("HISTER_DATA_DIR", dir)
+			filename := filepath.Join(dir, "config.yml")
+			content := "# server:\n#   address: " + DefaultServerAddress + "\n"
+			if explicit {
+				content = "server:\n  address: " + DefaultServerAddress + "\n"
+			}
+			if err := os.WriteFile(filename, []byte(content), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			cfg, _, err := LoadForInspection(filename, true)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, field := range FieldCatalog() {
+				if field.Path != "server.address" {
+					continue
+				}
+				state := cfg.FieldStates(field)[0]
+				if state.Value != DefaultServerAddress || state.Source.Locked != explicit || state.Editable || !field.RequiresConfirmation || field.ReadOnlyReason == "" {
+					t.Fatalf("address must show its source and value without allowing unconfirmed changes: %+v, %+v", field, state)
+				}
+			}
+			if candidate, errors := cfg.PrepareDraft([]SettingEdit{{Path: "server.address", Action: "set", Value: json.RawMessage(`"0.0.0.0:4433"`)}}); candidate != nil || len(errors) == 0 {
+				t.Fatal("address became writable before the confirmation workflow")
+			}
+		})
 	}
 }
 

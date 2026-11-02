@@ -56,6 +56,7 @@ export async function mockAPI(
         authMode: 'none',
         authenticated: true,
         canWrite: options.canWrite ?? true,
+        canConfigure: true,
         historyEnabled: true,
         colorScheme: 'automatic',
         search: {
@@ -72,6 +73,7 @@ export async function mockAPI(
         recent_searches: [{ query: 'svelte' }, { query: 'golang' }],
       },
       '/api/rules': { allow: [], skip: [], priority: [], versioning: [], aliases: {} },
+      '/api/settings': { revision: 'revision-1', fields: [], values: [], pending: null },
       '/api/preview': preview,
       '/api/versions': [],
       '/api/extractors': [

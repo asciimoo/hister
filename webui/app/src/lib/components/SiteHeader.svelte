@@ -43,12 +43,19 @@
   ];
 
   const extensionBrowser = detectExtensionBrowser(navigator.userAgent);
-  const menuItems = extensionBrowser
-    ? [
-        ...secondaryItems,
-        { ...extensionStores[extensionBrowser], color: 'var(--hister-rose)', external: true },
-      ]
-    : secondaryItems;
+  const secondaryMenuItems = $derived(
+    config?.canConfigure
+      ? [{ label: 'Settings', href: 'settings', color: 'var(--hister-indigo)' }, ...secondaryItems]
+      : secondaryItems,
+  );
+  const menuItems = $derived(
+    extensionBrowser
+      ? [
+          ...secondaryMenuItems,
+          { ...extensionStores[extensionBrowser], color: 'var(--hister-rose)', external: true },
+        ]
+      : secondaryMenuItems,
+  );
 
   const menuItem =
     'font-space text-text-brand-muted data-[highlighted]:bg-muted-surface data-[highlighted]:text-text-brand cursor-pointer rounded-none px-3 py-2 text-xs font-semibold tracking-wider uppercase';

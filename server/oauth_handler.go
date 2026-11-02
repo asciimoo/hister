@@ -51,7 +51,7 @@ func authReturnPath(target, prefix string) string {
 	}
 	page := strings.TrimSuffix(strings.TrimPrefix(u.Path, prefix), "/")
 	switch page {
-	case "", "/add", "/rules", "/history", "/profile", "/help", "/about", "/api-docs", "/preview", "/extractors":
+	case "", "/add", "/rules", "/history", "/profile", "/help", "/about", "/api-docs", "/preview", "/extractors", "/settings":
 	default:
 		return home
 	}
