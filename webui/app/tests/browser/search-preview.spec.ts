@@ -1208,30 +1208,22 @@ test('preview details remain available with only header metadata or version hist
   }
 });
 
-test('recent searches explain browser scope and hiding never deletes server history', async ({
-  page,
-}) => {
-  const mutations: string[] = [];
-  page.on('request', (request) => {
-    if (request.url().includes('/api/') && request.method() !== 'GET') {
-      mutations.push(request.url());
-    }
+test('recent searches stay visible and can be rerun without hiding controls', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('deletedSearches', JSON.stringify(['svelte', 'golang']));
   });
   await page.goto('/');
   const recents = page.getByRole('region', { name: 'Recent searches' });
-  await expect(recents).toContainText('Your history remains on the server.');
-  await recents.getByRole('button', { name: 'Hide recent search on this browser: svelte' }).click();
-  await expect(recents.getByRole('button', { name: 'svelte', exact: true })).toHaveCount(0);
+  await expect(recents.getByRole('button', { name: 'svelte', exact: true })).toBeVisible();
   await expect(recents.getByRole('button', { name: 'golang', exact: true })).toBeVisible();
+  await expect(recents.getByRole('button', { name: /hide/i })).toHaveCount(0);
+  await expect(recents).not.toContainText('Hiding searches');
   await page.reload();
+  await expect(recents.getByRole('button', { name: 'svelte', exact: true })).toBeVisible();
   await expect(recents.getByRole('button', { name: 'golang', exact: true })).toBeVisible();
-  await expect(recents.getByRole('button', { name: 'svelte', exact: true })).toHaveCount(0);
-  await recents.getByRole('button', { name: 'Hide all on this browser' }).click();
-  await expect(recents).toHaveCount(0);
-  await page.reload();
-  await expect(page.getByRole('link', { name: 'Browse all indexed pages' })).toBeVisible();
-  await expect(recents).toHaveCount(0);
-  expect(mutations).toEqual([]);
+  await recents.getByRole('button', { name: 'svelte', exact: true }).click();
+  await expect(page).toHaveURL(/\/\?q=svelte$/);
+  await expect(page.getByRole('searchbox')).toHaveValue('svelte');
 });
 
 for (const failure of ['server', 'network'] as const) {

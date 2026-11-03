@@ -1327,25 +1327,6 @@
     inputEl?.focus();
   }
 
-  function hideRecentSearch(q: string) {
-    recentSearches = recentSearches.filter((s) => s !== q);
-    localStorage.setItem(
-      'deletedSearches',
-      JSON.stringify([...JSON.parse(localStorage.getItem('deletedSearches') || '[]'), q]),
-    );
-  }
-
-  function hideAllRecentSearches() {
-    localStorage.setItem(
-      'deletedSearches',
-      JSON.stringify([
-        ...JSON.parse(localStorage.getItem('deletedSearches') || '[]'),
-        ...recentSearches,
-      ]),
-    );
-    recentSearches = [];
-  }
-
   async function loadQueryAliases() {
     if (!config.canWrite) return;
     try {
@@ -1371,15 +1352,7 @@
         historyCount = stats.doc_count ?? 0;
         fileCount = stats.file_count ?? 0;
         statsAvailable = true;
-        recentSearches = [];
-        if (stats.recent_searches) {
-          const deletedSearches: string[] = JSON.parse(
-            localStorage.getItem('deletedSearches') || '[]',
-          );
-          recentSearches = stats.recent_searches
-            .map((s: { query: string }) => s.query)
-            .filter((q: string) => !deletedSearches.includes(q));
-        }
+        recentSearches = (stats.recent_searches ?? []).map((s: { query: string }) => s.query);
       }
     } catch (e) {
       console.log('Failed to retrieve stats', e);
@@ -2832,27 +2805,13 @@
         class="home-recents flex w-full max-w-[900px] shrink-0 flex-col gap-2"
         aria-labelledby="recent-searches-title"
       >
-        <div class="flex flex-wrap items-center justify-between gap-2">
-          <h2
-            id="recent-searches-title"
-            class="font-inter text-text-brand-secondary flex items-center gap-2 text-sm font-semibold"
-          >
-            <History class="text-hister-indigo size-4" />
-            Recent searches
-          </h2>
-          <Button
-            variant="ghost"
-            size="sm"
-            class="font-inter text-text-brand-muted hover:text-hister-rose h-auto cursor-pointer px-2 py-1 text-xs"
-            onclick={hideAllRecentSearches}
-            title="Hide all recent searches on this browser"
-          >
-            Hide all on this browser
-          </Button>
-        </div>
-        <p class="font-inter text-text-brand-muted text-xs">
-          Hiding searches only affects this browser. Your history remains on the server.
-        </p>
+        <h2
+          id="recent-searches-title"
+          class="font-inter text-text-brand-secondary flex items-center gap-2 text-sm font-semibold"
+        >
+          <History class="text-hister-indigo size-4" />
+          Recent searches
+        </h2>
         <div class="flex flex-wrap items-center justify-center gap-2">
           {#each recentSearches.slice(0, 8) as search, i}
             {@const chip = chipColors[i % chipColors.length]}
@@ -2866,15 +2825,6 @@
                 onclick={() => clickChip(search)}
               >
                 {search}
-              </button>
-              <button
-                type="button"
-                class="hover:bg-hister-rose/10 hover:text-hister-rose flex w-8 shrink-0 cursor-pointer items-center justify-center border-l transition-colors {chip.border} {chip.text}"
-                aria-label="Hide recent search on this browser: {search}"
-                title="Hide on this browser"
-                onclick={() => hideRecentSearch(search)}
-              >
-                <X class="size-3.5" />
               </button>
             </div>
           {/each}
