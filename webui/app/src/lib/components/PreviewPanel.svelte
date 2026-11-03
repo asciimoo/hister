@@ -6,6 +6,7 @@
   import { parseIssuePreview, type IssuePreviewData } from '#lib/issue-preview.js';
   import PreviewLoadError from './PreviewLoadError.svelte';
   import { apiFetch } from '#lib/api.js';
+  import { resolve } from '$app/paths';
   import {
     buildPreviewUrl,
     getStoredPreviewDetailsOpen,
@@ -30,6 +31,7 @@
     History,
     MoreVertical,
     ExternalLink,
+    Download,
     Info,
     Video,
   } from '@lucide/svelte';
@@ -382,6 +384,19 @@
     >
       <div class="flow-root max-h-[6.875em] overflow-hidden text-lg leading-snug md:text-3xl">
         <div class="float-right mt-1 ml-2 flex items-center gap-1 text-sm leading-normal">
+          {#if url.startsWith('file://') && documentId}
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              class="text-text-brand-muted hover:text-text-brand"
+              href={`${resolve('/')}api/file?id=${encodeURIComponent(documentId)}`}
+              data-sveltekit-reload
+              title="Download file"
+              aria-label="Download file"
+            >
+              <Download class="size-4" />
+            </Button>
+          {/if}
           <DropdownMenu.Root
             onOpenChange={(open) => {
               if (open) loadExtractors(url);

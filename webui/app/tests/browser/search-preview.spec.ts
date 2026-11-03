@@ -362,7 +362,10 @@ test('code previews keep language choices when entering fullscreen from the side
   await expect(region.getByRole('combobox', { name: 'Code language' })).toHaveValue('plaintext');
 });
 
-test('local file result titles open fullscreen previews', async ({ page }) => {
+test('local file result titles open fullscreen previews with a download action', async ({
+  page,
+  isMobile,
+}) => {
   const file = {
     id: 'local-document-2',
     url: 'file:///home/me/notes.txt',
@@ -399,6 +402,11 @@ test('local file result titles open fullscreen previews', async ({ page }) => {
   await expect(
     rows.first().getByRole('link', { name: preview.title, exact: true }),
   ).toHaveAttribute('href', original);
+  const downloadLink = page.locator('.preview-header').getByRole('link', { name: 'Download file' });
+  if (!isMobile) {
+    await rows.last().getByRole('link', { name: 'Preview', exact: true }).click();
+    await expect(downloadLink).toHaveAttribute('href', '/api/file?id=local-document-2');
+  }
   await rows.last().getByRole('link', { name: file.title, exact: true }).click();
   await expect(page).toHaveURL(
     (url) =>
@@ -411,9 +419,39 @@ test('local file result titles open fullscreen previews', async ({ page }) => {
   await expect(rows).toHaveCount(0);
   expect(downloads).toEqual([]);
 
+  await expect(downloadLink).toHaveAttribute('href', '/api/file?id=local-document-2');
+  await expect(downloadLink).toBeInViewport({ ratio: 1 });
+  await page.screenshot({ path: test.info().outputPath('file-preview-header.png') });
+  const downloadEvent = page.waitForEvent('download');
+  await downloadLink.click();
+  const download = await downloadEvent;
+  expect(download.suggestedFilename()).toBe('notes.txt');
+  const stream = await download.createReadStream();
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) chunks.push(chunk);
+  expect(Buffer.concat(chunks).toString()).toBe('Saved notes');
+  await expect(page.getByRole('heading', { name: file.title, exact: true })).toBeVisible();
+
   await page.goBack();
   await expect(page).toHaveURL(/\/\?q=notes$/);
   await expect(rows).toHaveCount(2);
+});
+
+test('preview headers hide downloads for web pages, remote snapshots, and missing document IDs', async ({
+  page,
+}) => {
+  const filePreview = new URLSearchParams({ id: 'file:///home/me/notes.txt' });
+  for (const path of [
+    previewPath(),
+    previewPath('remote-file://laptop/notes.txt'),
+    `/preview?${filePreview}`,
+  ]) {
+    await page.goto(path);
+    await expect(page.getByText('Saved article content', { exact: true })).toBeVisible();
+    await expect(
+      page.locator('.preview-header').getByRole('link', { name: 'Download file' }),
+    ).toHaveCount(0);
+  }
 });
 
 test.describe('shared preview navigation', () => {
