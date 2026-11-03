@@ -23,6 +23,7 @@
   import { ScrollArea } from '@hister/components/ui/scroll-area';
   import { Button } from '@hister/components/ui/button';
   import * as DropdownMenu from '@hister/components/ui/dropdown-menu';
+  import * as Tooltip from '@hister/components/ui/tooltip';
   import {
     Eye,
     X,
@@ -346,30 +347,50 @@
     <div
       class="border-border-brand-muted flex shrink-0 items-center justify-end gap-1 border-b-[2px] px-2 py-1"
     >
-      {#if onfullscreentoggle}
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          class="text-text-brand-muted hover:text-text-brand"
-          onclick={onfullscreentoggle}
-          title={fullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
-        >
-          {#if fullscreen}
-            <Minimize2 class="size-4" />
-          {:else}
-            <Maximize2 class="size-4" />
-          {/if}
-        </Button>
-      {/if}
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        class="text-text-brand-muted hover:text-text-brand"
-        onclick={onclose}
-        aria-label="Close preview"
-      >
-        <X class="size-4" />
-      </Button>
+      <Tooltip.Provider delayDuration={0}>
+        {#if onfullscreentoggle}
+          <Tooltip.Root>
+            <Tooltip.Trigger onclick={onfullscreentoggle}>
+              {#snippet child({ props })}
+                <Button
+                  {...props}
+                  variant="ghost"
+                  size="icon-sm"
+                  class="text-text-brand-muted hover:text-text-brand"
+                  aria-label={fullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+                >
+                  {#if fullscreen}
+                    <Minimize2 class="size-4" />
+                  {:else}
+                    <Maximize2 class="size-4" />
+                  {/if}
+                </Button>
+              {/snippet}
+            </Tooltip.Trigger>
+            <Tooltip.Content role="tooltip" side="bottom" sideOffset={6}
+              >{fullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}</Tooltip.Content
+            >
+          </Tooltip.Root>
+        {/if}
+        <Tooltip.Root>
+          <Tooltip.Trigger onclick={onclose}>
+            {#snippet child({ props })}
+              <Button
+                {...props}
+                variant="ghost"
+                size="icon-sm"
+                class="text-text-brand-muted hover:text-text-brand"
+                aria-label="Close preview"
+              >
+                <X class="size-4" />
+              </Button>
+            {/snippet}
+          </Tooltip.Trigger>
+          <Tooltip.Content role="tooltip" side="bottom" sideOffset={6}
+            >Close preview</Tooltip.Content
+          >
+        </Tooltip.Root>
+      </Tooltip.Provider>
     </div>
     <div class="flex flex-1 items-center justify-center">
       {#if previewError}
@@ -384,117 +405,176 @@
     >
       <div class="flow-root max-h-[6.875em] overflow-hidden text-lg leading-snug md:text-3xl">
         <div class="float-right mt-1 ml-2 flex items-center gap-1 text-sm leading-normal">
-          {#if url.startsWith('file://') && documentId}
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              class="text-text-brand-muted hover:text-text-brand"
-              href={`${resolve('/')}api/file?id=${encodeURIComponent(documentId)}`}
-              data-sveltekit-reload
-              title="Download file"
-              aria-label="Download file"
-            >
-              <Download class="size-4" />
-            </Button>
-          {/if}
-          <DropdownMenu.Root
-            onOpenChange={(open) => {
-              if (open) loadExtractors(url);
-            }}
-          >
-            <DropdownMenu.Trigger>
-              {#snippet child({ props })}
-                <Button
-                  {...props}
-                  variant="ghost"
-                  size="icon-sm"
-                  class="text-text-brand-muted hover:text-text-brand shrink-0 cursor-pointer"
-                  title="Change extractor"
+          <Tooltip.Provider delayDuration={0}>
+            {#if url.startsWith('file://') && documentId}
+              <Tooltip.Root>
+                <Tooltip.Trigger>
+                  {#snippet child({ props })}
+                    <Button
+                      {...props}
+                      variant="ghost"
+                      size="icon-sm"
+                      class="text-text-brand-muted hover:text-text-brand"
+                      href={`${resolve('/')}api/file?id=${encodeURIComponent(documentId)}`}
+                      data-sveltekit-reload
+                      aria-label="Download file"
+                    >
+                      <Download class="size-4" />
+                    </Button>
+                  {/snippet}
+                </Tooltip.Trigger>
+                <Tooltip.Content role="tooltip" side="bottom" sideOffset={6}
+                  >Download file</Tooltip.Content
                 >
-                  <MoreVertical class="size-4" />
-                </Button>
-              {/snippet}
-            </DropdownMenu.Trigger>
-            <DropdownMenu.Content
-              class="border-brutal-border bg-card-surface w-44 rounded-none border-[3px] p-3 shadow-[4px_4px_0_var(--brutal-shadow)]"
+              </Tooltip.Root>
+            {/if}
+            <DropdownMenu.Root
+              onOpenChange={(open) => {
+                if (open) loadExtractors(url);
+              }}
             >
-              <div class="space-y-2">
-                <p
-                  class="font-outfit text-text-brand-muted mb-1 text-xs font-bold tracking-widest uppercase"
+              <Tooltip.Root>
+                <Tooltip.Trigger>
+                  {#snippet child({ props: tooltipProps })}
+                    <DropdownMenu.Trigger {...tooltipProps}>
+                      {#snippet child({ props })}
+                        <Button
+                          {...props}
+                          variant="ghost"
+                          size="icon-sm"
+                          class="text-text-brand-muted hover:text-text-brand shrink-0 cursor-pointer"
+                          aria-label="Change extractor"
+                        >
+                          <MoreVertical class="size-4" />
+                        </Button>
+                      {/snippet}
+                    </DropdownMenu.Trigger>
+                  {/snippet}
+                </Tooltip.Trigger>
+                <Tooltip.Content role="tooltip" side="bottom" sideOffset={6}
+                  >Change extractor</Tooltip.Content
                 >
-                  Extractor
-                </p>
-                {#if extractorsLoading}
-                  <p class="font-inter text-text-brand-muted text-xs">Loading…</p>
-                {:else if availableExtractors.length}
-                  <DropdownMenu.RadioGroup
-                    value={extractorName || availableExtractors[0].name}
-                    onValueChange={(v) => {
-                      extractorName = v;
-                    }}
+              </Tooltip.Root>
+              <DropdownMenu.Content
+                class="border-brutal-border bg-card-surface w-44 rounded-none border-[3px] p-3 shadow-[4px_4px_0_var(--brutal-shadow)]"
+              >
+                <div class="space-y-2">
+                  <p
+                    class="font-outfit text-text-brand-muted mb-1 text-xs font-bold tracking-widest uppercase"
                   >
-                    {#each availableExtractors as ext, i (ext.name)}
-                      <DropdownMenu.RadioItem value={ext.name}>{ext.name}</DropdownMenu.RadioItem>
-                    {/each}
-                  </DropdownMenu.RadioGroup>
-                {:else}
-                  <p class="font-inter text-text-brand-muted text-xs">No extractors available</p>
-                {/if}
-              </div>
-            </DropdownMenu.Content>
-          </DropdownMenu.Root>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            class="text-text-brand-muted hover:text-text-brand"
-            href={buildPreviewUrl(url, title || hintTitle, viewingVersion?.id, documentId)}
-            target="_blank"
-            rel="noopener noreferrer"
-            title="Open direct preview"
-            aria-label="Open direct preview"
-          >
-            <ExternalLink class="size-4" />
-          </Button>
-          {#if hasDocumentDetails}
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              class={showDocumentDetails
-                ? 'text-hister-teal hover:text-hister-teal'
-                : 'text-text-brand-muted hover:text-text-brand'}
-              onclick={toggleDocumentDetails}
-              title={showDocumentDetails ? 'Hide document details' : 'Show document details'}
-              aria-label={showDocumentDetails ? 'Hide document details' : 'Show document details'}
-              aria-expanded={showDocumentDetails}
-              aria-controls="preview-document-details"
-            >
-              <Info class="size-4" />
-            </Button>
-          {/if}
-          {#if onfullscreentoggle}
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              class="hover:text-text-brand"
-              onclick={onfullscreentoggle}
-              title={fullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
-            >
-              {#if fullscreen}
-                <Minimize2 class="size-4" />
-              {:else}
-                <Maximize2 class="size-4" />
-              {/if}
-            </Button>
-          {/if}
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            class="hover:text-text-brand"
-            onclick={onclose}
-            aria-label="Close preview"
-          >
-            <X class="size-4" />
-          </Button>
+                    Extractor
+                  </p>
+                  {#if extractorsLoading}
+                    <p class="font-inter text-text-brand-muted text-xs">Loading…</p>
+                  {:else if availableExtractors.length}
+                    <DropdownMenu.RadioGroup
+                      value={extractorName || availableExtractors[0].name}
+                      onValueChange={(v) => {
+                        extractorName = v;
+                      }}
+                    >
+                      {#each availableExtractors as ext, i (ext.name)}
+                        <DropdownMenu.RadioItem value={ext.name}>{ext.name}</DropdownMenu.RadioItem>
+                      {/each}
+                    </DropdownMenu.RadioGroup>
+                  {:else}
+                    <p class="font-inter text-text-brand-muted text-xs">No extractors available</p>
+                  {/if}
+                </div>
+              </DropdownMenu.Content>
+            </DropdownMenu.Root>
+            <Tooltip.Root>
+              <Tooltip.Trigger>
+                {#snippet child({ props })}
+                  <Button
+                    {...props}
+                    variant="ghost"
+                    size="icon-sm"
+                    class="text-text-brand-muted hover:text-text-brand"
+                    href={buildPreviewUrl(url, title || hintTitle, viewingVersion?.id, documentId)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="Open direct preview"
+                  >
+                    <ExternalLink class="size-4" />
+                  </Button>
+                {/snippet}
+              </Tooltip.Trigger>
+              <Tooltip.Content role="tooltip" side="bottom" sideOffset={6}
+                >Open direct preview</Tooltip.Content
+              >
+            </Tooltip.Root>
+            {#if hasDocumentDetails}
+              <Tooltip.Root>
+                <Tooltip.Trigger onclick={toggleDocumentDetails}>
+                  {#snippet child({ props })}
+                    <Button
+                      {...props}
+                      variant="ghost"
+                      size="icon-sm"
+                      class={showDocumentDetails
+                        ? 'text-hister-teal hover:text-hister-teal'
+                        : 'text-text-brand-muted hover:text-text-brand'}
+                      aria-label={showDocumentDetails
+                        ? 'Hide document details'
+                        : 'Show document details'}
+                      aria-expanded={showDocumentDetails}
+                      aria-controls="preview-document-details"
+                    >
+                      <Info class="size-4" />
+                    </Button>
+                  {/snippet}
+                </Tooltip.Trigger>
+                <Tooltip.Content role="tooltip" side="bottom" sideOffset={6}
+                  >{showDocumentDetails
+                    ? 'Hide document details'
+                    : 'Show document details'}</Tooltip.Content
+                >
+              </Tooltip.Root>
+            {/if}
+            {#if onfullscreentoggle}
+              <Tooltip.Root>
+                <Tooltip.Trigger onclick={onfullscreentoggle}>
+                  {#snippet child({ props })}
+                    <Button
+                      {...props}
+                      variant="ghost"
+                      size="icon-sm"
+                      class="hover:text-text-brand"
+                      aria-label={fullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+                    >
+                      {#if fullscreen}
+                        <Minimize2 class="size-4" />
+                      {:else}
+                        <Maximize2 class="size-4" />
+                      {/if}
+                    </Button>
+                  {/snippet}
+                </Tooltip.Trigger>
+                <Tooltip.Content role="tooltip" side="bottom" sideOffset={6}
+                  >{fullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}</Tooltip.Content
+                >
+              </Tooltip.Root>
+            {/if}
+            <Tooltip.Root>
+              <Tooltip.Trigger onclick={onclose}>
+                {#snippet child({ props })}
+                  <Button
+                    {...props}
+                    variant="ghost"
+                    size="icon-sm"
+                    class="hover:text-text-brand"
+                    aria-label="Close preview"
+                  >
+                    <X class="size-4" />
+                  </Button>
+                {/snippet}
+              </Tooltip.Trigger>
+              <Tooltip.Content role="tooltip" side="bottom" sideOffset={6}
+                >Close preview</Tooltip.Content
+              >
+            </Tooltip.Root>
+          </Tooltip.Provider>
         </div>
         <h2 class="font-outfit text-text-brand font-bold">
           {#if url.startsWith('remote-file://')}

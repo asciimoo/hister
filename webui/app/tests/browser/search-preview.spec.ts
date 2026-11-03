@@ -968,6 +968,94 @@ test('result metadata is available in preview details instead of the result row'
   ).toContainText('1');
 });
 
+for (const interaction of ['hover', 'keyboard'] as const) {
+  test(`preview header icons show tooltips on ${interaction}`, async ({ page, isMobile }) => {
+    test.skip(isMobile && interaction === 'hover', 'Touch screens do not have hover.');
+    await page.goto(previewPath('file:///notes/article.txt'));
+    const header = page.locator('.preview-header');
+    for (const [role, name] of [
+      ['link', 'Download file'],
+      ['button', 'Change extractor'],
+      ['link', 'Open direct preview'],
+      ['button', 'Show document details'],
+      ['button', 'Close preview'],
+    ] as const) {
+      const control = header.getByRole(role, { name, exact: true });
+      if (interaction === 'hover') {
+        await control.hover();
+      } else {
+        await control.focus();
+        await page.keyboard.press('Shift+Tab');
+        await page.keyboard.press('Tab');
+        await expect(control).toBeFocused();
+      }
+      await expect(page.getByRole('tooltip', { name, exact: true })).toBeVisible();
+      await expect(page.getByRole('tooltip', { name, exact: true })).toBeInViewport({ ratio: 1 });
+      await expect(control).toHaveAccessibleDescription(name);
+      await page.keyboard.press('Escape');
+      await expect(page.getByRole('tooltip')).toHaveCount(0);
+      await page.mouse.move(0, 0);
+    }
+    await header.getByRole('button', { name: 'Show document details', exact: true }).click();
+    const hideDetails = header.getByRole('button', { name: 'Hide document details', exact: true });
+    await hideDetails.press('Tab');
+    await page.keyboard.press('Shift+Tab');
+    await expect(
+      page.getByRole('tooltip', { name: 'Hide document details', exact: true }),
+    ).toBeVisible();
+    await hideDetails.press('Enter');
+    await expect(page.locator('#preview-document-details')).toHaveCount(0);
+    await header.getByRole('button', { name: 'Change extractor', exact: true }).click();
+    await expect(
+      page.getByRole('menuitemradio', { name: 'readability', exact: true }),
+    ).toBeVisible();
+    await expect(page.getByRole('tooltip')).toHaveCount(0);
+  });
+}
+
+test('preview header fullscreen tooltips follow the current view', async ({ page, isMobile }) => {
+  test.skip(isMobile, 'Fullscreen toggle is available on desktop.');
+  await page.goto('/?q=article');
+  for (const name of ['Enter fullscreen', 'Exit fullscreen']) {
+    const toggle = page.getByRole('button', { name, exact: true });
+    await toggle.hover();
+    await expect(page.getByRole('tooltip', { name, exact: true })).toBeVisible();
+    await toggle.click();
+  }
+  await expect(page.getByRole('button', { name: 'Enter fullscreen', exact: true })).toBeVisible();
+});
+
+test('preview header tooltips remain available while loading and after failure', async ({
+  page,
+  isMobile,
+}) => {
+  let finish: () => void = () => {};
+  const pending = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  await page.route('**/api/preview?**', async (route) => {
+    await pending;
+    await route.fulfill({ status: 500 });
+  });
+  await page.goto(isMobile ? previewPath() : '/?q=article');
+  await expect(page.getByRole('status')).toHaveText('Loading…');
+  for (const state of ['loading', 'error']) {
+    if (state === 'error') {
+      finish();
+      await expect(page.getByRole('alert')).toContainText('Could not load this preview.');
+    }
+    const names = isMobile ? ['Close preview'] : ['Enter fullscreen', 'Close preview'];
+    for (const name of names) {
+      const control = page.getByRole('button', { name, exact: true });
+      await control.focus();
+      await page.keyboard.press('Shift+Tab');
+      await page.keyboard.press('Tab');
+      await expect(page.getByRole('tooltip', { name, exact: true })).toBeVisible();
+      await page.keyboard.press('Escape');
+    }
+  }
+});
+
 test('preview header keeps only the title while details retain metadata and content controls', async ({
   page,
   isMobile,
