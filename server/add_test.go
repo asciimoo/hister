@@ -307,7 +307,8 @@ func TestFilePreviewRetainsOtherFormats(t *testing.T) {
 		url, html, want string
 		kind            document.DocType
 	}{
-		{url: "file:///missing/notes.docx", kind: document.Local, want: "Saved\nbody &lt;tag&gt;"},
+		{url: "file:///missing/notes.docx", kind: document.Local, want: `<div class="docx-preview" role="region" aria-label="DOCX preview"><p>Saved<br>body &lt;tag&gt;</p></div>`},
+		{url: "remote-file://laptop/missing/notes.DOCX", kind: document.RemoteFile, html: "<h2>Saved heading</h2><p>Saved <strong>body</strong></p><script>alert(1)</script>", want: `<div class="docx-preview" role="region" aria-label="DOCX preview"><h2>Saved heading</h2><p>Saved <strong>body</strong></p></div>`},
 		{url: "file:///missing/notes.md", kind: document.Local, html: "<p>Saved <strong>body</strong></p><script>alert(1)</script>", want: "<p>Saved <strong>body</strong></p>"},
 		{url: "file:///missing/notes.ORG", kind: document.Local, html: "<p>Saved <strong>body</strong></p>", want: "<p>Saved <strong>body</strong></p>"},
 		{url: "file:///missing/encoded%2Emd", kind: document.Local, want: "Saved\nbody &lt;tag&gt;"},

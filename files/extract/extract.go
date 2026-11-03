@@ -35,7 +35,7 @@ const (
 )
 
 // Result contains only extracted content. HTML files retain their source HTML
-// for the caller's web extraction chain. Rendered Markdown and Org HTML still
+// for the caller's web extraction chain. Rendered Markdown, Org, and DOCX HTML still
 // needs sanitizing before display.
 type Result struct {
 	Format Format

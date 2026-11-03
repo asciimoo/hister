@@ -250,6 +250,7 @@ func (r *Registry) ExtractFile(ctx context.Context, parser *extract.Extractor, n
 		prepared.Title = result.Title
 		prepared.HTML = result.HTML
 	case extract.DOCX:
+		prepared.HTML = result.HTML
 		if prepared.Title == "" {
 			prepared.Title = result.Title
 		}

@@ -65,6 +65,54 @@ test('PDF previews show readable pages without overflowing the panel', async ({
   }
 });
 
+test('DOCX previews preserve formatting and fit the panel in both themes', async ({
+  page,
+  isMobile,
+}) => {
+  await page.route('**/api/preview?*', (route) =>
+    route.fulfill({
+      json: {
+        title: 'Document notes',
+        template: 'docx',
+        content:
+          '<div class="docx-preview" role="region" aria-label="DOCX preview">' +
+          '<h1>Research notes</h1><h2>Findings</h2>' +
+          '<p>First line<br>  Indented\tline</p>' +
+          '<p><strong>Bold</strong>, <em>italic</em>, and <u>underlined</u> text.</p>' +
+          '<p>https://example.com/' +
+          'long-path/'.repeat(40) +
+          '</p></div>',
+      },
+    }),
+  );
+  for (const path of isMobile ? [previewPath()] : ['/?q=example', previewPath()]) {
+    await page.goto(path);
+    const doc = page.getByRole('region', { name: 'DOCX preview' });
+    await expect(doc.getByRole('heading', { name: 'Research notes', level: 1 })).toBeVisible();
+    await expect(doc.getByRole('heading', { name: 'Findings', level: 2 })).toBeVisible();
+    await expect(doc.locator('p').first()).toHaveCSS('white-space', 'pre-wrap');
+    await expect(doc.locator('p').first()).toHaveJSProperty(
+      'innerText',
+      'First line\n  Indented\tline',
+    );
+    await expect(doc.locator('strong')).toHaveCSS('font-weight', '600');
+    await expect(doc.locator('em')).toHaveCSS('font-style', 'italic');
+    for (const width of isMobile ? [375, 320] : [1280]) {
+      await page.setViewportSize({ width, height: 812 });
+      const viewport = page.locator('.preview-panel [data-slot="scroll-area-viewport"]');
+      expect(await viewport.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(
+        1,
+      );
+    }
+    await page.evaluate(() => document.documentElement.classList.remove('dark'));
+    const light = await doc.evaluate((el) => getComputedStyle(el).backgroundColor);
+    await page.screenshot({ path: test.info().outputPath('docx-light.png') });
+    await page.evaluate(() => document.documentElement.classList.add('dark'));
+    await expect(doc).not.toHaveCSS('background-color', light);
+    await page.screenshot({ path: test.info().outputPath('docx-dark.png') });
+  }
+});
+
 test('code previews highlight known syntax and preserve source text safely', async ({ page }) => {
   const source =
     '\n// Saved source\r\nconst html = "<img src=x onerror=alert(1)> &";\n\tconsole.log(html);\r// Old style line ending\n';

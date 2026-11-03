@@ -896,7 +896,8 @@
     min-width: 0;
   }
 
-  .preview-content :global(.pdf-page) {
+  .preview-content :global(.pdf-page),
+  .preview-content :global(.docx-preview) {
     min-width: 0;
     padding: clamp(1rem, 3vw, 2.5rem);
     border: 1px solid var(--border-muted-brand);
@@ -919,13 +920,19 @@
     text-transform: uppercase;
   }
 
-  .preview-content :global(.pdf-page p) {
+  .preview-content :global(.pdf-page p),
+  .preview-content :global(.docx-preview p) {
     margin: 0 0 1em;
     white-space: pre-wrap;
     tab-size: 4;
   }
 
-  .preview-content :global(.pdf-page p:last-child) {
+  .preview-content :global(.pdf-page p:last-child),
+  .preview-content :global(.docx-preview > :last-child) {
     margin-bottom: 0;
+  }
+
+  .preview-content :global(.docx-preview > :first-child) {
+    margin-top: 0;
   }
 </style>

@@ -1,6 +1,7 @@
 package extractor
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -9,6 +10,9 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	docx "github.com/mmonterroca/docxgo/v2"
+	"github.com/mmonterroca/docxgo/v2/domain"
 
 	"github.com/asciimoo/hister/config"
 	"github.com/asciimoo/hister/files/extract"
@@ -214,6 +218,50 @@ func TestExtractFilePreservesDocumentState(t *testing.T) {
 			d.Title, d.Text, d.HTML, d.Metadata = before.Title, before.Text, before.HTML, before.Metadata
 			if !reflect.DeepEqual(*d, before) {
 				t.Fatalf("extraction changed document state: %#v", d)
+			}
+		})
+	}
+}
+
+func TestDOCXFileExtractionAndPreview(t *testing.T) {
+	source := docx.NewDocument()
+	p, err := source.AddParagraph()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := p.SetStyle(domain.StyleIDHeading2); err != nil {
+		t.Fatal(err)
+	}
+	run, err := p.AddRun()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := run.SetText("Saved heading"); err != nil {
+		t.Fatal(err)
+	}
+	var data bytes.Buffer
+	if _, err := source.WriteTo(&data); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		url  string
+		kind document.DocType
+	}{
+		{"file:///missing/report.DOCX", document.Local},
+		{"remote-file://laptop/missing/report.docx", document.RemoteFile},
+	} {
+		t.Run(tc.url, func(t *testing.T) {
+			d := &document.Document{URL: tc.url, Type: tc.kind, Title: "Existing title", HTML: "<p>Old preview</p>"}
+			registry := NewDefaultRegistry()
+			if err := registry.ExtractFile(context.Background(), extract.New(config.PDFParser{}), "report.docx", d, data.Bytes()); err != nil {
+				t.Fatal(err)
+			}
+			if d.Title != "Existing title" || d.Text != "Saved heading" || d.Metadata["type"] != "docx" || d.HTML != "<h2>Saved heading</h2>" {
+				t.Fatalf("DOCX content was not saved correctly: %#v", d)
+			}
+			preview, err := registry.Preview(d, "")
+			if err != nil || preview.Template != "docx" || !strings.Contains(preview.Content, "<h2>Saved heading</h2>") {
+				t.Fatalf("stored DOCX preview = %#v, error = %v", preview, err)
 			}
 		})
 	}

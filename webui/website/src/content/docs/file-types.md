@@ -28,6 +28,8 @@ Click a local file result title to open its full screen preview within Hister.
 
 PDF previews preserve extracted line breaks, indentation, and paragraph spacing. Pages appear separately when page boundaries are available. Previews show saved text, so original images, fonts, and column layouts are not reproduced. Older PDFs gain the improved text layout immediately; import or submit them again to recover page boundaries, or use `hister reindex` for watched local PDFs.
 
+DOCX previews preserve paragraphs, standard headings, and directly applied bold, italic, and underline formatting. Images, tables, list numbering, and original page layouts are not reproduced. Older DOCX files gain paragraph spacing immediately; import them again to recover formatting, or use `hister reindex` for watched local files.
+
 Plain text previews preserve line breaks, blank lines, and indentation. Long lines wrap to fit the preview panel.
 
 Source code and data files with common extensions are highlighted automatically. Use **Code language** to choose a language for unknown file types, correct the detected language, or select **Plain text**. Language choices are remembered for each document in your browser. Select **Automatic** to restore filename detection.
