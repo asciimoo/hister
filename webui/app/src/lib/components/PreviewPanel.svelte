@@ -618,7 +618,7 @@
         </button>
       </div>
     {/if}
-    <ScrollArea class="min-h-0 flex-1">
+    <ScrollArea class="min-h-0 flex-1 pr-2.5">
       {#if showVersions && versionsLoading}
         <p role="status" class="font-inter text-text-brand-muted p-4 text-sm">
           Loading previous versions…
