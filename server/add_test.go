@@ -255,6 +255,50 @@ func TestFilePreviewPreservesPlainText(t *testing.T) {
 	}
 }
 
+func TestPDFPreviewFormatsStoredText(t *testing.T) {
+	cfg := testutil.InitModel(t)
+	idx := newServerTestIndexer(t, cfg)
+	handler := registerEndpoints(cfg, idx)
+	for _, tc := range []struct {
+		url      string
+		kind     document.DocType
+		metadata map[string]any
+	}{
+		{url: "file:///missing/paper.PDF", kind: document.Local},
+		{url: "remote-file://workstation/missing/paper.pdf", kind: document.RemoteFile},
+		{url: "https://example.com/download?id=123", kind: document.Web, metadata: map[string]any{"type": "pdf"}},
+	} {
+		t.Run(tc.url, func(t *testing.T) {
+			d := &document.Document{
+				URL: tc.url, Type: tc.kind, Title: "Saved PDF", Metadata: tc.metadata,
+				Text: "First line\nSecond line\n\nNew paragraph\fNext page <script>alert(1)</script>\f", Processed: true,
+			}
+			if err := idx.AddDocument(d); err != nil {
+				t.Fatal(err)
+			}
+			response := testutil.ServeHTTP(t, handler, http.MethodGet, "/api/preview?url="+url.QueryEscape(d.URL), nil, nil)
+			if response.Code != http.StatusOK {
+				t.Fatalf("preview status = %d: %s", response.Code, response.Body)
+			}
+			var preview types.DocumentPreviewResponse
+			if err := json.Unmarshal(response.Body.Bytes(), &preview); err != nil {
+				t.Fatal(err)
+			}
+			if preview.Template != "pdf" || preview.Title != "Saved PDF" {
+				t.Fatalf("unexpected PDF preview: %#v", preview)
+			}
+			for _, want := range []string{"<p>First line<br>Second line</p>", "<p>New paragraph</p>", "Page 2", "&lt;script&gt;alert(1)&lt;/script&gt;"} {
+				if !strings.Contains(preview.Content, want) {
+					t.Errorf("preview %q does not contain %q", preview.Content, want)
+				}
+			}
+			if strings.Contains(preview.Content, "<script>") {
+				t.Fatal("PDF text became active HTML")
+			}
+		})
+	}
+}
+
 func TestFilePreviewRetainsOtherFormats(t *testing.T) {
 	cfg := testutil.InitModel(t)
 	idx := newServerTestIndexer(t, cfg)
@@ -263,7 +307,6 @@ func TestFilePreviewRetainsOtherFormats(t *testing.T) {
 		url, html, want string
 		kind            document.DocType
 	}{
-		{url: "file:///missing/paper.PDF", kind: document.Local, want: "Saved\nbody &lt;tag&gt;"},
 		{url: "file:///missing/notes.docx", kind: document.Local, want: "Saved\nbody &lt;tag&gt;"},
 		{url: "file:///missing/notes.md", kind: document.Local, html: "<p>Saved <strong>body</strong></p><script>alert(1)</script>", want: "<p>Saved <strong>body</strong></p>"},
 		{url: "file:///missing/notes.ORG", kind: document.Local, html: "<p>Saved <strong>body</strong></p>", want: "<p>Saved <strong>body</strong></p>"},

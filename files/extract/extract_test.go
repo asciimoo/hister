@@ -180,14 +180,64 @@ func TestPDFParserProcess(t *testing.T) {
 	os.Exit(0)
 }
 
-func TestExtractPDFTextLimitsOutput(t *testing.T) {
+func TestRenderPDF(t *testing.T) {
+	for _, tc := range []struct {
+		name, text string
+		contains   []string
+		pages      int
+	}{
+		{
+			name: "saved text without page boundaries",
+			text: "First line\r\n  indented line\r\n \r\nSecond paragraph <img src=x onerror=alert(1)> & text",
+			contains: []string{
+				"<p>First line<br>  indented line</p>",
+				"<p>Second paragraph &lt;img src=x onerror=alert(1)&gt; &amp; text</p>",
+			},
+			pages: 1,
+		},
+		{
+			name: "pages including a blank page and trailing form feed",
+			text: "First page\f\fThird page\f\n",
+			contains: []string{
+				"Page 1", "Page 2", "Page 3", "<p>First page</p>", "<p>Third page</p>",
+				"No extractable text on this page.",
+			},
+			pages: 3,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// Rendering must work from stored text without a source file or parser command.
+			result, err := New(config.PDFParser{Command: "/missing/parser"}).Render(context.Background(), "/missing/paper.PDF", Result{Text: tc.text, HTML: "<script>untrusted()</script>"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if result.Template != "pdf" || strings.Count(result.Content, `class="pdf-page"`) != tc.pages {
+				t.Fatalf("unexpected PDF preview: %#v", result)
+			}
+			for _, want := range tc.contains {
+				if !strings.Contains(result.Content, want) {
+					t.Errorf("preview %q does not contain %q", result.Content, want)
+				}
+			}
+			if strings.ContainsAny(result.Content, "\r\f") || strings.Contains(result.Content, "<img") || strings.Contains(result.Content, "<script") {
+				t.Fatalf("preview contains unsafe markup or unrendered control characters: %q", result.Content)
+			}
+			if !strings.Contains(tc.text, "\f") && strings.Contains(result.Content, "Page 1") {
+				t.Fatal("preview invented page numbers for previously stored text")
+			}
+		})
+	}
+}
+
+func TestExtractPDFPreservesPagesAndLimitsOutput(t *testing.T) {
 	for _, tc := range []struct {
 		name, text string
 		pages      int
 		tooLarge   bool
 	}{
 		{name: "small", text: "Hello", pages: 2},
-		{name: "at limit", text: strings.Repeat("x", (1<<20)-1), pages: 32},
+		{name: "at limit", text: strings.Repeat("x", (1<<20)-2), pages: 32},
+		{name: "page break exceeds limit", text: strings.Repeat("x", (1<<20)-1), pages: 32, tooLarge: true},
 		{name: "large", text: strings.Repeat("x", 1<<20), pages: 33, tooLarge: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -212,13 +262,13 @@ func TestExtractPDFTextLimitsOutput(t *testing.T) {
 				fmt.Fprintf(&data, "%010d 00000 n \n", offset)
 			}
 			fmt.Fprintf(&data, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(objects)+1, xref)
-			text, err := extractPDFText([]byte(data.String()))
+			result, err := New(config.PDFParser{}).Extract(context.Background(), "paper.pdf", []byte(data.String()))
 			if tc.tooLarge {
-				if err == nil || !strings.Contains(err.Error(), "32 MiB") {
-					t.Fatalf("oversized PDF produced %d text bytes and error %v", len(text), err)
+				if !errors.Is(err, ErrExtractedContentTooLarge) || result != (Result{}) {
+					t.Fatalf("oversized PDF produced %d text bytes and error %v", len(result.Text), err)
 				}
-			} else if err != nil || text != strings.Repeat("\n"+tc.text, tc.pages) {
-				t.Fatalf("PDF text length = %d, error = %v", len(text), err)
+			} else if err != nil || result.Text != strings.Repeat("\n"+tc.text+"\f", tc.pages) {
+				t.Fatalf("PDF text length = %d, error = %v", len(result.Text), err)
 			}
 		})
 	}

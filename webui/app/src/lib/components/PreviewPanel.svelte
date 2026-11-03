@@ -889,4 +889,43 @@
   .preview-panel-connected .preview-header {
     background: var(--card-surface);
   }
+
+  .preview-content :global(.pdf-preview) {
+    display: grid;
+    gap: 1.5rem;
+    min-width: 0;
+  }
+
+  .preview-content :global(.pdf-page) {
+    min-width: 0;
+    padding: clamp(1rem, 3vw, 2.5rem);
+    border: 1px solid var(--border-muted-brand);
+    border-radius: 0.25rem;
+    background: var(--card-surface);
+    color: var(--text-primary-brand);
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: 1rem;
+    line-height: 1.75;
+    overflow-wrap: anywhere;
+  }
+
+  .preview-content :global(.pdf-page-number) {
+    margin: 0 0 1.5rem;
+    color: var(--text-muted-brand);
+    font-family: var(--font-inter);
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .preview-content :global(.pdf-page p) {
+    margin: 0 0 1em;
+    white-space: pre-wrap;
+    tab-size: 4;
+  }
+
+  .preview-content :global(.pdf-page p:last-child) {
+    margin-bottom: 0;
+  }
 </style>

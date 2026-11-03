@@ -352,6 +352,10 @@ func (r *Registry) PreviewContext(ctx context.Context, d *document.Document, nam
 	if err := ctx.Err(); err != nil {
 		return sdk.PreviewResponse{}, err
 	}
+	if name == "" && d.Metadata["type"] == "pdf" {
+		rendered, err := fileRenderer.Render(ctx, "document.pdf", extract.Result{Text: d.Text})
+		return sdk.PreviewResponse{Content: rendered.Content, Template: rendered.Template}, err
+	}
 	if name == "" && (d.Type == document.Local || d.Type == document.RemoteFile) {
 		u, err := url.Parse(d.URL)
 		if err != nil {

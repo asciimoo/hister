@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"html"
 	"os/exec"
 	"path/filepath"
 	"runtime/debug"
@@ -49,6 +50,58 @@ func (p pdfFileType) Prepare(ctx context.Context, d *Result, pdfData []byte) err
 	d.Text = text
 	d.Format = PDF
 	return nil
+}
+
+// Render formats the stored text, including page boundaries when the parser
+// supplied form feeds. It never opens the original PDF or trusts stored HTML.
+func (pdfFileType) Render(ctx context.Context, _ string, content Result) (RenderResult, error) {
+	text := strings.ReplaceAll(content.Text, "\r\n", "\n")
+	text = strings.ReplaceAll(text, "\r", "\n")
+	numbered := strings.Contains(text, "\f")
+	// PDF text tools commonly terminate the final page with a form feed.
+	text = strings.TrimSuffix(strings.TrimRight(text, " \t\n"), "\f")
+	var b strings.Builder
+	b.WriteString(`<div class="pdf-preview" role="region" aria-label="PDF preview">`)
+	page := 0
+	for pageText := range strings.SplitSeq(text, "\f") {
+		if err := ctx.Err(); err != nil {
+			return RenderResult{}, err
+		}
+		page++
+		b.WriteString(`<section class="pdf-page">`)
+		if numbered {
+			fmt.Fprintf(&b, `<h2 class="pdf-page-number">Page %d</h2>`, page)
+		}
+		inParagraph := false
+		for line := range strings.SplitSeq(pageText, "\n") {
+			if strings.TrimSpace(line) == "" {
+				if inParagraph {
+					b.WriteString("</p>")
+					inParagraph = false
+				}
+				continue
+			}
+			if inParagraph {
+				b.WriteString("<br>")
+			} else {
+				b.WriteString("<p>")
+				inParagraph = true
+			}
+			b.WriteString(html.EscapeString(line))
+		}
+		if inParagraph {
+			b.WriteString("</p>")
+		}
+		if strings.TrimSpace(pageText) == "" {
+			b.WriteString("<p>No extractable text on this page.</p>")
+		}
+		b.WriteString("</section>")
+		if b.Len() > MaxContentSize {
+			return RenderResult{}, ErrExtractedContentTooLarge
+		}
+	}
+	b.WriteString("</div>")
+	return RenderResult{Template: "pdf", Content: b.String()}, nil
 }
 
 const maxExternalPDFTextSize = MaxContentSize
@@ -104,7 +157,7 @@ func extractExternalPDFText(ctx context.Context, pdfData []byte, parser config.P
 }
 
 // extractPDFText reads all pages of a PDF from pdfData and returns the
-// concatenated plain text. It recovers from panics in the underlying PDF
+// plain text with a form feed after each page. It recovers from panics in the underlying PDF
 // library and converts them to errors.
 func extractPDFText(pdfData []byte) (text string, err error) {
 	defer func() {
@@ -126,10 +179,11 @@ func extractPDFText(pdfData []byte) (text string, err error) {
 		if err != nil {
 			return "", fmt.Errorf("read pdf page %d: %w", page, err)
 		}
-		if len(text) > MaxContentSize-b.Len() {
+		if len(text)+1 > MaxContentSize-b.Len() {
 			return "", ErrExtractedContentTooLarge
 		}
 		b.WriteString(text)
+		b.WriteByte('\f')
 	}
 	return b.String(), nil
 }

@@ -7,6 +7,64 @@ test.beforeEach(async ({ page }) => {
   await mockAPI(page);
 });
 
+test('PDF previews show readable pages without overflowing the panel', async ({
+  page,
+  isMobile,
+}) => {
+  await page.route('**/api/preview?*', (route) =>
+    route.fulfill({
+      json: {
+        title: 'Research notes',
+        template: 'pdf',
+        content:
+          '<div class="pdf-preview" role="region" aria-label="PDF preview">' +
+          '<section class="pdf-page"><h2 class="pdf-page-number">Page 1</h2>' +
+          '<p>Understanding search<br>  Notes from the reading group</p>' +
+          '<p>Saved PDFs keep their line breaks and paragraph spacing, making longer documents easier to read.</p>' +
+          '<p>&lt;script&gt;alert(1)&lt;/script&gt; &amp; literal text</p></section>' +
+          '<section class="pdf-page"><h2 class="pdf-page-number">Page 2</h2>' +
+          '<p>References<br>https://example.com/' +
+          'long-path/'.repeat(40) +
+          '</p></section></div>',
+      },
+    }),
+  );
+  for (const path of isMobile ? [previewPath()] : ['/?q=example', previewPath()]) {
+    await page.goto(path);
+    const pdf = page.getByRole('region', { name: 'PDF preview' });
+    await expect(pdf.getByRole('heading', { name: 'Page 1' })).toBeVisible();
+    await expect(pdf.getByRole('heading', { name: 'Page 2' })).toBeVisible();
+    await expect(pdf.locator('p').first()).toHaveCSS('white-space', 'pre-wrap');
+    await expect(pdf.locator('p').first()).toHaveJSProperty(
+      'innerText',
+      'Understanding search\n  Notes from the reading group',
+    );
+    await expect(pdf.locator('script')).toHaveCount(0);
+    await expect(pdf).toContainText('<script>alert(1)</script> & literal text');
+    const pages = pdf.locator('.pdf-page');
+    const first = (await pages.nth(0).boundingBox())!;
+    const second = (await pages.nth(1).boundingBox())!;
+    expect(second.y - first.y - first.height).toBeGreaterThanOrEqual(16);
+    for (const width of isMobile ? [375, 320] : [1280]) {
+      await page.setViewportSize({ width, height: 812 });
+      const viewport = page.locator('.preview-panel [data-slot="scroll-area-viewport"]');
+      expect(await viewport.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(
+        1,
+      );
+    }
+    await page.evaluate(() => document.documentElement.classList.remove('dark'));
+    const light = await pages.first().evaluate((el) => getComputedStyle(el).backgroundColor);
+    await page.screenshot({
+      path: test.info().outputPath(`pdf-${path.startsWith('/?') ? 'panel' : 'full'}-light.png`),
+    });
+    await page.evaluate(() => document.documentElement.classList.add('dark'));
+    await expect(pages.first()).not.toHaveCSS('background-color', light);
+    await page.screenshot({
+      path: test.info().outputPath(`pdf-${path.startsWith('/?') ? 'panel' : 'full'}-dark.png`),
+    });
+  }
+});
+
 test('code previews highlight known syntax and preserve source text safely', async ({ page }) => {
   const source =
     '\n// Saved source\r\nconst html = "<img src=x onerror=alert(1)> &";\n\tconsole.log(html);\r// Old style line ending\n';
