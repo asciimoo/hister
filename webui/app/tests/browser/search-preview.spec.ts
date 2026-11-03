@@ -7,6 +7,60 @@ test.beforeEach(async ({ page }) => {
   await mockAPI(page);
 });
 
+test('local file result titles open fullscreen previews', async ({ page }) => {
+  const file = {
+    id: 'local-document-2',
+    url: 'file:///home/me/notes.txt',
+    title: 'Local notes',
+  };
+  await page.routeWebSocket('**/search', (socket) => {
+    socket.onMessage(() =>
+      socket.send(
+        JSON.stringify({
+          documents: [{ id: 'document-1', url: original, title: preview.title }, file],
+          total: 2,
+        }),
+      ),
+    );
+  });
+  await page.route('**/api/preview?*', (route) => {
+    const isFile = new URL(route.request().url()).searchParams.get('url') === file.url;
+    return route.fulfill({
+      json: { ...preview, title: isFile ? file.title : preview.title },
+    });
+  });
+  await page.route('**/api/file?*', (route) =>
+    route.fulfill({
+      headers: { 'Content-Disposition': 'attachment; filename="notes.txt"' },
+      body: 'Saved notes',
+    }),
+  );
+  const downloads: string[] = [];
+  page.on('download', (download) => downloads.push(download.suggestedFilename()));
+
+  await page.goto('/?q=notes');
+  const rows = page.locator('[data-result]');
+  await expect(rows).toHaveCount(2);
+  await expect(
+    rows.first().getByRole('link', { name: preview.title, exact: true }),
+  ).toHaveAttribute('href', original);
+  await rows.last().getByRole('link', { name: file.title, exact: true }).click();
+  await expect(page).toHaveURL(
+    (url) =>
+      url.pathname === '/preview' &&
+      url.searchParams.get('id') === file.url &&
+      url.searchParams.get('document_id') === file.id,
+  );
+  await expect(page.getByRole('heading', { name: file.title, exact: true })).toBeVisible();
+  await expect(page.getByText('Saved article content', { exact: true })).toBeVisible();
+  await expect(rows).toHaveCount(0);
+  expect(downloads).toEqual([]);
+
+  await page.goBack();
+  await expect(page).toHaveURL(/\/\?q=notes$/);
+  await expect(rows).toHaveCount(2);
+});
+
 test.describe('shared preview navigation', () => {
   const documents = [
     { id: 'document-1', url: original, title: preview.title, added: preview.added },

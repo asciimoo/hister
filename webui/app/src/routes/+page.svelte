@@ -1063,9 +1063,8 @@
 
   // Convert file document URLs to browser viewable Hister URLs.
   function fileResultUrl(url: string, documentID?: string, title = ''): string {
-    if (url.startsWith('remote-file://')) return buildPreviewUrl(url, title, undefined, documentID);
-    if (url.startsWith('file://') && documentID)
-      return 'api/file?id=' + encodeURIComponent(documentID);
+    if (url.startsWith('file://') || url.startsWith('remote-file://'))
+      return buildPreviewUrl(url, title, undefined, documentID);
     return url;
   }
 

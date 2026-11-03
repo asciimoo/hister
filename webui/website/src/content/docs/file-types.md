@@ -24,7 +24,7 @@ Org files that read other files through `#+INCLUDE` or `#+SETUPFILE` are rejecte
 
 For directories watched by the server, symbolic links are indexed only when their targets remain inside the configured directory. The configured directory itself may be a symbolic link. Run `hister reindex` after upgrading to remove previously indexed files reached through links outside those directories.
 
-Opening a watched local file from search downloads the original file. Use the preview to read its content within Hister.
+Click a local file result title to open its full screen preview within Hister.
 
 Plain text previews preserve line breaks, blank lines, and indentation. Long lines wrap to fit the preview panel.
 
