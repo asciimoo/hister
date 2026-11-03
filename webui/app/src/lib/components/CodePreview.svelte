@@ -63,7 +63,19 @@
     return (highlighter ??= Promise.all([import('shiki/core'), import('shiki/engine/javascript')])
       .then(([{ createHighlighterCore }, { createJavaScriptRegexEngine }]) =>
         createHighlighterCore({
-          themes: [import('shiki/themes/github-light.mjs'), import('shiki/themes/github-dark.mjs')],
+          themes: [
+            import('shiki/themes/github-light.mjs'),
+            import('shiki/themes/github-dark.mjs').then(({ default: theme }) => ({
+              ...theme,
+              tokenColors: [
+                ...(theme.tokenColors ?? []),
+                {
+                  scope: ['comment', 'punctuation.definition.comment', 'string.comment'],
+                  settings: { foreground: '#9aa4b2' },
+                },
+              ],
+            })),
+          ],
           langs: [],
           engine: createJavaScriptRegexEngine(),
         }),
