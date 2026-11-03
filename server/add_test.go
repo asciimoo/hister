@@ -9,9 +9,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/PuerkitoBio/goquery"
+
 	"github.com/asciimoo/hister/server/document"
 	"github.com/asciimoo/hister/server/indexer"
 	"github.com/asciimoo/hister/server/testutil"
+	"github.com/asciimoo/hister/server/types"
 )
 
 type statusCountingWriter struct {
@@ -194,6 +197,91 @@ func TestServeAddIndexesRemoteFileSnapshot(t *testing.T) {
 	}
 	if got.Updated != 1234 || got.Label != "notes" {
 		t.Errorf("stored metadata = %#v, want updated time and label", got)
+	}
+}
+
+func TestFilePreviewPreservesPlainText(t *testing.T) {
+	cfg := testutil.InitModel(t)
+	idx := newServerTestIndexer(t, cfg)
+	handler := registerEndpoints(cfg, idx)
+	const content = "\nFirst line\n\n\tindented <script>alert(1)</script> & <img src=x onerror=alert(1)>\nLast line\n"
+	for _, tc := range []struct {
+		url  string
+		kind document.DocType
+	}{
+		{"file:///missing/notes.txt", document.Local},
+		{"file:///missing/notes.TXT", document.Local},
+		{"file:///missing/main.go", document.Local},
+		{"file:///missing/notes.unknown", document.Local},
+		{"file:///missing/README", document.Local},
+		{"remote-file://workstation/missing/notes.txt", document.RemoteFile},
+	} {
+		t.Run(tc.url, func(t *testing.T) {
+			// Preview must use the indexed snapshot even when the source is unavailable.
+			d := &document.Document{
+				URL: tc.url, Type: tc.kind,
+				Title: "Notes", Text: content, Processed: true,
+			}
+			if err := idx.AddDocument(d); err != nil {
+				t.Fatal(err)
+			}
+			response := testutil.ServeHTTP(t, handler, http.MethodGet, "/api/preview?url="+url.QueryEscape(d.URL), nil, nil)
+			if response.Code != http.StatusOK {
+				t.Fatalf("preview status = %d: %s", response.Code, response.Body)
+			}
+			var preview types.DocumentPreviewResponse
+			if err := json.Unmarshal(response.Body.Bytes(), &preview); err != nil {
+				t.Fatal(err)
+			}
+			page, err := goquery.NewDocumentFromReader(strings.NewReader(preview.Content))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if pre := page.Find("pre"); pre.Length() != 1 || pre.Text() != content {
+				t.Fatalf("preview does not preserve plain text whitespace: %q", preview.Content)
+			}
+			if page.Find("script, img").Length() != 0 {
+				t.Fatalf("preview rendered text as active HTML: %q", preview.Content)
+			}
+		})
+	}
+}
+
+func TestFilePreviewRetainsOtherFormats(t *testing.T) {
+	cfg := testutil.InitModel(t)
+	idx := newServerTestIndexer(t, cfg)
+	handler := registerEndpoints(cfg, idx)
+	for _, tc := range []struct {
+		url, html, want string
+		kind            document.DocType
+	}{
+		{url: "file:///missing/paper.PDF", kind: document.Local, want: "Saved\nbody &lt;tag&gt;"},
+		{url: "file:///missing/notes.docx", kind: document.Local, want: "Saved\nbody &lt;tag&gt;"},
+		{url: "file:///missing/notes.md", kind: document.Local, html: "<p>Saved <strong>body</strong></p><script>alert(1)</script>", want: "<p>Saved <strong>body</strong></p>"},
+		{url: "file:///missing/notes.ORG", kind: document.Local, html: "<p>Saved <strong>body</strong></p>", want: "<p>Saved <strong>body</strong></p>"},
+		{url: "file:///missing/encoded%2Emd", kind: document.Local, want: "Saved\nbody &lt;tag&gt;"},
+		{url: "https://example.com/notes.txt", kind: document.Web, want: "Saved\nbody &lt;tag&gt;"},
+	} {
+		t.Run(tc.url, func(t *testing.T) {
+			d := &document.Document{
+				URL: tc.url, Type: tc.kind, Title: "Notes",
+				Text: "Saved\nbody <tag>", HTML: tc.html, Processed: true,
+			}
+			if err := idx.AddDocument(d); err != nil {
+				t.Fatal(err)
+			}
+			response := testutil.ServeHTTP(t, handler, http.MethodGet, "/api/preview?url="+url.QueryEscape(d.URL), nil, nil)
+			if response.Code != http.StatusOK {
+				t.Fatalf("preview status = %d: %s", response.Code, response.Body)
+			}
+			var preview types.DocumentPreviewResponse
+			if err := json.Unmarshal(response.Body.Bytes(), &preview); err != nil {
+				t.Fatal(err)
+			}
+			if preview.Content != tc.want {
+				t.Fatalf("preview = %q, want %q", preview.Content, tc.want)
+			}
+		})
 	}
 }
 

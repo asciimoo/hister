@@ -26,6 +26,8 @@ For directories watched by the server, symbolic links are indexed only when thei
 
 Opening a watched local file from search downloads the original file. Use the preview to read its content within Hister.
 
+Plain text previews preserve line breaks, blank lines, and indentation. Long lines wrap to fit the preview panel.
+
 Watched HTML files use the same extractor chain as browser submissions, including Readability and structured metadata extraction, before language detection. Their original HTML is kept for previews, and their file identity is preserved even when the page contains a canonical URL. Run `hister reindex` after upgrading to extract text and correct language detection for previously indexed local HTML files. Existing remote HTML snapshots must be imported again from the source files.
 
 The same handlers process snapshots created with `hister import file`. These imports are stored as remote file documents. The client sends prepared text, metadata, and any HTML preview content to the server.

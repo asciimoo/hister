@@ -1,10 +1,11 @@
-// Package extract parses supplied file bytes without opening source paths or
-// assigning document identity, ownership, or storage state.
+// Package extract parses supplied file bytes and renders stored content without
+// opening source paths or assigning document identity, ownership, or storage state.
 package extract
 
 import (
 	"context"
 	"errors"
+	"html"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -19,6 +20,7 @@ var (
 	ErrBinaryFile               = errors.New("binary file")
 	ErrExtractedContentTooLarge = errors.New("extracted content exceeds 32 MiB")
 	ErrExternalFileReference    = errors.New("file extraction cannot read referenced files")
+	ErrNoRenderer               = errors.New("file type has no preview renderer")
 )
 
 type Format string
@@ -53,6 +55,13 @@ func (r Result) CheckSize() error {
 type fileTypeHandler interface {
 	Match(string) bool
 	Prepare(context.Context, *Result, []byte) error
+}
+
+// Renderer is an optional capability of a file type handler. It renders stored
+// content as safe HTML without reading source files. The filename is available
+// for extension-specific rendering, such as syntax highlighting.
+type Renderer interface {
+	Render(context.Context, string, Result) (string, error)
 }
 
 // Extractor owns parser configuration and can be shared across calls.
@@ -108,6 +117,26 @@ func (e *Extractor) forPath(name string) fileTypeHandler {
 	return plainTextFileType{}
 }
 
+// Render uses the same handler selection as Extract, but only consumes stored
+// content. ErrNoRenderer leaves preview fallback to the caller.
+func (e *Extractor) Render(ctx context.Context, name string, content Result) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	renderer, ok := e.forPath(name).(Renderer)
+	if !ok {
+		return "", ErrNoRenderer
+	}
+	rendered, err := renderer.Render(ctx, name, content)
+	if err != nil {
+		return "", err
+	}
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	return rendered, nil
+}
+
 type plainTextFileType struct{}
 
 func (plainTextFileType) Match(string) bool { return true }
@@ -119,6 +148,10 @@ func (plainTextFileType) Prepare(_ context.Context, result *Result, content []by
 	result.Format = PlainText
 	result.Text = string(content)
 	return nil
+}
+
+func (plainTextFileType) Render(_ context.Context, _ string, content Result) (string, error) {
+	return `<pre style="white-space: pre-wrap"><code>` + html.EscapeString(content.Text) + `</code></pre>`, nil
 }
 
 func hasExtension(path string, exts ...string) bool {

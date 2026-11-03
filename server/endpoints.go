@@ -1595,7 +1595,7 @@ func servePreview(c *webContext) {
 	}
 	var resp sdk.PreviewResponse
 	var err error
-	if doc.HTML == "" {
+	if doc.HTML == "" && doc.Type != document.Local && doc.Type != document.RemoteFile {
 		resp = sdk.PreviewResponse{Content: html.EscapeString(doc.Text)}
 	} else {
 		resp, err = extractor.PreviewContext(c.Request.Context(), doc, extractorName)

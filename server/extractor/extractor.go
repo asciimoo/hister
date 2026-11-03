@@ -57,6 +57,9 @@ var ErrExtractorAbort = errors.New("extractor aborted")
 // value or another result that was not created by a result constructor.
 var ErrInvalidExtractorResult = errors.New("invalid extractor result")
 
+// Rendering only uses stored content, so no PDF parser command is needed.
+var fileRenderer = extract.New(config.PDFParser{})
+
 // ExtractorInfo holds a summary of an extractor's identity and current state.
 type ExtractorInfo struct {
 	Name         string           `json:"name"`
@@ -325,11 +328,11 @@ func (r *Registry) ExtractContext(ctx context.Context, d *document.Document) err
 	return ErrNoExtractor
 }
 
-// Preview returns a rendered preview of the document. When name is empty, the
-// first successful matching preview extractor is used. A name selects the
-// starting extractor, with later matching preview extractors acting as
-// fallbacks. Explicit selection still requires the extractor to be enabled,
-// preview capable, and matched to the document.
+// Preview returns a rendered preview of the document. When name is empty, file
+// type renderers take precedence over the first successful matching preview
+// extractor. A name selects the starting extractor, with later matching preview
+// extractors acting as fallbacks. Explicit selection still requires the extractor
+// to be enabled, preview capable, and matched to the document.
 func Preview(d *document.Document, name string) (sdk.PreviewResponse, error) {
 	return defaultRegistry.Preview(d, name)
 }
@@ -348,6 +351,21 @@ func PreviewContext(ctx context.Context, d *document.Document, name string) (sdk
 func (r *Registry) PreviewContext(ctx context.Context, d *document.Document, name string) (sdk.PreviewResponse, error) {
 	if err := ctx.Err(); err != nil {
 		return sdk.PreviewResponse{}, err
+	}
+	if name == "" && (d.Type == document.Local || d.Type == document.RemoteFile) {
+		u, err := url.Parse(d.URL)
+		if err != nil {
+			return sdk.PreviewResponse{}, err
+		}
+		content, err := fileRenderer.Render(ctx, u.Path, extract.Result{
+			Title: d.Title, Text: d.Text, HTML: d.HTML,
+		})
+		if !errors.Is(err, extract.ErrNoRenderer) {
+			return sdk.PreviewResponse{Content: content}, err
+		}
+		if d.HTML == "" {
+			return sdk.PreviewResponse{Content: stdhtml.EscapeString(d.Text)}, nil
+		}
 	}
 	extractors := r.Extractors()
 	start := 0
