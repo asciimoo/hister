@@ -674,7 +674,10 @@
         </div>
       {:else}
         <div
-          class="preview-content font-inter text-text-brand-secondary prose dark:prose-invert prose-a:text-hister-teal w-full max-w-[60em] p-4 text-sm"
+          class="preview-content font-inter text-text-brand-secondary prose dark:prose-invert prose-a:text-hister-teal w-full p-4 text-sm {template ===
+          'code'
+            ? 'max-w-none'
+            : 'max-w-[60em]'}"
         >
           {#if meta?.videos?.length && showEmbeddedVideos}
             <div class="not-prose mb-6 space-y-4">
