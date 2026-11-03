@@ -9,8 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/PuerkitoBio/goquery"
-
 	"github.com/asciimoo/hister/server/document"
 	"github.com/asciimoo/hister/server/indexer"
 	"github.com/asciimoo/hister/server/testutil"
@@ -206,15 +204,22 @@ func TestFilePreviewPreservesPlainText(t *testing.T) {
 	handler := registerEndpoints(cfg, idx)
 	const content = "\nFirst line\n\n\tindented <script>alert(1)</script> & <img src=x onerror=alert(1)>\nLast line\n"
 	for _, tc := range []struct {
-		url  string
-		kind document.DocType
+		url, syntax string
+		kind        document.DocType
 	}{
-		{"file:///missing/notes.txt", document.Local},
-		{"file:///missing/notes.TXT", document.Local},
-		{"file:///missing/main.go", document.Local},
-		{"file:///missing/notes.unknown", document.Local},
-		{"file:///missing/README", document.Local},
-		{"remote-file://workstation/missing/notes.txt", document.RemoteFile},
+		{"file:///missing/notes.txt", "", document.Local},
+		{"file:///missing/notes.TXT", "", document.Local},
+		{"file:///missing/main.go", "go", document.Local},
+		{"file:///missing/config.JSON", "json", document.Local},
+		{"file:///missing/config.yml", "yaml", document.Local},
+		{"file:///missing/config.toml", "toml", document.Local},
+		{"file:///missing/source%2Epy", "python", document.Local},
+		{"file:///missing/Dockerfile", "dockerfile", document.Local},
+		{"file:///missing/Makefile", "makefile", document.Local},
+		{"file:///missing/notes.unknown", "", document.Local},
+		{"file:///missing/README", "", document.Local},
+		{"remote-file://workstation/missing/notes.txt", "", document.RemoteFile},
+		{"remote-file://workstation/missing/index.ts", "typescript", document.RemoteFile},
 	} {
 		t.Run(tc.url, func(t *testing.T) {
 			// Preview must use the indexed snapshot even when the source is unavailable.
@@ -233,15 +238,18 @@ func TestFilePreviewPreservesPlainText(t *testing.T) {
 			if err := json.Unmarshal(response.Body.Bytes(), &preview); err != nil {
 				t.Fatal(err)
 			}
-			page, err := goquery.NewDocumentFromReader(strings.NewReader(preview.Content))
-			if err != nil {
+			if preview.Template != "code" {
+				t.Fatalf("preview template = %q, want code", preview.Template)
+			}
+			var code struct {
+				Text   string `json:"text"`
+				Syntax string `json:"syntax"`
+			}
+			if err := json.Unmarshal([]byte(preview.Content), &code); err != nil {
 				t.Fatal(err)
 			}
-			if pre := page.Find("pre"); pre.Length() != 1 || pre.Text() != content {
-				t.Fatalf("preview does not preserve plain text whitespace: %q", preview.Content)
-			}
-			if page.Find("script, img").Length() != 0 {
-				t.Fatalf("preview rendered text as active HTML: %q", preview.Content)
+			if code.Text != content || code.Syntax != tc.syntax {
+				t.Fatalf("code preview = %#v, want original text and syntax %q", code, tc.syntax)
 			}
 		})
 	}

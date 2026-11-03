@@ -31,7 +31,8 @@
     "@lucide/svelte": "^1.65.0",
     "@tailwindcss/typography": "^0.5.20",
     "animejs": "^4.5.0",
-    "mode-watcher": "^1.1.0"
+    "mode-watcher": "^1.1.0",
+    "shiki": "^4.5.0"
   },
   "imports": {
     "#lib/*": "./src/lib/*"

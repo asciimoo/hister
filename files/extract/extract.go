@@ -4,8 +4,8 @@ package extract
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
-	"html"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -57,11 +57,17 @@ type fileTypeHandler interface {
 	Prepare(context.Context, *Result, []byte) error
 }
 
+// RenderResult contains safe HTML, or serialized data for the named preview template.
+type RenderResult struct {
+	Content  string
+	Template string
+}
+
 // Renderer is an optional capability of a file type handler. It renders stored
-// content as safe HTML without reading source files. The filename is available
-// for extension-specific rendering, such as syntax highlighting.
+// content without reading source files. The filename is available for
+// extension-specific rendering, such as syntax highlighting.
 type Renderer interface {
-	Render(context.Context, string, Result) (string, error)
+	Render(context.Context, string, Result) (RenderResult, error)
 }
 
 // Extractor owns parser configuration and can be shared across calls.
@@ -119,20 +125,20 @@ func (e *Extractor) forPath(name string) fileTypeHandler {
 
 // Render uses the same handler selection as Extract, but only consumes stored
 // content. ErrNoRenderer leaves preview fallback to the caller.
-func (e *Extractor) Render(ctx context.Context, name string, content Result) (string, error) {
+func (e *Extractor) Render(ctx context.Context, name string, content Result) (RenderResult, error) {
 	if err := ctx.Err(); err != nil {
-		return "", err
+		return RenderResult{}, err
 	}
 	renderer, ok := e.forPath(name).(Renderer)
 	if !ok {
-		return "", ErrNoRenderer
+		return RenderResult{}, ErrNoRenderer
 	}
 	rendered, err := renderer.Render(ctx, name, content)
 	if err != nil {
-		return "", err
+		return RenderResult{}, err
 	}
 	if err := ctx.Err(); err != nil {
-		return "", err
+		return RenderResult{}, err
 	}
 	return rendered, nil
 }
@@ -150,8 +156,40 @@ func (plainTextFileType) Prepare(_ context.Context, result *Result, content []by
 	return nil
 }
 
-func (plainTextFileType) Render(_ context.Context, _ string, content Result) (string, error) {
-	return `<pre style="white-space: pre-wrap"><code>` + html.EscapeString(content.Text) + `</code></pre>`, nil
+func (plainTextFileType) Render(_ context.Context, name string, content Result) (RenderResult, error) {
+	data, err := json.Marshal(struct {
+		Text   string `json:"text"`
+		Syntax string `json:"syntax,omitempty"`
+	}{Text: content.Text, Syntax: fileSyntax(name)})
+	if err != nil {
+		return RenderResult{}, err
+	}
+	return RenderResult{Template: "code", Content: string(data)}, nil
+}
+
+// fileSyntax supplies a hint for the browser's code preview. This is separate
+// from natural language detection and does not inspect or modify source text.
+func fileSyntax(name string) string {
+	switch strings.ToLower(filepath.Base(name)) {
+	case "dockerfile", "containerfile":
+		return "dockerfile"
+	case "makefile", "gnumakefile":
+		return "makefile"
+	}
+	return fileSyntaxExtensions[strings.ToLower(filepath.Ext(name))]
+}
+
+var fileSyntaxExtensions = map[string]string{
+	".c": "c", ".h": "c", ".cc": "cpp", ".cpp": "cpp", ".cxx": "cpp", ".hpp": "cpp",
+	".cs": "csharp", ".css": "css", ".scss": "scss", ".go": "go", ".java": "java",
+	".js": "javascript", ".mjs": "javascript", ".cjs": "javascript", ".jsx": "jsx",
+	".ts": "typescript", ".mts": "typescript", ".cts": "typescript", ".tsx": "tsx",
+	".json": "json", ".jsonc": "jsonc", ".yaml": "yaml", ".yml": "yaml", ".toml": "toml",
+	".xml": "xml", ".svg": "xml", ".ini": "ini", ".sql": "sql",
+	".py": "python", ".pyw": "python", ".rb": "ruby", ".rs": "rust", ".php": "php",
+	".sh": "shellscript", ".bash": "shellscript", ".zsh": "shellscript",
+	".lua": "lua", ".nix": "nix", ".mk": "makefile", ".dockerfile": "dockerfile",
+	".diff": "diff", ".patch": "diff",
 }
 
 func hasExtension(path string, exts ...string) bool {

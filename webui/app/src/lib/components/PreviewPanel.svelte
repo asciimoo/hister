@@ -2,6 +2,7 @@
 <script lang="ts">
   import VideoPreview from './VideoPreview.svelte';
   import IssuePreview from './IssuePreview.svelte';
+  import CodePreview, { parseCodePreview, type CodePreviewData } from './CodePreview.svelte';
   import { parseIssuePreview, type IssuePreviewData } from '#lib/issue-preview.js';
   import PreviewLoadError from './PreviewLoadError.svelte';
   import { apiFetch } from '#lib/api.js';
@@ -65,6 +66,7 @@
   let template = $state('');
   let templateData = $state<any>(null);
   let issueData = $state<IssuePreviewData | null>(null);
+  let codeData = $state<CodePreviewData | null>(null);
   let meta = $state<PreviewMetadata | null>(null);
   let documentDetails = $state<PreviewDocumentDetails | null>(null);
   let added = $state<number | null>(null);
@@ -230,6 +232,7 @@
     template = '';
     templateData = null;
     issueData = null;
+    codeData = null;
     documentDetails = null;
     showEmbeddedVideos = false;
     showVersions = false;
@@ -258,8 +261,9 @@
       template = data.template || '';
       templateData = template === 'video' ? parseTemplateData(data.content) : null;
       issueData = template === 'issue' ? parseIssuePreview(data.content) : null;
+      codeData = template === 'code' ? parseCodePreview(data.content) : null;
       content =
-        template === 'video' || template === 'issue'
+        template === 'video' || template === 'issue' || template === 'code'
           ? ''
           : data.content || '<p>No content available</p>';
       // Always update metadata (server always returns current doc's metadata regardless of version).
@@ -372,7 +376,7 @@
         <span role="status" class="font-inter text-text-brand-muted text-sm">Loading…</span>
       {/if}
     </div>
-  {:else if content || templateData || issueData}
+  {:else if content || templateData || issueData || codeData}
     <div
       class="preview-header border-border-brand-muted flex shrink-0 flex-col gap-0.5 border-b-[2px] px-4 py-2.5"
     >
@@ -724,6 +728,8 @@
             <VideoPreview data={templateData} />
           {:else if template === 'issue' && issueData}
             <IssuePreview data={issueData} />
+          {:else if template === 'code' && codeData}
+            <CodePreview data={codeData} documentKey={documentId || url} />
           {:else}
             {@html content}
           {/if}

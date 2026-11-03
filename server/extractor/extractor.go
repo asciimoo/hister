@@ -357,11 +357,11 @@ func (r *Registry) PreviewContext(ctx context.Context, d *document.Document, nam
 		if err != nil {
 			return sdk.PreviewResponse{}, err
 		}
-		content, err := fileRenderer.Render(ctx, u.Path, extract.Result{
+		rendered, err := fileRenderer.Render(ctx, u.Path, extract.Result{
 			Title: d.Title, Text: d.Text, HTML: d.HTML,
 		})
 		if !errors.Is(err, extract.ErrNoRenderer) {
-			return sdk.PreviewResponse{Content: content}, err
+			return sdk.PreviewResponse{Content: rendered.Content, Template: rendered.Template}, err
 		}
 		if d.HTML == "" {
 			return sdk.PreviewResponse{Content: stdhtml.EscapeString(d.Text)}, nil

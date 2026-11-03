@@ -169,6 +169,24 @@ func TestResultDetailsRendersIssueTemplateAsReadableText(t *testing.T) {
 	}
 }
 
+func TestResultDetailsRendersCodeTemplateAsText(t *testing.T) {
+	m := renderModel()
+	m.DetailsURL = "file:///notes/example.py"
+	m.DetailsPreview = &client.PreviewResponse{
+		Title: "Example", Template: "code",
+		Content: `{"text":"print(\"<tag> & value\")\n\t# comment","syntax":"python"}`,
+	}
+	content := ResultDetailsContent(m)
+	for _, want := range []string{`print("<tag> & value")`, "# comment"} {
+		if !strings.Contains(content, want) {
+			t.Errorf("missing source text %q in %s", want, content)
+		}
+	}
+	if strings.Contains(content, `"syntax"`) || strings.Contains(content, `"text"`) {
+		t.Errorf("code template displayed as JSON: %s", content)
+	}
+}
+
 func TestResultDetailsWrapsDocumentTextToViewport(t *testing.T) {
 	m := renderModel()
 	m.Width = 27

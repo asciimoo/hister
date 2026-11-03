@@ -7,6 +7,231 @@ test.beforeEach(async ({ page }) => {
   await mockAPI(page);
 });
 
+test('code previews highlight known syntax and preserve source text safely', async ({ page }) => {
+  const source =
+    '\n// Saved source\r\nconst html = "<img src=x onerror=alert(1)> &";\n\tconsole.log(html);\r// Old style line ending\n';
+  await page.route('**/api/preview?*', (route) =>
+    route.fulfill({
+      json: {
+        title: 'main.js',
+        template: 'code',
+        content: JSON.stringify({ text: source, syntax: 'javascript' }),
+      },
+    }),
+  );
+  await page.goto(previewPath('file:///missing/main.js'));
+  const code = page.getByRole('region', { name: 'Code preview' });
+  await expect(code.getByRole('combobox', { name: 'Code language' })).toHaveValue('auto');
+  await expect(code.locator('pre code')).toHaveJSProperty('textContent', source);
+  await expect(code.locator('script, img')).toHaveCount(0);
+  await expect(async () => {
+    const colors = await code
+      .locator('pre code span')
+      .evaluateAll((tokens) => [...new Set(tokens.map((token) => getComputedStyle(token).color))]);
+    expect(colors.length).toBeGreaterThan(1);
+  }).toPass();
+  const keyword = code.locator('pre code span').filter({ hasText: /^const$/ });
+  await page.evaluate(() => document.documentElement.classList.remove('dark'));
+  const lightColor = await keyword.evaluate((element) => getComputedStyle(element).color);
+  await page.evaluate(() => document.documentElement.classList.add('dark'));
+  await expect(keyword).not.toHaveCSS('color', lightColor);
+  await expect(code.locator('pre code')).toHaveJSProperty('textContent', source);
+  await page.screenshot({ path: test.info().outputPath('code-preview.png') });
+});
+
+test('code previews remember language overrides per document and display preferences', async ({
+  page,
+}) => {
+  const source = 'const answer = 42;\nconsole.log(answer);\n';
+  await page.route('**/api/preview?*', (route) =>
+    route.fulfill({
+      json: {
+        title: 'Unknown source',
+        template: 'code',
+        content: JSON.stringify({ text: source }),
+      },
+    }),
+  );
+  const first = previewPath('file:///notes/source.unknown');
+  const second = first.replace('document-1', 'document-2');
+  await page.goto(first);
+  const region = page.getByRole('region', { name: 'Code preview' });
+  const language = region.getByRole('combobox', { name: 'Code language' });
+  const code = region.locator('pre code');
+  await expect(code).toHaveJSProperty('textContent', source);
+  await expect(code.locator('.code-token')).toHaveCount(0);
+  await language.selectOption('javascript');
+  await expect(code.locator('.code-token').first()).toBeVisible();
+  await page.reload();
+  await expect(language).toHaveValue('javascript');
+  await expect(code.locator('.code-token').first()).toBeVisible();
+  await region.getByRole('checkbox', { name: 'Wrap lines' }).uncheck();
+  await region.getByRole('checkbox', { name: 'Line numbers' }).check();
+  await expect(region.locator('pre')).toHaveCSS('white-space', 'pre');
+  await expect(region.locator('[data-line-number="2"]')).toBeVisible();
+  expect(
+    await region
+      .locator('[data-line-number="2"]')
+      .evaluate((line) => getComputedStyle(line, '::before').content),
+  ).toBe('"2"');
+  const heights = await region.locator('.code-line').evaluateAll((lines) =>
+    lines.map((line) => ({
+      height: line.getBoundingClientRect().height,
+      expected: parseFloat(getComputedStyle(line).lineHeight),
+    })),
+  );
+  for (const { height, expected } of heights) expect(height).toBeCloseTo(expected, 0);
+  await expect(code).toHaveJSProperty('textContent', source);
+  await region.getByRole('checkbox', { name: 'Highlight syntax' }).uncheck();
+  await expect(code.locator('.code-token')).toHaveCount(0);
+  await page.reload();
+  await expect(region.getByRole('checkbox', { name: 'Highlight syntax' })).not.toBeChecked();
+  await expect(region.getByRole('checkbox', { name: 'Wrap lines' })).not.toBeChecked();
+  await expect(region.getByRole('checkbox', { name: 'Line numbers' })).toBeChecked();
+  await region.getByRole('checkbox', { name: 'Highlight syntax' }).check();
+  await language.selectOption('plaintext');
+  await expect(code.locator('.code-token')).toHaveCount(0);
+  await page.reload();
+  await expect(language).toHaveValue('plaintext');
+  await page.goto(second);
+  await expect(language).toHaveValue('auto');
+  await expect(code.locator('.code-token')).toHaveCount(0);
+  await page.goto(first);
+  await language.selectOption('auto');
+  await page.reload();
+  await expect(language).toHaveValue('auto');
+});
+
+test('code previews keep large files complete without highlighting', async ({ page }) => {
+  for (const source of ['x'.repeat(150 * 1024), 'line\n'.repeat(5001), 'x'.repeat(10001)]) {
+    await page.route('**/api/preview?*', (route) =>
+      route.fulfill({
+        json: {
+          title: 'Large file',
+          template: 'code',
+          content: JSON.stringify({ text: source, syntax: 'javascript' }),
+        },
+      }),
+    );
+    await page.goto(previewPath('file:///notes/large.js'));
+    const region = page.getByRole('region', { name: 'Code preview' });
+    await expect(region.getByRole('status')).toHaveText('Large file. Showing plain text.');
+    await expect(region.locator('pre code')).toHaveJSProperty('textContent', source);
+    await expect(region.locator('.code-token')).toHaveCount(0);
+    await expect(region.getByRole('checkbox', { name: 'Line numbers' })).toBeDisabled();
+  }
+});
+
+test('code previews reject malformed payloads and keep unknown syntax readable', async ({
+  page,
+}) => {
+  for (const content of [
+    '{"text":"<img src=x>"',
+    '{"text":42}',
+    '{"text":"<img src=x>","syntax":{}}',
+  ]) {
+    await page.route('**/api/preview?*', (route) =>
+      route.fulfill({ json: { template: 'code', content } }),
+    );
+    await page.goto(previewPath());
+    await expect(page.getByRole('alert')).toContainText('Could not load this preview.');
+    await expect(page.getByRole('button', { name: 'Retry', exact: true })).toBeVisible();
+    await expect(page.locator('.preview-content img')).toHaveCount(0);
+  }
+  await page.route('**/api/preview?*', (route) =>
+    route.fulfill({
+      json: {
+        template: 'code',
+        content: JSON.stringify({ text: '<img src=x>\n', syntax: '../../unknown' }),
+      },
+    }),
+  );
+  await page.goto(previewPath());
+  const code = page.getByRole('region', { name: 'Code preview' });
+  await expect(code.locator('pre code')).toHaveJSProperty('textContent', '<img src=x>\n');
+  await expect(code.locator('img, .code-token')).toHaveCount(0);
+});
+
+test('code previews stay readable when the highlighter cannot load', async ({ page }) => {
+  const source = 'const answer = 42;\n';
+  await page.route('**/api/preview?*', (route) =>
+    route.fulfill({
+      json: {
+        template: 'code',
+        content: JSON.stringify({ text: source, syntax: 'javascript' }),
+      },
+    }),
+  );
+  await page.route(/shiki.*(?:core|engine|langs)/, (route) => route.abort());
+  await page.goto(previewPath());
+  const region = page.getByRole('region', { name: 'Code preview' });
+  await expect(region.getByRole('status')).toContainText('Highlighting unavailable.');
+  await expect(region.locator('pre code')).toHaveJSProperty('textContent', source);
+  await region.getByRole('combobox', { name: 'Code language' }).selectOption('plaintext');
+  await expect(region.getByRole('status')).toHaveCount(0);
+});
+
+test('code previews ignore a delayed language load after selecting plain text', async ({
+  page,
+}) => {
+  const source = 'const answer = 42;\n';
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let started!: () => void;
+  const loading = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  await page.route(/shiki.*langs.*javascript/, async (route) => {
+    started();
+    await gate;
+    await route.continue();
+  });
+  await page.route('**/api/preview?*', (route) =>
+    route.fulfill({
+      json: {
+        template: 'code',
+        content: JSON.stringify({ text: source, syntax: 'javascript' }),
+      },
+    }),
+  );
+  await page.goto(previewPath());
+  await loading;
+  const region = page.getByRole('region', { name: 'Code preview' });
+  await region.getByRole('combobox', { name: 'Code language' }).selectOption('plaintext');
+  release();
+  await page.waitForLoadState('networkidle');
+  await expect(region.locator('pre code')).toHaveJSProperty('textContent', source);
+  await expect(region.locator('.code-token')).toHaveCount(0);
+});
+
+test('code previews keep language choices when entering fullscreen from the side panel', async ({
+  page,
+  isMobile,
+}) => {
+  test.skip(isMobile, 'The side panel is only available on desktop.');
+  await page.route('**/api/preview?*', (route) =>
+    route.fulfill({
+      json: {
+        title: 'Example',
+        template: 'code',
+        content: JSON.stringify({ text: 'let value = 1;\n', syntax: 'javascript' }),
+      },
+    }),
+  );
+  await page.goto('/?q=example');
+  const region = page.getByRole('region', { name: 'Code preview' });
+  await region.getByRole('combobox', { name: 'Code language' }).selectOption('plaintext');
+  await page.getByRole('button', { name: 'Enter fullscreen', exact: true }).click();
+  await expect(page).toHaveURL(/\/preview\?/);
+  await expect(region.getByRole('combobox', { name: 'Code language' })).toHaveValue('plaintext');
+  await expect(region.locator('.code-token')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
+  await expect(page).toHaveURL(/\/\?q=example$/);
+  await expect(region.getByRole('combobox', { name: 'Code language' })).toHaveValue('plaintext');
+});
+
 test('local file result titles open fullscreen previews', async ({ page }) => {
   const file = {
     id: 'local-document-2',

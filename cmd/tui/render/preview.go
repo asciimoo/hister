@@ -134,6 +134,15 @@ func formatPreviewDate(raw string) string {
 }
 
 func previewPlainText(template, content string) string {
+	if template == "code" {
+		var code struct {
+			Text string `json:"text"`
+		}
+		if err := json.Unmarshal([]byte(content), &code); err != nil {
+			return "Code preview unavailable."
+		}
+		return code.Text
+	}
 	if template == "issue" {
 		return issuePreviewText(content)
 	}

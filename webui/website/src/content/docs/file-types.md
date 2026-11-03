@@ -28,6 +28,10 @@ Click a local file result title to open its full screen preview within Hister.
 
 Plain text previews preserve line breaks, blank lines, and indentation. Long lines wrap to fit the preview panel.
 
+Source code and data files with common extensions are highlighted automatically. Use **Code language** to choose a language for unknown file types, correct the detected language, or select **Plain text**. Language choices are remembered for each document in your browser. Select **Automatic** to restore filename detection.
+
+The **Highlight syntax**, **Wrap lines**, and **Line numbers** controls apply to text previews and are saved in your browser. Colors follow the app's light or dark theme. Large files and very long lines remain readable as plain text without highlighting or line numbers.
+
 Watched HTML files use the same extractor chain as browser submissions, including Readability and structured metadata extraction, before language detection. Their original HTML is kept for previews, and their file identity is preserved even when the page contains a canonical URL. Run `hister reindex` after upgrading to extract text and correct language detection for previously indexed local HTML files. Existing remote HTML snapshots must be imported again from the source files.
 
 The same handlers process snapshots created with `hister import file`. These imports are stored as remote file documents. The client sends prepared text, metadata, and any HTML preview content to the server.
