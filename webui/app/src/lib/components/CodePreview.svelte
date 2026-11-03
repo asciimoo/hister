@@ -203,7 +203,7 @@
       Highlighting unavailable. Showing plain text.
     </p>{/if}
   <pre
-    class="bg-card-surface-muted text-text-brand font-fira m-0 max-w-full overflow-x-auto p-3 text-xs leading-6"
+    class="bg-muted-surface border-border-brand-muted text-text-brand font-fira m-0 max-w-full overflow-x-auto border p-3 text-xs leading-6"
     class:no-wrap={!wrapLines}
     class:numbered={lineNumbers && !large}
     style:--gutter-width={`${String(lines.length).length + 2}ch`}><code
