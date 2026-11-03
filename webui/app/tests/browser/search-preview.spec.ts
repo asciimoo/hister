@@ -61,6 +61,7 @@ test('code preview controls stay compact and accessible while scrolling', async 
     const highlight = region.getByRole('checkbox', { name: 'Highlight syntax' });
     const wrap = region.getByRole('checkbox', { name: 'Wrap lines' });
     const numbers = region.getByRole('checkbox', { name: 'Line numbers' });
+    const copy = region.getByRole('button', { name: 'Copy code' });
     const viewport = page.locator('.preview-panel [data-slot="scroll-area-viewport"]');
     await expect(language).toBeVisible();
     for (const width of isMobile ? [375, 320] : [1280]) {
@@ -70,7 +71,7 @@ test('code preview controls stay compact and accessible while scrolling', async 
       });
       await expect(viewport).toHaveJSProperty('scrollTop', 400);
       const bounds = (await viewport.boundingBox())!;
-      for (const control of [language, highlight, wrap, numbers]) {
+      for (const control of [language, highlight, wrap, numbers, copy]) {
         await expect(control).toBeInViewport({ ratio: 1 });
         const box = (await control.boundingBox())!;
         expect(box.y).toBeGreaterThanOrEqual(bounds.y);
@@ -79,8 +80,8 @@ test('code preview controls stay compact and accessible while scrolling', async 
       }
       if (!isMobile && path === fullscreen) {
         const selector = (await language.boundingBox())!;
-        for (const checkbox of [highlight, wrap, numbers]) {
-          const box = (await checkbox.boundingBox())!;
+        for (const control of [highlight, wrap, numbers, copy]) {
+          const box = (await control.boundingBox())!;
           expect(Math.abs(box.y + box.height / 2 - selector.y - selector.height / 2)).toBeLessThan(
             2,
           );
@@ -99,6 +100,73 @@ test('code preview controls stay compact and accessible while scrolling', async 
       });
     }
   }
+});
+
+test('code previews copy original source independently of display options', async ({
+  page,
+  context,
+}) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  let source = '\n\tconst html = "<tag> & π";  \n\n' + '// long line '.repeat(30) + '\n';
+  await page.route('**/api/preview?*', (route) =>
+    route.fulfill({
+      json: {
+        title: 'Source',
+        template: 'code',
+        content: JSON.stringify({ text: source, syntax: 'javascript' }),
+      },
+    }),
+  );
+  await page.goto(previewPath('file:///notes/source.js'));
+  const region = page.getByRole('region', { name: 'Code preview' });
+  const copy = region.getByRole('button', { name: 'Copy code' });
+  await expect(region.locator('.code-token').first()).toBeVisible();
+  await region.getByRole('checkbox', { name: 'Line numbers' }).check();
+  for (const wrap of [true, false]) {
+    await region.getByRole('checkbox', { name: 'Wrap lines' }).setChecked(wrap);
+    await page.evaluate(() => navigator.clipboard.writeText('previous clipboard content'));
+    await copy.click();
+    await expect(copy).toHaveText('Copied');
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(source);
+    await region.getByRole('combobox', { name: 'Code language' }).selectOption('plaintext');
+  }
+  source = '\n\t' + 'x'.repeat(150 * 1024) + '\n';
+  await page.goto(previewPath('file:///notes/large.txt'));
+  await expect(region.getByRole('status')).toContainText('Large file.');
+  await expect(copy).toHaveText('Copy');
+  await copy.click();
+  await expect(copy).toHaveText('Copied');
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(source);
+});
+
+test('code previews report clipboard failures and allow retry', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  const source = 'const answer = 42;\n';
+  await page.route('**/api/preview?*', (route) =>
+    route.fulfill({ json: { template: 'code', content: JSON.stringify({ text: source }) } }),
+  );
+  await page.goto(previewPath('file:///notes/source.js'));
+  await page.evaluate(() => {
+    const writeText = navigator.clipboard.writeText.bind(navigator.clipboard);
+    navigator.clipboard.writeText = async () => {
+      navigator.clipboard.writeText = writeText;
+      throw new DOMException('Clipboard permission denied', 'NotAllowedError');
+    };
+  });
+  const region = page.getByRole('region', { name: 'Code preview' });
+  const copy = region.getByRole('button', { name: 'Copy code' });
+  await copy.click();
+  await expect(region.getByRole('alert')).toContainText('Could not copy');
+  await expect(copy).toHaveText('Copy');
+  await expect(copy).toBeEnabled();
+  await copy.click();
+  await expect(copy).toHaveText('Copied');
+  await expect(region.getByRole('alert')).toHaveCount(0);
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(source);
+  await page.evaluate(() => Object.defineProperty(navigator, 'clipboard', { value: undefined }));
+  await copy.click();
+  await expect(region.getByRole('alert')).toContainText('copy it manually');
+  await expect(copy).toHaveText('Copy');
 });
 
 test('code previews remember language overrides per document and display preferences', async ({

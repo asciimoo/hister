@@ -87,6 +87,9 @@
 </script>
 
 <script lang="ts">
+  import { Button } from '@hister/components/ui/button';
+  import { Check, Copy } from '@lucide/svelte';
+
   let { data, documentKey }: { data: CodePreviewData; documentKey: string } = $props();
 
   function readPreference(key: string, fallback: string): string {
@@ -112,6 +115,7 @@
   let lineNumbers = $state(readPreference('hister-code-numbers', 'false') === 'true');
   let tokens = $state<ThemedToken[][] | null>(null);
   let failed = $state(false);
+  let copyState = $state<'idle' | 'copying' | 'copied' | 'error'>('idle');
   const languageKey = $derived(`hister-code-language:${documentKey}`);
   const detected = $derived(syntaxes.find((syntax) => syntax.id === data.syntax));
   const active = $derived(
@@ -126,6 +130,24 @@
       lines.some((line) => line.length > maxLineLength),
   );
   const endings = $derived(large ? [] : (data.text.match(/\r\n|\r|\n/g) ?? []));
+
+  async function copyCode() {
+    copyState = 'copying';
+    try {
+      await navigator.clipboard.writeText(data.text);
+      copyState = 'copied';
+    } catch {
+      copyState = 'error';
+    }
+  }
+
+  $effect(() => {
+    if (copyState !== 'copied') return;
+    const timer = setTimeout(() => {
+      copyState = 'idle';
+    }, 2000);
+    return () => clearTimeout(timer);
+  });
 
   $effect(() => {
     const saved = readPreference(languageKey, 'auto');
@@ -200,6 +222,22 @@
         onchange={() => savePreference('hister-code-numbers', String(lineNumbers))}
       /> Line numbers</label
     >
+    <Button
+      variant="ghost"
+      size="sm"
+      class="ml-auto h-7 gap-1.5 px-2 text-xs"
+      aria-label="Copy code"
+      title="Copy original code"
+      disabled={copyState === 'copying'}
+      onclick={copyCode}
+    >
+      {#if copyState === 'copied'}<Check class="size-3.5" />{:else}<Copy class="size-3.5" />{/if}
+      {copyState === 'copied' ? 'Copied' : copyState === 'copying' ? 'Copying…' : 'Copy'}
+    </Button>
+    <span aria-live="polite" class="sr-only">{copyState === 'copied' ? 'Code copied.' : ''}</span>
+    {#if copyState === 'error'}
+      <p role="alert" class="w-full">Could not copy. Select the code and copy it manually.</p>
+    {/if}
   </div>
   {#if large}<p role="status" class="text-text-brand-muted text-xs">
       Large file. Showing plain text.
