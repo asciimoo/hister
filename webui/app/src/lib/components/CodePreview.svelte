@@ -155,24 +155,29 @@
 </script>
 
 <section aria-label="Code preview" class="not-prose min-w-0 space-y-3">
-  <label class="text-text-brand-secondary flex flex-wrap items-center gap-2 text-xs">
-    Code language
-    <select
-      aria-label="Code language"
-      bind:value={selected}
-      disabled={large}
-      onchange={() => savePreference(languageKey, selected)}
-      class="bg-card-surface border-border-brand-muted min-w-0 border px-2 py-1"
-    >
-      <option value="auto">Automatic ({detected?.label ?? 'Plain text'})</option>
-      <option value="plaintext">Plain text</option>
-      {#each syntaxes as syntax}
-        <option value={syntax.id}>{syntax.label}</option>
-      {/each}
-    </select>
-  </label>
-  <div class="text-text-brand-secondary flex flex-wrap gap-x-4 gap-y-2 text-xs">
-    <label class="flex items-center gap-1.5"
+  <div
+    role="group"
+    aria-label="Code display options"
+    class="bg-card-surface border-border-brand-muted text-text-brand-secondary sticky top-0 z-10 flex flex-wrap items-center gap-x-3 gap-y-2 border-b py-2 text-xs"
+  >
+    <label class="max-w-full min-w-0">
+      <span class="sr-only">Code language</span>
+      <select
+        aria-label="Code language"
+        title="Code language"
+        bind:value={selected}
+        disabled={large}
+        onchange={() => savePreference(languageKey, selected)}
+        class="bg-card-surface border-border-brand-muted max-w-full border px-2 py-1"
+      >
+        <option value="auto">Automatic ({detected?.label ?? 'Plain text'})</option>
+        <option value="plaintext">Plain text</option>
+        {#each syntaxes as syntax}
+          <option value={syntax.id}>{syntax.label}</option>
+        {/each}
+      </select>
+    </label>
+    <label class="flex items-center gap-1.5 whitespace-nowrap"
       ><input
         type="checkbox"
         bind:checked={enabled}
@@ -180,14 +185,14 @@
         onchange={() => savePreference('hister-code-highlight', String(enabled))}
       /> Highlight syntax</label
     >
-    <label class="flex items-center gap-1.5"
+    <label class="flex items-center gap-1.5 whitespace-nowrap"
       ><input
         type="checkbox"
         bind:checked={wrapLines}
         onchange={() => savePreference('hister-code-wrap', String(wrapLines))}
       /> Wrap lines</label
     >
-    <label class="flex items-center gap-1.5"
+    <label class="flex items-center gap-1.5 whitespace-nowrap"
       ><input
         type="checkbox"
         bind:checked={lineNumbers}

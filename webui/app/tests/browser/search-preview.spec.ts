@@ -39,6 +39,68 @@ test('code previews highlight known syntax and preserve source text safely', asy
   await page.screenshot({ path: test.info().outputPath('code-preview.png') });
 });
 
+test('code preview controls stay compact and accessible while scrolling', async ({
+  page,
+  isMobile,
+}) => {
+  const source = 'const answer = 42;\n'.repeat(150);
+  await page.route('**/api/preview?*', (route) =>
+    route.fulfill({
+      json: {
+        title: 'Long source',
+        template: 'code',
+        content: JSON.stringify({ text: source, syntax: 'javascript' }),
+      },
+    }),
+  );
+  const fullscreen = previewPath('file:///notes/source.js');
+  for (const path of isMobile ? [fullscreen] : ['/?q=example', fullscreen]) {
+    await page.goto(path);
+    const region = page.getByRole('region', { name: 'Code preview' });
+    const language = region.getByRole('combobox', { name: 'Code language' });
+    const highlight = region.getByRole('checkbox', { name: 'Highlight syntax' });
+    const wrap = region.getByRole('checkbox', { name: 'Wrap lines' });
+    const numbers = region.getByRole('checkbox', { name: 'Line numbers' });
+    const viewport = page.locator('.preview-panel [data-slot="scroll-area-viewport"]');
+    await expect(language).toBeVisible();
+    for (const width of isMobile ? [375, 320] : [1280]) {
+      await page.setViewportSize({ width, height: 800 });
+      await viewport.evaluate((element) => {
+        element.scrollTop = 400;
+      });
+      await expect(viewport).toHaveJSProperty('scrollTop', 400);
+      const bounds = (await viewport.boundingBox())!;
+      for (const control of [language, highlight, wrap, numbers]) {
+        await expect(control).toBeInViewport({ ratio: 1 });
+        const box = (await control.boundingBox())!;
+        expect(box.y).toBeGreaterThanOrEqual(bounds.y);
+        expect(box.x).toBeGreaterThanOrEqual(bounds.x);
+        expect(box.x + box.width).toBeLessThanOrEqual(bounds.x + bounds.width);
+      }
+      if (!isMobile && path === fullscreen) {
+        const selector = (await language.boundingBox())!;
+        for (const checkbox of [highlight, wrap, numbers]) {
+          const box = (await checkbox.boundingBox())!;
+          expect(Math.abs(box.y + box.height / 2 - selector.y - selector.height / 2)).toBeLessThan(
+            2,
+          );
+        }
+      }
+      await wrap.uncheck();
+      await numbers.check();
+      await language.selectOption('plaintext');
+      await expect(region.locator('pre')).toHaveCSS('white-space', 'pre');
+      await expect(region.locator('pre code')).toHaveJSProperty('textContent', source);
+      expect(await viewport.evaluate((element) => element.scrollTop)).toBeGreaterThan(300);
+      await page.screenshot({
+        path: test
+          .info()
+          .outputPath(`code-controls-${path === fullscreen ? 'fullscreen' : 'panel'}-${width}.png`),
+      });
+    }
+  }
+});
+
 test('code previews remember language overrides per document and display preferences', async ({
   page,
 }) => {
