@@ -36,6 +36,8 @@
   const description = $derived(
     `${id}-description${edit ? ` ${id}-status` : ''}${errors.length ? ` ${id}-errors` : ''}`,
   );
+  const controlClass =
+    'border-input bg-background text-text-brand focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 h-10 w-full min-w-0 border px-3 py-2 text-base transition-[color,box-shadow] outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50 md:text-sm';
   function set(value: unknown) {
     onEdit({ path: field.path, action: 'set', value });
   }
@@ -127,7 +129,7 @@
       disabled={disabled || !editable}
       aria-describedby={description}
       aria-invalid={errors.length > 0}
-      class="border-brutal-border bg-page-bg text-text-brand w-full border-2 p-2 disabled:cursor-not-allowed disabled:opacity-60"
+      class={`${controlClass} max-w-xs`}
     >
       {#each field.schema.choices ?? [] as choice}<option value={choice}
           >{choice || 'Default'}</option
@@ -136,6 +138,7 @@
   {:else if field.schema.control === 'number'}
     <Input
       {id}
+      class={`${controlClass} max-w-40`}
       type="number"
       value={typeof value === 'number' ? value : undefined}
       min={field.schema.min}
@@ -150,6 +153,7 @@
   {:else if field.schema.control === 'text'}
     <Input
       {id}
+      class={controlClass}
       value={String(value ?? '')}
       maxlength={field.schema.max_length}
       oninput={(event) => set(event.currentTarget.value)}
