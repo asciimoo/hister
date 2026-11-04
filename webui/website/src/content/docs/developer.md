@@ -108,6 +108,9 @@ permission or replace field validation.
 ### Configuration editing API
 
 `GET /api/settings` returns redacted field state and an opaque revision.
+Field metadata includes a top level `category` and an optional display `group`.
+The backend catalog defines groups and field order; clients preserve that order
+when grouping fields within each category.
 `POST /api/settings/validate` checks a draft without side effects.
 `POST /api/settings/apply` saves and applies ordinary App edits. Both POST
 operations accept `revision` and an `edits` array with explicit `path`, `action`

@@ -4,6 +4,7 @@ import { apiFetch } from '#lib/api.js';
 export interface SettingField {
   path: string;
   category: string;
+  group?: string;
   label: string;
   description: string;
   schema: {
@@ -99,6 +100,26 @@ export const categoryLabels: Record<string, string> = {
   hotkeys: 'Hotkeys',
   sensitive_content_patterns: 'Sensitive content patterns',
 };
+
+export function groupSettings(fields: SettingField[], category: string) {
+  const groups = new Map<string, SettingField[]>();
+  const ungrouped: SettingField[] = [];
+  for (const field of fields) {
+    if (field.category !== category) continue;
+    if (!field.group) {
+      ungrouped.push(field);
+      continue;
+    }
+    const members = groups.get(field.group) ?? [];
+    members.push(field);
+    groups.set(field.group, members);
+  }
+  const result = [...groups].map(([label, fields]) => ({ label, fields }));
+  if (ungrouped.length) {
+    result.push({ label: groups.size ? 'Other settings' : '', fields: ungrouped });
+  }
+  return result;
+}
 
 export function sourceLabel(source: SettingValue['source']): string {
   return (

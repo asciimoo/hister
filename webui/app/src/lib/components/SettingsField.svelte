@@ -51,7 +51,7 @@
 
 <section
   aria-label={field.label}
-  class="border-border-brand mb-4 space-y-3 border-b py-6 last:mb-0 last:border-b-0 {active.source
+  class="border-border-brand mb-2 space-y-3 border-b py-4 last:mb-0 last:border-b-0 {active.source
     .locked
     ? 'border-l-hister-amber/60 bg-hister-amber/10 border-l-2 px-3'
     : !editable

@@ -35,6 +35,7 @@ type SettingSchema struct {
 type FieldMetadata struct {
 	Path                 string        `json:"path"`
 	Category             string        `json:"category"`
+	Group                string        `json:"group,omitempty"`
 	Label                string        `json:"label"`
 	Description          string        `json:"description"`
 	Schema               SettingSchema `json:"schema"`
@@ -227,49 +228,105 @@ func (c *Config) PrepareDraft(edits []SettingEdit, validators ...func(*Config) [
 // Types and safe defaults come from Config and CreateDefaultConfig. Collections
 // are whole settings; extractor option metadata belongs to the extractor registry.
 // Categories without editing support have explicit, redacted file managed entries.
+// Declaration order defines the display order of groups and their fields.
 func FieldCatalog() []FieldMetadata {
+	const (
+		groupAppearance            = "Appearance"
+		groupSearchBehavior        = "Search behavior"
+		groupAccess                = "Access"
+		groupLoggingAndDiagnostics = "Logging and diagnostics"
+		groupStorage               = "Storage"
+		groupConnection            = "Connection"
+		groupAuthentication        = "Authentication"
+		groupRequestLimits         = "Request limits"
+		groupMonitoring            = "Monitoring"
+		groupLanguageAndText       = "Language and text"
+		groupLocalFiles            = "Local files"
+		groupPDFExtraction         = "PDF extraction"
+		groupCrawlBehavior         = "Crawl behavior"
+		groupPageFetching          = "Page fetching"
+		groupRequests              = "Requests"
+		groupEmbeddingService      = "Embedding service"
+		groupDocumentChunks        = "Document chunks"
+		groupDocumentProcessing    = "Document processing"
+	)
 	minSnippet, maxSnippet := 1, 10000
 	fields := []FieldMetadata{
 		{
-			Path:           "app.directory",
-			Label:          "Data directory",
-			Description:    "Directory containing the instance's stored data.",
-			Schema:         SettingSchema{Sensitivity: "none"},
-			ReadOnlyReason: "Storage locations are file managed.",
-		},
-		{
 			Path:        "app.title",
+			Group:       groupAppearance,
 			Label:       "Title",
 			Description: "Name displayed in the web interface.",
 			Schema:      SettingSchema{Sensitivity: "none", MaxLength: 256},
 		},
 		{
 			Path:        "app.subtitle",
+			Group:       groupAppearance,
 			Label:       "Subtitle",
 			Description: "Text displayed below the title.",
 			Schema:      SettingSchema{Sensitivity: "none", MaxLength: 1024},
 		},
 		{
 			Path:        "app.color_scheme",
+			Group:       groupAppearance,
 			Label:       "Color scheme",
 			Description: "Use the system preference or choose a light or dark appearance.",
 			Schema:      SettingSchema{Sensitivity: "none", Choices: []string{"automatic", "light", "dark"}},
 		},
 		{
+			Path:           "app.display_extractor_config",
+			Group:          groupAppearance,
+			Label:          "Display extractor configuration",
+			Description:    "Display extractor options in the web interface.",
+			Schema:         SettingSchema{Sensitivity: "none"},
+			ReadOnlyReason: "Changing option visibility is not supported here.",
+		},
+		{
 			Path:        "app.snippet_length",
+			Group:       groupSearchBehavior,
 			Label:       "Snippet length",
 			Description: "Maximum number of characters in a search result snippet.",
 			Schema:      SettingSchema{Sensitivity: "none", Min: &minSnippet, Max: &maxSnippet},
 		},
 		{
 			Path:           "app.search_url",
+			Group:          groupSearchBehavior,
 			Label:          "Search engine URL",
 			Description:    "Destination for searches outside the index.",
 			Schema:         SettingSchema{Sensitivity: "url"},
 			ReadOnlyReason: "Manage search engine URLs in the main configuration.",
 		},
 		{
+			Path:        "app.open_results_on_new_tab",
+			Group:       groupSearchBehavior,
+			Label:       "Open results in a new tab",
+			Description: "Open search results in a separate browser tab.",
+			Schema:      SettingSchema{Sensitivity: "none"},
+		},
+		{
+			Path:        "app.show_suggestions",
+			Group:       groupSearchBehavior,
+			Label:       "Show suggestions",
+			Description: "Suggest terms while typing a search.",
+			Schema:      SettingSchema{Sensitivity: "none"},
+		},
+		{
+			Path:        "app.redirect_on_no_results",
+			Group:       groupSearchBehavior,
+			Label:       "Redirect empty searches",
+			Description: "Open the search engine when no indexed results match.",
+			Schema:      SettingSchema{Sensitivity: "none"},
+		},
+		{
+			Path:        "app.disable_previews",
+			Group:       groupSearchBehavior,
+			Label:       "Disable previews",
+			Description: "Hide document previews in search results.",
+			Schema:      SettingSchema{Sensitivity: "none"},
+		},
+		{
 			Path:                 "app.access_token",
+			Group:                groupAccess,
 			Label:                "Access token",
 			Description:          "Credential used to access the instance.",
 			Schema:               SettingSchema{Sensitivity: "secret"},
@@ -278,6 +335,7 @@ func FieldCatalog() []FieldMetadata {
 		},
 		{
 			Path:                 "app.user_handling",
+			Group:                groupAccess,
 			Label:                "User handling",
 			Description:          "Require individual user accounts.",
 			Schema:               SettingSchema{Sensitivity: "none"},
@@ -286,6 +344,7 @@ func FieldCatalog() []FieldMetadata {
 		},
 		{
 			Path:                 "app.public",
+			Group:                groupAccess,
 			Label:                "Public access",
 			Description:          "Allow anonymous visitors to search.",
 			Schema:               SettingSchema{Sensitivity: "none"},
@@ -294,12 +353,14 @@ func FieldCatalog() []FieldMetadata {
 		},
 		{
 			Path:        "app.log_level",
+			Group:       groupLoggingAndDiagnostics,
 			Label:       "Log level",
 			Description: "Choose how much detail the server writes to its log. An empty selection uses the default level.",
 			Schema:      SettingSchema{Sensitivity: "none", Choices: []string{"", "error", "err", "warning", "warn", "info", "debug", "trace"}},
 		},
 		{
 			Path:           "app.log_file",
+			Group:          groupLoggingAndDiagnostics,
 			Label:          "Log file",
 			Description:    "File receiving server log output.",
 			Schema:         SettingSchema{Sensitivity: "none"},
@@ -307,110 +368,91 @@ func FieldCatalog() []FieldMetadata {
 		},
 		{
 			Path:        "app.log_format",
+			Group:       groupLoggingAndDiagnostics,
 			Label:       "Log format",
 			Description: "Choose plain text or JSON logs. An empty selection uses the default format.",
 			Schema:      SettingSchema{Sensitivity: "none", Choices: []string{"", "text", "json"}},
 		},
 		{
 			Path:           "app.debug_sql",
+			Group:          groupLoggingAndDiagnostics,
 			Label:          "SQL debugging",
 			Description:    "Include database queries in diagnostic logs.",
 			Schema:         SettingSchema{Sensitivity: "none"},
 			ReadOnlyReason: "Manage diagnostic exposure in the main configuration.",
 		},
 		{
-			Path:        "app.open_results_on_new_tab",
-			Label:       "Open results in a new tab",
-			Description: "Open search results in a separate browser tab.",
-			Schema:      SettingSchema{Sensitivity: "none"},
-		},
-		{
-			Path:        "app.show_suggestions",
-			Label:       "Show suggestions",
-			Description: "Suggest terms while typing a search.",
-			Schema:      SettingSchema{Sensitivity: "none"},
-		},
-		{
-			Path:        "app.redirect_on_no_results",
-			Label:       "Redirect empty searches",
-			Description: "Open the search engine when no indexed results match.",
-			Schema:      SettingSchema{Sensitivity: "none"},
-		},
-		{
-			Path:           "app.display_extractor_config",
-			Label:          "Display extractor configuration",
-			Description:    "Display extractor options in the web interface.",
-			Schema:         SettingSchema{Sensitivity: "none"},
-			ReadOnlyReason: "Changing option visibility is not supported here.",
-		},
-		{
-			Path:        "app.disable_previews",
-			Label:       "Disable previews",
-			Description: "Hide document previews in search results.",
-			Schema:      SettingSchema{Sensitivity: "none"},
-		},
-		{
 			Path:           "app.profiler",
+			Group:          groupLoggingAndDiagnostics,
 			Label:          "Profiler",
 			Description:    "Enable server profiling.",
 			Schema:         SettingSchema{Sensitivity: "none"},
 			ReadOnlyReason: "Manage diagnostic exposure in the main configuration.",
 		},
 		{
+			Path:           "app.directory",
+			Group:          groupStorage,
+			Label:          "Data directory",
+			Description:    "Directory containing the instance's stored data.",
+			Schema:         SettingSchema{Sensitivity: "none"},
+			ReadOnlyReason: "Storage locations are file managed.",
+		},
+		{
 			Path:                 "server.address",
+			Group:                groupConnection,
 			Label:                "Listen address",
 			Description:          "Address where the server accepts connections.",
 			Schema:               SettingSchema{Sensitivity: "none"},
 			ReadOnlyReason:       "Connection changes require confirmation and are not available in this editor yet.",
 			RequiresConfirmation: true,
 		},
-		fileManagedField("server.base_url", "Base URL", "Public URL used to reach this instance."),
-		fileManagedField("server.database", "Database", "SQLite filename or PostgreSQL connection settings."),
-		fileManagedField("server.max_batch_body_size", "Maximum batch size", "Maximum batch request body size in MiB."),
-		fileManagedField("server.proxy_auth_header", "Proxy authentication header", "Header identifying users authenticated by a trusted proxy."),
-		fileManagedField("server.oauth", "OAuth providers", "Providers used to sign in with external accounts."),
-		fileManagedField("server.oauth_only", "Require OAuth", "Allow sign in only through an OAuth provider."),
-		fileManagedField("server.metrics", "Metrics", "Expose server metrics."),
-		fileManagedField("server.expose_version", "Expose version", "Include the server version in public configuration."),
-		fileManagedField("indexer.detect_languages", "Detect languages", "Detect document languages when indexing."),
-		fileManagedField("indexer.keep_stopwords", "Keep stopwords", "Keep common words in the search index."),
-		fileManagedField("indexer.directories", "Watched directories", "Directories and matching rules for indexing local files."),
-		fileManagedField("indexer.max_file_size_mb", "Maximum file size", "Maximum size of indexed files in MiB."),
-		fileManagedField("indexer.languages", "Languages", "Languages considered during language detection."),
-		fileManagedField("indexer.language_detection_accuracy", "Language detection accuracy", "Accuracy and memory usage of language detection."),
-		fileManagedField("indexer.pdf_parser.command", "PDF parser command", "Optional executable used to extract PDF text."),
-		fileManagedField("indexer.pdf_parser.args", "PDF parser arguments", "Arguments passed to the PDF parser command."),
-		fileManagedField("indexer.pdf_parser.timeout", "PDF parser timeout", "Maximum time in seconds for parsing a PDF."),
-		fileManagedField("crawler.timeout", "Crawler timeout", "Maximum time in seconds for a crawl request."),
-		fileManagedField("crawler.delay", "Crawler delay", "Delay in seconds between crawl requests."),
-		fileManagedField("crawler.backend", "Crawler backend", "Backend used to fetch web pages."),
-		fileManagedField("crawler.backend_options", "Crawler backend options", "Additional options supplied to the selected backend."),
-		fileManagedField("crawler.proxy", "Crawler proxy", "Proxy used for crawl requests."),
-		fileManagedField("crawler.user_agent", "Crawler user agent", "User agent sent with crawl requests."),
-		fileManagedField("crawler.headers", "Crawler headers", "Additional HTTP headers sent with crawl requests."),
-		fileManagedField("crawler.cookies", "Crawler cookies", "Cookies sent with crawl requests."),
-		fileManagedField("crawler.no_robots", "Ignore robots rules", "Disable robots.txt checks during crawling."),
-		fileManagedField("semantic_search.enable", "Semantic search", "Enable search by meaning using document embeddings."),
-		fileManagedField("semantic_search.embedding_endpoint", "Embedding endpoint", "URL of the service that generates embeddings."),
-		fileManagedField("semantic_search.embedding_model", "Embedding model", "Model used to generate embeddings."),
-		fileManagedField("semantic_search.embedding_timeout", "Embedding timeout", "Maximum time in seconds for document embedding requests."),
-		fileManagedField("semantic_search.api_key", "Embedding API key", "Credential used to access the embedding service."),
-		fileManagedField("semantic_search.headers", "Embedding headers", "Additional HTTP headers sent to the embedding service."),
-		fileManagedField("semantic_search.dimensions", "Embedding dimensions", "Number of dimensions in each embedding."),
-		fileManagedField("semantic_search.max_context_length", "Maximum context length", "Maximum number of tokens in a document chunk."),
-		fileManagedField("semantic_search.chunk_overlap", "Chunk overlap", "Number of tokens shared by adjacent document chunks."),
-		fileManagedField("semantic_search.max_embedding_batch_size", "Embedding batch size", "Maximum number of chunks per embedding request."),
-		fileManagedField("semantic_search.query_prefix", "Query prefix", "Text prepended to queries before generating embeddings."),
-		fileManagedField("semantic_search.document_prefix", "Document prefix", "Text prepended to document chunks before generating embeddings."),
-		fileManagedField("semantic_search.similarity_threshold", "Similarity threshold", "Minimum similarity required for a semantic result."),
-		fileManagedField("semantic_search.result_limit", "Semantic result limit", "Maximum number of semantic results to consider."),
-		fileManagedField("semantic_search.semantic_weight", "Semantic weight", "Weight of semantic scores when combining search results."),
-		fileManagedField("semantic_search.max_embedding_concurrency", "Embedding concurrency", "Maximum number of concurrent document embedding requests."),
-		fileManagedField("semantic_search.query_embedding_timeout", "Query embedding timeout", "Maximum time in seconds for a query embedding request."),
-		fileManagedField("semantic_search.max_query_embedding_concurrency", "Query embedding concurrency", "Maximum number of concurrent query embedding requests."),
-		fileManagedField("hotkeys.web", "Web keyboard shortcuts", "Keyboard shortcuts for the web interface."),
-		fileManagedField("sensitive_content_patterns", "Sensitive content patterns", "Patterns used to detect sensitive content before indexing."),
-		fileManagedField("extractors", "Extractors", "Extractor enable switches and options described by the extractor registry."),
+		fileManagedField("server.base_url", groupConnection, "Base URL", "Public URL used to reach this instance."),
+		fileManagedField("server.proxy_auth_header", groupAuthentication, "Proxy authentication header", "Header identifying users authenticated by a trusted proxy."),
+		fileManagedField("server.oauth", groupAuthentication, "OAuth providers", "Providers used to sign in with external accounts."),
+		fileManagedField("server.oauth_only", groupAuthentication, "Require OAuth", "Allow sign in only through an OAuth provider."),
+		fileManagedField("server.database", groupStorage, "Database", "SQLite filename or PostgreSQL connection settings."),
+		fileManagedField("server.max_batch_body_size", groupRequestLimits, "Maximum batch size", "Maximum batch request body size in MiB."),
+		fileManagedField("server.metrics", groupMonitoring, "Metrics", "Expose server metrics."),
+		fileManagedField("server.expose_version", groupMonitoring, "Expose version", "Include the server version in public configuration."),
+		fileManagedField("indexer.detect_languages", groupLanguageAndText, "Detect languages", "Detect document languages when indexing."),
+		fileManagedField("indexer.languages", groupLanguageAndText, "Languages", "Languages considered during language detection."),
+		fileManagedField("indexer.language_detection_accuracy", groupLanguageAndText, "Language detection accuracy", "Accuracy and memory usage of language detection."),
+		fileManagedField("indexer.keep_stopwords", groupLanguageAndText, "Keep stopwords", "Keep common words in the search index."),
+		fileManagedField("indexer.directories", groupLocalFiles, "Watched directories", "Directories and matching rules for indexing local files."),
+		fileManagedField("indexer.max_file_size_mb", groupLocalFiles, "Maximum file size", "Maximum size of indexed files in MiB."),
+		fileManagedField("indexer.pdf_parser.command", groupPDFExtraction, "PDF parser command", "Optional executable used to extract PDF text."),
+		fileManagedField("indexer.pdf_parser.args", groupPDFExtraction, "PDF parser arguments", "Arguments passed to the PDF parser command."),
+		fileManagedField("indexer.pdf_parser.timeout", groupPDFExtraction, "PDF parser timeout", "Maximum time in seconds for parsing a PDF."),
+		fileManagedField("crawler.timeout", groupCrawlBehavior, "Crawler timeout", "Maximum time in seconds for a crawl request."),
+		fileManagedField("crawler.delay", groupCrawlBehavior, "Crawler delay", "Delay in seconds between crawl requests."),
+		fileManagedField("crawler.no_robots", groupCrawlBehavior, "Ignore robots rules", "Disable robots.txt checks during crawling."),
+		fileManagedField("crawler.backend", groupPageFetching, "Crawler backend", "Backend used to fetch web pages."),
+		fileManagedField("crawler.backend_options", groupPageFetching, "Crawler backend options", "Additional options supplied to the selected backend."),
+		fileManagedField("crawler.proxy", groupRequests, "Crawler proxy", "Proxy used for crawl requests."),
+		fileManagedField("crawler.user_agent", groupRequests, "Crawler user agent", "User agent sent with crawl requests."),
+		fileManagedField("crawler.headers", groupRequests, "Crawler headers", "Additional HTTP headers sent with crawl requests."),
+		fileManagedField("crawler.cookies", groupRequests, "Crawler cookies", "Cookies sent with crawl requests."),
+		fileManagedField("semantic_search.enable", groupSearchBehavior, "Semantic search", "Enable search by meaning using document embeddings."),
+		fileManagedField("semantic_search.similarity_threshold", groupSearchBehavior, "Similarity threshold", "Minimum similarity required for a semantic result."),
+		fileManagedField("semantic_search.result_limit", groupSearchBehavior, "Semantic result limit", "Maximum number of semantic results to consider."),
+		fileManagedField("semantic_search.semantic_weight", groupSearchBehavior, "Semantic weight", "Weight of semantic scores when combining search results."),
+		fileManagedField("semantic_search.query_prefix", groupSearchBehavior, "Query prefix", "Text prepended to queries before generating embeddings."),
+		fileManagedField("semantic_search.query_embedding_timeout", groupSearchBehavior, "Query embedding timeout", "Maximum time in seconds for a query embedding request."),
+		fileManagedField("semantic_search.max_query_embedding_concurrency", groupSearchBehavior, "Query embedding concurrency", "Maximum number of concurrent query embedding requests."),
+		fileManagedField("semantic_search.embedding_endpoint", groupEmbeddingService, "Embedding endpoint", "URL of the service that generates embeddings."),
+		fileManagedField("semantic_search.embedding_model", groupEmbeddingService, "Embedding model", "Model used to generate embeddings."),
+		fileManagedField("semantic_search.api_key", groupEmbeddingService, "Embedding API key", "Credential used to access the embedding service."),
+		fileManagedField("semantic_search.headers", groupEmbeddingService, "Embedding headers", "Additional HTTP headers sent to the embedding service."),
+		fileManagedField("semantic_search.dimensions", groupEmbeddingService, "Embedding dimensions", "Number of dimensions in each embedding."),
+		fileManagedField("semantic_search.max_context_length", groupDocumentChunks, "Maximum context length", "Maximum number of tokens in a document chunk."),
+		fileManagedField("semantic_search.chunk_overlap", groupDocumentChunks, "Chunk overlap", "Number of tokens shared by adjacent document chunks."),
+		fileManagedField("semantic_search.document_prefix", groupDocumentChunks, "Document prefix", "Text prepended to document chunks before generating embeddings."),
+		fileManagedField("semantic_search.embedding_timeout", groupDocumentProcessing, "Embedding timeout", "Maximum time in seconds for document embedding requests."),
+		fileManagedField("semantic_search.max_embedding_batch_size", groupDocumentProcessing, "Embedding batch size", "Maximum number of chunks per embedding request."),
+		fileManagedField("semantic_search.max_embedding_concurrency", groupDocumentProcessing, "Embedding concurrency", "Maximum number of concurrent document embedding requests."),
+		fileManagedField("hotkeys.web", "", "Web keyboard shortcuts", "Keyboard shortcuts for the web interface."),
+		fileManagedField("sensitive_content_patterns", "", "Sensitive content patterns", "Patterns used to detect sensitive content before indexing."),
+		fileManagedField("extractors", "", "Extractors", "Extractor enable switches and options described by the extractor registry."),
 	}
 	defaults := CreateDefaultConfig()
 	for i := range fields {
@@ -453,9 +495,9 @@ func FieldCatalog() []FieldMetadata {
 
 // A placeholder records coverage without guessing controls or disclosing values.
 // Replace it with a full definition when the category supports safe editing.
-func fileManagedField(path, label, description string) FieldMetadata {
+func fileManagedField(path, group, label, description string) FieldMetadata {
 	return FieldMetadata{
-		Path: path, Label: label, Description: description,
+		Path: path, Group: group, Label: label, Description: description,
 		Schema:         SettingSchema{Type: "unknown", Control: "none", Collection: "unknown", Sensitivity: "unknown"},
 		Effect:         "unknown",
 		ReadOnlyReason: "Manage this setting in the main configuration.",

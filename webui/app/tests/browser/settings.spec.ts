@@ -7,10 +7,25 @@ async function settingsAPI(page: Page, config: Record<string, unknown> = {}) {
   const publicConfig = { canConfigure: true, ...config };
   await mockAPI(page, { config: publicConfig });
   const fields = [
-    { path: 'app.title', label: 'Title', type: 'string', control: 'text', default: 'Hister' },
-    { path: 'app.subtitle', label: 'Subtitle', type: 'string', control: 'text', default: '' },
+    {
+      path: 'app.title',
+      group: 'Appearance',
+      label: 'Title',
+      type: 'string',
+      control: 'text',
+      default: 'Hister',
+    },
+    {
+      path: 'app.subtitle',
+      group: 'Appearance',
+      label: 'Subtitle',
+      type: 'string',
+      control: 'text',
+      default: '',
+    },
     {
       path: 'app.snippet_length',
+      group: 'Search behavior',
       label: 'Snippet length',
       type: 'integer',
       control: 'number',
@@ -20,6 +35,7 @@ async function settingsAPI(page: Page, config: Record<string, unknown> = {}) {
     },
     {
       path: 'app.color_scheme',
+      group: 'Appearance',
       label: 'Color scheme',
       type: 'string',
       control: 'select',
@@ -28,6 +44,7 @@ async function settingsAPI(page: Page, config: Record<string, unknown> = {}) {
     },
     {
       path: 'app.show_suggestions',
+      group: 'Search behavior',
       label: 'Show suggestions',
       type: 'boolean',
       control: 'switch',
@@ -35,6 +52,7 @@ async function settingsAPI(page: Page, config: Record<string, unknown> = {}) {
     },
     {
       path: 'server.address',
+      group: 'Connection',
       label: 'Listen address',
       type: 'string',
       control: 'text',
@@ -43,6 +61,7 @@ async function settingsAPI(page: Page, config: Record<string, unknown> = {}) {
   ].map((field) => ({
     path: field.path,
     category: field.path.split('.')[0],
+    group: field.group,
     label: field.label,
     description: `${field.label} description.`,
     default: field.default,
@@ -88,7 +107,7 @@ test('authorized navigation edits typed App fields and saves one draft across ta
   page,
 }) => {
   const { state, publicConfig } = await settingsAPI(page);
-  const saves: unknown[] = [];
+  const saves: { revision: string; edits: unknown[] }[] = [];
   await page.route('**/api/settings/apply', async (route) => {
     const draft = route.request().postDataJSON();
     saves.push(draft);
@@ -118,18 +137,108 @@ test('authorized navigation edits typed App fields and saves one draft across ta
   expect(saves).toEqual([
     {
       revision: 'revision-1',
-      edits: [
+      edits: expect.arrayContaining([
         { path: 'app.title', action: 'set', value: 'My archive' },
         { path: 'app.snippet_length', action: 'set', value: 420 },
         { path: 'app.color_scheme', action: 'set', value: 'dark' },
         { path: 'app.show_suggestions', action: 'set', value: false },
-      ],
+      ]),
     },
   ]);
+  expect(saves[0].edits).toHaveLength(4);
   await expect(page.getByRole('banner')).toContainText('My archive');
   await expect(page.getByRole('button', { name: 'Save and apply', exact: true })).toBeDisabled();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
+  );
+});
+
+test('related settings are grouped while drafts and unrecognized fields remain available', async ({
+  page,
+}) => {
+  const { state } = await settingsAPI(page);
+  state.fields.push({
+    ...state.fields[0],
+    path: 'app.future_option',
+    label: 'Future option',
+    group: undefined,
+  });
+  state.values.push({ ...state.values[0], path: 'app.future_option', value: 'Available' });
+  await page.goto('/settings');
+  await expect(page.getByRole('heading', { level: 3 })).toHaveText([
+    'Appearance',
+    'Search behavior',
+    'Other settings',
+  ]);
+  const appearance = page.getByRole('region', { name: 'Appearance', exact: true });
+  const search = page.getByRole('region', { name: 'Search behavior', exact: true });
+  const other = page.getByRole('region', { name: 'Other settings', exact: true });
+  await expect(
+    appearance.getByRole('combobox', { name: 'Color scheme', exact: true }),
+  ).toBeVisible();
+  await expect(
+    search.getByRole('switch', { name: 'Show suggestions', exact: true }),
+  ).toBeAttached();
+  await expect(other.getByRole('textbox', { name: 'Future option', exact: true })).toHaveValue(
+    'Available',
+  );
+  await expect(page.getByRole('textbox', { name: 'Future option', exact: true })).toHaveCount(1);
+  await appearance.getByRole('textbox', { name: 'Title', exact: true }).fill('Grouped archive');
+  await search.getByRole('spinbutton', { name: 'Snippet length', exact: true }).fill('420');
+  await page.getByRole('tab', { name: 'Server', exact: true }).click();
+  await page.getByRole('tab', { name: 'App', exact: true }).click();
+  await expect(appearance.getByRole('textbox', { name: 'Title', exact: true })).toHaveValue(
+    'Grouped archive',
+  );
+  await expect(search.getByRole('spinbutton', { name: 'Snippet length', exact: true })).toHaveValue(
+    '420',
+  );
+});
+
+test('settings groups follow server labels and display order', async ({ page }) => {
+  const { state } = await settingsAPI(page);
+  const [title, subtitle, snippet, colorScheme, suggestions, address] = state.fields;
+  state.fields = [
+    Object.assign(snippet, { group: 'Result tuning' }),
+    Object.assign(suggestions, { group: 'Result tuning' }),
+    Object.assign(title, { group: 'Branding' }),
+    Object.assign(subtitle, { group: 'Branding' }),
+    Object.assign(colorScheme, { group: 'Branding' }),
+    Object.assign(
+      { ...title, path: 'app.extra_display', label: 'Extra display option' },
+      { group: 'Branding' },
+    ),
+    address,
+  ];
+  state.values.push({ ...state.values[0], path: 'app.extra_display', value: 'From the server' });
+  await page.goto('/settings');
+  await expect(page.getByRole('heading', { level: 3 })).toHaveText(['Result tuning', 'Branding']);
+  const results = page.getByRole('region', { name: 'Result tuning', exact: true });
+  const branding = page.getByRole('region', { name: 'Branding', exact: true });
+  await expect(
+    results.getByRole('spinbutton', { name: 'Snippet length', exact: true }),
+  ).toHaveValue('300');
+  await expect(branding.getByRole('textbox', { name: 'Title', exact: true })).toHaveValue('Hister');
+  await expect(
+    branding.getByRole('textbox', { name: 'Extra display option', exact: true }),
+  ).toHaveValue('From the server');
+});
+
+test('categories without defined groups keep all their fields visible', async ({ page }) => {
+  const { state } = await settingsAPI(page);
+  state.fields.push({
+    ...state.fields[0],
+    category: 'custom',
+    group: undefined,
+    path: 'custom.option',
+    label: 'Custom option',
+  });
+  state.values.push({ ...state.values[0], path: 'custom.option', value: 'Available' });
+  await page.goto('/settings');
+  await page.getByRole('tab', { name: 'custom', exact: true }).click();
+  await expect(page.getByRole('tabpanel').getByRole('heading', { level: 3 })).toHaveCount(0);
+  await expect(page.getByRole('textbox', { name: 'Custom option', exact: true })).toHaveValue(
+    'Available',
   );
 });
 

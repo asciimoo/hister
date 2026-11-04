@@ -7,6 +7,7 @@
   import SettingsField from '#lib/components/SettingsField.svelte';
   import {
     categoryLabels,
+    groupSettings,
     settingsRequest,
     SettingsError,
     type SettingsState,
@@ -27,6 +28,7 @@
   const categories = $derived([...new Set(state?.fields.map((field) => field.category) ?? [])]);
   const dirty = $derived(Object.keys(edits).length > 0);
   const values = $derived(new Map(state?.values.map((value) => [value.path, value]) ?? []));
+  const groups = $derived(groupSettings(state?.fields ?? [], category));
 
   onMount(() => {
     void load();
@@ -291,19 +293,35 @@
               >
                 {error.path}: {error.message}
               </p>{/each}
-            {#each state.fields.filter((field) => field.category === category) as field (field.path)}
-              {@const active = values.get(field.path)}
-              {#if active}<SettingsField
-                  {field}
-                  {active}
-                  edit={edits[field.path]}
-                  errors={errors
-                    .filter((error) => error.path === field.path)
-                    .map((error) => error.message)}
-                  disabled={busy}
-                  onEdit={(edit) => update(field.path, edit)}
-                />{/if}
-            {/each}
+            <div class="space-y-10">
+              {#each groups as group, index (group.label)}
+                <section aria-labelledby={group.label ? `${category}-group-${index}` : undefined}>
+                  {#if group.label}
+                    <h3
+                      id={`${category}-group-${index}`}
+                      class="font-space text-text-brand mb-3 text-xl font-bold"
+                    >
+                      {group.label}
+                    </h3>
+                  {/if}
+                  <div>
+                    {#each group.fields as field (field.path)}
+                      {@const active = values.get(field.path)}
+                      {#if active}<SettingsField
+                          {field}
+                          {active}
+                          edit={edits[field.path]}
+                          errors={errors
+                            .filter((error) => error.path === field.path)
+                            .map((error) => error.message)}
+                          disabled={busy}
+                          onEdit={(edit) => update(field.path, edit)}
+                        />{/if}
+                    {/each}
+                  </div>
+                </section>
+              {/each}
+            </div>
           </div>
         </div>
         <div

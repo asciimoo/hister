@@ -115,6 +115,65 @@ func TestFieldCatalogPreservesEditorContract(t *testing.T) {
 	}
 }
 
+func TestFieldCatalogIncludesDisplayGroups(t *testing.T) {
+	raw, err := json.Marshal(FieldCatalog())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fields []struct {
+		Path     string `json:"path"`
+		Category string `json:"category"`
+		Group    string `json:"group"`
+	}
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		t.Fatal(err)
+	}
+	wantGroups := map[string][]string{
+		"app":             {"Appearance", "Search behavior", "Access", "Logging and diagnostics", "Storage"},
+		"server":          {"Connection", "Authentication", "Storage", "Request limits", "Monitoring"},
+		"indexer":         {"Language and text", "Local files", "PDF extraction"},
+		"crawler":         {"Crawl behavior", "Page fetching", "Requests"},
+		"semantic_search": {"Search behavior", "Embedding service", "Document chunks", "Document processing"},
+	}
+	groups := make(map[string][]string)
+	byPath := make(map[string]string)
+	for _, field := range fields {
+		byPath[field.Path] = field.Group
+		if _, grouped := wantGroups[field.Category]; !grouped {
+			if field.Group != "" {
+				t.Errorf("single purpose category %s gained an unnecessary group", field.Category)
+			}
+			continue
+		}
+		if field.Group == "" {
+			t.Fatalf("%s has no display group", field.Path)
+		}
+		if !slices.Contains(groups[field.Category], field.Group) {
+			groups[field.Category] = append(groups[field.Category], field.Group)
+		}
+	}
+	for category, want := range wantGroups {
+		if !slices.Equal(groups[category], want) {
+			t.Errorf("%s groups = %v, want %v", category, groups[category], want)
+		}
+	}
+	for path, want := range map[string]string{
+		"app.title":                       "Appearance",
+		"app.snippet_length":              "Search behavior",
+		"app.directory":                   "Storage",
+		"server.oauth":                    "Authentication",
+		"indexer.pdf_parser.command":      "PDF extraction",
+		"indexer.pdf_parser.args":         "PDF extraction",
+		"crawler.cookies":                 "Requests",
+		"semantic_search.embedding_model": "Embedding service",
+		"semantic_search.chunk_overlap":   "Document chunks",
+	} {
+		if byPath[path] != want {
+			t.Errorf("%s group = %q, want %q", path, byPath[path], want)
+		}
+	}
+}
+
 func TestListenAddressSourceInEditor(t *testing.T) {
 	for _, explicit := range []bool{false, true} {
 		t.Run(map[bool]string{false: "commented", true: "explicit"}[explicit], func(t *testing.T) {
