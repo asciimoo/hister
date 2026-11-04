@@ -52,14 +52,14 @@
 
 <section
   aria-label={field.label}
-  class="border-border-brand -mx-3 mb-2 grid gap-x-8 gap-y-3 border-b border-l-2 px-3 py-4 last:mb-0 last:border-b-0 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] {active
+  class="border-border-brand-muted relative grid gap-x-8 gap-y-3 border-b px-4 py-4 before:absolute before:inset-y-0 before:left-0 before:w-0.5 last:border-b-0 md:px-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] {active
     .source.locked
-    ? 'border-l-hister-amber/60 bg-hister-amber/10'
+    ? 'bg-hister-amber/10 before:bg-hister-amber/60'
     : !editable
-      ? 'border-l-border-brand bg-muted-surface/50'
+      ? 'bg-muted-surface/50 before:bg-border-brand'
       : edit
-        ? 'bg-hister-indigo/5 border-l-transparent'
-        : 'border-l-transparent'}"
+        ? 'bg-hister-indigo/5'
+        : ''}"
 >
   <div class="min-w-0 space-y-1 break-words">
     <div class="flex flex-wrap items-center gap-x-2 gap-y-1">

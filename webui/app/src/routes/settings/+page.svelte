@@ -298,26 +298,31 @@
             id={`panel-${category}`}
             aria-labelledby={`tab-${category}`}
             tabindex="0"
-            class="bg-card-surface min-h-0 flex-1 overflow-y-auto p-4 focus:outline-none md:p-6"
+            class="bg-page-bg min-h-0 flex-1 overflow-y-auto p-4 focus:outline-none md:p-6"
           >
-            <div class="w-full">
+            <div class="w-full max-w-5xl">
               {#each tabErrors(category).filter((error) => !state?.fields.some((field) => field.path === error.path)) as error}<p
                   class="text-hister-rose my-2 text-sm"
                 >
                   {error.path}: {error.message}
                 </p>{/each}
-              <div class="space-y-10">
+              <div class="space-y-6">
                 {#each groups as group, index (group.label)}
-                  <section aria-labelledby={group.label ? `${category}-group-${index}` : undefined}>
+                  <section
+                    aria-labelledby={group.label ? `${category}-group-${index}` : undefined}
+                    class="border-border-brand-muted bg-card-surface border"
+                  >
                     {#if group.label}
-                      <h3
-                        id={`${category}-group-${index}`}
-                        class="font-space text-text-brand mb-3 text-lg font-semibold tracking-tight"
-                      >
-                        {group.label}
-                      </h3>
+                      <div class="border-border-brand-muted border-b px-4 py-4 md:px-6">
+                        <h3
+                          id={`${category}-group-${index}`}
+                          class="font-space text-text-brand text-lg font-semibold tracking-tight"
+                        >
+                          {group.label}
+                        </h3>
+                      </div>
                     {/if}
-                    <div class="max-w-[57rem] {group.label ? 'ml-4 md:ml-6' : ''}">
+                    <div>
                       {#each group.fields as field (field.path)}
                         {@const active = values.get(field.path)}
                         {#if active}<SettingsField

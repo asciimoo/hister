@@ -429,6 +429,22 @@ test('related settings are grouped while drafts and unrecognized fields remain a
   const appearance = page.getByRole('region', { name: 'Appearance', exact: true });
   const search = page.getByRole('region', { name: 'Search behavior', exact: true });
   const other = page.getByRole('region', { name: 'Other settings', exact: true });
+  for (const [group, fieldName] of [
+    [appearance, 'Title'],
+    [search, 'Snippet length'],
+    [other, 'Future option'],
+  ] as const) {
+    const heading = group.getByRole('heading', { level: 3 });
+    await heading.scrollIntoViewIfNeeded();
+    const headingBox = (await heading.boundingBox())!;
+    const groupBox = (await group.boundingBox())!;
+    const row = group.getByRole('region', { name: fieldName, exact: true });
+    const labelBox = (await row.getByText(fieldName, { exact: true }).boundingBox())!;
+    const rowBox = (await row.boundingBox())!;
+    expect(labelBox.x).toBeCloseTo(headingBox.x, 0);
+    expect(rowBox.x).toBeGreaterThanOrEqual(groupBox.x);
+    expect(rowBox.x + rowBox.width).toBeLessThanOrEqual(groupBox.x + groupBox.width);
+  }
   await expect(
     appearance.getByRole('combobox', { name: 'Color scheme', exact: true }),
   ).toBeVisible();
