@@ -49,7 +49,8 @@
 
 <section
   aria-label={field.label}
-  class="border-border-brand-muted space-y-3 border-b py-5 last:border-b-0 {active.source.locked
+  class="border-border-brand mb-4 space-y-3 border-b py-6 last:mb-0 last:border-b-0 {active.source
+    .locked
     ? 'border-l-hister-amber/60 bg-hister-amber/10 border-l-2 px-3'
     : !editable
       ? 'border-l-border-brand bg-muted-surface/50 border-l-2 px-3'
@@ -57,7 +58,7 @@
 >
   <div class="flex flex-wrap items-center justify-between gap-2">
     <div class="flex items-center gap-1">
-      <label for={id} class="font-space text-text-brand font-bold">{field.label}</label>
+      <label for={id} class="font-space text-text-brand text-lg font-bold">{field.label}</label>
       <Tooltip.Provider delayDuration={0}>
         <Tooltip.Root bind:open={sourceOpen} disableCloseOnTriggerClick>
           <Tooltip.Trigger
