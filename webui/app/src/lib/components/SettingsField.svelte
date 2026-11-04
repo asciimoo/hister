@@ -127,7 +127,7 @@
       disabled={disabled || !editable}
       aria-describedby={description}
       aria-invalid={errors.length > 0}
-      class="border-brutal-border bg-page-bg text-text-brand w-full border-2 p-2 disabled:opacity-60"
+      class="border-brutal-border bg-page-bg text-text-brand w-full border-2 p-2 disabled:cursor-not-allowed disabled:opacity-60"
     >
       {#each field.schema.choices ?? [] as choice}<option value={choice}
           >{choice || 'Default'}</option
