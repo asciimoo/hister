@@ -158,9 +158,6 @@ test('settings rows align controls on desktop and stack them on mobile', async (
   isMobile,
 }) => {
   const { state } = await settingsAPI(page);
-  const subtitle = state.values.find((value) => value.path === 'app.subtitle')!;
-  subtitle.editable = false;
-  subtitle.source = { kind: 'environment', locked: true, web_selected: false };
   const suggestions = state.fields.find((field) => field.path === 'app.show_suggestions')!;
   state.fields.push({
     ...suggestions,
@@ -211,6 +208,52 @@ test('settings rows align controls on desktop and stack them on mobile', async (
   expect(edited.x).toBeCloseTo(boxes[0].x, 0);
   expect(edited.width).toBeCloseTo(boxes[0].width, 0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+test('fixed settings show readable values without editing controls and keep secrets hidden', async ({
+  page,
+}) => {
+  const { state } = await settingsAPI(page);
+  for (const value of state.values) value.editable = false;
+  state.values.find((value) => value.path === 'app.subtitle')!.source.locked = true;
+  state.values.find((value) => value.path === 'app.snippet_length')!.value = 0;
+  state.values.find((value) => value.path === 'app.show_suggestions')!.value = false;
+  for (const [label, path, secretPresent] of [
+    ['Access token', 'app.access_token', true],
+    ['Optional token', 'app.optional_token', false],
+  ] as const) {
+    state.fields.push({
+      ...state.fields[0],
+      label,
+      path,
+      schema: { type: 'string', control: 'text', collection: 'none', sensitivity: 'secret' },
+    });
+    state.values.push({
+      ...state.values[0],
+      path,
+      value: secretPresent ? 'never-render-this-secret' : undefined,
+      secret_present: secretPresent,
+    });
+  }
+  await page.goto('/settings');
+  for (const [label, text] of [
+    ['Title', 'Hister'],
+    ['Subtitle', 'Empty'],
+    ['Snippet length', '0'],
+    ['Color scheme', 'automatic'],
+    ['Show suggestions', 'Disabled'],
+    ['Access token', 'Value stored (hidden)'],
+    ['Optional token', 'No stored value'],
+  ]) {
+    const row = page.getByRole('region', { name: label, exact: true });
+    await expect(row.getByText(text, { exact: true })).toBeVisible();
+    await expect(row.getByRole('button', { name: /^(Clear|Reset|Undo) / })).toHaveCount(0);
+  }
+  for (const role of ['textbox', 'combobox', 'spinbutton', 'switch'] as const) {
+    await expect(page.getByRole('tabpanel').getByRole(role)).toHaveCount(0);
+  }
+  await expect(page.getByRole('tabpanel')).not.toContainText('never-render-this-secret');
+  await expect(page.getByRole('button', { name: 'Save and apply', exact: true })).toBeDisabled();
 });
 
 test('long descriptions and reference values fit within settings rows', async ({
@@ -564,7 +607,8 @@ test('source tooltips show explicit locks and overridden web selections on click
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.getByRole('heading', { name: 'Settings', exact: true }).click();
   await expect(tooltip).not.toBeVisible();
-  await expect(region.getByRole('textbox')).toBeDisabled();
+  await expect(region.getByRole('textbox')).toHaveCount(0);
+  await expect(region.getByText('Managed title', { exact: true })).toBeVisible();
   await expect(region.getByText('Locked', { exact: true })).toBeVisible();
   await expect(region.getByRole('button', { name: /^(Clear|Reset|Undo) / })).toHaveCount(0);
   await page.getByRole('tab', { name: 'Server', exact: true }).click();
@@ -577,8 +621,8 @@ test('source tooltips show explicit locks and overridden web selections on click
   await expect(tooltip).toContainText('Source: Built in default');
   await expect(tooltip).toContainText('Connection changes require confirmation');
   await expect(address.getByText('Locked', { exact: true })).toHaveCount(0);
-  await expect(address.getByRole('textbox')).toHaveValue('127.0.0.1:4433');
-  await expect(address.getByRole('textbox')).toBeDisabled();
+  await expect(address.getByText('127.0.0.1:4433', { exact: true })).toBeVisible();
+  await expect(address.getByRole('textbox')).toHaveCount(0);
   const addressValue = state.values.find((value) => value.path === 'server.address')!;
   addressValue.source = {
     kind: 'file',
@@ -658,9 +702,20 @@ test('reset removes a web selection while clear stores an explicit empty string'
     await route.fulfill({ json: { saved: true } });
   });
   await page.goto('/settings');
-  await page.getByRole('button', { name: 'Reset Title', exact: true }).click();
+  const reset = page.getByRole('button', { name: 'Reset Title', exact: true });
+  const clear = page.getByRole('button', { name: 'Clear Subtitle', exact: true });
+  await expect(reset).toHaveText('Reset');
+  await expect(clear).toHaveText('Clear');
+  await reset.click();
   await expect(page.getByRole('textbox', { name: 'Title', exact: true })).toHaveValue('Hister');
-  await page.getByRole('button', { name: 'Clear Subtitle', exact: true }).click();
+  const undo = page.getByRole('button', { name: 'Undo Title', exact: true });
+  await expect(undo).toHaveText('Undo');
+  await undo.press('Enter');
+  await expect(page.getByRole('textbox', { name: 'Title', exact: true })).toHaveValue(
+    'Saved title',
+  );
+  await reset.click();
+  await clear.click();
   await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
   await expect(page.getByRole('status')).toContainText('Settings saved and applied');
   expect(saved).toEqual({

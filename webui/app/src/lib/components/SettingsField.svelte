@@ -39,6 +39,7 @@
   );
   const controlClass =
     'border-input bg-background text-text-brand focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 h-10 w-full min-w-0 border px-3 py-2 text-base transition-[color,box-shadow] outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50 md:text-sm';
+  const actionClass = 'text-text-brand-muted hover:text-text-brand h-8 px-1.5 text-xs font-normal';
   function set(value: unknown) {
     onEdit(value === active.value ? undefined : { path: field.path, action: 'set', value });
   }
@@ -52,20 +53,18 @@
 
 <section
   aria-label={field.label}
-  class="border-border-brand-muted relative grid gap-x-8 gap-y-3 border-b px-4 py-4 before:absolute before:inset-y-0 before:left-0 before:w-0.5 last:border-b-0 md:px-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] {active
-    .source.locked
-    ? 'bg-hister-amber/10 before:bg-hister-amber/60'
-    : !editable
-      ? 'bg-muted-surface/50 before:bg-border-brand'
-      : edit
-        ? 'bg-hister-indigo/5'
-        : ''}"
+  class="border-border-brand-muted grid gap-x-8 gap-y-3 border-b px-4 py-4 last:border-b-0 md:px-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] {edit
+    ? 'bg-hister-indigo/5'
+    : ''}"
 >
   <div class="min-w-0 space-y-1 break-words">
     <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
       <div class="flex min-w-0 flex-wrap items-center gap-1">
-        <label for={id} class="font-inter text-text-brand min-w-0 text-sm font-medium break-words"
-          >{field.label}</label
+        <svelte:element
+          this={editable ? 'label' : 'span'}
+          for={editable ? id : undefined}
+          class="font-inter text-text-brand min-w-0 text-sm font-medium break-words"
+          >{field.label}</svelte:element
         >
         <Tooltip.Provider delayDuration={0}>
           <Tooltip.Root bind:open={sourceOpen} disableCloseOnTriggerClick>
@@ -124,18 +123,20 @@
       {field.description}
     </p>
   </div>
-  <div class="min-w-0 space-y-3 break-words">
-    <div class="flex lg:justify-end">
+  <div class="min-w-0 space-y-2 break-words">
+    <div class="flex min-h-8 items-center lg:justify-end">
       {#if field.schema.sensitivity !== 'none'}
         <p {id} class="text-text-brand min-w-0 text-sm">
           {active.secret_present ? 'Value stored (hidden)' : 'No stored value'}
         </p>
+      {:else if !editable}
+        <p {id} class="text-text-brand min-w-0 text-sm">{display(active.value)}</p>
       {:else if field.schema.control === 'switch'}
         <Switch
           {id}
           checked={value === true}
           onCheckedChange={set}
-          disabled={disabled || !editable}
+          {disabled}
           aria-describedby={description}
           aria-invalid={errors.length > 0}
         />
@@ -144,7 +145,7 @@
           {id}
           value={String(value ?? '')}
           onchange={(event) => set(event.currentTarget.value)}
-          disabled={disabled || !editable}
+          {disabled}
           aria-describedby={description}
           aria-invalid={errors.length > 0}
           class={controlClass}
@@ -164,7 +165,7 @@
           step="1"
           oninput={(event) =>
             set(event.currentTarget.value === '' ? null : Number(event.currentTarget.value))}
-          disabled={disabled || !editable}
+          {disabled}
           aria-describedby={description}
           aria-invalid={errors.length > 0}
         />
@@ -175,7 +176,7 @@
           value={String(value ?? '')}
           maxlength={field.schema.max_length}
           oninput={(event) => set(event.currentTarget.value)}
-          disabled={disabled || !editable}
+          {disabled}
           aria-describedby={description}
           aria-invalid={errors.length > 0}
         />
@@ -198,29 +199,33 @@
         {#if field.schema.type === 'string' && (!field.schema.choices || field.schema.choices.includes(''))}
           <Button
             type="button"
-            variant="outline"
+            variant="link"
             size="sm"
+            class={actionClass}
+            aria-label={`Clear ${field.label}`}
             {disabled}
-            onclick={() => onEdit({ path: field.path, action: 'set', value: '' })}
-            >Clear {field.label}</Button
+            onclick={() => onEdit({ path: field.path, action: 'set', value: '' })}>Clear</Button
           >
         {/if}
         {#if active.source.web_selected}
           <Button
             type="button"
-            variant="outline"
+            variant="link"
             size="sm"
+            class={actionClass}
+            aria-label={`Reset ${field.label}`}
             disabled={disabled || edit?.action === 'reset'}
-            onclick={() => onEdit({ path: field.path, action: 'reset' })}
-            >Reset {field.label}</Button
+            onclick={() => onEdit({ path: field.path, action: 'reset' })}>Reset</Button
           >
         {/if}
         {#if edit}<Button
             type="button"
-            variant="ghost"
+            variant="link"
             size="sm"
+            class={actionClass}
+            aria-label={`Undo ${field.label}`}
             {disabled}
-            onclick={() => onEdit(undefined)}>Undo {field.label}</Button
+            onclick={() => onEdit(undefined)}>Undo</Button
           >{/if}
       </div>
     {/if}
