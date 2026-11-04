@@ -221,31 +221,33 @@
 <svelte:window onbeforeunload={beforeUnload} />
 
 <div class="bg-page-bg text-text-brand flex min-h-0 flex-1 flex-col">
-  <div class="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col px-4 pt-5 md:px-8">
-    <h2 class="font-space text-2xl font-extrabold">Settings</h2>
-    <p class="text-text-brand-muted my-2 text-sm">
-      Configure appearance, search behavior and logging. Other settings are shown for reference.
-    </p>
-    {#if problem}<div role="alert" class="text-hister-rose my-2 text-sm">
-        <p>{problem}</p>
-        {#each errors.filter((error) => !error.path || !categories.includes(error.path.split('.')[0])) as error}<p
-          >
-            {error.message}
-          </p>{/each}
-      </div>{/if}
-    <p role="status" class="text-text-brand-muted my-2 text-sm">{message}</p>
-    {#if needsReload || (!state && !denied && !busy)}<Button
-        type="button"
-        variant="outline"
-        disabled={busy}
-        onclick={reload}
-        class="mb-3 self-start">Reload settings</Button
-      >{/if}
+  <div class="flex min-h-0 w-full flex-1 flex-col pt-5">
+    <div class="flex shrink-0 flex-col px-4 md:px-6">
+      <h2 class="font-space text-2xl font-extrabold">Settings</h2>
+      <p class="text-text-brand-muted my-2 text-sm">
+        Configure appearance, search behavior and logging. Other settings are shown for reference.
+      </p>
+      {#if problem}<div role="alert" class="text-hister-rose my-2 text-sm">
+          <p>{problem}</p>
+          {#each errors.filter((error) => !error.path || !categories.includes(error.path.split('.')[0])) as error}<p
+            >
+              {error.message}
+            </p>{/each}
+        </div>{/if}
+      <p role="status" class="text-text-brand-muted my-2 text-sm">{message}</p>
+      {#if needsReload || (!state && !denied && !busy)}<Button
+          type="button"
+          variant="outline"
+          disabled={busy}
+          onclick={reload}
+          class="mb-3 self-start">Reload settings</Button
+        >{/if}
+    </div>
     {#if state && !denied}
       <div
         role="tablist"
         aria-label="Configuration categories"
-        class="border-border-brand-muted flex shrink-0 gap-1 overflow-x-auto border-b pb-2"
+        class="border-border-brand-muted flex shrink-0 gap-1 overflow-x-auto border-b px-4 pb-2 md:px-6"
       >
         {#each categories as item, index}
           {@const count = tabErrors(item).length}
@@ -283,32 +285,34 @@
           tabindex="0"
           class="bg-card-surface min-h-0 flex-1 overflow-y-auto p-4 focus:outline-none md:p-6"
         >
-          {#each tabErrors(category).filter((error) => !state?.fields.some((field) => field.path === error.path)) as error}<p
-              class="text-hister-rose my-2 text-sm"
-            >
-              {error.path}: {error.message}
-            </p>{/each}
-          {#each state.fields.filter((field) => field.category === category) as field (field.path)}
-            {@const active = values.get(field.path)}
-            {#if active}<SettingsField
-                {field}
-                {active}
-                edit={edits[field.path]}
-                errors={errors
-                  .filter((error) => error.path === field.path)
-                  .map((error) => error.message)}
-                disabled={busy}
-                onEdit={(edit) => update(field.path, edit)}
-              />{/if}
-          {/each}
+          <div class="w-full max-w-[57rem]">
+            {#each tabErrors(category).filter((error) => !state?.fields.some((field) => field.path === error.path)) as error}<p
+                class="text-hister-rose my-2 text-sm"
+              >
+                {error.path}: {error.message}
+              </p>{/each}
+            {#each state.fields.filter((field) => field.category === category) as field (field.path)}
+              {@const active = values.get(field.path)}
+              {#if active}<SettingsField
+                  {field}
+                  {active}
+                  edit={edits[field.path]}
+                  errors={errors
+                    .filter((error) => error.path === field.path)
+                    .map((error) => error.message)}
+                  disabled={busy}
+                  onEdit={(edit) => update(field.path, edit)}
+                />{/if}
+            {/each}
+          </div>
         </div>
         <div
-          class="border-border-brand-muted flex shrink-0 flex-wrap items-center justify-between gap-3 border-t py-3"
+          class="border-border-brand-muted flex shrink-0 flex-wrap items-center gap-3 border-t px-4 py-3 md:px-6"
         >
+          <Button type="submit" disabled={busy || !dirty || needsReload}>Save and apply</Button>
           <p class="text-text-brand-muted text-sm">
             {dirty ? 'Unsaved changes' : 'No unsaved changes'}
           </p>
-          <Button type="submit" disabled={busy || !dirty || needsReload}>Save and apply</Button>
         </div>
       </form>
     {/if}
