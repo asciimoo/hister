@@ -247,7 +247,9 @@
               {error.message}
             </p>{/each}
         </div>{/if}
-      <p role="status" class="text-text-brand-muted my-2 text-sm">{message}</p>
+      {#if !state || denied}
+        <p role="status" class="text-text-brand-muted my-2 text-sm">{message}</p>
+      {/if}
       {#if needsReload || (!state && !denied && !busy)}<Button
           type="button"
           variant="outline"
@@ -343,29 +345,45 @@
             </div>
           </div>
           <div
-            class="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-t px-4 py-3 md:px-6 {dirty
+            role="group"
+            aria-label="Settings actions"
+            class="shrink-0 border-t px-4 py-3 md:px-6 {dirty
               ? 'border-hister-indigo/50 bg-hister-indigo/5'
               : 'border-border-brand-muted bg-page-bg'}"
           >
-            <div class="flex flex-wrap items-center gap-2">
-              <Button type="submit" disabled={busy || !dirty || needsReload}>Save and apply</Button>
-              <Button
-                type="button"
-                variant="ghost"
-                disabled={busy || !dirty}
-                onclick={discard}
-                class="text-text-brand-secondary px-3">Discard changes</Button
-              >
-            </div>
-            <p
-              aria-live="polite"
-              aria-atomic="true"
-              class="text-sm {dirty ? 'text-text-brand font-medium' : 'text-text-brand-muted'}"
+            <div
+              class="flex w-full max-w-5xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
             >
-              {dirty
-                ? `${editCount} unsaved ${editCount === 1 ? 'change' : 'changes'}`
-                : 'No unsaved changes'}
-            </p>
+              <div class="min-w-0 sm:flex-1">
+                <p
+                  aria-live="polite"
+                  aria-atomic="true"
+                  class="text-sm {dirty ? 'text-text-brand font-medium' : 'text-text-brand-muted'}"
+                >
+                  {dirty
+                    ? `${editCount} unsaved ${editCount === 1 ? 'change' : 'changes'}`
+                    : 'No unsaved changes'}
+                </p>
+                <p
+                  role="status"
+                  class="text-text-brand-muted text-xs break-words {message ? 'mt-1' : ''}"
+                >
+                  {message}
+                </p>
+              </div>
+              <div class="flex flex-wrap items-center justify-end gap-2 sm:shrink-0">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  disabled={busy || !dirty}
+                  onclick={discard}
+                  class="text-text-brand-secondary px-2 sm:px-3">Discard changes</Button
+                >
+                <Button type="submit" disabled={busy || !dirty || needsReload} class="px-2 sm:px-4"
+                  >Save and apply</Button
+                >
+              </div>
+            </div>
           </div>
         </form>
       </div>

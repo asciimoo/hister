@@ -287,6 +287,7 @@ test('long descriptions and reference values fit within settings rows', async ({
 
 test('the save bar counts edited fields and discards the draft from any tab without saving', async ({
   page,
+  isMobile,
 }) => {
   await settingsAPI(page);
   const requests: string[] = [];
@@ -305,6 +306,17 @@ test('the save bar counts edited fields and discards the draft from any tab with
   await title.fill('Draft title');
   await title.fill('Revised draft title');
   await expect(page.getByText('1 unsaved change', { exact: true })).toBeVisible();
+  const countBox = (await page.getByText('1 unsaved change', { exact: true }).boundingBox())!;
+  const discardBox = (await discard.boundingBox())!;
+  const saveBox = (await save.boundingBox())!;
+  expect(discardBox.x + discardBox.width).toBeLessThanOrEqual(saveBox.x);
+  if (isMobile) {
+    expect(countBox.y + countBox.height).toBeLessThanOrEqual(discardBox.y);
+  } else {
+    expect(countBox.x + countBox.width).toBeLessThanOrEqual(discardBox.x);
+  }
+  await expect(discard).toBeInViewport();
+  await expect(save).toBeInViewport();
   await snippet.fill('420');
   await page.getByRole('button', { name: 'Reset Show suggestions', exact: true }).click();
   await expect(page.getByText('3 unsaved changes', { exact: true })).toBeVisible();
@@ -327,7 +339,9 @@ test('the save bar counts edited fields and discards the draft from any tab with
   await expect(page.getByText('No unsaved changes', { exact: true })).toBeVisible();
   await expect(discard).toBeDisabled();
   await expect(save).toBeDisabled();
-  await expect(page.getByRole('status')).toHaveText('Unsaved changes discarded.');
+  await expect(
+    page.getByRole('group', { name: 'Settings actions' }).getByRole('status'),
+  ).toHaveText('Unsaved changes discarded.');
   await page.getByRole('tab', { name: 'App', exact: true }).click();
   await expect(title).toHaveValue('Hister');
   await expect(snippet).toHaveValue('300');
@@ -416,36 +430,71 @@ test('restoring typed values leaves only unrelated edits and explicit resets in 
 
 test('the draft cannot be discarded while saving and the count clears after success', async ({
   page,
+  isMobile,
 }) => {
   const { state } = await settingsAPI(page);
   let finishValidation = () => {};
   const validationGate = new Promise<void>((resolve) => {
     finishValidation = resolve;
   });
+  let finishApply = () => {};
+  const applyGate = new Promise<void>((resolve) => {
+    finishApply = resolve;
+  });
+  let finishRefresh = () => {};
+  const refreshGate = new Promise<void>((resolve) => {
+    finishRefresh = resolve;
+  });
+  let applied = false;
+  await page.route('**/api/settings', async (route) => {
+    if (applied) await refreshGate;
+    await route.fulfill({ json: state });
+  });
   await page.route('**/api/settings/validate', async (route) => {
     await validationGate;
     await route.fulfill({ json: { revision: state.revision, values: state.values } });
   });
-  await page.route('**/api/settings/apply', (route) => {
+  await page.route('**/api/settings/apply', async (route) => {
+    await applyGate;
     state.values[0].value = 'Saved draft';
+    applied = true;
     return route.fulfill({ json: { saved: true } });
   });
+  if (isMobile) await page.setViewportSize({ width: 320, height: 800 });
   await page.goto('/settings');
   const title = page.getByRole('textbox', { name: 'Title', exact: true });
   const save = page.getByRole('button', { name: 'Save and apply', exact: true });
   const discard = page.getByRole('button', { name: 'Discard changes', exact: true });
+  const status = page.getByRole('group', { name: 'Settings actions' }).getByRole('status');
   await title.fill('Saved draft');
   try {
     await save.click();
-    await expect(page.getByRole('status')).toHaveText('Validating settings…');
+    await expect(status).toHaveText('Validating settings…');
     await expect(save).toBeDisabled();
     await expect(discard).toBeDisabled();
     await expect(title).toBeDisabled();
     await expect(page.getByText('Unsaved', { exact: true })).toBeVisible();
+    finishValidation();
+    await expect(status).toHaveText('Applying settings. Service may be briefly interrupted…');
+    await expect(status).toBeInViewport();
+    await expect(save).toBeInViewport();
+    await expect(discard).toBeInViewport();
+    const saveBox = (await save.boundingBox())!;
+    const discardBox = (await discard.boundingBox())!;
+    expect(discardBox.y).toBe(saveBox.y);
+    finishApply();
+    await expect(status).toHaveText('Reconnecting and reading active settings…');
+    await expect(save).toBeDisabled();
+    await expect(discard).toBeDisabled();
+    await expect(status).toBeInViewport();
   } finally {
     finishValidation();
+    finishApply();
+    finishRefresh();
   }
-  await expect(page.getByRole('status')).toHaveText('Settings saved and applied.');
+  await expect(status).toHaveText('Settings saved and applied.');
+  await expect(status).toBeInViewport();
+  await expect(page.getByRole('status')).toHaveCount(1);
   await expect(title).toHaveValue('Saved draft');
   await expect(page.getByText('No unsaved changes', { exact: true })).toBeVisible();
   await expect(discard).toBeDisabled();
