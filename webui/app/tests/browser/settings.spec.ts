@@ -149,8 +149,9 @@ test('nonadministrators cannot navigate to private settings or enter a login loo
   await expect(page).toHaveURL(/\/settings$/);
 });
 
-test('source labels distinguish commented defaults, explicit locks and overridden web selections', async ({
+test('source tooltips show explicit locks and overridden web selections on click', async ({
   page,
+  isMobile,
 }) => {
   const { state } = await settingsAPI(page);
   const subtitle = state.values.find((value) => value.path === 'app.subtitle')!;
@@ -168,14 +169,27 @@ test('source labels distinguish commented defaults, explicit locks and overridde
   };
   await page.goto('/settings');
   const region = page.getByRole('region', { name: 'Subtitle', exact: true });
-  await expect(region).toContainText('Environment');
-  await expect(region).toContainText('HISTER__APP__SUBTITLE');
-  await expect(region).toContainText('overridden');
+  const info = region.getByRole('button', { name: 'Source information for Subtitle' });
+  const tooltip = page.getByRole('tooltip');
+  await expect(info).toBeVisible();
+  await expect(page.getByText('Source: Environment', { exact: false })).not.toBeVisible();
+  if (isMobile) await info.tap();
+  else await info.click();
+  await expect(tooltip).toContainText('Source: Environment (HISTER__APP__SUBTITLE)');
+  await expect(tooltip).toContainText('Set by environment: HISTER__APP__SUBTITLE');
+  await expect(tooltip).toContainText('A stored web selection is overridden by this source.');
+  await expect(info).toHaveAccessibleDescription(/Source: Environment/);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.getByRole('heading', { name: 'Settings', exact: true }).click();
+  await expect(tooltip).not.toBeVisible();
   await expect(region.getByRole('textbox')).toBeDisabled();
-  await expect(region.getByRole('button')).toHaveCount(0);
+  await expect(region.getByText('Locked', { exact: true })).toBeVisible();
+  await expect(region.getByRole('button', { name: /^(Clear|Reset|Undo) / })).toHaveCount(0);
   await page.getByRole('tab', { name: 'Server', exact: true }).click();
   const address = page.getByRole('region', { name: 'Listen address', exact: true });
-  await expect(address).toContainText('Built in default');
+  await address.getByRole('button', { name: 'Source information for Listen address' }).click();
+  await expect(tooltip).toContainText('Source: Built in default');
+  await expect(tooltip).toContainText('Connection changes require confirmation');
   await expect(address.getByText('Locked', { exact: true })).toHaveCount(0);
   await expect(address.getByRole('textbox')).toHaveValue('127.0.0.1:4433');
   await expect(address.getByRole('textbox')).toBeDisabled();
@@ -191,7 +205,58 @@ test('source labels distinguish commented defaults, explicit locks and overridde
   await page.reload();
   await page.getByRole('tab', { name: 'Server', exact: true }).click();
   await expect(address).toContainText('Locked');
-  await expect(address).toContainText('Main configuration');
+  await address.getByRole('button', { name: 'Source information for Listen address' }).click();
+  await expect(tooltip).toContainText('Source: Main configuration (/etc/hister/config.yml)');
+});
+
+test('source tooltips remain readable on hover and dismiss with Escape', async ({
+  page,
+  isMobile,
+}) => {
+  test.skip(isMobile, 'Hover requires a mouse pointer.');
+  await settingsAPI(page);
+  await page.goto('/settings');
+  const info = page.getByRole('button', { name: 'Source information for Title', exact: true });
+  const tooltip = page.getByRole('tooltip');
+  await info.hover();
+  await expect(tooltip).toContainText('Source: Built in default');
+  await tooltip.hover();
+  await expect(tooltip).toBeVisible();
+  await info.click();
+  await expect(tooltip).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(tooltip).not.toBeVisible();
+  await page.getByRole('heading', { name: 'Settings', exact: true }).hover();
+  await info.hover();
+  await expect(tooltip).toBeVisible();
+  await page.getByRole('heading', { name: 'Settings', exact: true }).hover();
+  await expect(tooltip).not.toBeVisible();
+});
+
+test('source tooltips support keyboard access while draft feedback stays visible', async ({
+  page,
+}) => {
+  await settingsAPI(page);
+  await page.goto('/settings');
+  const input = page.getByRole('textbox', { name: 'Title', exact: true });
+  const info = page.getByRole('button', { name: 'Source information for Title', exact: true });
+  const tooltip = page.getByRole('tooltip');
+  await input.fill('Draft title');
+  await expect(input).toHaveAccessibleDescription(/Current value: Hister\. Unsaved change\./);
+  await page.keyboard.press('Shift+Tab');
+  await expect(info).toBeFocused();
+  await expect(tooltip).toContainText('Source: Built in default');
+  await expect(info).toHaveAccessibleDescription('Source: Built in default');
+  await page.keyboard.press('Escape');
+  await expect(tooltip).not.toBeVisible();
+  await page.keyboard.press('Enter');
+  await expect(tooltip).toBeVisible();
+  await page.keyboard.press('Tab');
+  await expect(input).toBeFocused();
+  await expect(tooltip).not.toBeVisible();
+  await expect(input).toHaveValue('Draft title');
+  await expect(page.getByText('Current value: Hister. Unsaved change.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Save and apply', exact: true })).toBeEnabled();
 });
 
 test('reset removes a web selection while clear stores an explicit empty string', async ({

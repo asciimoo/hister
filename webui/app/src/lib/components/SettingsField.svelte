@@ -2,6 +2,8 @@
   import { Button } from '@hister/components/ui/button';
   import { Input } from '@hister/components/ui/input';
   import { Switch } from '@hister/components/ui/switch';
+  import * as Tooltip from '@hister/components/ui/tooltip';
+  import { Info } from '@lucide/svelte';
   import {
     canEditSetting,
     sourceLabel,
@@ -25,13 +27,14 @@
     disabled?: boolean;
     onEdit: (edit: SettingEdit | undefined) => void;
   } = $props();
+  let sourceOpen = $state(false);
   const editable = $derived(canEditSetting(field, active));
   const value = $derived(
     edit?.action === 'set' ? edit.value : edit?.action === 'reset' ? field.default : active.value,
   );
   const id = $derived(`setting-${field.path}`);
   const description = $derived(
-    `${id}-description ${id}-source${errors.length ? ` ${id}-errors` : ''}`,
+    `${id}-description${edit || editable ? ` ${id}-status` : ''}${errors.length ? ` ${id}-errors` : ''}`,
   );
   function set(value: unknown) {
     onEdit({ path: field.path, action: 'set', value });
@@ -49,7 +52,38 @@
   class="border-border-brand-muted space-y-3 border-b py-5 last:border-0"
 >
   <div class="flex flex-wrap items-center justify-between gap-2">
-    <label for={id} class="font-space text-text-brand font-bold">{field.label}</label>
+    <div class="flex items-center gap-1">
+      <label for={id} class="font-space text-text-brand font-bold">{field.label}</label>
+      <Tooltip.Provider delayDuration={0}>
+        <Tooltip.Root bind:open={sourceOpen} disableCloseOnTriggerClick>
+          <Tooltip.Trigger
+            type="button"
+            aria-label={`Source information for ${field.label}`}
+            onclick={() => (sourceOpen = true)}
+            class="text-text-brand-muted hover:text-text-brand inline-flex size-8 shrink-0 items-center justify-center rounded-sm"
+          >
+            <Info class="size-4" aria-hidden="true" />
+          </Tooltip.Trigger>
+          <Tooltip.Content
+            role="tooltip"
+            side="bottom"
+            align="start"
+            sideOffset={6}
+            class="max-w-[min(22rem,calc(100vw-2rem))] space-y-1 text-left text-wrap break-words"
+          >
+            <p>
+              Source: {sourceLabel(active.source)}{active.source.name
+                ? ` (${active.source.name})`
+                : ''}
+            </p>
+            {#if active.reason}<p>{active.reason}</p>{/if}
+            {#if active.source.locked && active.source.web_selected}<p>
+                A stored web selection is overridden by this source.
+              </p>{/if}
+          </Tooltip.Content>
+        </Tooltip.Root>
+      </Tooltip.Provider>
+    </div>
     {#if active.source.locked}<span class="text-text-brand-muted text-xs font-semibold">Locked</span
       >{:else if !editable}<span class="text-text-brand-muted text-xs">Read only</span>{/if}
   </div>
@@ -108,21 +142,16 @@
   {:else}
     <p {id} class="text-text-brand text-sm">{display(active.value)}</p>
   {/if}
-  <div id={`${id}-source`} class="text-text-brand-muted space-y-1 text-xs break-words">
-    <p>
-      Source: {sourceLabel(active.source)}{active.source.name ? ` (${active.source.name})` : ''}
-    </p>
-    {#if edit}<p>
-        Current value: {display(active.value)}. {edit.action === 'reset'
-          ? 'Reset to the inherited value on save.'
-          : 'Unsaved change.'}
-      </p>{/if}
-    {#if active.reason}<p>{active.reason}</p>{/if}
-    {#if active.source.locked && active.source.web_selected}<p>
-        A stored web selection is overridden by this source.
-      </p>{/if}
-    {#if editable}<p>Applies after saving.</p>{/if}
-  </div>
+  {#if edit || editable}
+    <div id={`${id}-status`} class="text-text-brand-muted space-y-1 text-xs break-words">
+      {#if edit}<p>
+          Current value: {display(active.value)}. {edit.action === 'reset'
+            ? 'Reset to the inherited value on save.'
+            : 'Unsaved change.'}
+        </p>{/if}
+      {#if editable}<p>Applies after saving.</p>{/if}
+    </div>
+  {/if}
   {#if errors.length}<div id={`${id}-errors`} class="text-hister-rose text-sm">
       {#each errors as error}<p>{error}</p>{/each}
     </div>{/if}
