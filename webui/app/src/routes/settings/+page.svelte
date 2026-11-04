@@ -26,7 +26,8 @@
   let needsReload = $state(false);
   let destroyed = false;
   const categories = $derived([...new Set(state?.fields.map((field) => field.category) ?? [])]);
-  const dirty = $derived(Object.keys(edits).length > 0);
+  const editCount = $derived(Object.keys(edits).length);
+  const dirty = $derived(editCount > 0);
   const values = $derived(new Map(state?.values.map((value) => [value.path, value]) ?? []));
   const groups = $derived(groupSettings(state?.fields ?? [], category));
 
@@ -124,8 +125,8 @@
         needsReload = true;
         problem =
           error.code === 'sources_changed'
-            ? 'Configuration sources changed or cannot be read. Reload the server configuration, then reload settings. Your draft is still here.'
-            : 'Settings changed since you opened this page. Reload settings before saving again. Your draft is still here.';
+            ? 'Configuration sources changed or cannot be read. Reload the server configuration, then reload settings.'
+            : 'Settings changed since you opened this page. Reload settings before saving again.';
       } else {
         errors = error.fields;
         problem = error.fields.length ? 'Please correct the highlighted settings.' : error.message;
@@ -142,6 +143,14 @@
     errors = errors.filter((error) => error.path !== path);
     if (!needsReload) problem = '';
     message = '';
+  }
+
+  function discard() {
+    if (busy || !dirty) return;
+    edits = {};
+    errors = [];
+    if (!needsReload) problem = '';
+    message = 'Unsaved changes discarded.';
   }
 
   function tabErrors(tab: string) {
@@ -199,8 +208,8 @@
             'Settings were saved, but active settings could not be refreshed. Reload settings before making another change.';
         else if (!(error instanceof SettingsError))
           problem =
-            'The save response was lost. The change may have been applied. Reload settings to check the active values before saving again. Your draft is still here.';
-        else problem += ' Reload settings before saving again. Your draft is still here.';
+            'The save response was lost. The change may have been applied. Reload settings to check the active values before saving again.';
+        else problem += ' Reload settings before saving again.';
         // Show the active values alongside the retained draft, without accepting
         // a new revision for another save until the owner explicitly reloads.
         if (!saved) {
@@ -230,7 +239,7 @@
         Configure appearance, search behavior and logging. Other settings are shown for reference.
       </p>
       {#if problem}<div role="alert" class="text-hister-rose my-2 text-sm">
-          <p>{problem}</p>
+          <p>{problem}{needsReload && dirty ? ' Your draft is still here.' : ''}</p>
           {#each errors.filter((error) => !error.path || !categories.includes(error.path.split('.')[0])) as error}<p
             >
               {error.message}
@@ -325,11 +334,28 @@
           </div>
         </div>
         <div
-          class="border-border-brand-muted flex shrink-0 flex-wrap items-center gap-3 border-t px-4 py-3 md:px-6"
+          class="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-t px-4 py-3 md:px-6 {dirty
+            ? 'border-hister-indigo/50 bg-hister-indigo/5'
+            : 'border-border-brand-muted bg-page-bg'}"
         >
-          <Button type="submit" disabled={busy || !dirty || needsReload}>Save and apply</Button>
-          <p class="text-text-brand-muted text-sm">
-            {dirty ? 'Unsaved changes' : 'No unsaved changes'}
+          <div class="flex flex-wrap items-center gap-2">
+            <Button type="submit" disabled={busy || !dirty || needsReload}>Save and apply</Button>
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={busy || !dirty}
+              onclick={discard}
+              class="text-text-brand-secondary px-3">Discard changes</Button
+            >
+          </div>
+          <p
+            aria-live="polite"
+            aria-atomic="true"
+            class="text-sm {dirty ? 'text-text-brand font-medium' : 'text-text-brand-muted'}"
+          >
+            {dirty
+              ? `${editCount} unsaved ${editCount === 1 ? 'change' : 'changes'}`
+              : 'No unsaved changes'}
           </p>
         </div>
       </form>

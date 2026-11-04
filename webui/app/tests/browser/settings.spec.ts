@@ -153,6 +153,156 @@ test('authorized navigation edits typed App fields and saves one draft across ta
   );
 });
 
+test('the save bar counts edited fields and discards the draft from any tab without saving', async ({
+  page,
+}) => {
+  await settingsAPI(page);
+  const requests: string[] = [];
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname.startsWith('/api/settings')) {
+      requests.push(`${request.method()} ${new URL(request.url()).pathname}`);
+    }
+  });
+  await page.goto('/settings');
+  const discard = page.getByRole('button', { name: 'Discard changes', exact: true });
+  const save = page.getByRole('button', { name: 'Save and apply', exact: true });
+  const title = page.getByRole('textbox', { name: 'Title', exact: true });
+  const snippet = page.getByRole('spinbutton', { name: 'Snippet length', exact: true });
+  await expect(discard).toBeDisabled();
+  await expect(page.getByText('No unsaved changes', { exact: true })).toBeVisible();
+  await title.fill('Draft title');
+  await title.fill('Revised draft title');
+  await expect(page.getByText('1 unsaved change', { exact: true })).toBeVisible();
+  await snippet.fill('420');
+  await page.getByRole('button', { name: 'Reset Show suggestions', exact: true }).click();
+  await expect(page.getByText('3 unsaved changes', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Undo Title', exact: true }).click();
+  await expect(page.getByText('2 unsaved changes', { exact: true })).toBeVisible();
+  await page.getByRole('tab', { name: 'Server', exact: true }).click();
+  await discard.click();
+  await expect(page.getByRole('tab', { name: 'Server', exact: true })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await expect(page.getByText('No unsaved changes', { exact: true })).toBeVisible();
+  await expect(discard).toBeDisabled();
+  await expect(save).toBeDisabled();
+  await expect(page.getByRole('status')).toHaveText('Unsaved changes discarded.');
+  await page.getByRole('tab', { name: 'App', exact: true }).click();
+  await expect(title).toHaveValue('Hister');
+  await expect(snippet).toHaveValue('300');
+  await expect(page.getByRole('switch', { name: 'Show suggestions', exact: true })).toBeChecked();
+  expect(requests).toEqual(['GET /api/settings']);
+  page.on('dialog', (dialog) => dialog.dismiss());
+  await page.getByRole('link', { name: 'Rules', exact: true }).click();
+  await expect(page).toHaveURL(/\/rules$/);
+});
+
+test('typing the loaded value again removes the pending change and navigation warning', async ({
+  page,
+}) => {
+  const { state } = await settingsAPI(page);
+  state.values[0].value = 'Saved archive';
+  Object.assign(state.values[0].source, { kind: 'web', web_selected: true });
+  await page.goto('/settings');
+  const title = page.getByRole('textbox', { name: 'Title', exact: true });
+  await title.fill('Draft archive');
+  await expect(page.getByText('1 unsaved change', { exact: true })).toBeVisible();
+  await title.fill('Saved archive');
+  await expect(page.getByText('No unsaved changes', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Save and apply', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Discard changes', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Undo Title', exact: true })).toHaveCount(0);
+  await expect(title).not.toHaveAccessibleDescription(/Unsaved change/);
+  await page.getByRole('tab', { name: 'Server', exact: true }).click();
+  await page.getByRole('tab', { name: 'App', exact: true }).click();
+  await expect(title).toHaveValue('Saved archive');
+  page.on('dialog', (dialog) => dialog.dismiss());
+  await page.getByRole('link', { name: 'Rules', exact: true }).click();
+  await expect(page).toHaveURL(/\/rules$/);
+});
+
+test('restoring typed values leaves only unrelated edits and explicit resets in the draft', async ({
+  page,
+}) => {
+  const { state } = await settingsAPI(page);
+  state.values.find((value) => value.path === 'app.show_suggestions')!.value = false;
+  let saved: unknown;
+  await page.route('**/api/settings/apply', (route) => {
+    saved = route.request().postDataJSON();
+    state.values[0].value = 'Keep this draft';
+    return route.fulfill({ json: { saved: true } });
+  });
+  await page.goto('/settings');
+  await page.getByRole('textbox', { name: 'Title', exact: true }).fill('Keep this draft');
+  const subtitle = page.getByRole('textbox', { name: 'Subtitle', exact: true });
+  const snippet = page.getByRole('spinbutton', { name: 'Snippet length', exact: true });
+  const color = page.getByRole('combobox', { name: 'Color scheme', exact: true });
+  const suggestions = page.getByRole('switch', { name: 'Show suggestions', exact: true });
+  for (const [label, edit, restore] of [
+    ['Subtitle', () => subtitle.fill('Temporary subtitle'), () => subtitle.fill('')],
+    ['Snippet length', () => snippet.fill('420'), () => snippet.fill('0300')],
+    ['Color scheme', () => color.selectOption('dark'), () => color.selectOption('automatic')],
+    ['Show suggestions', () => suggestions.check(), () => suggestions.uncheck()],
+  ] as const) {
+    await test.step(`Restore ${label}`, async () => {
+      await edit();
+      await expect(page.getByText('2 unsaved changes', { exact: true })).toBeVisible();
+      await restore();
+      await expect(page.getByText('1 unsaved change', { exact: true })).toBeVisible();
+      await expect(page.getByRole('button', { name: `Undo ${label}`, exact: true })).toHaveCount(0);
+    });
+  }
+  // A reset removes the stored selection even when its value already equals the default.
+  await page.getByRole('button', { name: 'Reset Show suggestions', exact: true }).click();
+  await expect(page.getByText('2 unsaved changes', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
+  await expect(page.getByRole('status')).toHaveText('Settings saved and applied.');
+  expect(saved).toEqual({
+    revision: 'revision-1',
+    edits: [
+      { path: 'app.title', action: 'set', value: 'Keep this draft' },
+      { path: 'app.show_suggestions', action: 'reset' },
+    ],
+  });
+});
+
+test('the draft cannot be discarded while saving and the count clears after success', async ({
+  page,
+}) => {
+  const { state } = await settingsAPI(page);
+  let finishValidation = () => {};
+  const validationGate = new Promise<void>((resolve) => {
+    finishValidation = resolve;
+  });
+  await page.route('**/api/settings/validate', async (route) => {
+    await validationGate;
+    await route.fulfill({ json: { revision: state.revision, values: state.values } });
+  });
+  await page.route('**/api/settings/apply', (route) => {
+    state.values[0].value = 'Saved draft';
+    return route.fulfill({ json: { saved: true } });
+  });
+  await page.goto('/settings');
+  const title = page.getByRole('textbox', { name: 'Title', exact: true });
+  const save = page.getByRole('button', { name: 'Save and apply', exact: true });
+  const discard = page.getByRole('button', { name: 'Discard changes', exact: true });
+  await title.fill('Saved draft');
+  try {
+    await save.click();
+    await expect(page.getByRole('status')).toHaveText('Validating settings…');
+    await expect(save).toBeDisabled();
+    await expect(discard).toBeDisabled();
+    await expect(title).toBeDisabled();
+  } finally {
+    finishValidation();
+  }
+  await expect(page.getByRole('status')).toHaveText('Settings saved and applied.');
+  await expect(title).toHaveValue('Saved draft');
+  await expect(page.getByText('No unsaved changes', { exact: true })).toBeVisible();
+  await expect(discard).toBeDisabled();
+});
+
 test('related settings are grouped while drafts and unrecognized fields remain available', async ({
   page,
 }) => {
@@ -395,7 +545,7 @@ test('reset removes a web selection while clear stores an explicit empty string'
   });
 });
 
-test('validation errors identify their tab and preserve the complete draft', async ({ page }) => {
+test('validation errors preserve the draft and clear when it is discarded', async ({ page }) => {
   await settingsAPI(page);
   let applied = false;
   await page.route('**/api/settings/apply', (route) => {
@@ -428,6 +578,17 @@ test('validation errors identify their tab and preserve the complete draft', asy
     'Keep this draft',
   );
   expect(applied).toBe(false);
+  await page.getByRole('button', { name: 'Discard changes', exact: true }).click();
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await expect(page.getByRole('tab', { name: 'App', exact: true })).toBeVisible();
+  await expect(page.getByRole('spinbutton', { name: 'Snippet length', exact: true })).toHaveValue(
+    '300',
+  );
+  await expect(
+    page.getByRole('spinbutton', { name: 'Snippet length', exact: true }),
+  ).toHaveAttribute('aria-invalid', 'false');
+  await expect(page.getByText('Must be at least 1.', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Save and apply', exact: true })).toBeDisabled();
 });
 
 test('stale revisions retain the draft and require an explicit reload', async ({ page }) => {
@@ -486,6 +647,40 @@ test('a lost save response rereads active state without replaying the save', asy
   await expect(page.getByRole('textbox', { name: 'Title', exact: true })).toHaveValue(
     'Saved despite disconnect',
   );
+});
+
+test('discarding a stale draft preserves the reload requirement without claiming the draft remains', async ({
+  page,
+}) => {
+  const { state } = await settingsAPI(page);
+  await page.route('**/api/settings/validate', (route) =>
+    route.fulfill({
+      status: 409,
+      json: { code: 'stale_revision', error: 'Read current settings.' },
+    }),
+  );
+  await page.goto('/settings');
+  const title = page.getByRole('textbox', { name: 'Title', exact: true });
+  const save = page.getByRole('button', { name: 'Save and apply', exact: true });
+  const discard = page.getByRole('button', { name: 'Discard changes', exact: true });
+  await title.fill('Stale draft');
+  await save.click();
+  await expect(page.getByRole('alert')).toContainText('Your draft is still here.');
+  await discard.click();
+  await expect(title).toHaveValue('Hister');
+  await expect(page.getByRole('alert')).toContainText('Reload settings before saving again.');
+  await expect(page.getByRole('alert')).not.toContainText('Your draft is still here.');
+  await title.fill('Another draft');
+  await expect(save).toBeDisabled();
+  await expect(page.getByRole('alert')).toContainText('Your draft is still here.');
+  await discard.click();
+  state.values[0].value = 'Current server title';
+  state.revision = 'revision-2';
+  await page.getByRole('button', { name: 'Reload settings', exact: true }).click();
+  await expect(title).toHaveValue('Current server title');
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await title.fill('Fresh draft');
+  await expect(save).toBeEnabled();
 });
 
 test('temporary service interruptions recover after save and refresh public configuration', async ({
