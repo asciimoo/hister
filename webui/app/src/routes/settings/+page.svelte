@@ -281,7 +281,7 @@
           id={`panel-${category}`}
           aria-labelledby={`tab-${category}`}
           tabindex="0"
-          class="min-h-0 flex-1 overflow-y-auto px-1 focus:outline-none"
+          class="bg-card-surface min-h-0 flex-1 overflow-y-auto px-1 focus:outline-none"
         >
           {#each tabErrors(category).filter((error) => !state?.fields.some((field) => field.path === error.path)) as error}<p
               class="text-hister-rose my-2 text-sm"
