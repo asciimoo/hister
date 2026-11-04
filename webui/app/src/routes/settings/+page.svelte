@@ -236,7 +236,7 @@
 <div class="bg-page-bg text-text-brand flex min-h-0 flex-1 flex-col">
   <div class="flex min-h-0 w-full flex-1 flex-col pt-5">
     <div class="flex shrink-0 flex-col px-4 md:px-6">
-      <h2 class="font-space text-2xl font-extrabold">Settings</h2>
+      <h2 class="font-space text-2xl font-bold tracking-tight">Settings</h2>
       <p class="text-text-brand-muted my-2 text-sm">
         Configure appearance, search behavior and logging. Other settings are shown for reference.
       </p>
@@ -275,10 +275,10 @@
               tabindex={category === item ? 0 : -1}
               onclick={() => (category = item)}
               onkeydown={(event) => tabKeydown(event, index)}
-              class="font-space hover:bg-muted-surface shrink-0 cursor-pointer border-b-2 px-3 py-2 text-sm font-semibold whitespace-nowrap transition-colors lg:border-b-0 lg:border-l-2 lg:py-3 lg:text-left lg:whitespace-normal {category ===
+              class="font-inter hover:bg-muted-surface shrink-0 cursor-pointer border-b-2 px-3 py-2 text-sm whitespace-nowrap transition-colors lg:border-b-0 lg:border-l-2 lg:py-3 lg:text-left lg:whitespace-normal {category ===
               item
-                ? 'border-hister-indigo text-text-brand lg:bg-hister-indigo/10'
-                : 'text-text-brand-muted border-transparent'}"
+                ? 'border-hister-indigo text-text-brand lg:bg-hister-indigo/10 font-semibold'
+                : 'text-text-brand-muted border-transparent font-medium'}"
               >{categoryLabels[item] ?? item}{count
                 ? ` (${count} ${count === 1 ? 'error' : 'errors'})`
                 : ''}</button
@@ -312,7 +312,7 @@
                     {#if group.label}
                       <h3
                         id={`${category}-group-${index}`}
-                        class="font-space text-text-brand mb-3 text-xl font-bold"
+                        class="font-space text-text-brand mb-3 text-lg font-semibold tracking-tight"
                       >
                         {group.label}
                       </h3>

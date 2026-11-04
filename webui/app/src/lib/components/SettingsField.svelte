@@ -64,7 +64,7 @@
   <div class="min-w-0 space-y-1 break-words">
     <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
       <div class="flex min-w-0 flex-wrap items-center gap-1">
-        <label for={id} class="font-space text-text-brand min-w-0 text-lg font-bold break-words"
+        <label for={id} class="font-inter text-text-brand min-w-0 text-sm font-medium break-words"
           >{field.label}</label
         >
         <Tooltip.Provider delayDuration={0}>
@@ -120,7 +120,9 @@
         </div>
       {/if}
     </div>
-    <p id={`${id}-description`} class="text-text-brand-muted text-sm">{field.description}</p>
+    <p id={`${id}-description`} class="text-text-brand-muted text-sm leading-relaxed">
+      {field.description}
+    </p>
   </div>
   <div class="min-w-0 space-y-3 break-words">
     <div class="flex lg:justify-end">
