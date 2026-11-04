@@ -34,7 +34,7 @@
   );
   const id = $derived(`setting-${field.path}`);
   const description = $derived(
-    `${id}-description${edit || editable ? ` ${id}-status` : ''}${errors.length ? ` ${id}-errors` : ''}`,
+    `${id}-description${edit ? ` ${id}-status` : ''}${errors.length ? ` ${id}-errors` : ''}`,
   );
   function set(value: unknown) {
     onEdit({ path: field.path, action: 'set', value });
@@ -142,15 +142,12 @@
   {:else}
     <p {id} class="text-text-brand text-sm">{display(active.value)}</p>
   {/if}
-  {#if edit || editable}
-    <div id={`${id}-status`} class="text-text-brand-muted space-y-1 text-xs break-words">
-      {#if edit}<p>
-          Current value: {display(active.value)}. {edit.action === 'reset'
-            ? 'Reset to the inherited value on save.'
-            : 'Unsaved change.'}
-        </p>{/if}
-      {#if editable}<p>Applies after saving.</p>{/if}
-    </div>
+  {#if edit}
+    <p id={`${id}-status`} class="text-text-brand-muted text-xs break-words">
+      Current value: {display(active.value)}. {edit.action === 'reset'
+        ? 'Reset to the inherited value on save.'
+        : 'Unsaved change.'}
+    </p>
   {/if}
   {#if errors.length}<div id={`${id}-errors`} class="text-hister-rose text-sm">
       {#each errors as error}<p>{error}</p>{/each}
