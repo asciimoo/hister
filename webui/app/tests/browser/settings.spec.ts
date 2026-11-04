@@ -730,14 +730,36 @@ test('temporary service interruptions recover after save and refresh public conf
 
 test('keyboard tabs preserve drafts and navigation warns about unsaved changes', async ({
   page,
+  isMobile,
 }) => {
   await settingsAPI(page);
   await page.goto('/settings');
   await page.getByRole('textbox', { name: 'Title', exact: true }).fill('Unsaved');
   await page.getByRole('tab', { name: 'App', exact: true }).focus();
-  await page.keyboard.press('ArrowRight');
+  const next = isMobile ? 'ArrowRight' : 'ArrowDown';
+  const previous = isMobile ? 'ArrowLeft' : 'ArrowUp';
+  await page.keyboard.press(next);
   await expect(page.getByRole('tab', { name: 'Server', exact: true })).toBeFocused();
   await expect(page.getByRole('tabpanel')).toHaveAccessibleName('Server');
+  await page.keyboard.press(next);
+  await expect(page.getByRole('tab', { name: 'App', exact: true })).toBeFocused();
+  await page.keyboard.press(previous);
+  await expect(page.getByRole('tab', { name: 'Server', exact: true })).toBeFocused();
+  await page.keyboard.press('Home');
+  const navigation = page.getByRole('tablist', { name: 'Configuration categories' });
+  await expect(navigation).toHaveAttribute(
+    'aria-orientation',
+    isMobile ? 'horizontal' : 'vertical',
+  );
+  await page.keyboard.press(isMobile ? 'ArrowDown' : 'ArrowRight');
+  await expect(page.getByRole('tab', { name: 'App', exact: true })).toBeFocused();
+  await page.setViewportSize({ width: isMobile ? 1280 : 375, height: 800 });
+  await expect(navigation).toHaveAttribute(
+    'aria-orientation',
+    isMobile ? 'vertical' : 'horizontal',
+  );
+  await page.keyboard.press(isMobile ? 'ArrowDown' : 'ArrowRight');
+  await expect(page.getByRole('tab', { name: 'Server', exact: true })).toBeFocused();
   await page.keyboard.press('Home');
   await expect(page.getByRole('textbox', { name: 'Title', exact: true })).toHaveValue('Unsaved');
   const dismissed = page.waitForEvent('dialog').then((dialog) => dialog.dismiss());
@@ -811,8 +833,9 @@ test('session requests carry CSRF protection and drafts stay out of browser stor
   );
 });
 
-test('all categories remain accessible on narrow screens and secrets remain hidden', async ({
+test('category navigation fits beside desktop settings and above mobile settings', async ({
   page,
+  isMobile,
 }) => {
   const { state } = await settingsAPI(page);
   for (const category of [
@@ -842,11 +865,30 @@ test('all categories remain accessible on narrow screens and secrets remain hidd
     });
   }
   await page.goto('/settings');
+  const navigation = page.getByRole('tablist', { name: 'Configuration categories' });
+  const tabs = navigation.getByRole('tab');
+  await expect(tabs).toHaveCount(8);
+  const navigationBox = (await navigation.boundingBox())!;
+  const panelBox = (await page.getByRole('tabpanel').boundingBox())!;
+  const appBox = (await tabs.first().boundingBox())!;
+  const serverBox = (await tabs.nth(1).boundingBox())!;
+  if (isMobile) {
+    expect(navigationBox.y + navigationBox.height).toBeLessThanOrEqual(panelBox.y + 1);
+    expect(serverBox.x).toBeGreaterThan(appBox.x);
+    expect(serverBox.y).toBe(appBox.y);
+  } else {
+    expect(navigationBox.x + navigationBox.width).toBeLessThanOrEqual(panelBox.x + 1);
+    expect(navigationBox.width).toBeLessThan(300);
+    expect(serverBox.y).toBeGreaterThan(appBox.y);
+    expect(serverBox.x).toBe(appBox.x);
+    for (const tab of await tabs.all()) await expect(tab).toBeInViewport();
+  }
   await page
     .getByRole('textbox', { name: 'Title', exact: true })
     .fill('Draft across all categories');
   await page.getByRole('tab', { name: 'App', exact: true }).focus();
   await page.keyboard.press('End');
+  await expect(tabs.last()).toBeInViewport();
   await expect(page.getByRole('tabpanel')).toHaveAccessibleName('Sensitive content patterns');
   await expect(page.getByText('Value stored (hidden)', { exact: true })).toBeVisible();
   await expect(page.getByRole('tabpanel').getByRole('textbox')).toHaveCount(0);

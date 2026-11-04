@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
+  import { MediaQuery } from 'svelte/reactivity';
   import { beforeNavigate } from '$app/navigation';
   import { Button } from '@hister/components/ui/button';
   import { fetchConfig, resetConfig } from '#lib/api.js';
@@ -25,6 +26,7 @@
   let problem = $state('');
   let needsReload = $state(false);
   let destroyed = false;
+  const sidebarLayout = new MediaQuery('(min-width: 64rem)');
   const categories = $derived([...new Set(state?.fields.map((field) => field.category) ?? [])]);
   const editCount = $derived(Object.keys(edits).length);
   const dirty = $derived(editCount > 0);
@@ -160,10 +162,10 @@
   function tabKeydown(event: KeyboardEvent, index: number) {
     let next = index;
     switch (event.key) {
-      case 'ArrowRight':
+      case sidebarLayout.current ? 'ArrowDown' : 'ArrowRight':
         next = (index + 1) % categories.length;
         break;
-      case 'ArrowLeft':
+      case sidebarLayout.current ? 'ArrowUp' : 'ArrowLeft':
         next = (index + categories.length - 1) % categories.length;
         break;
       case 'Home':
@@ -255,110 +257,113 @@
         >{/if}
     </div>
     {#if state && !denied}
-      <div
-        role="tablist"
-        aria-label="Configuration categories"
-        class="border-border-brand-muted flex shrink-0 gap-1 overflow-x-auto border-b px-4 pb-2 md:px-6"
-      >
-        {#each categories as item, index}
-          {@const count = tabErrors(item).length}
-          <button
-            type="button"
-            role="tab"
-            id={`tab-${item}`}
-            aria-controls={`panel-${item}`}
-            aria-selected={category === item}
-            tabindex={category === item ? 0 : -1}
-            onclick={() => (category = item)}
-            onkeydown={(event) => tabKeydown(event, index)}
-            class="font-space hover:bg-muted-surface shrink-0 cursor-pointer border-b-2 px-3 py-2 text-sm font-semibold transition-colors {category ===
-            item
-              ? 'border-hister-indigo text-text-brand'
-              : 'text-text-brand-muted border-transparent'}"
-            >{categoryLabels[item] ?? item}{count
-              ? ` (${count} ${count === 1 ? 'error' : 'errors'})`
-              : ''}</button
-          >
-        {/each}
-      </div>
-      <form
-        class="flex min-h-0 flex-1 flex-col"
-        onsubmit={(event) => {
-          event.preventDefault();
-          void save();
-        }}
-        novalidate
-      >
+      <div class="border-border-brand-muted flex min-h-0 flex-1 flex-col lg:flex-row lg:border-t">
         <div
-          role="tabpanel"
-          id={`panel-${category}`}
-          aria-labelledby={`tab-${category}`}
-          tabindex="0"
-          class="bg-card-surface min-h-0 flex-1 overflow-y-auto p-4 focus:outline-none md:p-6"
+          role="tablist"
+          aria-label="Configuration categories"
+          aria-orientation={sidebarLayout.current ? 'vertical' : 'horizontal'}
+          class="border-border-brand-muted flex shrink-0 gap-1 overflow-x-auto border-b px-4 py-2 md:px-6 lg:w-56 lg:flex-col lg:overflow-x-hidden lg:overflow-y-auto lg:border-r lg:border-b-0 lg:p-3"
         >
-          <div class="w-full">
-            {#each tabErrors(category).filter((error) => !state?.fields.some((field) => field.path === error.path)) as error}<p
-                class="text-hister-rose my-2 text-sm"
-              >
-                {error.path}: {error.message}
-              </p>{/each}
-            <div class="space-y-10">
-              {#each groups as group, index (group.label)}
-                <section aria-labelledby={group.label ? `${category}-group-${index}` : undefined}>
-                  {#if group.label}
-                    <h3
-                      id={`${category}-group-${index}`}
-                      class="font-space text-text-brand mb-3 text-xl font-bold"
-                    >
-                      {group.label}
-                    </h3>
-                  {/if}
-                  <div class="max-w-[57rem] {group.label ? 'ml-4 md:ml-6' : ''}">
-                    {#each group.fields as field (field.path)}
-                      {@const active = values.get(field.path)}
-                      {#if active}<SettingsField
-                          {field}
-                          {active}
-                          edit={edits[field.path]}
-                          errors={errors
-                            .filter((error) => error.path === field.path)
-                            .map((error) => error.message)}
-                          disabled={busy}
-                          onEdit={(edit) => update(field.path, edit)}
-                        />{/if}
-                    {/each}
-                  </div>
-                </section>
-              {/each}
+          {#each categories as item, index}
+            {@const count = tabErrors(item).length}
+            <button
+              type="button"
+              role="tab"
+              id={`tab-${item}`}
+              aria-controls={`panel-${item}`}
+              aria-selected={category === item}
+              tabindex={category === item ? 0 : -1}
+              onclick={() => (category = item)}
+              onkeydown={(event) => tabKeydown(event, index)}
+              class="font-space hover:bg-muted-surface shrink-0 cursor-pointer border-b-2 px-3 py-2 text-sm font-semibold whitespace-nowrap transition-colors lg:border-b-0 lg:border-l-2 lg:py-3 lg:text-left lg:whitespace-normal {category ===
+              item
+                ? 'border-hister-indigo text-text-brand lg:bg-hister-indigo/10'
+                : 'text-text-brand-muted border-transparent'}"
+              >{categoryLabels[item] ?? item}{count
+                ? ` (${count} ${count === 1 ? 'error' : 'errors'})`
+                : ''}</button
+            >
+          {/each}
+        </div>
+        <form
+          class="flex min-h-0 min-w-0 flex-1 flex-col"
+          onsubmit={(event) => {
+            event.preventDefault();
+            void save();
+          }}
+          novalidate
+        >
+          <div
+            role="tabpanel"
+            id={`panel-${category}`}
+            aria-labelledby={`tab-${category}`}
+            tabindex="0"
+            class="bg-card-surface min-h-0 flex-1 overflow-y-auto p-4 focus:outline-none md:p-6"
+          >
+            <div class="w-full">
+              {#each tabErrors(category).filter((error) => !state?.fields.some((field) => field.path === error.path)) as error}<p
+                  class="text-hister-rose my-2 text-sm"
+                >
+                  {error.path}: {error.message}
+                </p>{/each}
+              <div class="space-y-10">
+                {#each groups as group, index (group.label)}
+                  <section aria-labelledby={group.label ? `${category}-group-${index}` : undefined}>
+                    {#if group.label}
+                      <h3
+                        id={`${category}-group-${index}`}
+                        class="font-space text-text-brand mb-3 text-xl font-bold"
+                      >
+                        {group.label}
+                      </h3>
+                    {/if}
+                    <div class="max-w-[57rem] {group.label ? 'ml-4 md:ml-6' : ''}">
+                      {#each group.fields as field (field.path)}
+                        {@const active = values.get(field.path)}
+                        {#if active}<SettingsField
+                            {field}
+                            {active}
+                            edit={edits[field.path]}
+                            errors={errors
+                              .filter((error) => error.path === field.path)
+                              .map((error) => error.message)}
+                            disabled={busy}
+                            onEdit={(edit) => update(field.path, edit)}
+                          />{/if}
+                      {/each}
+                    </div>
+                  </section>
+                {/each}
+              </div>
             </div>
           </div>
-        </div>
-        <div
-          class="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-t px-4 py-3 md:px-6 {dirty
-            ? 'border-hister-indigo/50 bg-hister-indigo/5'
-            : 'border-border-brand-muted bg-page-bg'}"
-        >
-          <div class="flex flex-wrap items-center gap-2">
-            <Button type="submit" disabled={busy || !dirty || needsReload}>Save and apply</Button>
-            <Button
-              type="button"
-              variant="ghost"
-              disabled={busy || !dirty}
-              onclick={discard}
-              class="text-text-brand-secondary px-3">Discard changes</Button
-            >
-          </div>
-          <p
-            aria-live="polite"
-            aria-atomic="true"
-            class="text-sm {dirty ? 'text-text-brand font-medium' : 'text-text-brand-muted'}"
+          <div
+            class="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-t px-4 py-3 md:px-6 {dirty
+              ? 'border-hister-indigo/50 bg-hister-indigo/5'
+              : 'border-border-brand-muted bg-page-bg'}"
           >
-            {dirty
-              ? `${editCount} unsaved ${editCount === 1 ? 'change' : 'changes'}`
-              : 'No unsaved changes'}
-          </p>
-        </div>
-      </form>
+            <div class="flex flex-wrap items-center gap-2">
+              <Button type="submit" disabled={busy || !dirty || needsReload}>Save and apply</Button>
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={busy || !dirty}
+                onclick={discard}
+                class="text-text-brand-secondary px-3">Discard changes</Button
+              >
+            </div>
+            <p
+              aria-live="polite"
+              aria-atomic="true"
+              class="text-sm {dirty ? 'text-text-brand font-medium' : 'text-text-brand-muted'}"
+            >
+              {dirty
+                ? `${editCount} unsaved ${editCount === 1 ? 'change' : 'changes'}`
+                : 'No unsaved changes'}
+            </p>
+          </div>
+        </form>
+      </div>
     {/if}
   </div>
 </div>
