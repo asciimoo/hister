@@ -72,7 +72,7 @@
               type="button"
               aria-label={`${active.source.locked ? 'Locked: ' : !editable ? 'Read only: ' : ''}Source information for ${field.label}`}
               onclick={() => (sourceOpen = true)}
-              class="text-text-brand-muted hover:text-text-brand inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-sm {active
+              class="text-text-brand-muted hover:text-text-brand inline-flex h-8 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-sm {active
                 .source.locked || !editable
                 ? 'px-1 text-xs'
                 : 'w-8'}"
@@ -134,6 +134,7 @@
       {:else if field.schema.control === 'switch'}
         <Switch
           {id}
+          class="cursor-pointer"
           checked={value === true}
           onCheckedChange={set}
           {disabled}
@@ -148,7 +149,7 @@
           {disabled}
           aria-describedby={description}
           aria-invalid={errors.length > 0}
-          class={controlClass}
+          class={`${controlClass} cursor-pointer`}
         >
           {#each field.schema.choices ?? [] as choice}<option value={choice}
               >{choice || 'Default'}</option
@@ -157,7 +158,7 @@
       {:else if field.schema.control === 'number'}
         <Input
           {id}
-          class={`${controlClass} max-w-40`}
+          class={`${controlClass} max-w-40 cursor-text`}
           type="number"
           value={typeof value === 'number' ? value : undefined}
           min={field.schema.min}
@@ -172,7 +173,7 @@
       {:else if field.schema.control === 'text'}
         <Input
           {id}
-          class={controlClass}
+          class={`${controlClass} cursor-text`}
           value={String(value ?? '')}
           maxlength={field.schema.max_length}
           oninput={(event) => set(event.currentTarget.value)}
