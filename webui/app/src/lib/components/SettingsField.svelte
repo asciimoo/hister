@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Badge } from '@hister/components/ui/badge';
   import { Button } from '@hister/components/ui/button';
   import { Input } from '@hister/components/ui/input';
   import { Switch } from '@hister/components/ui/switch';
@@ -58,56 +59,61 @@
       ? 'border-l-border-brand bg-muted-surface/50 border-l-2 px-3'
       : ''}"
 >
-  <div class="flex flex-wrap items-center justify-between gap-2">
-    <div class="flex items-center gap-1">
-      <label for={id} class="font-space text-text-brand text-lg font-bold">{field.label}</label>
-      <Tooltip.Provider delayDuration={0}>
-        <Tooltip.Root bind:open={sourceOpen} disableCloseOnTriggerClick>
-          <Tooltip.Trigger
-            type="button"
-            aria-label={`Source information for ${field.label}`}
-            onclick={() => (sourceOpen = true)}
-            class="text-text-brand-muted hover:text-text-brand inline-flex size-8 shrink-0 items-center justify-center rounded-sm"
-          >
-            <Info class="size-4" aria-hidden="true" />
-          </Tooltip.Trigger>
-          <Tooltip.Content
-            role="tooltip"
-            side="bottom"
-            align="start"
-            sideOffset={6}
-            class="max-w-[min(22rem,calc(100vw-2rem))] space-y-1 text-left text-wrap break-words"
-          >
-            <p>
-              Source: {sourceLabel(active.source)}{active.source.name
-                ? ` (${active.source.name})`
-                : ''}
-            </p>
-            {#if active.reason}<p>{active.reason}</p>{/if}
-            {#if active.source.locked && active.source.web_selected}<p>
-                A stored web selection is overridden by this source.
-              </p>{/if}
-          </Tooltip.Content>
-        </Tooltip.Root>
-      </Tooltip.Provider>
+  <div class="space-y-1">
+    <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+      <div class="flex min-w-0 items-center gap-1">
+        <label for={id} class="font-space text-text-brand min-w-0 text-lg font-bold break-words"
+          >{field.label}</label
+        >
+        <Tooltip.Provider delayDuration={0}>
+          <Tooltip.Root bind:open={sourceOpen} disableCloseOnTriggerClick>
+            <Tooltip.Trigger
+              type="button"
+              aria-label={`Source information for ${field.label}`}
+              onclick={() => (sourceOpen = true)}
+              class="text-text-brand-muted hover:text-text-brand inline-flex size-8 shrink-0 items-center justify-center rounded-sm"
+            >
+              <Info class="size-4" aria-hidden="true" />
+            </Tooltip.Trigger>
+            <Tooltip.Content
+              role="tooltip"
+              side="bottom"
+              align="start"
+              sideOffset={6}
+              class="max-w-[min(22rem,calc(100vw-2rem))] space-y-1 text-left text-wrap break-words"
+            >
+              <p>
+                Source: {sourceLabel(active.source)}{active.source.name
+                  ? ` (${active.source.name})`
+                  : ''}
+              </p>
+              {#if active.reason}<p>{active.reason}</p>{/if}
+              {#if active.source.locked && active.source.web_selected}<p>
+                  A stored web selection is overridden by this source.
+                </p>{/if}
+            </Tooltip.Content>
+          </Tooltip.Root>
+        </Tooltip.Provider>
+      </div>
+      {#if active.source.locked || !editable}
+        <Badge
+          variant="outline"
+          class="ml-auto gap-1.5 {active.source.locked
+            ? 'border-hister-amber/30 bg-hister-amber/10 text-text-brand'
+            : 'border-border-brand bg-muted-surface/60 text-text-brand-secondary'}"
+        >
+          {#if active.source.locked}
+            <Lock aria-hidden="true" />
+            Locked
+          {:else}
+            <Eye aria-hidden="true" />
+            Read only
+          {/if}
+        </Badge>
+      {/if}
     </div>
-    {#if active.source.locked}
-      <span
-        class="border-hister-amber/40 bg-hister-amber/15 text-text-brand inline-flex items-center gap-1.5 border px-2 py-1 text-xs font-semibold"
-      >
-        <Lock class="size-3.5" aria-hidden="true" />
-        Locked
-      </span>
-    {:else if !editable}
-      <span
-        class="border-border-brand bg-muted-surface text-text-brand inline-flex items-center gap-1.5 border px-2 py-1 text-xs font-semibold"
-      >
-        <Eye class="size-3.5" aria-hidden="true" />
-        Read only
-      </span>
-    {/if}
+    <p id={`${id}-description`} class="text-text-brand-muted text-sm">{field.description}</p>
   </div>
-  <p id={`${id}-description`} class="text-text-brand-muted text-sm">{field.description}</p>
   {#if field.schema.sensitivity !== 'none'}
     <p {id} class="text-text-brand text-sm">
       {active.secret_present ? 'Value stored (hidden)' : 'No stored value'}

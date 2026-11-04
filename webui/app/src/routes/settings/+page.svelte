@@ -287,7 +287,7 @@
           tabindex="0"
           class="bg-card-surface min-h-0 flex-1 overflow-y-auto p-4 focus:outline-none md:p-6"
         >
-          <div class="w-full max-w-[57rem]">
+          <div class="w-full">
             {#each tabErrors(category).filter((error) => !state?.fields.some((field) => field.path === error.path)) as error}<p
                 class="text-hister-rose my-2 text-sm"
               >
@@ -304,7 +304,7 @@
                       {group.label}
                     </h3>
                   {/if}
-                  <div>
+                  <div class="max-w-[57rem] {group.label ? 'ml-4 md:ml-6' : ''}">
                     {#each group.fields as field (field.path)}
                       {@const active = values.get(field.path)}
                       {#if active}<SettingsField
