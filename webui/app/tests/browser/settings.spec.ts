@@ -153,6 +153,95 @@ test('authorized navigation edits typed App fields and saves one draft across ta
   );
 });
 
+test('settings rows align controls on desktop and stack them on mobile', async ({
+  page,
+  isMobile,
+}) => {
+  const { state } = await settingsAPI(page);
+  const subtitle = state.values.find((value) => value.path === 'app.subtitle')!;
+  subtitle.editable = false;
+  subtitle.source = { kind: 'environment', locked: true, web_selected: false };
+  const suggestions = state.fields.find((field) => field.path === 'app.show_suggestions')!;
+  state.fields.push({
+    ...suggestions,
+    path: 'app.show_history',
+    label: 'Show history',
+    description: 'Show history description.',
+  });
+  state.values.push({ ...state.values[0], path: 'app.show_history', value: false });
+  await page.goto('/settings');
+
+  const fields = [
+    ['Title', 'textbox'],
+    ['Subtitle', 'textbox'],
+    ['Color scheme', 'combobox'],
+    ['Snippet length', 'spinbutton'],
+    ['Show suggestions', 'switch'],
+    ['Show history', 'switch'],
+  ] as const;
+  const boxes = [];
+  for (const [name, role] of fields) {
+    const control = page.getByRole(role, { name, exact: true });
+    await control.scrollIntoViewIfNeeded();
+    const row = page.getByRole('region', { name, exact: true });
+    const labelBox = (await row.getByText(name, { exact: true }).boundingBox())!;
+    const descriptionBox = (await row
+      .getByText(`${name} description.`, { exact: true })
+      .boundingBox())!;
+    const controlBox = (await control.boundingBox())!;
+    if (isMobile) {
+      expect(controlBox.y).toBeGreaterThanOrEqual(descriptionBox.y + descriptionBox.height);
+      expect(controlBox.x).toBeCloseTo(labelBox.x, 0);
+    } else {
+      expect(controlBox.x).toBeGreaterThan(descriptionBox.x + descriptionBox.width);
+      expect(Math.abs(controlBox.y - labelBox.y)).toBeLessThan(16);
+    }
+    boxes.push(controlBox);
+  }
+  expect(boxes[0].width).toBeCloseTo(boxes[1].width, 0);
+  expect(boxes[0].width).toBeCloseTo(boxes[2].width, 0);
+  if (!isMobile) {
+    for (const box of boxes) {
+      expect(box.x + box.width).toBeCloseTo(boxes[0].x + boxes[0].width, 0);
+    }
+  }
+  const title = page.getByRole('textbox', { name: 'Title', exact: true });
+  await title.fill('Aligned draft');
+  const edited = (await title.boundingBox())!;
+  expect(edited.x).toBeCloseTo(boxes[0].x, 0);
+  expect(edited.width).toBeCloseTo(boxes[0].width, 0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+test('long descriptions and reference values fit within settings rows', async ({
+  page,
+  isMobile,
+}) => {
+  const { state } = await settingsAPI(page);
+  const value = `/srv/archive/${'long_directory_name_'.repeat(20)}`;
+  const description = 'The directory containing the documents available to this Hister instance.';
+  state.fields.push({
+    ...state.fields[0],
+    path: 'app.directory',
+    label: 'Document storage directory',
+    description,
+    schema: { type: 'string', control: 'none', collection: 'none', sensitivity: 'none' },
+  });
+  state.values.push({ ...state.values[0], path: 'app.directory', value, editable: false });
+  await page.setViewportSize({ width: isMobile ? 375 : 1024, height: 800 });
+  await page.goto('/settings');
+  const row = page.getByRole('region', { name: 'Document storage directory', exact: true });
+  const reference = row.getByText(value, { exact: true });
+  await reference.scrollIntoViewIfNeeded();
+  const rowBox = (await row.boundingBox())!;
+  for (const text of [reference, row.getByText(description, { exact: true })]) {
+    expect(await text.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+    const box = (await text.boundingBox())!;
+    expect(box.x).toBeGreaterThanOrEqual(rowBox.x);
+    expect(box.x + box.width).toBeLessThanOrEqual(rowBox.x + rowBox.width);
+  }
+});
+
 test('the save bar counts edited fields and discards the draft from any tab without saving', async ({
   page,
 }) => {
@@ -448,6 +537,7 @@ test('source tooltips show explicit locks and overridden web selections on click
   const info = region.getByRole('button', { name: 'Source information for Subtitle' });
   const tooltip = page.getByRole('tooltip');
   await expect(info).toBeVisible();
+  await expect(info).toHaveText('Locked');
   await expect(page.getByText('Source: Environment', { exact: false })).not.toBeVisible();
   if (isMobile) await info.tap();
   else await info.click();
@@ -463,7 +553,11 @@ test('source tooltips show explicit locks and overridden web selections on click
   await expect(region.getByRole('button', { name: /^(Clear|Reset|Undo) / })).toHaveCount(0);
   await page.getByRole('tab', { name: 'Server', exact: true }).click();
   const address = page.getByRole('region', { name: 'Listen address', exact: true });
-  await address.getByRole('button', { name: 'Source information for Listen address' }).click();
+  const addressInfo = address.getByRole('button', {
+    name: 'Source information for Listen address',
+  });
+  await expect(addressInfo).toHaveText('Read only');
+  await addressInfo.click();
   await expect(tooltip).toContainText('Source: Built in default');
   await expect(tooltip).toContainText('Connection changes require confirmation');
   await expect(address.getByText('Locked', { exact: true })).toHaveCount(0);
