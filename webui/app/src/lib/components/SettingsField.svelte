@@ -3,7 +3,7 @@
   import { Input } from '@hister/components/ui/input';
   import { Switch } from '@hister/components/ui/switch';
   import * as Tooltip from '@hister/components/ui/tooltip';
-  import { Info } from '@lucide/svelte';
+  import { Info, Lock } from '@lucide/svelte';
   import {
     canEditSetting,
     sourceLabel,
@@ -49,7 +49,9 @@
 
 <section
   aria-label={field.label}
-  class="border-border-brand-muted space-y-3 border-b py-5 last:border-0"
+  class="border-border-brand-muted space-y-3 border-b py-5 last:border-b-0 {active.source.locked
+    ? 'border-l-hister-amber/60 bg-hister-amber/10 border-l-2 px-3'
+    : ''}"
 >
   <div class="flex flex-wrap items-center justify-between gap-2">
     <div class="flex items-center gap-1">
@@ -84,8 +86,14 @@
         </Tooltip.Root>
       </Tooltip.Provider>
     </div>
-    {#if active.source.locked}<span class="text-text-brand-muted text-xs font-semibold">Locked</span
-      >{:else if !editable}<span class="text-text-brand-muted text-xs">Read only</span>{/if}
+    {#if active.source.locked}
+      <span
+        class="border-hister-amber/40 bg-hister-amber/15 text-text-brand inline-flex items-center gap-1.5 border px-2 py-1 text-xs font-semibold"
+      >
+        <Lock class="size-3.5" aria-hidden="true" />
+        Locked
+      </span>
+    {:else if !editable}<span class="text-text-brand-muted text-xs">Read only</span>{/if}
   </div>
   <p id={`${id}-description`} class="text-text-brand-muted text-sm">{field.description}</p>
   {#if field.schema.sensitivity !== 'none'}
