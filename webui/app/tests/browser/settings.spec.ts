@@ -176,8 +176,16 @@ test('the save bar counts edited fields and discards the draft from any tab with
   await snippet.fill('420');
   await page.getByRole('button', { name: 'Reset Show suggestions', exact: true }).click();
   await expect(page.getByText('3 unsaved changes', { exact: true })).toBeVisible();
+  await expect(
+    page
+      .getByRole('region', { name: 'Show suggestions', exact: true })
+      .getByText('Unsaved', { exact: true }),
+  ).toBeVisible();
   await page.getByRole('button', { name: 'Undo Title', exact: true }).click();
   await expect(page.getByText('2 unsaved changes', { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('region', { name: 'Title', exact: true }).getByText('Unsaved', { exact: true }),
+  ).toHaveCount(0);
   await page.getByRole('tab', { name: 'Server', exact: true }).click();
   await discard.click();
   await expect(page.getByRole('tab', { name: 'Server', exact: true })).toHaveAttribute(
@@ -192,6 +200,7 @@ test('the save bar counts edited fields and discards the draft from any tab with
   await expect(title).toHaveValue('Hister');
   await expect(snippet).toHaveValue('300');
   await expect(page.getByRole('switch', { name: 'Show suggestions', exact: true })).toBeChecked();
+  await expect(page.getByText('Unsaved', { exact: true })).toHaveCount(0);
   expect(requests).toEqual(['GET /api/settings']);
   page.on('dialog', (dialog) => dialog.dismiss());
   await page.getByRole('link', { name: 'Rules', exact: true }).click();
@@ -206,10 +215,16 @@ test('typing the loaded value again removes the pending change and navigation wa
   Object.assign(state.values[0].source, { kind: 'web', web_selected: true });
   await page.goto('/settings');
   const title = page.getByRole('textbox', { name: 'Title', exact: true });
+  const unsaved = page
+    .getByRole('region', { name: 'Title', exact: true })
+    .getByText('Unsaved', { exact: true });
+  await expect(unsaved).toHaveCount(0);
   await title.fill('Draft archive');
   await expect(page.getByText('1 unsaved change', { exact: true })).toBeVisible();
+  await expect(unsaved).toBeVisible();
   await title.fill('Saved archive');
   await expect(page.getByText('No unsaved changes', { exact: true })).toBeVisible();
+  await expect(unsaved).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Save and apply', exact: true })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Discard changes', exact: true })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Undo Title', exact: true })).toHaveCount(0);
@@ -294,6 +309,7 @@ test('the draft cannot be discarded while saving and the count clears after succ
     await expect(save).toBeDisabled();
     await expect(discard).toBeDisabled();
     await expect(title).toBeDisabled();
+    await expect(page.getByText('Unsaved', { exact: true })).toBeVisible();
   } finally {
     finishValidation();
   }
@@ -301,6 +317,7 @@ test('the draft cannot be discarded while saving and the count clears after succ
   await expect(title).toHaveValue('Saved draft');
   await expect(page.getByText('No unsaved changes', { exact: true })).toBeVisible();
   await expect(discard).toBeDisabled();
+  await expect(page.getByText('Unsaved', { exact: true })).toHaveCount(0);
 });
 
 test('related settings are grouped while drafts and unrecognized fields remain available', async ({

@@ -4,7 +4,7 @@
   import { Input } from '@hister/components/ui/input';
   import { Switch } from '@hister/components/ui/switch';
   import * as Tooltip from '@hister/components/ui/tooltip';
-  import { Eye, Info, Lock } from '@lucide/svelte';
+  import { Eye, Info, Lock, Pencil } from '@lucide/svelte';
   import {
     canEditSetting,
     sourceLabel,
@@ -57,7 +57,9 @@
     ? 'border-l-hister-amber/60 bg-hister-amber/10 border-l-2 px-3'
     : !editable
       ? 'border-l-border-brand bg-muted-surface/50 border-l-2 px-3'
-      : ''}"
+      : edit
+        ? 'bg-hister-indigo/5 -mx-3 px-3'
+        : ''}"
 >
   <div class="space-y-1">
     <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -95,21 +97,34 @@
           </Tooltip.Root>
         </Tooltip.Provider>
       </div>
-      {#if active.source.locked || !editable}
-        <Badge
-          variant="outline"
-          class="ml-auto gap-1.5 {active.source.locked
-            ? 'border-hister-amber/30 bg-hister-amber/10 text-text-brand'
-            : 'border-border-brand bg-muted-surface/60 text-text-brand-secondary'}"
-        >
-          {#if active.source.locked}
-            <Lock aria-hidden="true" />
-            Locked
-          {:else}
-            <Eye aria-hidden="true" />
-            Read only
+      {#if active.source.locked || !editable || edit}
+        <div class="ml-auto flex flex-wrap justify-end gap-2">
+          {#if active.source.locked || !editable}
+            <Badge
+              variant="outline"
+              class="gap-1.5 {active.source.locked
+                ? 'border-hister-amber/30 bg-hister-amber/10 text-text-brand'
+                : 'border-border-brand bg-muted-surface/60 text-text-brand-secondary'}"
+            >
+              {#if active.source.locked}
+                <Lock aria-hidden="true" />
+                Locked
+              {:else}
+                <Eye aria-hidden="true" />
+                Read only
+              {/if}
+            </Badge>
           {/if}
-        </Badge>
+          {#if edit}
+            <Badge
+              variant="outline"
+              class="border-hister-indigo/30 bg-hister-indigo/10 text-text-brand gap-1.5"
+            >
+              <Pencil aria-hidden="true" />
+              Unsaved
+            </Badge>
+          {/if}
+        </div>
       {/if}
     </div>
     <p id={`${id}-description`} class="text-text-brand-muted text-sm">{field.description}</p>
