@@ -258,7 +258,8 @@
             tabindex={category === item ? 0 : -1}
             onclick={() => (category = item)}
             onkeydown={(event) => tabKeydown(event, index)}
-            class="font-space shrink-0 border-b-2 px-3 py-2 text-sm font-semibold {category === item
+            class="font-space shrink-0 cursor-pointer border-b-2 px-3 py-2 text-sm font-semibold {category ===
+            item
               ? 'border-hister-indigo text-text-brand'
               : 'text-text-brand-muted border-transparent'}"
             >{categoryLabels[item] ?? item}{count
