@@ -859,10 +859,6 @@
     pageKey = res.page_key ?? '';
   }
 
-  function stripHtml(s: string): string {
-    return s.replace(/<[^>]*>/g, '');
-  }
-
   function openResult(url: string, title: string, newWindow = false, sourceUrl = url) {
     debouncedURLUpdate.flush();
     if (config.openResultsOnNewTab) newWindow = true;
@@ -874,7 +870,7 @@
     if (!config.historyEnabled) return;
     const payload = JSON.stringify({
       url,
-      title: stripHtml(title),
+      title,
       query: queryStr,
       delete: false,
     });
