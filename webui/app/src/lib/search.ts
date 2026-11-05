@@ -77,12 +77,6 @@ export interface SearchResults {
   facets?: FacetsResult;
 }
 
-export function escapeHTML(s: string): string {
-  const pre = document.createElement('pre');
-  pre.appendChild(document.createTextNode(s));
-  return pre.innerHTML;
-}
-
 function escapeXML(s: string): string {
   return s
     .replace(/&/g, '&amp;')

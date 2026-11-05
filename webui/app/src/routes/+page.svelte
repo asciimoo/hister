@@ -11,7 +11,6 @@
     exportCSV,
     exportRSS,
     scrollTo,
-    escapeHTML,
     buildSearchQuery,
     parseSearchResults,
     openURL,
