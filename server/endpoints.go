@@ -36,6 +36,7 @@ import (
 	"github.com/asciimoo/hister/server/model"
 	"github.com/asciimoo/hister/server/timeline"
 	"github.com/asciimoo/hister/server/types"
+	"github.com/asciimoo/hister/server/vectorstore"
 
 	"github.com/gorilla/websocket"
 	"github.com/rs/zerolog/log"
@@ -2523,6 +2524,10 @@ func serveReindex(c *webContext) {
 	}
 	if err := c.Indexer.ReindexContext(c.Request.Context(), c.Config.Rules, req.SkipSensitive, req.DetectLanguages, c.Config.Indexer.KeepStopwords, c.Config.Indexer.Directories); err != nil {
 		log.Error().Err(err).Msg("reindex failed")
+		if mismatch, ok := errors.AsType[*vectorstore.DimensionMismatchError](err); ok {
+			http.Error(c.Response, mismatch.Error(), http.StatusUnprocessableEntity)
+			return
+		}
 		serve500(c)
 		return
 	}

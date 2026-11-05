@@ -792,7 +792,7 @@ func (idx *Indexer) reindex(ctx context.Context, basePath string, rules *config.
 		disablePreviews:  idx.disablePreviews,
 		userHandling:     idx.userHandling,
 		data:             idx.data,
-		embedCtx:         idx.embedCtx,
+		embedCtx:         ctx,
 	}
 	if idx.embeddingQueue != nil {
 		idx.stopEmbeddingQueue()
@@ -815,6 +815,11 @@ func (idx *Indexer) reindex(ctx context.Context, basePath string, rules *config.
 		return err
 	}
 	if idx.vectorStore != nil && idx.embedder != nil {
+		// Validate the endpoint before discarding usable vectors. A configured
+		// dimension count does not guarantee that the model can produce it.
+		if _, err := idx.embedder.ChunkAndEmbed(ctx, "hister", vectorstore.DocumentContext{}); err != nil {
+			return abortReindex(fmt.Errorf("validate embeddings before reindex: %w", err))
+		}
 		if err := idx.vectorStore.Clear(); err != nil {
 			return abortReindex(fmt.Errorf("rebuild vector store before reindex: %w", err))
 		}
@@ -1074,9 +1079,8 @@ func documentEmbeddingContext(d *document.Document) vectorstore.DocumentContext 
 }
 
 // embedDocumentChunks creates metadata and body chunk embeddings and stores the
-// resulting vectors. Errors are logged and returned so durable queue workers
-// can retry them. Synchronous callers may ignore the error and continue Bleve
-// indexing.
+// resulting vectors. Errors are returned so durable queue workers can retry
+// them and synchronous reindexing cannot report an incomplete rebuild as done.
 func embedDocumentChunks(ctx context.Context, idx *Indexer, d *document.Document) error {
 	start := time.Now()
 	chunks, err := idx.embedder.ChunkAndEmbed(ctx, d.Text, documentEmbeddingContext(d))
@@ -1765,7 +1769,9 @@ func (b *MultiBatch) applyDocumentWrite(d *document.Document, plan documentWrite
 		if b.indexer.embeddingWorkers > 0 {
 			b.embeddingIDs[d.ID()] = struct{}{}
 		} else {
-			_ = embedDocumentChunks(b.indexer.embedCtx, b.indexer, d)
+			if err := embedDocumentChunks(b.indexer.embedCtx, b.indexer, d); err != nil {
+				return err
+			}
 		}
 	}
 	for _, idx := range plan.staleIndexes {

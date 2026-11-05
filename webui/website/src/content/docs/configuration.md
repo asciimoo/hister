@@ -917,7 +917,7 @@ The vector store backend is chosen automatically based on `server.database`:
 
 Use `HISTER__SEMANTIC_SEARCH__QUERY_EMBEDDING_TIMEOUT` and `HISTER__SEMANTIC_SEARCH__MAX_QUERY_EMBEDDING_CONCURRENCY` to override the query deadline and concurrency through environment variables. Changing these settings does not require reindexing.
 
-Set `semantic_search.dimensions` to the output size supported by your embedding endpoint. If the endpoint returns a different size, Hister rejects the embeddings. After changing dimensions with SQLite, restart Hister and run `hister reindex` to rebuild the vector table and regenerate embeddings. Existing vectors are preserved until reindexing begins, and startup logs report when the stored dimensions differ from the configuration.
+Set `semantic_search.dimensions` to the output size supported by your embedding endpoint. If the endpoint returns a different size, Hister rejects the embeddings. After changing dimensions with SQLite, restart Hister and run `hister reindex` to rebuild the vector table and regenerate embeddings. Reindexing checks the endpoint before clearing existing vectors and stops if that check fails. Startup logs report when the stored dimensions differ from the configuration.
 
 ### Example
 

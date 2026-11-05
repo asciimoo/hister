@@ -72,6 +72,12 @@ If the main text loads, but seems jumbled up, and (most) images don't load, chec
 
 - Ensure your Hister server is running and up to date
 
+### Reindex reports an embedding dimension mismatch
+
+`semantic_search.dimensions` must match an output size supported by your embedding model. For example, `expected 2000, got 768` means the endpoint returned 768 values while Hister expected 2000. Set the server's dimensions to 768, restart Hister, and run `hister reindex` again. Changing this value alone cannot make a model produce a different size.
+
+Reindexing checks the embedding endpoint before clearing existing vectors. If embedding fails later during the rebuild, correct the reported problem and rerun reindexing. `hister config validate` checks configuration values without contacting the embedding endpoint.
+
 ## Memory Management
 
 If Hister is consuming too much memory, especially with large browsing histories or many indexed documents, you can reduce memory usage by disabling language detection.

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 
 	"github.com/asciimoo/hister/config"
@@ -352,6 +353,8 @@ func TestReindexStoresReplacementIndexMetadata(t *testing.T) {
 }
 
 func TestReindexStoresActiveEmbeddingFingerprint(t *testing.T) {
+	endpoint := embeddingTestServer(t, new(atomic.Int64))
+	defer endpoint.Close()
 	cfg := testutil.Config(t)
 	idx, err := initializeIndexer(cfg.FullPath(""), indexOptions{DetectLanguages: false, KeepStopwords: false}, "stored-embedding")
 	if err != nil {
@@ -359,9 +362,9 @@ func TestReindexStoresActiveEmbeddingFingerprint(t *testing.T) {
 	}
 	semanticConfig := config.SemanticSearch{
 		Enable:            true,
-		EmbeddingEndpoint: "http://localhost:11434/v1/embeddings",
+		EmbeddingEndpoint: endpoint.URL,
 		EmbeddingModel:    "model",
-		Dimensions:        768,
+		Dimensions:        2,
 		MaxContextLength:  512,
 		ChunkOverlap:      64,
 		DocumentPrefix:    "document: ",
@@ -387,6 +390,8 @@ func TestReindexStoresActiveEmbeddingFingerprint(t *testing.T) {
 }
 
 func TestReindexPreservesIndexWhenVectorRebuildFails(t *testing.T) {
+	endpoint := embeddingTestServer(t, new(atomic.Int64))
+	defer endpoint.Close()
 	cfg := testutil.Config(t)
 	idx, err := initializeIndexer(cfg.FullPath(""), indexOptions{DetectLanguages: false, KeepStopwords: false}, "stored-embedding")
 	if err != nil {
@@ -397,7 +402,7 @@ func TestReindexPreservesIndexWhenVectorRebuildFails(t *testing.T) {
 	if err := idx.Add(doc); err != nil {
 		t.Fatal(err)
 	}
-	idx.semanticConfig = config.SemanticSearch{Enable: true, Dimensions: 4}
+	idx.semanticConfig = config.SemanticSearch{Enable: true, Dimensions: 2, EmbeddingEndpoint: endpoint.URL}
 	idx.embedder = vectorstore.NewEmbedder(&idx.semanticConfig)
 	wantErr := errors.New("vector table rebuild failed")
 	idx.vectorStore = &metadataVectorStore{clearErr: wantErr}
@@ -434,7 +439,11 @@ func (i reindexCloseHook) Close() error {
 }
 
 func TestReindexClosesVectorStoreAfterReplacementOpenFailure(t *testing.T) {
+	endpoint := embeddingTestServer(t, new(atomic.Int64))
+	defer endpoint.Close()
 	cfg := testutil.Config(t)
+	cfg.SemanticSearch.EmbeddingEndpoint = endpoint.URL
+	cfg.SemanticSearch.Dimensions = 2
 	idx := newTestIndexer(t, cfg)
 	store := &metadataVectorStore{}
 	idx.vectorStore = store

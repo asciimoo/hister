@@ -1117,7 +1117,7 @@ func init() {
 			CSRFRequired: true,
 			AdminOnly:    true,
 			Handler:      serveReindex,
-			Description:  "Rebuild the search index from all stored documents (admin only)",
+			Description:  "Rebuild the search index from all stored documents (admin only). Embedding dimension mismatches return HTTP 422.",
 			JSONSchema: []*JSONSchemaField{
 				{
 					Name:        "skipSensitive",

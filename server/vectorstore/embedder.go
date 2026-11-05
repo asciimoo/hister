@@ -36,6 +36,17 @@ type Embedder struct {
 	queryTimeout     time.Duration
 }
 
+// DimensionMismatchError identifies an endpoint/configuration mismatch without
+// including endpoint URLs, credentials, or response bodies.
+type DimensionMismatchError struct {
+	Expected int
+	Got      int
+}
+
+func (e *DimensionMismatchError) Error() string {
+	return fmt.Sprintf("embedding dimension mismatch: expected %d, got %d; set semantic_search.dimensions to the output size supported by the embedding model and restart Hister before reindexing", e.Expected, e.Got)
+}
+
 // DocumentContext contains stable metadata used to contextualize document
 // embeddings. Description and keywords are embedded only in the dedicated
 // metadata vector, not repeated in every body chunk.
@@ -328,7 +339,7 @@ func (e *Embedder) embed(ctx context.Context, sem chan struct{}, text string) ([
 		return nil, fmt.Errorf("embedding response contained no data")
 	}
 	if got := len(result.Data[0].Embedding); e.dimensions > 0 && got != e.dimensions {
-		return nil, fmt.Errorf("embedding dimension mismatch: expected %d, got %d", e.dimensions, got)
+		return nil, &DimensionMismatchError{Expected: e.dimensions, Got: got}
 	}
 	return toFloat32(result.Data[0].Embedding), nil
 }
@@ -354,7 +365,7 @@ func embeddingVectors(result *embeddingResponse, dimensions int) ([][]float32, e
 	vectors := make([][]float32, len(result.Data))
 	for i, d := range result.Data {
 		if got := len(d.Embedding); dimensions > 0 && got != dimensions {
-			return nil, fmt.Errorf("embedding dimension mismatch at index %d: expected %d, got %d", i, dimensions, got)
+			return nil, fmt.Errorf("embedding at index %d: %w", i, &DimensionMismatchError{Expected: dimensions, Got: got})
 		}
 		vectors[i] = toFloat32(d.Embedding)
 	}

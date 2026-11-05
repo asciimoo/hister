@@ -511,6 +511,11 @@ receive the entire request, including its body. It closes idle keepalive
 connections after one minute. These limits do not impose a duration limit on
 handlers such as reindexing after the request has been received.
 
+`POST /api/reindex` returns `200` for completion, `422` for an embedding dimension mismatch, or `500` for
+other rebuild failures. The dimension error body identifies the expected and
+returned sizes without including embedding endpoint details. Disconnecting
+cancels the rebuild, including active embedding requests.
+
 ### Document Versions
 
 ```http

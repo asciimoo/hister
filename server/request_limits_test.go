@@ -17,8 +17,38 @@ import (
 	"testing"
 	"time"
 
+	"github.com/asciimoo/hister/server/document"
+	"github.com/asciimoo/hister/server/testutil"
+
 	"github.com/gorilla/websocket"
 )
+
+func TestReindexReportsDimensionMismatch(t *testing.T) {
+	embeddings := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, `{"data":[{"embedding":[0.25,0.75]}]}`)
+	}))
+	defer embeddings.Close()
+	cfg := testutil.Config(t)
+	cfg.App.AccessToken = "secret"
+	testutil.InitModelWithConfig(t, cfg)
+	idx := newServerTestIndexer(t, cfg)
+	if err := idx.Add(&document.Document{URL: "https://example.com/reindex", Text: "Stored content", Processed: true}); err != nil {
+		t.Fatal(err)
+	}
+	idx.Close()
+	cfg.SemanticSearch.Enable = true
+	cfg.SemanticSearch.Dimensions = 2000
+	cfg.SemanticSearch.EmbeddingEndpoint = embeddings.URL
+	idx = newServerTestIndexer(t, cfg)
+	response := testutil.ServeHTTP(t, registerEndpoints(cfg, idx), http.MethodPost, "/api/reindex", strings.NewReader(`{}`), map[string]string{
+		"X-Access-Token": "secret",
+		"Origin":         "hister://",
+		"Content-Type":   "application/json",
+	})
+	if response.Code != http.StatusUnprocessableEntity || !strings.Contains(response.Body.String(), "expected 2000, got 2") || !strings.Contains(response.Body.String(), "semantic_search.dimensions") {
+		t.Fatalf("reindex did not report the configuration problem: status=%d body=%s", response.Code, response.Body)
+	}
+}
 
 func TestRequestBodyLimits(t *testing.T) {
 	_, handler := newPublicTokenTestServer(t)
