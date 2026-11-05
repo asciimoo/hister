@@ -103,12 +103,11 @@ export class ResultState {
   async pin(url: string, title: string, currentQuery: string, remove = false) {
     const q = this.actionsQuery || currentQuery;
     if (!q) return;
-    const cleanTitle = title.replace(/<[^>]*>/g, '');
     try {
       const res = await apiFetch('/history', {
         method: 'POST',
         headers: { 'Content-type': 'application/json; charset=UTF-8' },
-        body: JSON.stringify({ url, title: cleanTitle, query: q, pin: !remove }),
+        body: JSON.stringify({ url, title, query: q, pin: !remove }),
       });
       if (!res.ok) throw new Error('Failed to update priority');
       this.actionsMessage = `Priority result ${remove ? 'removed' : 'added'}.`;

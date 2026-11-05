@@ -901,7 +901,7 @@
                           rel="noopener"
                           onclick={() => (highlightIdx = flatIdx)}
                         >
-                          {displayText(item.title || item.url).replace(/<[^>]*>/g, '')}
+                          {displayText(item.title || item.url)}
                         </a>
                         <div
                           class="flex min-w-0 flex-col gap-1 md:flex-row md:items-center md:gap-2"
