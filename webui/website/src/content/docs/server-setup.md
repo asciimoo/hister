@@ -136,6 +136,8 @@ caddy reverse-proxy --from hister.example.com --to localhost:4433
 
 ### Nginx
 
+This example uses HTTP/2. To enable HTTP/3, follow the optional setup below.
+
 ```nginx
 # Make sure you have a good TLS configuration!
 # https://ssl-config.mozilla.org/#server=nginx
@@ -149,9 +151,6 @@ server {
 	server_name hister.example.com;
 	listen 443 ssl; listen [::]:443 ssl;
 	http2 on;
-	listen 443 quic; listen [::]:443 quic;
-	http3 on;
-	add_header Alt-Svc 'h3=":443"; ma=86400; persist=1'; # Advertise HTTP/3 support.
 
 	gzip off; # Prevents some security vulns on encrypted traffic.
 	# Redirect HTTP reqs made on the HTTPS port into proper HTTPS reqs.
@@ -197,6 +196,37 @@ map $uri $hister_connection {
 ```
 
 **Note**: if search doesn't work, there likely is a problem with WebSocket connections; troubleshooting info can be gathered from Nginx's `access.log` (tells you whether requests reached Nginx) and `error.log` (tells if you if any errors occurred _within_ Nginx).
+
+#### Optional HTTP/3
+
+Nginx can serve HTTP/3 to browsers while forwarding requests to Hister over HTTP/1.1. Use an Nginx build with [HTTP/3 support](https://nginx.org/en/docs/quic.html), enable TLS 1.3 in your TLS configuration, and allow UDP port 443 through your firewall and any port forwarding. Keep the existing TCP listeners, certificates, and WebSocket proxy settings.
+
+Add this default QUIC server alongside your other `server` blocks inside `http {}`. It rejects requests for sites that are not configured for HTTP/3, preventing them from reaching Hister:
+
+```nginx
+server {
+	listen 443 quic reuseport default_server;
+	listen [::]:443 quic reuseport default_server;
+	http3 off;
+	ssl_reject_handshake on;
+	return 421;
+}
+```
+
+Use only one QUIC `default_server` and specify `reuseport` only once per shared UDP address and port. If these listeners already exist, adapt the existing default server instead of adding a duplicate. Omit the IPv6 listeners in both examples if IPv6 is disabled.
+
+Add these lines inside Hister's existing HTTPS `server` block:
+
+```nginx
+listen 443 quic;
+listen [::]:443 quic;
+http3 on;
+add_header Alt-Svc 'h3=":443"; ma=300' always;
+```
+
+Keep `Alt-Svc` inside each site configured for HTTP/3, rather than setting it globally. Other sites can remain on HTTP/2. Use the short five minute advertisement while validating the setup, then increase `ma` if desired. Run `nginx -t` before reloading Nginx and check that each hostname reaches its intended site. With an HTTP/3 capable curl build, test Hister using `curl --http3-only https://hister.example.com/`.
+
+To disable HTTP/3, remove Hister's QUIC listeners and `http3 on` directive, and temporarily replace its `Alt-Svc` advertisement with `add_header Alt-Svc 'clear' always;`. This clears previously cached advertisements when clients receive the response; removing the old header alone does not clear them immediately.
 
 ## Unix sockets
 
