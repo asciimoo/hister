@@ -346,6 +346,15 @@ cases:
         - Big Buck Bunny
       min_preview_length: 100
 
+  - name: duckduckgo_html_search_results
+    url: https://html.duckduckgo.com/html/?q=hister
+    backend: http
+    extractor: DuckDuckGo
+    timeout: 20
+    run_chain: false
+    expect:
+      min_extra_documents: 3
+
   - name: readability_wikipedia_article_http
     url: https://en.wikipedia.org/wiki/Web_scraping
     backend: http
