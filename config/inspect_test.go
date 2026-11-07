@@ -513,6 +513,37 @@ func TestIndexerDraftSettings(t *testing.T) {
 	}
 }
 
+func TestValidateFieldsReportsSafeLanguageErrors(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		accuracy  string
+		languages []string
+		path      string
+	}{
+		{"invalid accuracy", "private-input", []string{"en", "de"}, "indexer.language_detection_accuracy"},
+		{"unsupported language", "high", []string{"en", "private-input"}, "indexer.languages"},
+		{"duplicate aliases", "", []string{"nb", "no"}, "indexer.languages"},
+		{"accuracy checked first", "private-input", []string{"private-input"}, "indexer.language_detection_accuracy"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := CreateDefaultConfig()
+			c.Indexer.LanguageDetectionAccuracy = tc.accuracy
+			c.Indexer.Languages = tc.languages
+			fields := c.ValidateFields()
+			if len(fields) != 1 || fields[0].Path != tc.path || fields[0].Code != "invalid_configuration" || fields[0].Message == "" {
+				t.Fatalf("field errors = %+v, want one validation error for %s", fields, tc.path)
+			}
+			encoded, err := json.Marshal(fields)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(string(encoded), "private-input") || strings.Contains(fields[0].Error(), "private-input") {
+				t.Fatal("submitted language settings leaked into field errors")
+			}
+		})
+	}
+}
+
 func TestPrepareDraftUsesDetachedLoadedSources(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HISTER_DATA_DIR", dir)

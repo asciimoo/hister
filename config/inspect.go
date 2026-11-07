@@ -194,7 +194,11 @@ func (c *Config) ValidateFields() []FieldError {
 	fields := candidate.validateAppFields()
 	check := func(path, message string, err error) {
 		if err != nil {
-			fields = append(fields, FieldError{Path: path, Code: "invalid_configuration", Message: message})
+			field, ok := errors.AsType[FieldError](err)
+			if !ok {
+				field = FieldError{Path: path, Code: "invalid_configuration", Message: message}
+			}
+			fields = append(fields, field)
 		}
 	}
 	check("indexer.pdf_parser", "Check the parser command, arguments, and positive timeout.", candidate.Indexer.PDFParser.Validate())
@@ -212,14 +216,7 @@ func (c *Config) ValidateFields() []FieldError {
 	check("app.public", "Public access requires a token or user handling.", candidate.ValidatePublicMode())
 	check("hotkeys.web", "Use supported key combinations and actions.", candidate.Hotkeys.Validate())
 	check("semantic_search", "Check the embedding endpoint, model, dimensions, and context length.", candidate.validateSemanticSearch())
-	indexerPath := "indexer.languages"
-	indexerMessage := "Choose at least two distinct supported languages, or no language restriction."
-	switch candidate.Indexer.LanguageDetectionAccuracy {
-	case "", LanguageDetectionAccuracyLow, LanguageDetectionAccuracyHigh:
-	default:
-		indexerPath, indexerMessage = "indexer.language_detection_accuracy", "Choose low or high detection accuracy."
-	}
-	check(indexerPath, indexerMessage, candidate.Indexer.Validate())
+	check("indexer", "Check the indexer settings.", candidate.Indexer.Validate())
 	check("server.oauth", "Check provider names, required credentials, and provider settings.", candidate.validateOAuth())
 	switch candidate.Crawler.Backend {
 	case "", "http", "chromedp", "bidi":

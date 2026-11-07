@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"os"
@@ -998,6 +999,54 @@ func TestIndexerValidationPreservesUnsupportedInput(t *testing.T) {
 	}
 	if !slices.Equal(i.Languages, want) {
 		t.Fatalf("validation changed configured language values: %v", i.Languages)
+	}
+}
+
+func TestIndexerValidationIdentifiesFields(t *testing.T) {
+	accuracyField := FieldError{
+		Path: "indexer.language_detection_accuracy", Code: "invalid_configuration",
+		Message: "Choose low or high detection accuracy.",
+	}
+	languagesField := FieldError{
+		Path: "indexer.languages", Code: "invalid_configuration",
+		Message: "Choose at least two distinct supported languages, or no language restriction.",
+	}
+	for _, tc := range []struct {
+		name    string
+		indexer Indexer
+		field   FieldError
+		detail  string
+	}{
+		{
+			name: "invalid accuracy", indexer: Indexer{LanguageDetectionAccuracy: "private-input"},
+			field: accuracyField, detail: `invalid indexer.language_detection_accuracy "private-input": must be "high" or "low"`,
+		},
+		{
+			name: "unsupported language", indexer: Indexer{Languages: []string{"en", " private-input "}},
+			field: languagesField, detail: `unsupported language in indexer.languages: " private-input "`,
+		},
+		{
+			name: "duplicate aliases", indexer: Indexer{Languages: []string{"nb", "no"}},
+			field: languagesField, detail: "indexer.languages needs at least two distinct languages, or none at all to detect every supported language",
+		},
+		{
+			name: "accuracy checked before languages", indexer: Indexer{LanguageDetectionAccuracy: "private-input", Languages: []string{"en"}},
+			field: accuracyField, detail: `invalid indexer.language_detection_accuracy "private-input": must be "high" or "low"`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.indexer.Validate()
+			if err == nil || err.Error() != tc.detail {
+				t.Fatalf("validation diagnostic = %v, want %q", err, tc.detail)
+			}
+			field, ok := errors.AsType[FieldError](fmt.Errorf("validate configuration: %w", err))
+			if !ok {
+				t.Fatalf("validation error does not identify its field: %v", err)
+			}
+			if field != tc.field {
+				t.Fatalf("field error = %+v, want %+v", field, tc.field)
+			}
+		})
 	}
 }
 

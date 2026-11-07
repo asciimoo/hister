@@ -205,16 +205,32 @@ func (i Indexer) LowAccuracyLanguageDetection() bool {
 	return i.LanguageDetectionAccuracy == "" || i.LanguageDetectionAccuracy == LanguageDetectionAccuracyLow
 }
 
+// validationError retains detailed diagnostics while exposing a field error
+// without user supplied values through errors.As.
+type validationError struct {
+	field  FieldError
+	detail string
+}
+
+func (e validationError) Error() string { return e.detail }
+func (e validationError) Unwrap() error { return e.field }
+
 // Validate checks detector settings using the shared language registry without
-// loading the detector's models.
+// loading the detector's models. Errors expose a safe FieldError through errors.As.
 func (i Indexer) Validate() error {
 	switch i.LanguageDetectionAccuracy {
 	case "", LanguageDetectionAccuracyHigh, LanguageDetectionAccuracyLow:
 	default:
-		return fmt.Errorf(
-			"invalid indexer.language_detection_accuracy %q: must be %q or %q",
-			i.LanguageDetectionAccuracy, LanguageDetectionAccuracyHigh, LanguageDetectionAccuracyLow,
-		)
+		return validationError{
+			field: FieldError{
+				Path: "indexer.language_detection_accuracy", Code: "invalid_configuration",
+				Message: "Choose low or high detection accuracy.",
+			},
+			detail: fmt.Sprintf(
+				"invalid indexer.language_detection_accuracy %q: must be %q or %q",
+				i.LanguageDetectionAccuracy, LanguageDetectionAccuracyHigh, LanguageDetectionAccuracyLow,
+			),
+		}
 	}
 	if len(i.Languages) == 0 {
 		return nil
@@ -222,11 +238,15 @@ func (i Indexer) Validate() error {
 	// Use the same candidate set as detection so aliases and regional variants
 	// cannot make a single language satisfy the two-language minimum.
 	candidates, unsupported := languages.NormalizeCandidates(i.Languages)
+	field := FieldError{
+		Path: "indexer.languages", Code: "invalid_configuration",
+		Message: "Choose at least two distinct supported languages, or no language restriction.",
+	}
 	if len(unsupported) > 0 {
-		return fmt.Errorf("unsupported language in indexer.languages: %q", unsupported[0])
+		return validationError{field: field, detail: fmt.Sprintf("unsupported language in indexer.languages: %q", unsupported[0])}
 	}
 	if len(candidates) < 2 {
-		return errors.New("indexer.languages needs at least two distinct languages, or none at all to detect every supported language")
+		return validationError{field: field, detail: "indexer.languages needs at least two distinct languages, or none at all to detect every supported language"}
 	}
 	return nil
 }
