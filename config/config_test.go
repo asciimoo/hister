@@ -972,8 +972,12 @@ func TestIndexerValidate(t *testing.T) {
 		{"repeated language", Indexer{Languages: []string{"en", " EN "}}, true},
 		{"regional duplicates", Indexer{Languages: []string{"en-US", "en-GB"}}, true},
 		{"norwegian aliases", Indexer{Languages: []string{"no", "nb"}}, true},
+		{"indonesian aliases", Indexer{Languages: []string{"in-ID", "id"}}, true},
+		{"mixed aliases and duplicate regions", Indexer{Languages: []string{" EN-us ", "en-GB", "no", "nb-NO"}}, false},
 		{"regional candidates", Indexer{Languages: []string{"en-US", "de-DE"}}, false},
 		{"unsupported detector", Indexer{Languages: []string{"en", "uk"}}, true},
+		{"analyzer without detector", Indexer{Languages: []string{"en", "ckb"}}, true},
+		{"unknown language", Indexer{Languages: []string{"en", "unknown"}}, true},
 		{"unknown accuracy", Indexer{LanguageDetectionAccuracy: "medium"}, true},
 		{"low accuracy", Indexer{LanguageDetectionAccuracy: "low"}, false},
 	} {
@@ -982,6 +986,18 @@ func TestIndexerValidate(t *testing.T) {
 				t.Fatalf("Validate() error = %v, wantErr %v", err, tc.wantErr)
 			}
 		})
+	}
+}
+
+func TestIndexerValidationPreservesUnsupportedInput(t *testing.T) {
+	i := Indexer{Languages: []string{" EN-us ", "en-GB", "nb-NO", " ckb ", "xx"}}
+	want := slices.Clone(i.Languages)
+	err := i.Validate()
+	if err == nil || err.Error() != `unsupported language in indexer.languages: " ckb "` {
+		t.Fatalf("want the first unsupported input unchanged, got %v", err)
+	}
+	if !slices.Equal(i.Languages, want) {
+		t.Fatalf("validation changed configured language values: %v", i.Languages)
 	}
 }
 

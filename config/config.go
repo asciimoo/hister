@@ -219,18 +219,13 @@ func (i Indexer) Validate() error {
 	if len(i.Languages) == 0 {
 		return nil
 	}
-	// Count distinct codes the way the detector resolves them: a repeated entry
-	// would otherwise pass this check, resolve to a single language, and leave
-	// the detector disabled without saying so.
-	distinct := make(map[string]struct{}, len(i.Languages))
-	for _, code := range i.Languages {
-		resolved, err := languages.Resolve(code)
-		if err != nil || resolved.Detector == "" {
-			return fmt.Errorf("unsupported language in indexer.languages: %q", code)
-		}
-		distinct[resolved.Detector] = struct{}{}
+	// Use the same candidate set as detection so aliases and regional variants
+	// cannot make a single language satisfy the two-language minimum.
+	candidates, unsupported := languages.NormalizeCandidates(i.Languages)
+	if len(unsupported) > 0 {
+		return fmt.Errorf("unsupported language in indexer.languages: %q", unsupported[0])
 	}
-	if len(distinct) < 2 {
+	if len(candidates) < 2 {
 		return errors.New("indexer.languages needs at least two distinct languages, or none at all to detect every supported language")
 	}
 	return nil

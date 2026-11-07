@@ -154,6 +154,24 @@ func Resolve(value string) (Resolution, error) {
 	return result, nil
 }
 
+// NormalizeCandidates returns the distinct supported detector codes and the
+// unsupported inputs, preserving their original spellings, order, and repeats.
+// Empty input produces an empty set; callers decide whether that selects all
+// languages. The input is never changed and the returned set belongs to the caller.
+func NormalizeCandidates(codes []string) (map[string]struct{}, []string) {
+	candidates := make(map[string]struct{}, len(codes))
+	var unsupported []string
+	for _, code := range codes {
+		resolved, err := Resolve(code)
+		if err != nil || resolved.Detector == "" {
+			unsupported = append(unsupported, code)
+			continue
+		}
+		candidates[resolved.Detector] = struct{}{}
+	}
+	return candidates, unsupported
+}
+
 // StoredTags includes historical spellings so filters work before reindexing.
 func StoredTags(tag string) []string {
 	base, _, _ := strings.Cut(tag, "-")

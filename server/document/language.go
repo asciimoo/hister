@@ -94,13 +94,7 @@ var SupportedLanguages = func() map[string]lingua.Language {
 // callers can reject a misspelled configuration instead of silently changing
 // the set of detection candidates.
 func UnsupportedLanguages(codes []string) []string {
-	var unsupported []string
-	for _, code := range codes {
-		resolved, err := languages.Resolve(code)
-		if err != nil || resolved.Detector == "" {
-			unsupported = append(unsupported, code)
-		}
-	}
+	_, unsupported := languages.NormalizeCandidates(codes)
 	return unsupported
 }
 
@@ -111,12 +105,7 @@ func ResolveLanguages(codes []string) []lingua.Language {
 	if len(codes) == 0 {
 		return Languages
 	}
-	wanted := make(map[string]struct{}, len(codes))
-	for _, c := range codes {
-		if resolved, err := languages.Resolve(c); err == nil && resolved.Detector != "" {
-			wanted[resolved.Detector] = struct{}{}
-		}
-	}
+	wanted, _ := languages.NormalizeCandidates(codes)
 	langs := make([]lingua.Language, 0, len(wanted))
 	for _, l := range Languages {
 		if _, ok := wanted[languageCode(l)]; ok {

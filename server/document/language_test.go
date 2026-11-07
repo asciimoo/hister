@@ -32,6 +32,7 @@ func TestResolveLanguages(t *testing.T) {
 		{"legacy norwegian alias", []string{"no", "en"}, []string{"en", "nb"}},
 		{"bokmal and regions", []string{"nb-NO", "en-US", "en-GB", "no"}, []string{"en", "nb"}},
 		{"deprecated indonesian alias", []string{"in", "de-DE"}, []string{"de", "id"}},
+		{"unsupported input does not select defaults", []string{"cs", "ckb", "unknown", "zz"}, nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := codesOf(t, tc.codes); !slices.Equal(got, tc.want) {
@@ -47,6 +48,21 @@ func TestResolveLanguages(t *testing.T) {
 	}
 }
 
+func TestResolveLanguagesPreservesModelOrder(t *testing.T) {
+	codes := []string{"ja-JP", " EN-us ", "no", "en-GB", "nb-NO", "de-DE", "ckb"}
+	original := slices.Clone(codes)
+	var got []string
+	for _, model := range ResolveLanguages(codes) {
+		got = append(got, languageCode(model))
+	}
+	if want := []string{"nb", "de", "en", "ja"}; !slices.Equal(got, want) {
+		t.Fatalf("resolved model order = %v, want %v", got, want)
+	}
+	if !slices.Equal(codes, original) {
+		t.Fatalf("resolution changed configured language values: %v", codes)
+	}
+}
+
 func TestUnsupportedLanguages(t *testing.T) {
 	if got := UnsupportedLanguages([]string{"en", "de", "nl", "id"}); len(got) != 0 {
 		t.Fatalf("UnsupportedLanguages = %v, want none", got)
@@ -59,6 +75,11 @@ func TestUnsupportedLanguages(t *testing.T) {
 	// silently ignored.
 	if got := UnsupportedLanguages([]string{"cs"}); !slices.Equal(got, []string{"cs"}) {
 		t.Fatalf("UnsupportedLanguages([cs]) = %v, want [cs]", got)
+	}
+	codes := []string{"EN-us", "no", "nb-NO", "in-ID", " ckb ", "uk-UA", "zz", " ckb ", "unknown", " "}
+	want := []string{" ckb ", "uk-UA", "zz", " ckb ", "unknown", " "}
+	if got := UnsupportedLanguages(codes); !slices.Equal(got, want) {
+		t.Fatalf("unsupported inputs = %q, want original spellings and order %q", got, want)
 	}
 }
 
