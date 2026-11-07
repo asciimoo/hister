@@ -39,6 +39,9 @@ var analyzers = map[string]string{
 // test verifies that each candidate has a bundled model and vice versa.
 const detectorCodes = " ar bg ca da de el en es eu fa fi fr ga hi hr hu hy id it ja ko nb nl pl pt ro ru sv tr zh "
 
+// DetectorCodes lists the languages with bundled detection models.
+func DetectorCodes() []string { return strings.Fields(detectorCodes) }
+
 // no was historically used for Bokmal in stored Hister documents. The other
 // entries are deprecated ISO language codes accepted by BCP 47 canonicalization.
 var aliases = map[string]string{"no": "nb", "in": "id", "iw": "he", "ji": "yi", "mo": "ro"}

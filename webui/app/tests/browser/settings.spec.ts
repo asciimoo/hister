@@ -1126,3 +1126,186 @@ test('leaving an unsaved draft through the home link warns only once', async ({ 
   await expect(page).toHaveURL('http://127.0.0.1:4174/');
   expect(warnings).toBe(1);
 });
+
+async function indexerSettingsAPI(page: Page) {
+  const { state } = await settingsAPI(page);
+  const text = { type: 'string', control: 'text', collection: 'none', sensitivity: 'none' };
+  const toggle = { type: 'boolean', control: 'switch', collection: 'none', sensitivity: 'none' };
+  const list = {
+    type: 'list',
+    control: 'list',
+    collection: 'replace',
+    sensitivity: 'none',
+    items: text,
+  };
+  for (const field of [
+    {
+      path: 'indexer.languages',
+      label: 'Languages',
+      schema: { ...list, items: { ...text, control: 'select', choices: ['en', 'hu', 'de'] } },
+      default: [],
+    },
+    {
+      path: 'indexer.max_file_size_mb',
+      label: 'Maximum file size',
+      schema: {
+        type: 'integer',
+        control: 'number',
+        collection: 'none',
+        sensitivity: 'none',
+        min: 1,
+      },
+      default: 1,
+    },
+    {
+      path: 'indexer.directories',
+      label: 'Watched directories',
+      default: [],
+      schema: {
+        ...list,
+        items: {
+          type: 'object',
+          control: 'object',
+          collection: 'none',
+          sensitivity: 'none',
+          properties: [
+            { name: 'path', label: 'Path', schema: text },
+            { name: 'label', label: 'Label', schema: text },
+            { name: 'user', label: 'Owner', schema: text },
+            { name: 'filetypes', label: 'File types', schema: list },
+            { name: 'patterns', label: 'Include patterns', schema: list },
+            { name: 'excludes', label: 'Exclude patterns', schema: list },
+            { name: 'include_hidden', label: 'Include hidden files', schema: toggle },
+            { name: 'delete_on_remove', label: 'Delete from index when removed', schema: toggle },
+          ],
+        },
+      },
+    },
+  ]) {
+    state.fields.push({
+      ...field,
+      category: 'indexer',
+      description: 'Indexer setting.',
+      effect: 'reindex',
+      requires_confirmation: false,
+    });
+    state.values.push({
+      path: field.path,
+      value: field.default,
+      editable: true,
+      secret_present: false,
+      source: { kind: 'default', locked: false, web_selected: false },
+    });
+  }
+  return state;
+}
+
+test('Indexer controls save languages and structured directories in the shared draft', async ({
+  page,
+}) => {
+  await indexerSettingsAPI(page);
+  let saved: any;
+  await page.route('**/api/settings/apply', (route) => {
+    saved = route.request().postDataJSON();
+    return route.fulfill({ json: { saved: true } });
+  });
+  await page.goto('/settings');
+  await page.getByRole('textbox', { name: 'Title', exact: true }).fill('Indexer draft');
+  await page.getByRole('tab', { name: 'Indexer', exact: true }).click();
+  await page.getByRole('listbox', { name: 'Languages', exact: true }).selectOption(['en', 'hu']);
+  await page.getByRole('spinbutton', { name: 'Maximum file size', exact: true }).fill('8');
+  await page.getByRole('button', { name: 'Add Watched directories item', exact: true }).click();
+  const row = page.getByRole('group', { name: 'Watched directories 1', exact: true });
+  await row.getByRole('textbox', { name: 'Path', exact: true }).fill('/srv/notes');
+  await row.getByRole('textbox', { name: 'Owner', exact: true }).fill('alice');
+  await row.getByRole('textbox', { name: 'Label', exact: true }).fill('notes');
+  await row.getByRole('textbox', { name: 'File types', exact: true }).fill('txt\nmd');
+  await row.getByRole('textbox', { name: 'Include patterns', exact: true }).fill('note*');
+  await row.getByRole('textbox', { name: 'Exclude patterns', exact: true }).fill('secret*');
+  await row.getByRole('switch', { name: 'Include hidden files', exact: true }).check();
+  await row.getByRole('switch', { name: 'Delete from index when removed', exact: true }).check();
+  await page.getByRole('tab', { name: 'App', exact: true }).click();
+  await page.getByRole('tab', { name: 'Indexer', exact: true }).click();
+  await expect(row.getByRole('textbox', { name: 'Path', exact: true })).toHaveValue('/srv/notes');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Settings saved and applied');
+  expect(saved.edits).toEqual(
+    expect.arrayContaining([
+      { path: 'app.title', action: 'set', value: 'Indexer draft' },
+      { path: 'indexer.languages', action: 'set', value: ['en', 'hu'] },
+      { path: 'indexer.max_file_size_mb', action: 'set', value: 8 },
+      {
+        path: 'indexer.directories',
+        action: 'set',
+        value: [
+          {
+            path: '/srv/notes',
+            label: 'notes',
+            user: 'alice',
+            filetypes: ['txt', 'md'],
+            patterns: ['note*'],
+            excludes: ['secret*'],
+            include_hidden: true,
+            delete_on_remove: true,
+          },
+        ],
+      },
+    ]),
+  );
+});
+
+test('Indexer collections retain invalid drafts and support reset, clear and source locks', async ({
+  page,
+}) => {
+  const state = await indexerSettingsAPI(page);
+  const directories = state.values.find((field) => field.path === 'indexer.directories')!;
+  directories.value = [{ path: '/srv/original', delete_on_remove: true }];
+  Object.assign(directories.source, { kind: 'web', web_selected: true });
+  let draft: any;
+  await page.route('**/api/settings/validate', (route) => {
+    draft = route.request().postDataJSON();
+    return route.fulfill({
+      status: 422,
+      json: {
+        errors: [
+          {
+            path: 'indexer.directories',
+            code: 'invalid_value',
+            message: 'Directory 1: Choose an existing directory.',
+          },
+        ],
+      },
+    });
+  });
+  await page.goto('/settings');
+  await page.getByRole('tab', { name: 'Indexer', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Path', exact: true }).fill('/missing');
+  await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
+  await expect(
+    page.getByText('Directory 1: Choose an existing directory.', { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'Path', exact: true })).toHaveValue('/missing');
+  await page.getByRole('button', { name: 'Reset Watched directories', exact: true }).click();
+  await expect(page.getByRole('textbox', { name: 'Path', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
+  expect(draft.edits).toEqual([{ path: 'indexer.directories', action: 'reset' }]);
+  await page.getByRole('button', { name: 'Undo Watched directories', exact: true }).click();
+  await page
+    .getByRole('button', { name: 'Remove Watched directories item 1', exact: true })
+    .click();
+  await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
+  expect(draft.edits).toEqual([{ path: 'indexer.directories', action: 'set', value: [] }]);
+  await page.getByRole('button', { name: 'Discard changes', exact: true }).click();
+  Object.assign(directories.source, { kind: 'file', locked: true });
+  directories.editable = false;
+  await page.reload();
+  await page.getByRole('tab', { name: 'Indexer', exact: true }).click();
+  await expect(
+    page.getByRole('button', { name: 'Add Watched directories item', exact: true }),
+  ).toHaveCount(0);
+  await expect(page.getByRole('textbox', { name: 'Path', exact: true })).toHaveCount(0);
+  await expect(
+    page.getByRole('region', { name: 'Watched directories', exact: true }),
+  ).toContainText('/srv/original');
+});

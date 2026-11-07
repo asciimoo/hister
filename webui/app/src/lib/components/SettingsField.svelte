@@ -1,8 +1,7 @@
 <script lang="ts">
   import { Badge } from '@hister/components/ui/badge';
   import { Button } from '@hister/components/ui/button';
-  import { Input } from '@hister/components/ui/input';
-  import { Switch } from '@hister/components/ui/switch';
+  import SettingInput from './SettingInput.svelte';
   import * as Tooltip from '@hister/components/ui/tooltip';
   import { Eye, Info, Lock, Pencil } from '@lucide/svelte';
   import {
@@ -37,17 +36,19 @@
   const description = $derived(
     `${id}-description${edit ? ` ${id}-status` : ''}${errors.length ? ` ${id}-errors` : ''}`,
   );
-  const controlClass =
-    'border-input bg-background text-text-brand focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 h-10 w-full min-w-0 border px-3 py-2 text-base transition-[color,box-shadow] outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50 md:text-sm';
   const actionClass = 'text-text-brand-muted hover:text-text-brand h-8 px-1.5 text-xs font-normal';
   function set(value: unknown) {
-    onEdit(value === active.value ? undefined : { path: field.path, action: 'set', value });
+    onEdit(
+      JSON.stringify(value) === JSON.stringify(active.value)
+        ? undefined
+        : { path: field.path, action: 'set', value },
+    );
   }
   function display(value: unknown): string {
     if (value === undefined || value === null) return 'Not available';
     if (value === '') return 'Empty';
     if (typeof value === 'boolean') return value ? 'Enabled' : 'Disabled';
-    return String(value);
+    return typeof value === 'object' ? JSON.stringify(value) : String(value);
   }
 </script>
 
@@ -131,58 +132,17 @@
         </p>
       {:else if !editable}
         <p {id} class="text-text-brand min-w-0 text-sm">{display(active.value)}</p>
-      {:else if field.schema.control === 'switch'}
-        <Switch
-          {id}
-          class="cursor-pointer"
-          checked={value === true}
-          onCheckedChange={set}
-          {disabled}
-          aria-describedby={description}
-          aria-invalid={errors.length > 0}
-        />
-      {:else if field.schema.control === 'select'}
-        <select
-          {id}
-          value={String(value ?? '')}
-          onchange={(event) => set(event.currentTarget.value)}
-          {disabled}
-          aria-describedby={description}
-          aria-invalid={errors.length > 0}
-          class={`${controlClass} cursor-pointer`}
-        >
-          {#each field.schema.choices ?? [] as choice}<option value={choice}
-              >{choice || 'Default'}</option
-            >{/each}
-        </select>
-      {:else if field.schema.control === 'number'}
-        <Input
-          {id}
-          class={`${controlClass} max-w-40 cursor-text`}
-          type="number"
-          value={typeof value === 'number' ? value : undefined}
-          min={field.schema.min}
-          max={field.schema.max}
-          step="1"
-          oninput={(event) =>
-            set(event.currentTarget.value === '' ? null : Number(event.currentTarget.value))}
-          {disabled}
-          aria-describedby={description}
-          aria-invalid={errors.length > 0}
-        />
-      {:else if field.schema.control === 'text'}
-        <Input
-          {id}
-          class={`${controlClass} cursor-text`}
-          value={String(value ?? '')}
-          maxlength={field.schema.max_length}
-          oninput={(event) => set(event.currentTarget.value)}
-          {disabled}
-          aria-describedby={description}
-          aria-invalid={errors.length > 0}
-        />
       {:else}
-        <p {id} class="text-text-brand min-w-0 text-sm">{display(active.value)}</p>
+        <SettingInput
+          {id}
+          label={field.label}
+          schema={field.schema}
+          {value}
+          {disabled}
+          {description}
+          invalid={errors.length > 0}
+          onChange={set}
+        />
       {/if}
     </div>
     {#if edit}
@@ -197,7 +157,7 @@
       </div>{/if}
     {#if editable}
       <div class="flex flex-wrap gap-2 lg:justify-end">
-        {#if field.schema.type === 'string' && (!field.schema.choices || field.schema.choices.includes(''))}
+        {#if field.schema.type === 'list' || (field.schema.type === 'string' && (!field.schema.choices || field.schema.choices.includes('')))}
           <Button
             type="button"
             variant="link"
@@ -205,7 +165,12 @@
             class={actionClass}
             aria-label={`Clear ${field.label}`}
             {disabled}
-            onclick={() => onEdit({ path: field.path, action: 'set', value: '' })}>Clear</Button
+            onclick={() =>
+              onEdit({
+                path: field.path,
+                action: 'set',
+                value: field.schema.type === 'list' ? [] : '',
+              })}>Clear</Button
           >
         {/if}
         {#if active.source.web_selected}

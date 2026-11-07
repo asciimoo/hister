@@ -216,6 +216,31 @@ func readConfigurationState(t *testing.T, handler http.Handler, headers map[stri
 	return state.Revision, values
 }
 
+func TestSettingsDirectoryOwnership(t *testing.T) {
+	_, handler := newConfigurationTestServer(t, "user", "")
+	admin, err := model.CreateUser("settings-admin", "password123", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := model.CreateUser("file-owner", "password123", false); err != nil {
+		t.Fatal(err)
+	}
+	headers := map[string]string{"Origin": "hister://", "X-Access-Token": admin.Token}
+	revision, _ := readConfigurationState(t, handler, headers)
+	dir := t.TempDir()
+	for _, owner := range []string{"", "file-owner", "unknown-owner"} {
+		body := fmt.Sprintf(`{"revision":%q,"edits":[{"path":"indexer.directories","action":"set","value":[{"path":%q,"user":%q,"delete_on_remove":true}]}]}`, revision, dir, owner)
+		response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/validate", strings.NewReader(body), headers)
+		want := http.StatusOK
+		if owner == "unknown-owner" {
+			want = http.StatusUnprocessableEntity
+		}
+		if response.Code != want {
+			t.Fatalf("owner %q: %d %s", owner, response.Code, response.Body)
+		}
+	}
+}
+
 func TestConfigurationDraftValidation(t *testing.T) {
 	cfg, handler := newConfigurationTestServer(t, "token", "semantic_search:\n  api_key: private-api-key\ncrawler:\n  headers:\n    X-Key: private-header\n  proxy: https://user:private-proxy@example.com\n")
 	headers := map[string]string{"Authorization": "Bearer private-token", "Origin": "hister://", "Content-Type": "application/json"}

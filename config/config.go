@@ -148,14 +148,14 @@ type OAuthEntry struct {
 }
 
 type Directory struct {
-	Path           string   `yaml:"path"              mapstructure:"path"`
-	Label          string   `yaml:"label"             mapstructure:"label"`
-	Filetypes      []string `yaml:"filetypes"         mapstructure:"filetypes"`
-	Patterns       []string `yaml:"patterns"          mapstructure:"patterns"`
-	Excludes       []string `yaml:"excludes"          mapstructure:"excludes"`
-	IncludeHidden  bool     `yaml:"include_hidden"    mapstructure:"include_hidden"`
-	DeleteOnRemove bool     `yaml:"delete_on_remove"  mapstructure:"delete_on_remove"`
-	User           string   `yaml:"user"              mapstructure:"user"`
+	Path           string   `yaml:"path"              mapstructure:"path" json:"path"`
+	Label          string   `yaml:"label"             mapstructure:"label" json:"label"`
+	Filetypes      []string `yaml:"filetypes"         mapstructure:"filetypes" json:"filetypes,omitempty"`
+	Patterns       []string `yaml:"patterns"          mapstructure:"patterns" json:"patterns,omitempty"`
+	Excludes       []string `yaml:"excludes"          mapstructure:"excludes" json:"excludes,omitempty"`
+	IncludeHidden  bool     `yaml:"include_hidden"    mapstructure:"include_hidden" json:"include_hidden"`
+	DeleteOnRemove bool     `yaml:"delete_on_remove"  mapstructure:"delete_on_remove" json:"delete_on_remove"`
+	User           string   `yaml:"user"              mapstructure:"user" json:"user"`
 }
 
 type Indexer struct {

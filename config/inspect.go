@@ -212,7 +212,14 @@ func (c *Config) ValidateFields() []FieldError {
 	check("app.public", "Public access requires a token or user handling.", candidate.ValidatePublicMode())
 	check("hotkeys.web", "Use supported key combinations and actions.", candidate.Hotkeys.Validate())
 	check("semantic_search", "Check the embedding endpoint, model, dimensions, and context length.", candidate.validateSemanticSearch())
-	check("indexer", "Choose a supported detection accuracy and at least two distinct languages, or no language restriction.", candidate.Indexer.Validate())
+	indexerPath := "indexer.languages"
+	indexerMessage := "Choose at least two distinct supported languages, or no language restriction."
+	switch candidate.Indexer.LanguageDetectionAccuracy {
+	case "", LanguageDetectionAccuracyLow, LanguageDetectionAccuracyHigh:
+	default:
+		indexerPath, indexerMessage = "indexer.language_detection_accuracy", "Choose low or high detection accuracy."
+	}
+	check(indexerPath, indexerMessage, candidate.Indexer.Validate())
 	check("server.oauth", "Check provider names, required credentials, and provider settings.", candidate.validateOAuth())
 	switch candidate.Crawler.Backend {
 	case "", "http", "chromedp", "bidi":

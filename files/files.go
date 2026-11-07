@@ -58,6 +58,61 @@ func ExpandHome(path string) string {
 	return path
 }
 
+// ValidateDirectorySettings checks web selections against the server filesystem
+// and user database without installing watchers or indexing files.
+func ValidateDirectorySettings(c *config.Config) []config.FieldError {
+	var result []config.FieldError
+	var roots []string
+	for i, dir := range c.Indexer.Directories {
+		reject := func(message string) {
+			result = append(result, config.FieldError{Path: "indexer.directories", Code: "invalid_value", Message: fmt.Sprintf("Directory %d: %s", i+1, message)})
+		}
+		if dir == nil {
+			reject("Supply a directory row.")
+			continue
+		}
+		root, err := filepath.EvalSymlinks(ExpandHome(dir.Path))
+		if err != nil {
+			reject("Choose an existing directory accessible to the server.")
+			continue
+		}
+		root, err = filepath.Abs(root)
+		if err != nil {
+			reject("Cannot resolve the server directory path.")
+			continue
+		}
+		info, err := os.Stat(root)
+		if err != nil || !info.IsDir() {
+			reject("Choose an existing directory accessible to the server.")
+			continue
+		}
+		folder, err := os.Open(root)
+		if err == nil {
+			_, err = folder.Readdirnames(1)
+			_ = folder.Close()
+		}
+		if err != nil && err != io.EOF {
+			reject("Choose a directory the server can read.")
+			continue
+		}
+		for _, previous := range roots {
+			if HasPathPrefix(root, previous) || HasPathPrefix(previous, root) {
+				reject("Directory paths must not overlap, including symbolic links. Use one row for each tree.")
+				break
+			}
+		}
+		roots = append(roots, root)
+		if dir.User != "" {
+			if !c.App.UserHandling {
+				reject("An owner requires multi user mode. Leave the owner empty for global files.")
+			} else if _, err := model.GetUser(dir.User); err != nil {
+				reject("The owner could not be resolved. Choose an existing username.")
+			}
+		}
+	}
+	return result
+}
+
 // HasPathPrefix reports whether filePath equals dirPath or is contained within it,
 // using the platform's path separator.
 func HasPathPrefix(filePath, dirPath string) bool {

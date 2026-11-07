@@ -755,7 +755,7 @@ hister listen --config /path/to/my/config.yml
 ## Settings in the Web Interface
 
 Open **Settings** from the navigation menu to change appearance, snippet length, search
-behavior, and log level or format. Administrators can configure multi user instances.
+behavior, log level or format, and indexing. Administrators can configure multi user instances.
 Token protected instances require signing in; instances without authentication need no login.
 
 Keep one draft across category tabs, then choose **Save and apply**. Saving briefly interrupts
@@ -768,8 +768,26 @@ flags are locked, even when they equal a default. Commented examples do not lock
 value. A locked setting can retain a web selection that takes effect when its overriding source is removed.
 
 Web selections persist in `config.web.yml` inside the data directory, including when there is
-no main config file. Saving does not rewrite your main configuration. Other categories and
-connection or authentication settings are currently read only. Stored credentials stay hidden.
+no main config file. Saving does not rewrite your main configuration. Categories other than
+App and Indexer, and connection or authentication settings, are currently read only. Stored credentials stay hidden.
+
+The **Indexer** tab offers language detection, a language multiselect, detection accuracy,
+stopword handling, and the maximum file size in MiB. Select at least two languages, or clear
+the selection to detect all supported languages. Reindex existing documents after changing
+language or stopword settings. Saving does not reindex them automatically.
+
+Add watched directory rows with an absolute path on the server or a `~/` path. Each directory
+must exist, be readable by the server, and have no overlap with another row, including through
+symbolic links. Supply extensions without dots and file name glob patterns, one per line.
+An empty owner makes files global; a named owner must already exist in multi user mode.
+Saving starts a scan and replaces the active watches. Removing a row stops watching but keeps
+indexed documents. Changing an owner does not remove documents indexed for the previous owner.
+Delete those documents separately if their previous visibility is no longer appropriate.
+
+**Delete from index when removed** removes indexed documents when watched files are deleted
+or renamed. It never deletes files from disk. **Clear** on a collection selects an empty list;
+**Reset** removes the web selection. An authoritative directory or language list locks the
+whole collection. PDF parser controls remain managed in the main configuration.
 
 ## Reloading a Running Server
 
@@ -971,7 +989,7 @@ When multiple filters are specified, they are applied in order: excludes first, 
 
 ## Local Directory Indexing
 
-The `indexer.directories` option lets you index local files so they appear alongside your browser history in search results. You do not need to run `hister import file` for configured directories that the server can access. After changing this configuration, restart the Hister server. It scans the directories automatically at startup, then a file watcher monitors them so new and modified files are indexed without another restart.
+The `indexer.directories` option lets you index local files so they appear alongside your browser history in search results. You do not need to run `hister import file` for configured directories that the server can access. After editing the configuration file, reload or restart the Hister server. Changes saved in Settings apply immediately. Hister scans the directories, then a file watcher monitors them so new and modified files are indexed automatically.
 
 ```yaml
 indexer:

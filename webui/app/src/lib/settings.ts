@@ -1,22 +1,33 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { apiFetch } from '#lib/api.js';
 
+export interface SettingSchema {
+  type: string;
+  control: string;
+  collection: string;
+  sensitivity: string;
+  min?: number;
+  max?: number;
+  max_length?: number;
+  max_items?: number;
+  choices?: string[];
+  items?: SettingSchema;
+  properties?: {
+    name: string;
+    label: string;
+    description?: string;
+    required?: boolean;
+    schema: SettingSchema;
+  }[];
+}
+
 export interface SettingField {
   path: string;
   category: string;
   group?: string;
   label: string;
   description: string;
-  schema: {
-    type: string;
-    control: string;
-    collection: string;
-    sensitivity: string;
-    min?: number;
-    max?: number;
-    max_length?: number;
-    choices?: string[];
-  };
+  schema: SettingSchema;
   default?: unknown;
   effect: string;
   read_only_reason?: string;
@@ -143,7 +154,27 @@ export function canEditSetting(field: SettingField, value: SettingValue): boolea
     !field.read_only_reason &&
     !field.requires_confirmation &&
     field.schema.sensitivity === 'none' &&
-    field.schema.collection === 'none' &&
-    ['text', 'number', 'select', 'switch'].includes(field.schema.control)
+    supportsControl(field.schema)
+  );
+}
+
+function supportsControl(schema: SettingSchema): boolean {
+  if (schema.sensitivity !== 'none') return false;
+  if (schema.type === 'list')
+    return (
+      schema.control === 'list' &&
+      schema.collection === 'replace' &&
+      !!schema.items &&
+      supportsControl(schema.items)
+    );
+  if (schema.type === 'object')
+    return (
+      schema.control === 'object' &&
+      schema.collection === 'none' &&
+      !!schema.properties?.length &&
+      schema.properties.every((property) => supportsControl(property.schema))
+    );
+  return (
+    schema.collection === 'none' && ['text', 'number', 'select', 'switch'].includes(schema.control)
   );
 }

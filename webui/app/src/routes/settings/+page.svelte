@@ -238,7 +238,8 @@
     <div class="flex shrink-0 flex-col px-4 md:px-6">
       <h2 class="font-space text-2xl font-bold tracking-tight">Settings</h2>
       <p class="text-text-brand-muted my-2 text-sm">
-        Configure appearance, search behavior and logging. Other settings are shown for reference.
+        Configure appearance, search behavior, logging and indexing. Other settings are shown for
+        reference.
       </p>
       {#if problem}<div role="alert" class="text-hister-rose my-2 text-sm">
           <p>{problem}{needsReload && dirty ? ' Your draft is still here.' : ''}</p>

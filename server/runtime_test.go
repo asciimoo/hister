@@ -32,6 +32,160 @@ import (
 	"github.com/asciimoo/hister/server/types"
 )
 
+func TestSettingsDirectoryOwnerRemovedWhileDraining(t *testing.T) {
+	entered, release := make(chan struct{}), make(chan struct{})
+	unblock := sync.OnceFunc(func() { close(release) })
+	defer unblock()
+	oldEndpoints := Endpoints
+	Endpoints = append(append([]*Endpoint(nil), Endpoints...), &Endpoint{
+		Path: "/api/test-remove-owner", Method: GET,
+		Handler: func(c *webContext) {
+			close(entered)
+			<-release
+			if err := model.DeleteUser("directory-owner"); err != nil {
+				t.Error(err)
+			}
+			serve200(c)
+		},
+	})
+	t.Cleanup(func() { Endpoints = oldEndpoints })
+	cfg, handler, _ := newReloadTestServer(t, true)
+	admin, err := model.GetUser("runtime-owner")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := model.CreateUser("directory-owner", "password123", false); err != nil {
+		t.Fatal(err)
+	}
+	headers := map[string]string{"Origin": "hister://", "X-Access-Token": admin.Token}
+	revision, _ := readConfigurationState(t, handler, headers)
+	held := make(chan struct{})
+	go func() {
+		testutil.ServeHTTP(t, handler, http.MethodGet, "/hister/api/test-remove-owner", nil, headers)
+		close(held)
+	}()
+	<-entered
+	body := fmt.Sprintf(`{"revision":%q,"edits":[{"path":"indexer.directories","action":"set","value":[{"path":%q,"user":"directory-owner"}]}]}`, revision, t.TempDir())
+	result := make(chan *httptest.ResponseRecorder, 1)
+	go func() {
+		result <- testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(body), headers)
+	}()
+	waitRuntimePause(t, handler)
+	unblock()
+	<-held
+	response := <-result
+	if response.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("removed owner accepted: %d %s", response.Code, response.Body)
+	}
+	if _, err := os.Stat(cfg.FullPath("config.web.yml")); !os.IsNotExist(err) {
+		t.Fatal("removed owner persisted")
+	}
+	fresh, _ := readConfigurationState(t, handler, headers)
+	if fresh != revision {
+		t.Fatal("removed owner replaced runtime")
+	}
+}
+
+func TestSettingsDirectoryValidation(t *testing.T) {
+	cfg, handler, _ := newReloadTestServer(t, false)
+	headers := map[string]string{"Origin": "hister://", "X-Access-Token": "secret"}
+	revision, _ := readConfigurationState(t, handler, headers)
+	dir := t.TempDir()
+	file := filepath.Join(dir, "note.txt")
+	if err := os.WriteFile(file, []byte("not a directory"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, dirs := range [][]map[string]any{
+		{{"path": filepath.Join(dir, "missing")}},
+		{{"path": file}},
+		{{"path": dir, "user": "missing-owner"}},
+		{{"path": dir}, {"path": dir}},
+	} {
+		edits, err := json.Marshal([]map[string]any{{"path": "indexer.directories", "action": "set", "value": dirs}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, op := range []string{"validate", "apply"} {
+			response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/"+op, strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":%s}`, revision, edits)), headers)
+			if response.Code != http.StatusUnprocessableEntity || !strings.Contains(response.Body.String(), `"path":"indexer.directories"`) {
+				t.Errorf("%s accepted invalid directories: %d %s", op, response.Code, response.Body)
+			}
+		}
+	}
+	if _, err := os.Stat(cfg.FullPath("config.web.yml")); !os.IsNotExist(err) {
+		t.Fatalf("invalid draft was persisted: %v", err)
+	}
+	fresh, _ := readConfigurationState(t, handler, headers)
+	if fresh != revision {
+		t.Fatal("invalid draft replaced runtime")
+	}
+}
+
+func TestSettingsIndexerPersistenceAndWatching(t *testing.T) {
+	cfg, handler, _ := newReloadTestServer(t, false)
+	mainPath := filepath.Join(cfg.App.Directory, "config.yml")
+	original, err := os.ReadFile(mainPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	headers := map[string]string{"Origin": "hister://", "X-Access-Token": "secret"}
+	dir := t.TempDir()
+	filename := filepath.Join(dir, "note.txt")
+	if err := os.WriteFile(filename, []byte("Saved watcher content"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	save := func(edits string) {
+		t.Helper()
+		revision, _ := readConfigurationState(t, handler, headers)
+		response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":%s}`, revision, edits)), headers)
+		if response.Code != http.StatusOK {
+			t.Fatalf("save: %d %s", response.Code, response.Body)
+		}
+	}
+	save(fmt.Sprintf(`[{"path":"indexer.directories","action":"set","value":[{"path":%q,"label":"web-watched","filetypes":["txt"],"delete_on_remove":true}]},{"path":"indexer.languages","action":"set","value":["en","hu"]},{"path":"indexer.max_file_size_mb","action":"set","value":8}]`, dir))
+	loaded, _, err := config.LoadForInspection(mainPath, true)
+	if err != nil || len(loaded.Indexer.Directories) != 1 || loaded.Indexer.Directories[0].Path != dir || !loaded.Indexer.Directories[0].DeleteOnRemove || loaded.Indexer.MaxFileSize != 8 || !slices.Equal(loaded.Indexer.Languages, []string{"en", "hu"}) {
+		t.Fatalf("restart lost indexer settings: %v", err)
+	}
+	path := "/hister/api/document?url=" + url.QueryEscape(files.PathToFileURL(filename))
+	waitDocument := func(present bool) {
+		t.Helper()
+		deadline := time.Now().Add(5 * time.Second)
+		for {
+			response := testutil.ServeHTTP(t, handler, http.MethodGet, path, nil, headers)
+			if present && response.Code == http.StatusOK && strings.Contains(response.Body.String(), "Saved watcher content") && strings.Contains(response.Body.String(), `"label":"web-watched"`) {
+				return
+			}
+			if !present && response.Code == http.StatusNotFound {
+				return
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("watcher state (present %t): %d %s", present, response.Code, response.Body)
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+	waitDocument(true)
+	if err := os.Remove(filename); err != nil {
+		t.Fatal(err)
+	}
+	waitDocument(false)
+	save(`[{"path":"indexer.directories","action":"set","value":[]}]`)
+	loaded, _, err = config.LoadForInspection(mainPath, true)
+	if err != nil || len(loaded.Indexer.Directories) != 0 || !loaded.Source("indexer.directories").WebSelected {
+		t.Fatalf("clear not retained: %v", err)
+	}
+	save(`[{"path":"indexer.directories","action":"reset"}]`)
+	loaded, _, err = config.LoadForInspection(mainPath, true)
+	if err != nil || len(loaded.Indexer.Directories) != 0 || loaded.Source("indexer.directories").WebSelected {
+		t.Fatalf("reset not retained: %v", err)
+	}
+	after, err := os.ReadFile(mainPath)
+	if err != nil || string(after) != string(original) {
+		t.Fatal("Indexer save rewrote main configuration")
+	}
+}
+
 func TestSettingsSavePersistsAndResets(t *testing.T) {
 	cfg, handler, write := newReloadTestServer(t, false)
 	write("") // Leave ordinary App settings to the web editor.

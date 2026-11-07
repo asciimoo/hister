@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/asciimoo/hister/config"
+	"github.com/asciimoo/hister/files"
 	"github.com/asciimoo/hister/server/extractor"
 )
 
@@ -26,7 +27,14 @@ func configurationStates(current *config.Config) []config.FieldState {
 // The config package owns composition and never imports the extractor runtime.
 func prepareConfigurationDraft(current *config.Config, edits []config.SettingEdit) (*config.Config, []config.FieldError) {
 	return current.PrepareDraft(edits, func(candidate *config.Config) []config.FieldError {
-		return extractor.ValidateConfiguration(candidate.Extractors)
+		errors := extractor.ValidateConfiguration(candidate.Extractors)
+		for _, edit := range edits {
+			if edit.Path == "indexer.directories" {
+				errors = append(errors, files.ValidateDirectorySettings(candidate)...)
+				break
+			}
+		}
+		return errors
 	})
 }
 

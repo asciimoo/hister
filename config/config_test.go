@@ -500,6 +500,7 @@ func TestLoadRequiresRequestedFile(t *testing.T) {
 }
 
 func TestConfigurationSourcesIgnoreEmptyContainers(t *testing.T) {
+	t.Setenv("HISTER_DATA_DIR", t.TempDir())
 	for _, raw := range []string{
 		"# app:\n#   title: Hister\n",
 		"{}\n",

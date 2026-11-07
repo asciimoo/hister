@@ -67,13 +67,14 @@ func TestFieldCatalogPreservesEditorContract(t *testing.T) {
 		if field.Label == "" || field.Description == "" || field.Category != category {
 			t.Fatalf("incomplete description for %s", field.Path)
 		}
-		if field.Category != "app" && field.Path != "server.address" {
+		ordinaryIndexer := field.Category == "indexer" && !strings.HasPrefix(field.Path, "indexer.pdf_parser.")
+		if field.Category != "app" && field.Path != "server.address" && !ordinaryIndexer {
 			if field.Schema.Type != "unknown" || field.Schema.Sensitivity != "unknown" || field.Default != nil || field.ReadOnlyReason == "" {
 				t.Fatalf("unsupported setting %s gained editing support or exposed defaults", field.Path)
 			}
 			continue
 		}
-		if field.Effect != "runtime" {
+		if field.Effect != "runtime" && (!ordinaryIndexer || field.Effect != "reindex") {
 			t.Fatalf("incorrect effect for %s", field.Path)
 		}
 		if err := field.Schema.ValidateDefinition(); err != nil {
@@ -339,6 +340,139 @@ func TestValidateAppFieldConstraints(t *testing.T) {
 				t.Fatal("startup accepted App values that inspection and reload reject")
 			}
 		})
+	}
+}
+
+func TestWatchedDirectoryDraftSettings(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HISTER_DATA_DIR", dir)
+	filename := filepath.Join(dir, "config.yml")
+	if err := os.WriteFile(filename, []byte("# defaults\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c, _, err := LoadForInspection(filename, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	valid := `[{"path":"~/Documents","label":"notes","filetypes":["md"],"patterns":["note*"],"excludes":["secret*"],"include_hidden":true,"delete_on_remove":true,"user":"alice"}]`
+	next, fields := c.PrepareDraft([]SettingEdit{{Path: "indexer.directories", Action: "set", Value: json.RawMessage(valid)}})
+	if next == nil || len(fields) != 0 {
+		t.Fatalf("directory draft rejected: %v", fields)
+	}
+	want := &Directory{Path: "~/Documents", Label: "notes", Filetypes: []string{"md"}, Patterns: []string{"note*"}, Excludes: []string{"secret*"}, IncludeHidden: true, DeleteOnRemove: true, User: "alice"}
+	if len(next.Indexer.Directories) != 1 || !reflect.DeepEqual(next.Indexer.Directories[0], want) {
+		t.Fatalf("incorrect directory: %+v", next.Indexer.Directories)
+	}
+	raw, err := json.Marshal(next.FieldStates())
+	if err != nil || !strings.Contains(string(raw), `"delete_on_remove":true`) || !strings.Contains(string(raw), `"path":"~/Documents"`) {
+		t.Fatalf("directory read does not use catalog keys: %s %v", raw, err)
+	}
+	for _, value := range []string{
+		`null`, `[null]`, `[{}]`, `[{"path":""}]`, `[{"path":"relative"}]`,
+		`[{"path":"/docs","patterns":["["]}]`, `[{"path":"/docs","excludes":["["]}]`,
+		`[{"path":"/docs","filetypes":[".md"]}]`, `[{"path":"/docs","filetypes":["*"]}]`,
+		`[{"path":"/docs","delete_on_remove":"true"}]`, `[{"path":"/docs","unknown":true}]`,
+		`[{"path":"/docs","path":"/other"}]`,
+	} {
+		candidate, errors := c.PrepareDraft([]SettingEdit{{Path: "indexer.directories", Action: "set", Value: json.RawMessage(value)}})
+		if candidate != nil || len(errors) == 0 || errors[0].Path != "indexer.directories" {
+			t.Errorf("accepted invalid directories %s: %v", value, errors)
+		}
+	}
+	for _, edit := range []SettingEdit{{Path: "indexer.directories", Action: "set", Value: json.RawMessage(`[]`)}, {Path: "indexer.directories", Action: "reset"}} {
+		cleared, errors := next.PrepareDraft([]SettingEdit{edit})
+		if cleared == nil || len(errors) != 0 || len(cleared.Indexer.Directories) != 0 || cleared.Source(edit.Path).WebSelected != (edit.Action == "set") {
+			t.Fatalf("clear/reset failed: %v", errors)
+		}
+	}
+	if err := os.WriteFile(filename, []byte("indexer:\n  directories:\n    - path: /locked\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	locked, _, err := LoadForInspection(filename, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, edit := range []SettingEdit{{Path: "indexer.directories", Action: "set", Value: json.RawMessage(`[]`)}, {Path: "indexer.directories", Action: "reset"}, {Path: "indexer.directories.0.path", Action: "set", Value: json.RawMessage(`"/bypass"`)}} {
+		candidate, errors := locked.PrepareDraft([]SettingEdit{edit})
+		if candidate != nil || len(errors) == 0 {
+			t.Fatalf("collection lock bypassed: %v", edit)
+		}
+	}
+}
+
+func TestWatchedDirectoryStateCanBeEdited(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HISTER_DATA_DIR", dir)
+	filename := filepath.Join(dir, "config.yml")
+	if err := os.WriteFile(filename, []byte("# defaults\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "config.web.yml"), []byte("indexer:\n  directories:\n    - path: /docs\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c, _, err := LoadForInspection(filename, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, state := range c.FieldStates() {
+		if state.Path != "indexer.directories" {
+			continue
+		}
+		value, err := json.Marshal(state.Value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// A browser preserves untouched properties when changing one row member.
+		value = []byte(strings.Replace(string(value), "/docs", "/other", 1))
+		next, fields := c.PrepareDraft([]SettingEdit{{Path: state.Path, Action: "set", Value: value}})
+		if next == nil || len(fields) != 0 {
+			t.Fatalf("cannot edit a stored directory row: %v", fields)
+		}
+	}
+}
+
+func TestIndexerDraftSettings(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HISTER_DATA_DIR", dir)
+	filename := filepath.Join(dir, "config.yml")
+	if err := os.WriteFile(filename, []byte("# indexer settings inherit defaults\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c, _, err := LoadForInspection(filename, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	next, fields := c.PrepareDraft([]SettingEdit{
+		{Path: "indexer.detect_languages", Action: "set", Value: json.RawMessage(`false`)},
+		{Path: "indexer.keep_stopwords", Action: "set", Value: json.RawMessage(`true`)},
+		{Path: "indexer.languages", Action: "set", Value: json.RawMessage(`["en", "hu"]`)},
+		{Path: "indexer.language_detection_accuracy", Action: "set", Value: json.RawMessage(`"high"`)},
+		{Path: "indexer.max_file_size_mb", Action: "set", Value: json.RawMessage(`8`)},
+	})
+	if next == nil || len(fields) != 0 {
+		t.Fatalf("indexer draft rejected: %v", fields)
+	}
+	if next.Indexer.DetectLanguages || !next.Indexer.KeepStopwords || next.Indexer.MaxFileSize != 8 || next.Indexer.LanguageDetectionAccuracy != "high" || !reflect.DeepEqual(next.Indexer.Languages, []string{"en", "hu"}) {
+		t.Fatalf("indexer selections not composed: %+v", next.Indexer)
+	}
+	for _, tc := range []struct{ path, value string }{
+		{"indexer.max_file_size_mb", "0"},
+		{"indexer.max_file_size_mb", "8796093022208"},
+		{"indexer.languages", `["en"]`},
+		{"indexer.languages", `["en", "en"]`},
+		{"indexer.languages", `["en", "unknown-language"]`},
+		{"indexer.language_detection_accuracy", `"invalid"`},
+		{"indexer.pdf_parser.command", `"executable"`},
+		{"indexer", `{"pdf_parser":{"command":"executable"}}`},
+	} {
+		candidate, errors := c.PrepareDraft([]SettingEdit{{Path: tc.path, Action: "set", Value: json.RawMessage(tc.value)}})
+		if candidate != nil || len(errors) == 0 || errors[0].Path != tc.path {
+			t.Errorf("expected field error for %s: %v", tc.path, errors)
+		}
+	}
+	cleared, errors := next.PrepareDraft([]SettingEdit{{Path: "indexer.languages", Action: "set", Value: json.RawMessage(`[]`)}})
+	if cleared == nil || len(errors) != 0 || len(cleared.Indexer.Languages) != 0 || !cleared.Source("indexer.languages").WebSelected {
+		t.Fatalf("cannot explicitly clear language restriction: %v", errors)
 	}
 }
 

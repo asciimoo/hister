@@ -5,29 +5,43 @@ package config
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"maps"
 	"net/url"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/asciimoo/hister/server/languages"
 )
 
 // SettingSchema describes a control independently of any stored value. Both
 // collection and sensitivity must be explicit, including for ordinary scalars.
 type SettingSchema struct {
-	Type        string         `json:"type"`
-	Control     string         `json:"control"`
-	Collection  string         `json:"collection"`
-	Sensitivity string         `json:"sensitivity"`
-	Min         *int           `json:"min,omitempty"`
-	Max         *int           `json:"max,omitempty"`
-	MaxLength   int            `json:"max_length,omitempty"`
-	MaxItems    int            `json:"max_items,omitempty"`
-	Choices     []string       `json:"choices,omitempty"`
-	Items       *SettingSchema `json:"items,omitempty"`
+	Type        string            `json:"type"`
+	Control     string            `json:"control"`
+	Collection  string            `json:"collection"`
+	Sensitivity string            `json:"sensitivity"`
+	Min         *int              `json:"min,omitempty"`
+	Max         *int              `json:"max,omitempty"`
+	MaxLength   int               `json:"max_length,omitempty"`
+	MaxItems    int               `json:"max_items,omitempty"`
+	Choices     []string          `json:"choices,omitempty"`
+	Items       *SettingSchema    `json:"items,omitempty"`
+	Properties  []SettingProperty `json:"properties,omitempty"`
+}
+
+// SettingProperty describes one member of a structured collection item.
+type SettingProperty struct {
+	Name        string        `json:"name"`
+	Label       string        `json:"label"`
+	Description string        `json:"description"`
+	Required    bool          `json:"required"`
+	Schema      SettingSchema `json:"schema"`
 }
 
 // FieldMetadata contains static descriptions only. Runtime values and sources
@@ -180,10 +194,10 @@ func (c *Config) PrepareDraft(edits []SettingEdit, validators ...func(*Config) [
 			}
 			delete(selections, edit.Path)
 		case "set":
-			var value any
 			decoder := json.NewDecoder(bytes.NewReader(edit.Value))
 			decoder.UseNumber()
-			if err := decoder.Decode(&value); err != nil {
+			value, err := decodeSettingValue(decoder)
+			if err != nil {
 				reject("invalid_value", "Supply one valid JSON value.")
 				continue
 			}
@@ -210,6 +224,13 @@ func (c *Config) PrepareDraft(edits []SettingEdit, validators ...func(*Config) [
 		return nil, []FieldError{{Code: "invalid_configuration", Message: "Cannot compose the candidate configuration."}}
 	}
 	validation := next.ValidateFields()
+	if seen["indexer.directories"] {
+		for i, dir := range next.Indexer.Directories {
+			if message := dir.validateSetting(); message != "" {
+				validation = append(validation, FieldError{Path: "indexer.directories", Code: "invalid_value", Message: fmt.Sprintf("Directory %d: %s", i+1, message)})
+			}
+		}
+	}
 	for _, validate := range validators {
 		validation = append(validation, validate(next)...)
 	}
@@ -222,6 +243,52 @@ func (c *Config) PrepareDraft(edits []SettingEdit, validators ...func(*Config) [
 		return nil, []FieldError{{Code: "invalid_configuration", Message: "The complete configuration is invalid."}}
 	}
 	return next, nil
+}
+
+// decodeSettingValue preserves numeric types and rejects duplicate keys at every
+// nesting level, including properties inside structured collection rows.
+func decodeSettingValue(decoder *json.Decoder) (any, error) {
+	token, err := decoder.Token()
+	if err != nil {
+		return nil, err
+	}
+	switch token {
+	case json.Delim('{'):
+		value := make(map[string]any)
+		for decoder.More() {
+			key, err := decoder.Token()
+			if err != nil {
+				return nil, err
+			}
+			name, ok := key.(string)
+			if !ok {
+				return nil, errors.New("invalid object key")
+			}
+			if _, exists := value[name]; exists {
+				return nil, errors.New("duplicate object key")
+			}
+			item, err := decodeSettingValue(decoder)
+			if err != nil {
+				return nil, err
+			}
+			value[name] = item
+		}
+		_, err := decoder.Token()
+		return value, err
+	case json.Delim('['):
+		value := make([]any, 0)
+		for decoder.More() {
+			item, err := decodeSettingValue(decoder)
+			if err != nil {
+				return nil, err
+			}
+			value = append(value, item)
+		}
+		_, err := decoder.Token()
+		return value, err
+	default:
+		return token, nil
+	}
 }
 
 // FieldCatalog explicitly describes every setting in the main YAML config.
@@ -251,6 +318,7 @@ func FieldCatalog() []FieldMetadata {
 		groupDocumentProcessing    = "Document processing"
 	)
 	minSnippet, maxSnippet := 1, 10000
+	minFileSize, maxFileSize := 1, int(min(int64(^uint(0)>>1), int64((1<<63-1)/(1024*1024))))
 	fields := []FieldMetadata{
 		{
 			Path:        "app.title",
@@ -414,12 +482,12 @@ func FieldCatalog() []FieldMetadata {
 		fileManagedField("server.max_batch_body_size", groupRequestLimits, "Maximum batch size", "Maximum batch request body size in MiB."),
 		fileManagedField("server.metrics", groupMonitoring, "Metrics", "Expose server metrics."),
 		fileManagedField("server.expose_version", groupMonitoring, "Expose version", "Include the server version in public configuration."),
-		fileManagedField("indexer.detect_languages", groupLanguageAndText, "Detect languages", "Detect document languages when indexing."),
-		fileManagedField("indexer.languages", groupLanguageAndText, "Languages", "Languages considered during language detection."),
-		fileManagedField("indexer.language_detection_accuracy", groupLanguageAndText, "Language detection accuracy", "Accuracy and memory usage of language detection."),
-		fileManagedField("indexer.keep_stopwords", groupLanguageAndText, "Keep stopwords", "Keep common words in the search index."),
-		fileManagedField("indexer.directories", groupLocalFiles, "Watched directories", "Directories and matching rules for indexing local files."),
-		fileManagedField("indexer.max_file_size_mb", groupLocalFiles, "Maximum file size", "Maximum size of indexed files in MiB."),
+		{Path: "indexer.detect_languages", Group: groupLanguageAndText, Label: "Detect languages", Description: "Detect languages for newly processed documents. Reindex to update existing documents.", Schema: SettingSchema{Sensitivity: "none"}, Effect: "reindex"},
+		{Path: "indexer.languages", Group: groupLanguageAndText, Label: "Languages", Description: "Select at least two languages, or clear the selection to detect all supported languages. Reindex to update existing documents.", Schema: SettingSchema{Type: "list", Control: "list", Collection: "replace", Sensitivity: "none", Items: &SettingSchema{Type: "string", Control: "select", Collection: "none", Sensitivity: "none", Choices: languages.DetectorCodes()}}, Effect: "reindex"},
+		{Path: "indexer.language_detection_accuracy", Group: groupLanguageAndText, Label: "Language detection accuracy", Description: "Low uses less memory. High improves detection accuracy. Reindex to update existing documents.", Schema: SettingSchema{Sensitivity: "none", Choices: []string{"", "low", "high"}}, Effect: "reindex"},
+		{Path: "indexer.keep_stopwords", Group: groupLanguageAndText, Label: "Keep stopwords", Description: "Keep common words in the search index. Reindex to update existing documents.", Schema: SettingSchema{Sensitivity: "none"}, Effect: "reindex"},
+		{Path: "indexer.directories", Group: groupLocalFiles, Label: "Watched directories", Description: "Server directories to scan and watch after saving. Blank owner makes files visible to everyone with search access. Removing a row stops watching but retains indexed documents.", Schema: directorySchema()},
+		{Path: "indexer.max_file_size_mb", Group: groupLocalFiles, Label: "Maximum file size", Description: "Maximum file size in MiB. Applies to subsequent file processing.", Schema: SettingSchema{Sensitivity: "none", Min: &minFileSize, Max: &maxFileSize}, Effect: "runtime"},
 		fileManagedField("indexer.pdf_parser.command", groupPDFExtraction, "PDF parser command", "Optional executable used to extract PDF text."),
 		fileManagedField("indexer.pdf_parser.args", groupPDFExtraction, "PDF parser arguments", "Arguments passed to the PDF parser command."),
 		fileManagedField("indexer.pdf_parser.timeout", groupPDFExtraction, "PDF parser timeout", "Maximum time in seconds for parsing a PDF."),
@@ -465,15 +533,20 @@ func FieldCatalog() []FieldMetadata {
 			continue
 		}
 		value := settingValue(defaults, field.Path)
+		if field.Schema.Type == "list" && reflect.ValueOf(value).IsNil() {
+			value = []any{}
+		}
 		switch value.(type) {
 		case string:
 			field.Schema.Type, field.Schema.Control = "string", "text"
 		case bool:
 			field.Schema.Type, field.Schema.Control = "boolean", "switch"
-		case int:
+		case int, int64:
 			field.Schema.Type, field.Schema.Control = "integer", "number"
 		}
-		field.Schema.Collection = "none"
+		if field.Schema.Collection == "" {
+			field.Schema.Collection = "none"
+		}
 		if len(field.Schema.Choices) > 0 {
 			field.Schema.Control = "select"
 		}
@@ -491,6 +564,45 @@ func FieldCatalog() []FieldMetadata {
 		}
 	}
 	return fields
+}
+
+func directorySchema() SettingSchema {
+	text := SettingSchema{Type: "string", Control: "text", Collection: "none", Sensitivity: "none", MaxLength: 4096}
+	toggle := SettingSchema{Type: "boolean", Control: "switch", Collection: "none", Sensitivity: "none"}
+	list := SettingSchema{Type: "list", Control: "list", Collection: "replace", Sensitivity: "none", MaxItems: 256, Items: &text}
+	return SettingSchema{
+		Type: "list", Control: "list", Collection: "replace", Sensitivity: "none", MaxItems: 256, Items: &SettingSchema{
+			Type: "object", Control: "object", Collection: "none", Sensitivity: "none", Properties: []SettingProperty{
+				{Name: "path", Label: "Path", Description: "Existing absolute server path or ~/ path. Directories must not overlap.", Required: true, Schema: text},
+				{Name: "label", Label: "Label", Description: "Label assigned to indexed files.", Schema: text},
+				{Name: "user", Label: "Owner", Description: "Existing username in multi user mode. Leave empty for global files.", Schema: text},
+				{Name: "filetypes", Label: "File types", Description: "Extensions without a dot, one per line. Empty allows every file type.", Schema: list},
+				{Name: "patterns", Label: "Include patterns", Description: "File name glob patterns, one per line. Empty includes all names.", Schema: list},
+				{Name: "excludes", Label: "Exclude patterns", Description: "File and directory name glob patterns, one per line.", Schema: list},
+				{Name: "include_hidden", Label: "Include hidden files", Description: "Also includes hidden directories and common dependency and cache folders.", Schema: toggle},
+				{Name: "delete_on_remove", Label: "Delete from index when removed", Description: "Deleting or renaming a file removes its indexed document. This never deletes files from disk.", Schema: toggle},
+			},
+		},
+	}
+}
+
+func (d *Directory) validateSetting() string {
+	if d == nil || strings.TrimSpace(d.Path) == "" || (!filepath.IsAbs(d.Path) && !strings.HasPrefix(d.Path, "~/")) {
+		return "Use an absolute server directory path or a ~/ path."
+	}
+	for _, patterns := range [][]string{d.Patterns, d.Excludes} {
+		for _, pattern := range patterns {
+			if _, err := filepath.Match(pattern, ""); err != nil || pattern == "" {
+				return "Use valid nonempty file name glob patterns."
+			}
+		}
+	}
+	for _, ext := range d.Filetypes {
+		if ext == "" || strings.ContainsAny(ext, ". /\\*?[]") {
+			return "Use file extensions without dots, spaces, separators, or glob characters."
+		}
+	}
+	return ""
 }
 
 // A placeholder records coverage without guessing controls or disclosing values.
@@ -539,6 +651,11 @@ func (s SettingSchema) ValidateValue(value any) (any, string) {
 		switch v := value.(type) {
 		case int:
 			n = v
+		case int64:
+			if int64(int(v)) != v {
+				return nil, "Must be a supported integer."
+			}
+			n = int(v)
 		case json.Number:
 			parsed, err := v.Int64()
 			if err != nil || int64(int(parsed)) != parsed {
@@ -555,6 +672,33 @@ func (s SettingSchema) ValidateValue(value any) (any, string) {
 			return nil, fmt.Sprintf("Must be at most %d.", *s.Max)
 		}
 		return n, ""
+	case "object":
+		v, ok := value.(map[string]any)
+		if !ok || v == nil {
+			return nil, "Must be an object with described properties."
+		}
+		properties := make(map[string]SettingProperty, len(s.Properties))
+		for _, property := range s.Properties {
+			properties[property.Name] = property
+		}
+		result := make(map[string]any, len(v))
+		for name, value := range v {
+			property, ok := properties[name]
+			if !ok {
+				return nil, "Unknown object property."
+			}
+			item, message := property.Schema.ValidateValue(value)
+			if message != "" {
+				return nil, property.Label + ": " + message
+			}
+			result[name] = item
+		}
+		for _, property := range s.Properties {
+			if _, ok := result[property.Name]; !ok && property.Required {
+				return nil, property.Label + " is required."
+			}
+		}
+		return result, ""
 	case "list":
 		v := reflect.ValueOf(value)
 		if !v.IsValid() || (v.Kind() != reflect.Slice && v.Kind() != reflect.Array) || s.Items == nil {
@@ -570,7 +714,7 @@ func (s SettingSchema) ValidateValue(value any) (any, string) {
 		for i := 0; i < v.Len(); i++ {
 			item, message := s.Items.ValidateValue(v.Index(i).Interface())
 			if message != "" {
-				return nil, "Invalid list item. " + message
+				return nil, fmt.Sprintf("Item %d: %s", i+1, message)
 			}
 			items = append(items, item)
 		}
@@ -616,6 +760,9 @@ func (s SettingSchema) ValidateDefinition() error {
 	if s.Type != "string" && (s.MaxLength != 0 || len(s.Choices) != 0) {
 		return invalid()
 	}
+	if s.Type != "object" && len(s.Properties) != 0 {
+		return invalid()
+	}
 	switch s.Type {
 	case "string":
 		if s.Control != "text" && s.Control != "select" && s.Control != "url" && s.Control != "secret" {
@@ -643,6 +790,20 @@ func (s SettingSchema) ValidateDefinition() error {
 	case "integer":
 		if s.Control != "number" || s.Sensitivity != "none" {
 			return invalid()
+		}
+	case "object":
+		if s.Control != "object" || s.Sensitivity != "none" || len(s.Properties) == 0 {
+			return invalid()
+		}
+		seen := make(map[string]bool)
+		for _, property := range s.Properties {
+			if property.Name == "" || property.Label == "" || seen[property.Name] || property.Schema.Sensitivity != "none" {
+				return invalid()
+			}
+			if err := property.Schema.ValidateDefinition(); err != nil {
+				return err
+			}
+			seen[property.Name] = true
 		}
 	case "list", "dictionary":
 		if s.Control != s.Type || s.Collection != "replace" || s.Items == nil || s.Sensitivity == "url" {
@@ -714,7 +875,7 @@ func settingValue(c *Config, path string) any {
 func (c *Config) validateAppFields() []FieldError {
 	var result []FieldError
 	for _, field := range FieldCatalog() {
-		if field.ReadOnlyReason != "" {
+		if field.Category != "app" || field.ReadOnlyReason != "" {
 			continue
 		}
 		if _, message := field.Schema.ValidateValue(settingValue(c, field.Path)); message != "" {

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"reflect"
 	"sync"
 	"time"
 
@@ -72,6 +73,7 @@ type runtimeRequest struct {
 // Its message is safe for callers; underlying resource errors stay in logs.
 type runtimeApplyError struct {
 	code, message string
+	fields        []config.FieldError
 }
 
 func (e *runtimeApplyError) Error() string { return e.message }
@@ -284,6 +286,9 @@ func (r *serverRuntime) save(lease *runtimeRequest, edits []config.SettingEdit) 
 		code := "apply_failed"
 		if applyErr, ok := errors.AsType[*runtimeApplyError](err); ok {
 			code = applyErr.code
+			if len(applyErr.fields) > 0 {
+				return status, map[string]any{"code": code, "errors": applyErr.fields}
+			}
 		}
 		return failure(status, code, err.Error())
 	}
@@ -371,6 +376,14 @@ func (r *serverRuntime) apply(ctx context.Context, lease *runtimeRequest, next *
 		if err := model.CheckAdministratorAvailability(next); err != nil {
 			r.resume(old)
 			return http.StatusBadRequest, err
+		}
+	}
+	// A request completing during draining may have removed a selected owner.
+	// Recheck paths too before retiring the current runtime or committing a save.
+	if staged != nil && !reflect.DeepEqual(old.cfg.Indexer.Directories, next.Indexer.Directories) {
+		if fields := files.ValidateDirectorySettings(next); len(fields) > 0 {
+			r.resume(old)
+			return http.StatusUnprocessableEntity, &runtimeApplyError{code: "invalid_settings", message: "Watched directories changed during apply.", fields: fields}
 		}
 	}
 	// Include rule writes that completed while this reload was draining.
