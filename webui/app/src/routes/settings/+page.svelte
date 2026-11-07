@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { MediaQuery } from 'svelte/reactivity';
-  import { beforeNavigate } from '$app/navigation';
+  import { beforeNavigate, goto } from '$app/navigation';
+  import { page } from '$app/state';
   import { Button } from '@hister/components/ui/button';
   import { fetchConfig, resetConfig } from '#lib/api.js';
   import { redirectToAuth } from '#lib/auth-navigation.js';
@@ -19,7 +20,6 @@
   let state = $state<SettingsState | null>(null);
   let edits = $state<Record<string, SettingEdit>>({});
   let errors = $state<SettingError[]>([]);
-  let category = $state('app');
   let busy = $state(true);
   let denied = $state(false);
   let message = $state('Loading settings…');
@@ -28,6 +28,11 @@
   let destroyed = false;
   const sidebarLayout = new MediaQuery('(min-width: 64rem)');
   const categories = $derived([...new Set(state?.fields.map((field) => field.category) ?? [])]);
+  const settingsUrl = $derived(page.shallow?.url ?? page.url);
+  const requestedCategory = $derived(settingsUrl.searchParams.get('tab') ?? 'app');
+  const category = $derived(
+    categories.includes(requestedCategory) ? requestedCategory : (categories[0] ?? 'app'),
+  );
   const editCount = $derived(Object.keys(edits).length);
   const dirty = $derived(editCount > 0);
   const values = $derived(new Map(state?.values.map((value) => [value.path, value]) ?? []));
@@ -40,6 +45,7 @@
     destroyed = true;
   });
   beforeNavigate((navigation) => {
+    if (navigation.shallow && navigation.to?.url.pathname === page.url.pathname) return;
     if (
       (dirty || busy) &&
       !navigation.willUnload &&
@@ -159,6 +165,13 @@
     return errors.filter((error) => error.path.split('.')[0] === tab);
   }
 
+  function selectCategory(next: string) {
+    const url = new URL(settingsUrl);
+    if (next === 'app') url.searchParams.delete('tab');
+    else url.searchParams.set('tab', next);
+    if (url.href !== settingsUrl.href) void goto(url, { shallow: true });
+  }
+
   function tabKeydown(event: KeyboardEvent, index: number) {
     let next = index;
     switch (event.key) {
@@ -178,8 +191,8 @@
         return;
     }
     event.preventDefault();
-    category = categories[next];
-    document.getElementById(`tab-${category}`)?.focus();
+    selectCategory(categories[next]);
+    document.getElementById(`tab-${categories[next]}`)?.focus();
   }
 
   async function save() {
@@ -276,7 +289,7 @@
               aria-controls={`panel-${item}`}
               aria-selected={category === item}
               tabindex={category === item ? 0 : -1}
-              onclick={() => (category = item)}
+              onclick={() => selectCategory(item)}
               onkeydown={(event) => tabKeydown(event, index)}
               class="font-inter hover:bg-muted-surface shrink-0 cursor-pointer border-b-2 px-3 py-2 text-sm whitespace-nowrap transition-colors lg:border-b-0 lg:border-l-2 lg:py-3 lg:text-left lg:whitespace-normal {category ===
               item

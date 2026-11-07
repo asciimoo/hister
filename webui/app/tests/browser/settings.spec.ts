@@ -103,6 +103,69 @@ async function settingsAPI(page: Page, config: Record<string, unknown> = {}) {
   return { state, publicConfig };
 }
 
+test('settings tab selection is restored after a reload', async ({ page }) => {
+  await settingsAPI(page);
+  await page.goto('/settings?source=bookmark#preferences');
+  await page.getByRole('tab', { name: 'Server', exact: true }).click();
+  await expect(page).toHaveURL(
+    'http://127.0.0.1:4174/settings?source=bookmark&tab=server#preferences',
+  );
+  await page.reload();
+  await expect(page.getByRole('tab', { name: 'Server', exact: true })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await expect(page.getByRole('tabpanel')).toHaveAccessibleName('Server');
+});
+
+test('settings tab URLs open directly and unknown tabs fall back to App', async ({ page }) => {
+  await settingsAPI(page);
+  for (const [tab, label] of [
+    ['server', 'Server'],
+    ['app', 'App'],
+    ['missing-category', 'App'],
+  ]) {
+    await page.goto(`/settings?tab=${tab}`);
+    await expect(page.getByRole('tab', { name: label, exact: true })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    await expect(page.getByRole('tabpanel')).toHaveAccessibleName(label);
+  }
+});
+
+test('settings tab history preserves the draft without a navigation warning', async ({ page }) => {
+  await settingsAPI(page);
+  const warnings: string[] = [];
+  page.on('dialog', async (dialog) => {
+    warnings.push(dialog.message());
+    await dialog.dismiss();
+  });
+  let reads = 0;
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname === '/api/settings') reads++;
+  });
+  await page.goto('/settings');
+  await page.getByRole('textbox', { name: 'Title', exact: true }).fill('Unsaved draft');
+  await page.getByRole('tab', { name: 'Server', exact: true }).click();
+  await expect(page).toHaveURL(/\/settings\?tab=server$/);
+  await page.getByRole('tab', { name: 'App', exact: true }).click();
+  await expect(page).toHaveURL(/\/settings$/);
+  await page.goBack();
+  await expect(page.getByRole('tabpanel')).toHaveAccessibleName('Server');
+  await page.goBack();
+  await expect(page.getByRole('tabpanel')).toHaveAccessibleName('App');
+  await page.goForward();
+  await expect(page.getByRole('tabpanel')).toHaveAccessibleName('Server');
+  await page.goForward();
+  await expect(page.getByRole('textbox', { name: 'Title', exact: true })).toHaveValue(
+    'Unsaved draft',
+  );
+  await expect(page.getByText('1 unsaved change', { exact: true })).toBeVisible();
+  expect(warnings).toEqual([]);
+  expect(reads).toBe(1);
+});
+
 test('authorized navigation edits typed App fields and saves one draft across tabs', async ({
   page,
 }) => {
@@ -955,6 +1018,7 @@ test('keyboard tabs preserve drafts and navigation warns about unsaved changes',
   await page.keyboard.press(next);
   await expect(page.getByRole('tab', { name: 'Server', exact: true })).toBeFocused();
   await expect(page.getByRole('tabpanel')).toHaveAccessibleName('Server');
+  await expect(page).toHaveURL(/\/settings\?tab=server$/);
   await page.keyboard.press(next);
   await expect(page.getByRole('tab', { name: 'App', exact: true })).toBeFocused();
   await page.keyboard.press(previous);
@@ -976,6 +1040,7 @@ test('keyboard tabs preserve drafts and navigation warns about unsaved changes',
   await expect(page.getByRole('tab', { name: 'Server', exact: true })).toBeFocused();
   await page.keyboard.press('Home');
   await expect(page.getByRole('textbox', { name: 'Title', exact: true })).toHaveValue('Unsaved');
+  await expect(page).toHaveURL(/\/settings$/);
   const dismissed = page.waitForEvent('dialog').then((dialog) => dialog.dismiss());
   await page.getByRole('link', { name: 'Rules', exact: true }).click();
   await dismissed;
