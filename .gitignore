@@ -12,6 +12,7 @@ dist/
 build/
 server/static/app
 tmp/
+compose.override.yml
 
 .test/
 webui/app/test-results/
