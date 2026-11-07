@@ -2,7 +2,7 @@
   import { Button } from '@hister/components/ui/button';
   import { Input } from '@hister/components/ui/input';
   import { Switch } from '@hister/components/ui/switch';
-  import type { SettingSchema } from '#lib/settings.js';
+  import { choiceLabel, type SettingSchema } from '#lib/settings.js';
   import SettingInput from './SettingInput.svelte';
 
   let {
@@ -65,7 +65,8 @@
     aria-invalid={invalid}
     class={`${controlClass} cursor-pointer`}
   >
-    {#each schema.choices ?? [] as choice}<option value={choice}>{choice || 'Default'}</option
+    {#each schema.choices ?? [] as choice}<option value={choice}
+        >{choiceLabel(schema, choice) || 'Default'}</option
       >{/each}
   </select>
 {:else if schema.control === 'number'}
@@ -107,7 +108,9 @@
     aria-invalid={invalid}
     class={`${controlClass} h-auto cursor-pointer`}
   >
-    {#each schema.items.choices as choice}<option value={choice}>{choice}</option>{/each}
+    {#each schema.items.choices as choice}<option value={choice}
+        >{choiceLabel(schema.items, choice)}</option
+      >{/each}
   </select>
 {:else if schema.type === 'list' && schema.items?.type === 'string'}
   <textarea

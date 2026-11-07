@@ -6,6 +6,7 @@ package languages
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"golang.org/x/text/language"
@@ -25,22 +26,85 @@ type Resolution struct {
 	Index    string // Empty selects the default index; otherwise an allowlisted code.
 }
 
-// Only these languages have complete Bleve analyzers. Other language packages
-// may provide stop word filters without providing an analyzer.
-var analyzers = map[string]string{
-	"ar": "ar", "ckb": "ckb", "da": "da", "de": "de", "en": "en",
-	"es": "es", "fa": "fa", "fi": "fi", "fr": "fr", "hi": "hi",
-	"hr": "hr", "hu": "hu", "it": "it", "ja": "cjk", "ko": "cjk",
-	"nb": "no", "nl": "nl", "pl": "pl", "pt": "pt", "ro": "ro",
-	"ru": "ru", "sv": "sv", "tr": "tr", "zh": "cjk",
+// A definition records Hister's capabilities, not whether a language tag is
+// valid. Resolve also accepts valid tags without a detector or custom analyzer.
+type definition struct {
+	name          string
+	detector      bool
+	analyzer      string // Empty selects DefaultAnalyzer.
+	indexOverride string // Empty uses the language code when an analyzer exists.
 }
 
-// Keep this set in sync with the model packs in server/document. A contract
-// test verifies that each candidate has a bundled model and vice versa.
-const detectorCodes = " ar bg ca da de el en es eu fa fi fr ga hi hr hu hy id it ja ko nb nl pl pt ro ru sv tr zh "
+// Only complete Bleve analyzers belong here; a stopword filter alone is not an
+// analyzer. Detector support must match the model packs in server/document,
+// which is checked by the bundled-model contract test.
+var definitions = map[string]definition{
+	"ar":  {name: "Arabic", detector: true, analyzer: "ar"},
+	"bg":  {name: "Bulgarian", detector: true},
+	"ca":  {name: "Catalan", detector: true},
+	"ckb": {name: "Central Kurdish", analyzer: "ckb"},
+	"da":  {name: "Danish", detector: true, analyzer: "da"},
+	"de":  {name: "German", detector: true, analyzer: "de"},
+	"el":  {name: "Greek", detector: true},
+	"en":  {name: "English", detector: true, analyzer: "en"},
+	"es":  {name: "Spanish", detector: true, analyzer: "es"},
+	"eu":  {name: "Basque", detector: true},
+	"fa":  {name: "Persian", detector: true, analyzer: "fa"},
+	"fi":  {name: "Finnish", detector: true, analyzer: "fi"},
+	"fr":  {name: "French", detector: true, analyzer: "fr"},
+	"ga":  {name: "Irish", detector: true},
+	"hi":  {name: "Hindi", detector: true, analyzer: "hi"},
+	"hr":  {name: "Croatian", detector: true, analyzer: "hr"},
+	"hu":  {name: "Hungarian", detector: true, analyzer: "hu"},
+	"hy":  {name: "Armenian", detector: true},
+	"id":  {name: "Indonesian", detector: true},
+	"it":  {name: "Italian", detector: true, analyzer: "it"},
+	"ja":  {name: "Japanese", detector: true, analyzer: "cjk"},
+	"ko":  {name: "Korean", detector: true, analyzer: "cjk"},
+	"nb":  {name: "Norwegian Bokmål", detector: true, analyzer: "no", indexOverride: "no"},
+	"nl":  {name: "Dutch", detector: true, analyzer: "nl"},
+	"pl":  {name: "Polish", detector: true, analyzer: "pl"},
+	"pt":  {name: "Portuguese", detector: true, analyzer: "pt"},
+	"ro":  {name: "Romanian", detector: true, analyzer: "ro"},
+	"ru":  {name: "Russian", detector: true, analyzer: "ru"},
+	"sv":  {name: "Swedish", detector: true, analyzer: "sv"},
+	"tr":  {name: "Turkish", detector: true, analyzer: "tr"},
+	"zh":  {name: "Chinese", detector: true, analyzer: "cjk"},
+}
+
+func (d definition) indexCode(code string) string {
+	if d.analyzer == "" {
+		return ""
+	}
+	if d.indexOverride != "" {
+		return d.indexOverride
+	}
+	return code
+}
 
 // DetectorCodes lists the languages with bundled detection models.
-func DetectorCodes() []string { return strings.Fields(detectorCodes) }
+func DetectorCodes() []string {
+	codes := make([]string, 0, len(definitions))
+	for code, definition := range definitions {
+		if definition.detector {
+			codes = append(codes, code)
+		}
+	}
+	slices.Sort(codes)
+	return codes
+}
+
+// DetectorNames resolves supported detection codes to English display names.
+// The returned map can be changed without affecting language resolution.
+func DetectorNames() map[string]string {
+	names := make(map[string]string)
+	for code, definition := range definitions {
+		if definition.detector {
+			names[code] = definition.name
+		}
+	}
+	return names
+}
 
 // no was historically used for Bokmal in stored Hister documents. The other
 // entries are deprecated ISO language codes accepted by BCP 47 canonicalization.
@@ -79,16 +143,14 @@ func Resolve(value string) (Resolution, error) {
 		code = replacement
 	}
 	result := Resolution{Tag: canonical, Base: code, Analyzer: DefaultAnalyzer}
-	if strings.Contains(detectorCodes, " "+code+" ") {
+	definition := definitions[code]
+	if definition.detector {
 		result.Detector = code
 	}
-	if analyzer, ok := analyzers[code]; ok {
-		result.Analyzer = analyzer
-		result.Index = code
-		if code == "nb" {
-			result.Index = "no"
-		}
+	if definition.analyzer != "" {
+		result.Analyzer = definition.analyzer
 	}
+	result.Index = definition.indexCode(code)
 	return result, nil
 }
 
@@ -107,9 +169,17 @@ func StoredTags(tag string) []string {
 // IsIndexCode accepts only the finite set of language index names Hister has
 // written. Keep legacy analyzer names readable independently of new routing.
 func IsIndexCode(code string) bool {
-	if code == "no" || code == "cjk" {
+	// Older versions combined Chinese, Japanese, and Korean in one CJK index.
+	if code == "cjk" {
 		return true
 	}
-	_, ok := analyzers[code]
-	return ok && code != "nb"
+	if code == "" {
+		return false
+	}
+	for language, definition := range definitions {
+		if definition.indexCode(language) == code {
+			return true
+		}
+	}
+	return false
 }

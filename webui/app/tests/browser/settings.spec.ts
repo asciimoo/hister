@@ -1142,7 +1142,15 @@ async function indexerSettingsAPI(page: Page) {
     {
       path: 'indexer.languages',
       label: 'Languages',
-      schema: { ...list, items: { ...text, control: 'select', choices: ['en', 'hu', 'de'] } },
+      schema: {
+        ...list,
+        items: {
+          ...text,
+          control: 'select',
+          choices: ['en', 'hu', 'de'],
+          choice_labels: { en: 'English', hu: 'Hungarian', de: 'German' },
+        },
+      },
       default: [],
     },
     {
@@ -1212,7 +1220,9 @@ test('Indexer controls save languages and structured directories in the shared d
   await page.goto('/settings');
   await page.getByRole('textbox', { name: 'Title', exact: true }).fill('Indexer draft');
   await page.getByRole('tab', { name: 'Indexer', exact: true }).click();
-  await page.getByRole('listbox', { name: 'Languages', exact: true }).selectOption(['en', 'hu']);
+  const languages = page.getByRole('listbox', { name: 'Languages', exact: true });
+  await expect(languages.getByRole('option')).toHaveText(['English', 'Hungarian', 'German']);
+  await languages.selectOption([{ label: 'English' }, { label: 'Hungarian' }]);
   await page.getByRole('spinbutton', { name: 'Maximum file size', exact: true }).fill('8');
   await page.getByRole('button', { name: 'Add Watched directories item', exact: true }).click();
   const row = page.getByRole('group', { name: 'Watched directories 1', exact: true });
@@ -1308,4 +1318,25 @@ test('Indexer collections retain invalid drafts and support reset, clear and sou
   await expect(
     page.getByRole('region', { name: 'Watched directories', exact: true }),
   ).toContainText('/srv/original');
+});
+
+test('language names describe active and locked selections', async ({ page }) => {
+  const state = await indexerSettingsAPI(page);
+  const languages = state.values.find((field) => field.path === 'indexer.languages')!;
+  languages.value = ['en', 'hu'];
+  await page.goto('/settings');
+  await page.getByRole('tab', { name: 'Indexer', exact: true }).click();
+  await page.getByRole('listbox', { name: 'Languages', exact: true }).selectOption(['en', 'de']);
+  await expect(
+    page.getByText('Current value: English, Hungarian. Unsaved change.', { exact: true }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Discard changes', exact: true }).click();
+  Object.assign(languages.source, { kind: 'file', locked: true });
+  languages.editable = false;
+  await page.reload();
+  await page.getByRole('tab', { name: 'Indexer', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Languages', exact: true })).toContainText(
+    'English, Hungarian',
+  );
+  await expect(page.getByRole('listbox', { name: 'Languages', exact: true })).toHaveCount(0);
 });

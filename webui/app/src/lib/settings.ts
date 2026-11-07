@@ -11,6 +11,7 @@ export interface SettingSchema {
   max_length?: number;
   max_items?: number;
   choices?: string[];
+  choice_labels?: Record<string, string>;
   items?: SettingSchema;
   properties?: {
     name: string;
@@ -32,6 +33,10 @@ export interface SettingField {
   effect: string;
   read_only_reason?: string;
   requires_confirmation: boolean;
+}
+
+export function choiceLabel(schema: SettingSchema, value: string): string {
+  return schema.choice_labels?.[value] ?? value;
 }
 
 export interface SettingValue {

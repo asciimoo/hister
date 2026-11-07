@@ -22,17 +22,18 @@ import (
 // SettingSchema describes a control independently of any stored value. Both
 // collection and sensitivity must be explicit, including for ordinary scalars.
 type SettingSchema struct {
-	Type        string            `json:"type"`
-	Control     string            `json:"control"`
-	Collection  string            `json:"collection"`
-	Sensitivity string            `json:"sensitivity"`
-	Min         *int              `json:"min,omitempty"`
-	Max         *int              `json:"max,omitempty"`
-	MaxLength   int               `json:"max_length,omitempty"`
-	MaxItems    int               `json:"max_items,omitempty"`
-	Choices     []string          `json:"choices,omitempty"`
-	Items       *SettingSchema    `json:"items,omitempty"`
-	Properties  []SettingProperty `json:"properties,omitempty"`
+	Type         string            `json:"type"`
+	Control      string            `json:"control"`
+	Collection   string            `json:"collection"`
+	Sensitivity  string            `json:"sensitivity"`
+	Min          *int              `json:"min,omitempty"`
+	Max          *int              `json:"max,omitempty"`
+	MaxLength    int               `json:"max_length,omitempty"`
+	MaxItems     int               `json:"max_items,omitempty"`
+	Choices      []string          `json:"choices,omitempty"`
+	ChoiceLabels map[string]string `json:"choice_labels,omitempty"`
+	Items        *SettingSchema    `json:"items,omitempty"`
+	Properties   []SettingProperty `json:"properties,omitempty"`
 }
 
 // SettingProperty describes one member of a structured collection item.
@@ -483,7 +484,7 @@ func FieldCatalog() []FieldMetadata {
 		fileManagedField("server.metrics", groupMonitoring, "Metrics", "Expose server metrics."),
 		fileManagedField("server.expose_version", groupMonitoring, "Expose version", "Include the server version in public configuration."),
 		{Path: "indexer.detect_languages", Group: groupLanguageAndText, Label: "Detect languages", Description: "Detect languages for newly processed documents. Reindex to update existing documents.", Schema: SettingSchema{Sensitivity: "none"}, Effect: "reindex"},
-		{Path: "indexer.languages", Group: groupLanguageAndText, Label: "Languages", Description: "Select at least two languages, or clear the selection to detect all supported languages. Reindex to update existing documents.", Schema: SettingSchema{Type: "list", Control: "list", Collection: "replace", Sensitivity: "none", Items: &SettingSchema{Type: "string", Control: "select", Collection: "none", Sensitivity: "none", Choices: languages.DetectorCodes()}}, Effect: "reindex"},
+		{Path: "indexer.languages", Group: groupLanguageAndText, Label: "Languages", Description: "Select at least two languages, or clear the selection to detect all supported languages. Reindex to update existing documents.", Schema: SettingSchema{Type: "list", Control: "list", Collection: "replace", Sensitivity: "none", Items: &SettingSchema{Type: "string", Control: "select", Collection: "none", Sensitivity: "none", Choices: languages.DetectorCodes(), ChoiceLabels: languages.DetectorNames()}}, Effect: "reindex"},
 		{Path: "indexer.language_detection_accuracy", Group: groupLanguageAndText, Label: "Language detection accuracy", Description: "Low uses less memory. High improves detection accuracy. Reindex to update existing documents.", Schema: SettingSchema{Sensitivity: "none", Choices: []string{"", "low", "high"}}, Effect: "reindex"},
 		{Path: "indexer.keep_stopwords", Group: groupLanguageAndText, Label: "Keep stopwords", Description: "Keep common words in the search index. Reindex to update existing documents.", Schema: SettingSchema{Sensitivity: "none"}, Effect: "reindex"},
 		{Path: "indexer.directories", Group: groupLocalFiles, Label: "Watched directories", Description: "Server directories to scan and watch after saving. Blank owner makes files visible to everyone with search access. Removing a row stops watching but retains indexed documents.", Schema: directorySchema()},

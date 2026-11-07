@@ -6,6 +6,7 @@
   import { Eye, Info, Lock, Pencil } from '@lucide/svelte';
   import {
     canEditSetting,
+    choiceLabel,
     sourceLabel,
     type SettingField,
     type SettingValue,
@@ -48,6 +49,10 @@
     if (value === undefined || value === null) return 'Not available';
     if (value === '') return 'Empty';
     if (typeof value === 'boolean') return value ? 'Enabled' : 'Disabled';
+    const items = field.schema.items;
+    if (Array.isArray(value) && items?.choices)
+      return value.map((item) => choiceLabel(items, String(item))).join(', ') || 'Empty';
+    if (typeof value === 'string') return choiceLabel(field.schema, value);
     return typeof value === 'object' ? JSON.stringify(value) : String(value);
   }
 </script>

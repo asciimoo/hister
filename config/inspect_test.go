@@ -116,6 +116,43 @@ func TestFieldCatalogPreservesEditorContract(t *testing.T) {
 	}
 }
 
+func TestLanguageChoicesExposeNamesAndRetainCodes(t *testing.T) {
+	for _, field := range FieldCatalog() {
+		if field.Path != "indexer.languages" {
+			continue
+		}
+		raw, err := json.Marshal(field.Schema.Items)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var choices struct {
+			Values []string          `json:"choices"`
+			Labels map[string]string `json:"choice_labels"`
+		}
+		if err := json.Unmarshal(raw, &choices); err != nil {
+			t.Fatal(err)
+		}
+		for _, code := range choices.Values {
+			if label := choices.Labels[code]; label == "" || label == code {
+				t.Errorf("language %q has no readable name", code)
+			}
+		}
+		for code, name := range map[string]string{"en": "English", "hu": "Hungarian", "de": "German", "nb": "Norwegian Bokmål", "zh": "Chinese"} {
+			if choices.Labels[code] != name {
+				t.Errorf("language %q name = %q, want %q", code, choices.Labels[code], name)
+			}
+		}
+		if value, message := field.Schema.ValidateValue([]string{"en", "hu"}); message != "" || !reflect.DeepEqual(value, []any{"en", "hu"}) {
+			t.Fatalf("language codes no longer accepted unchanged: %v %s", value, message)
+		}
+		if _, message := field.Schema.ValidateValue([]string{"English", "Hungarian"}); message == "" {
+			t.Fatal("display names became stored language values")
+		}
+		return
+	}
+	t.Fatal("language choices are missing")
+}
+
 func TestFieldCatalogIncludesDisplayGroups(t *testing.T) {
 	raw, err := json.Marshal(FieldCatalog())
 	if err != nil {
