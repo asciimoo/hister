@@ -128,7 +128,7 @@ func init() {
 			AdminOnly:   true,
 			NoStore:     true,
 			Handler:     serveSettings,
-			Description: "Read configuration field descriptions, redacted active values, sources, editability, and an opaque revision. Requires administrative access. Does not save or apply settings.",
+			Description: "Read configuration field descriptions, redacted active values, sources, editability, and an opaque revision. Includes pending status (changed, invalid, or unreadable) when configuration sources differ, with redacted pending values for valid changes. Requires administrative access. Does not save or apply settings.",
 		},
 		{
 			Name:         "ValidateSettings",

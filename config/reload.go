@@ -19,6 +19,22 @@ func (c *Config) SourcesUnchanged(overrides ...Override) bool {
 	return err == nil && reflect.DeepEqual(c.composition, next.composition)
 }
 
+// PendingConfiguration reads changed sources without applying them or creating
+// runtime resources. A nil candidate means the loaded sources are unchanged.
+func (c *Config) PendingConfiguration(overrides ...Override) (*Config, error) {
+	next, err := loadSelected(c.fname, true, overrides...)
+	if err != nil {
+		return nil, err
+	}
+	if c.composition != nil && reflect.DeepEqual(c.composition, next.composition) {
+		return nil, nil
+	}
+	if err := next.Validate(); err != nil {
+		return nil, err
+	}
+	return next, nil
+}
+
 // PrepareDataDirectory initializes storage files when a full reload switches
 // data directories. It does not change the main configuration or its overrides.
 func (c *Config) PrepareDataDirectory() error {

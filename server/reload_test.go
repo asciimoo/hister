@@ -365,6 +365,159 @@ func TestConfigurationRequestShape(t *testing.T) {
 	}
 }
 
+func TestConfigurationPendingSources(t *testing.T) {
+	cfg, handler := newConfigurationTestServer(t, "token", "")
+	headers := map[string]string{"Authorization": "Bearer private-token"}
+	revision, _ := readConfigurationState(t, handler, headers)
+	read := func() (*config.FieldState, string) {
+		t.Helper()
+		response := testutil.ServeHTTP(t, handler, http.MethodGet, "/hister/api/settings", nil, headers)
+		var state struct {
+			Revision string
+			Values   []config.FieldState
+			Pending  *struct {
+				Status string
+				Values []config.FieldState
+			}
+		}
+		if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &state) != nil {
+			t.Fatalf("read settings: %d %s", response.Code, response.Body)
+		}
+		if response.Header().Get("Cache-Control") != "no-store" || strings.Contains(response.Body.String(), "private-token") || strings.Contains(response.Body.String(), "future-token") {
+			t.Fatal("pending settings are cacheable or expose a token")
+		}
+		if state.Revision != revision {
+			t.Fatal("reading pending settings changed the active revision")
+		}
+		for _, field := range state.Values {
+			if field.Path == "app.title" && field.Value != "Web title" {
+				t.Fatal("reading pending settings changed the active value")
+			}
+		}
+		if state.Pending == nil {
+			return nil, ""
+		}
+		for _, field := range state.Pending.Values {
+			if field.Path == "app.title" {
+				return &field, state.Pending.Status
+			}
+		}
+		t.Fatal("missing pending title")
+		return nil, ""
+	}
+	if pending, _ := read(); pending != nil {
+		t.Fatal("unchanged configuration has pending values")
+	}
+	raw, err := os.ReadFile(cfg.Filename())
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated := strings.Replace(string(raw), "  subtitle: File subtitle", "  subtitle: File subtitle\n  title: File title", 1)
+	updated = strings.Replace(updated, "private-token", "future-token", 1)
+	if err := os.WriteFile(cfg.Filename(), []byte(updated), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	pending, status := read()
+	if pending == nil || status != "changed" || pending.Value != "File title" || pending.Editable || pending.Source.Kind != "file" || !pending.Source.WebSelected {
+		t.Fatalf("missing unapplied file selection: %+v (%s)", pending, status)
+	}
+	if cfg.App.Title != "Web title" {
+		t.Fatal("inspection modified the running configuration")
+	}
+	t.Setenv("HISTER__APP__TITLE", "Environment title")
+	pending, status = read()
+	if pending == nil || status != "changed" || pending.Value != "Environment title" || pending.Source.Kind != "environment" || !pending.Source.Locked {
+		t.Fatalf("pending selection ignored environment precedence: %+v (%s)", pending, status)
+	}
+	managed, err := os.ReadFile(cfg.FullPath("config.web.yml"))
+	if err != nil || string(managed) != "app:\n  title: Web title\n" {
+		t.Fatal("inspection modified web selections")
+	}
+}
+
+func TestConfigurationPendingSourceFailures(t *testing.T) {
+	for _, scenario := range []string{"missing file", "invalid YAML", "invalid setting", "invalid extractor"} {
+		t.Run(scenario, func(t *testing.T) {
+			cfg, handler := newConfigurationTestServer(t, "token", "")
+			raw, err := os.ReadFile(cfg.Filename())
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := "invalid"
+			switch scenario {
+			case "missing file":
+				want = "unreadable"
+				err = os.Remove(cfg.Filename())
+			case "invalid YAML":
+				err = os.WriteFile(cfg.Filename(), []byte("app: [private-input"), 0o600)
+			case "invalid setting":
+				err = os.WriteFile(cfg.Filename(), append(raw, []byte("crawler:\n  backend: private-input\n")...), 0o600)
+			case "invalid extractor":
+				err = os.WriteFile(cfg.Filename(), append(raw, []byte("extractors:\n  basic:\n    options:\n      unknown: private-input\n")...), 0o600)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			response := testutil.ServeHTTP(t, handler, http.MethodGet, "/hister/api/settings", nil, map[string]string{"Authorization": "Bearer private-token"})
+			var state struct {
+				Pending *struct {
+					Status string
+					Values []config.FieldState
+				}
+			}
+			if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &state) != nil || state.Pending == nil || state.Pending.Status != want || len(state.Pending.Values) != 0 {
+				t.Fatalf("missing safe pending failure (%s): %d %s", want, response.Code, response.Body)
+			}
+			if strings.Contains(response.Body.String(), "private-input") || strings.Contains(response.Body.String(), "private-token") {
+				t.Fatal("pending source failure exposed private configuration")
+			}
+			if cfg.App.Title != "Web title" {
+				t.Fatal("failed inspection changed the running configuration")
+			}
+		})
+	}
+}
+
+func TestConfigurationPendingReload(t *testing.T) {
+	_, handler, write := newReloadTestServer(t, false)
+	headers := map[string]string{"Origin": "hister://", "X-Access-Token": "secret"}
+	revision, _ := readConfigurationState(t, handler, headers)
+	write("  title: Reloaded title\n")
+	read := func() *pendingConfiguration {
+		t.Helper()
+		response := testutil.ServeHTTP(t, handler, http.MethodGet, "/hister/api/settings", nil, headers)
+		var state struct{ Pending *pendingConfiguration }
+		if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &state) != nil {
+			t.Fatalf("read settings: %d", response.Code)
+		}
+		return state.Pending
+	}
+	if pending := read(); pending == nil || pending.Status != "changed" {
+		t.Fatal("external edit was not reported")
+	}
+	draft := func(revision string) *strings.Reader {
+		return strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":[{"path":"app.subtitle","action":"set","value":"Web draft"}]}`, revision))
+	}
+	response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", draft(revision), headers)
+	if response.Code != http.StatusConflict {
+		t.Fatalf("save before reload: %d", response.Code)
+	}
+	if status := reloadRequest(t, handler, "secret"); status != http.StatusOK {
+		t.Fatalf("reload: %d", status)
+	}
+	if read() != nil {
+		t.Fatal("applied sources still reported as pending")
+	}
+	nextRevision, values := readConfigurationState(t, handler, headers)
+	if nextRevision == revision || values["app.title"].Value != "Reloaded title" || !values["app.title"].Source.Locked {
+		t.Fatal("reload did not publish the new value, lock and revision")
+	}
+	response = testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", draft(nextRevision), headers)
+	if response.Code != http.StatusOK {
+		t.Fatalf("save after reload: %d %s", response.Code, response.Body)
+	}
+}
+
 func TestConfigurationStaleSources(t *testing.T) {
 	for _, change := range []string{"revision", "main", "managed", "removed main", "invalid managed", "environment", "reload"} {
 		t.Run(change, func(t *testing.T) {

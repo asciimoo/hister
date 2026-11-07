@@ -885,7 +885,257 @@ test('validation errors preserve the draft and clear when it is discarded', asyn
   await expect(page.getByRole('button', { name: 'Save and apply', exact: true })).toBeDisabled();
 });
 
-test('stale revisions retain the draft and require an explicit reload', async ({ page }) => {
+test('unapplied file settings can be reloaded while preserving an unrelated draft', async ({
+  page,
+}) => {
+  const { state } = await settingsAPI(page);
+  const title = {
+    ...state.values[0],
+    value: 'Title from disk',
+    editable: false,
+    source: { kind: 'file', name: '/etc/hister/local.yml', locked: true, web_selected: false },
+  };
+  state.pending = { status: 'changed', values: [title] };
+  let reloads = 0;
+  await page.route('**/api/reload', async (route) => {
+    expect(route.request().method()).toBe('POST');
+    reloads++;
+    state.values[0] = title;
+    state.revision = 'revision-2';
+    state.pending = null;
+    await route.fulfill({ status: 200, body: 'OK' });
+  });
+  let saved: any;
+  await page.route('**/api/settings/apply', async (route) => {
+    saved = route.request().postDataJSON();
+    await route.fulfill({ json: { saved: true } });
+  });
+  await page.goto('/settings');
+  await expect(page.getByRole('alert').locator('p')).toHaveText(
+    'The local configuration file (local.yml) has changed and needs to be reloaded.',
+  );
+  await expect(page.getByRole('alert')).toHaveAccessibleName('Configuration changes not applied');
+  await expect(
+    page.getByRole('heading', { name: 'Configuration changes not applied', exact: true }),
+  ).toBeVisible();
+  expect((await page.getByRole('tabpanel').boundingBox())!.height).toBeGreaterThan(300);
+  await expect(page.getByRole('textbox', { name: 'Title', exact: true })).toHaveValue('Hister');
+  const preview = page.getByRole('region', { name: 'Pending Title', exact: true });
+  await expect(preview).toContainText('Configured on disk, not applied');
+  await expect(preview).toContainText('Title from disk');
+  await page.getByRole('textbox', { name: 'Subtitle', exact: true }).fill('Keep my subtitle');
+  await expect(page.getByRole('button', { name: 'Save and apply', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: 'Reload configuration', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Configuration reloaded');
+  expect(reloads).toBe(1);
+  await expect(page.getByRole('textbox', { name: 'Title', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Title', exact: true })).toContainText(
+    'Title from disk',
+  );
+  await expect(preview).toHaveCount(0);
+  await expect(page.getByRole('textbox', { name: 'Subtitle', exact: true })).toHaveValue(
+    'Keep my subtitle',
+  );
+  await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Settings saved and applied');
+  expect(saved).toEqual({
+    revision: 'revision-2',
+    edits: [{ path: 'app.subtitle', action: 'set', value: 'Keep my subtitle' }],
+  });
+});
+
+test('configuration reload requires resolving changed and newly locked draft fields', async ({
+  page,
+}) => {
+  const { state } = await settingsAPI(page);
+  state.pending = { status: 'changed', values: [] };
+  await page.route('**/api/reload', async (route) => {
+    state.values[0] = {
+      ...state.values[0],
+      value: 'Locked file title',
+      editable: false,
+      source: { kind: 'file', locked: true, web_selected: false },
+    };
+    state.values[1] = {
+      ...state.values[1],
+      value: 'Another web selection',
+      source: { kind: 'web', locked: false, web_selected: true },
+    };
+    state.revision = 'revision-2';
+    state.pending = null;
+    await route.fulfill({ status: 200, body: 'OK' });
+  });
+  let saved: any;
+  await page.route('**/api/settings/apply', async (route) => {
+    saved = route.request().postDataJSON();
+    await route.fulfill({ json: { saved: true } });
+  });
+  await page.goto('/settings');
+  await page.getByRole('textbox', { name: 'Title', exact: true }).fill('My title draft');
+  await page.getByRole('textbox', { name: 'Subtitle', exact: true }).fill('My subtitle draft');
+  await page.getByRole('button', { name: 'Reload configuration', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Configuration reloaded');
+  const title = page.getByRole('region', { name: 'Title', exact: true });
+  const subtitle = page.getByRole('region', { name: 'Subtitle', exact: true });
+  await expect(title.getByRole('alert')).toContainText('no longer editable');
+  await expect(title).toContainText('My title draft');
+  await expect(title).toContainText('Locked file title');
+  await expect(title.getByRole('button', { name: 'Keep my edit', exact: true })).toHaveCount(0);
+  await expect(subtitle.getByRole('alert')).toContainText('changed');
+  await expect(subtitle.getByRole('textbox')).toHaveValue('My subtitle draft');
+  await expect(page.getByRole('button', { name: 'Save and apply', exact: true })).toBeDisabled();
+  await title.getByRole('button', { name: 'Use current value', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Save and apply', exact: true })).toBeDisabled();
+  await subtitle.getByRole('button', { name: 'Keep my edit', exact: true }).click();
+  await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Settings saved and applied');
+  expect(saved).toEqual({
+    revision: 'revision-2',
+    edits: [{ path: 'app.subtitle', action: 'set', value: 'My subtitle draft' }],
+  });
+});
+
+test('refresh detects invalid and repaired configuration without losing the draft', async ({
+  page,
+}) => {
+  const { state } = await settingsAPI(page);
+  await page.goto('/settings');
+  await page.getByRole('textbox', { name: 'Title', exact: true }).fill('Keep this draft');
+  for (const status of ['invalid', 'unreadable'] as const) {
+    state.pending = { status };
+    await page.getByRole('button', { name: 'Refresh settings', exact: true }).click();
+    await expect(page.getByRole('alert')).toContainText(
+      status === 'invalid' ? 'invalid settings' : 'cannot be read',
+    );
+    await expect(page.getByRole('textbox', { name: 'Title', exact: true })).toHaveValue(
+      'Keep this draft',
+    );
+    await expect(page.getByRole('button', { name: 'Save and apply', exact: true })).toBeDisabled();
+    await expect(
+      page.getByRole('button', { name: 'Reload configuration', exact: true }),
+    ).toHaveCount(0);
+  }
+  state.pending = null;
+  await page.getByRole('button', { name: 'Refresh settings', exact: true }).click();
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await expect(page.getByRole('textbox', { name: 'Title', exact: true })).toHaveValue(
+    'Keep this draft',
+  );
+  await expect(page.getByRole('button', { name: 'Save and apply', exact: true })).toBeEnabled();
+});
+
+test('a file change discovered during save shows pending values without applying them', async ({
+  page,
+}) => {
+  const { state } = await settingsAPI(page);
+  let reloads = 0;
+  await page.route('**/api/reload', (route) => {
+    reloads++;
+    return route.fulfill({ status: 200 });
+  });
+  await page.route('**/api/settings/validate', (route) =>
+    route.fulfill({ status: 409, json: { code: 'sources_changed', error: 'Sources changed.' } }),
+  );
+  await page.goto('/settings');
+  await page.getByRole('textbox', { name: 'Subtitle', exact: true }).fill('My draft');
+  state.pending = {
+    status: 'changed',
+    values: [
+      {
+        ...state.values[0],
+        value: 'New file title',
+        editable: false,
+        source: { kind: 'file', locked: true, web_selected: false },
+      },
+    ],
+  };
+  await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Pending Title', exact: true })).toContainText(
+    'New file title',
+  );
+  await expect(page.getByRole('textbox', { name: 'Title', exact: true })).toHaveValue('Hister');
+  await expect(page.getByRole('textbox', { name: 'Subtitle', exact: true })).toHaveValue(
+    'My draft',
+  );
+  await expect(
+    page.getByRole('button', { name: 'Reload configuration', exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Save and apply', exact: true })).toBeDisabled();
+  expect(reloads).toBe(0);
+});
+
+for (const outcome of ['invalid configuration', 'lost response'] as const) {
+  test(`configuration reload recovers from ${outcome} without replaying or losing the draft`, async ({
+    page,
+  }) => {
+    const { state } = await settingsAPI(page, { authMode: 'token', authenticated: true });
+    state.pending = { status: 'changed', values: [] };
+    await page.route('**/api/config', (route) =>
+      route.fulfill({
+        headers: { 'X-CSRF-Token': 'csrf-current' },
+        json: {
+          authMode: 'token',
+          authenticated: true,
+          canConfigure: true,
+          title: 'Hister',
+          colorScheme: 'automatic',
+        },
+      }),
+    );
+    let reloads = 0;
+    await page.route('**/api/reload', (route) => {
+      expect(route.request().headers()['x-csrf-token']).toBe('csrf-current');
+      reloads++;
+      if (outcome === 'invalid configuration') {
+        state.pending = { status: 'invalid' };
+        return route.fulfill({ status: 400, body: 'private-configuration-detail' });
+      }
+      state.pending = null;
+      state.values[0] = {
+        ...state.values[0],
+        value: 'Reloaded title',
+        editable: false,
+        source: { kind: 'file', locked: true, web_selected: false },
+      };
+      state.revision = 'revision-2';
+      return route.abort('failed');
+    });
+    await page.goto('/settings');
+    await page.getByRole('textbox', { name: 'Subtitle', exact: true }).fill('Private draft');
+    await page.getByRole('button', { name: 'Reload configuration', exact: true }).click();
+    if (outcome === 'invalid configuration') {
+      await expect(page.getByRole('alert').filter({ hasText: 'invalid settings' })).toBeVisible();
+      await expect(page.getByRole('textbox', { name: 'Title', exact: true })).toHaveValue('Hister');
+    } else {
+      await expect(
+        page.getByRole('alert').filter({ hasText: 'reload response was lost' }),
+      ).toBeVisible();
+      await expect(page.getByRole('region', { name: 'Title', exact: true })).toContainText(
+        'Reloaded title',
+      );
+    }
+    await expect(page.getByRole('textbox', { name: 'Subtitle', exact: true })).toHaveValue(
+      'Private draft',
+    );
+    await expect(page.getByRole('button', { name: 'Save and apply', exact: true })).toBeDisabled();
+    await expect(
+      page.getByRole('button', { name: 'Reload configuration', exact: true }),
+    ).toHaveCount(0);
+    await expect(page.locator('body')).not.toContainText('private-configuration-detail');
+    expect(reloads).toBe(1);
+    expect(await page.evaluate(() => JSON.stringify([localStorage, sessionStorage]))).not.toContain(
+      'Private draft',
+    );
+    if (outcome === 'lost response') {
+      await page.getByRole('button', { name: 'Refresh settings', exact: true }).click();
+      await expect(page.getByRole('button', { name: 'Save and apply', exact: true })).toBeEnabled();
+    }
+  });
+}
+
+test('stale revisions retain the draft and require conflict resolution after refresh', async ({
+  page,
+}) => {
   const { state } = await settingsAPI(page);
   await page.route('**/api/settings/validate', (route) =>
     route.fulfill({
@@ -903,15 +1153,12 @@ test('stale revisions retain the draft and require an explicit reload', async ({
   await expect(page.getByRole('button', { name: 'Save and apply', exact: true })).toBeDisabled();
   state.values[0].value = 'Another administrator';
   state.revision = 'revision-2';
-  const dismissed = page.waitForEvent('dialog').then((dialog) => dialog.dismiss());
-  await page.getByRole('button', { name: 'Reload settings', exact: true }).click();
-  await dismissed;
+  await page.getByRole('button', { name: 'Refresh settings', exact: true }).click();
   await expect(page.getByRole('textbox', { name: 'Title', exact: true })).toHaveValue(
     'Keep this draft',
   );
-  const accepted = page.waitForEvent('dialog').then((dialog) => dialog.accept());
-  await page.getByRole('button', { name: 'Reload settings', exact: true }).click();
-  await accepted;
+  await expect(page.getByRole('button', { name: 'Save and apply', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: 'Use current value', exact: true }).click();
   await expect(page.getByRole('textbox', { name: 'Title', exact: true })).toHaveValue(
     'Another administrator',
   );
@@ -934,13 +1181,37 @@ test('a lost save response rereads active state without replaying the save', asy
   await page.goto('/settings');
   await page.getByRole('textbox', { name: 'Title', exact: true }).fill('Saved despite disconnect');
   await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
-  await expect(page.getByRole('alert')).toContainText('response was lost');
+  await expect(page.getByRole('alert').filter({ hasText: 'response was lost' })).toBeVisible();
   await expect.poll(() => readsAfterSave).toBeGreaterThan(0);
   expect(saves).toBe(1);
   await expect(page.getByRole('button', { name: 'Save and apply', exact: true })).toBeDisabled();
   await expect(page.getByRole('textbox', { name: 'Title', exact: true })).toHaveValue(
     'Saved despite disconnect',
   );
+});
+
+test('refresh retains conflicts found while recovering from a lost save response', async ({
+  page,
+}) => {
+  const { state } = await settingsAPI(page);
+  await page.route('**/api/settings/apply', (route) => {
+    state.values[0].value = 'External title';
+    state.revision = 'revision-2';
+    return route.abort('failed');
+  });
+  await page.goto('/settings');
+  await page.getByRole('textbox', { name: 'Title', exact: true }).fill('My draft');
+  await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
+  const title = page.getByRole('region', { name: 'Title', exact: true });
+  await expect(title).toContainText('Current value: External title.');
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await page.getByRole('button', { name: 'Refresh settings', exact: true }).click();
+    await expect(title.getByRole('alert')).toContainText('active setting changed');
+    await expect(title.getByRole('textbox')).toHaveValue('My draft');
+    await expect(page.getByRole('button', { name: 'Save and apply', exact: true })).toBeDisabled();
+  }
+  await title.getByRole('button', { name: 'Keep my edit', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Save and apply', exact: true })).toBeEnabled();
 });
 
 test('discarding a stale draft preserves the reload requirement without claiming the draft remains', async ({
@@ -962,7 +1233,7 @@ test('discarding a stale draft preserves the reload requirement without claiming
   await expect(page.getByRole('alert')).toContainText('Your draft is still here.');
   await discard.click();
   await expect(title).toHaveValue('Hister');
-  await expect(page.getByRole('alert')).toContainText('Reload settings before saving again.');
+  await expect(page.getByRole('alert')).toContainText('Refresh settings before saving again.');
   await expect(page.getByRole('alert')).not.toContainText('Your draft is still here.');
   await title.fill('Another draft');
   await expect(save).toBeDisabled();
@@ -970,7 +1241,7 @@ test('discarding a stale draft preserves the reload requirement without claiming
   await discard.click();
   state.values[0].value = 'Current server title';
   state.revision = 'revision-2';
-  await page.getByRole('button', { name: 'Reload settings', exact: true }).click();
+  await page.getByRole('button', { name: 'Refresh settings', exact: true }).click();
   await expect(title).toHaveValue('Current server title');
   await expect(page.getByRole('alert')).toHaveCount(0);
   await title.fill('Fresh draft');

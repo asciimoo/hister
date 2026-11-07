@@ -7,6 +7,7 @@ import (
 	"io"
 	"maps"
 	"net/http"
+	"os"
 	"sync"
 
 	"github.com/asciimoo/hister/config"
@@ -47,12 +48,32 @@ type configReloader struct {
 	revision  string
 }
 
+type pendingConfiguration struct {
+	Status string              `json:"status"`
+	Values []config.FieldState `json:"values,omitempty"`
+}
+
 func serveSettings(c *webContext) {
+	var pending *pendingConfiguration
+	next, err := c.Config.PendingConfiguration(c.reloader.overrides...)
+	if err != nil {
+		// Configuration errors may contain credentials or private paths.
+		pending = &pendingConfiguration{Status: "invalid"}
+		if _, ok := errors.AsType[*os.PathError](err); ok {
+			pending.Status = "unreadable"
+		}
+	} else if next != nil {
+		if len(extractor.ValidateConfiguration(next.Extractors)) > 0 {
+			pending = &pendingConfiguration{Status: "invalid"}
+		} else {
+			pending = &pendingConfiguration{Status: "changed", Values: configurationStates(next)}
+		}
+	}
 	c.JSON(map[string]any{
 		"revision": c.reloader.revision,
 		"fields":   configurationCatalog(c.Config),
 		"values":   configurationStates(c.Config),
-		"pending":  nil,
+		"pending":  pending,
 	})
 }
 

@@ -4,6 +4,7 @@
   import { beforeNavigate, goto } from '$app/navigation';
   import { page } from '$app/state';
   import { Button } from '@hister/components/ui/button';
+  import { TriangleAlert } from '@lucide/svelte';
   import { fetchConfig, resetConfig } from '#lib/api.js';
   import { redirectToAuth } from '#lib/auth-navigation.js';
   import SettingsField from '#lib/components/SettingsField.svelte';
@@ -11,6 +12,9 @@
     categoryLabels,
     groupSettings,
     settingsRequest,
+    reloadConfiguration,
+    sameSetting,
+    canEditSetting,
     SettingsError,
     type SettingsState,
     type SettingEdit,
@@ -19,6 +23,7 @@
 
   let state = $state<SettingsState | null>(null);
   let edits = $state<Record<string, SettingEdit>>({});
+  let conflicts = $state<Record<string, string>>({});
   let errors = $state<SettingError[]>([]);
   let busy = $state(true);
   let denied = $state(false);
@@ -35,7 +40,17 @@
   );
   const editCount = $derived(Object.keys(edits).length);
   const dirty = $derived(editCount > 0);
+  const conflictCount = $derived(Object.keys(conflicts).length);
   const values = $derived(new Map(state?.values.map((value) => [value.path, value]) ?? []));
+  const pendingValues = $derived(
+    new Map(state?.pending?.values?.map((value) => [value.path, value]) ?? []),
+  );
+  const localConfigFilename = $derived(
+    [...(state?.pending?.values ?? []), ...(state?.values ?? [])]
+      .find((value) => value.source.kind === 'file' && value.source.name)
+      ?.source.name?.split(/[\\/]/)
+      .pop(),
+  );
   const groups = $derived(groupSettings(state?.fields ?? [], category));
 
   onMount(() => {
@@ -78,12 +93,30 @@
     }
   }
 
-  async function readActive() {
-    state = await retryRead(() => settingsRequest<SettingsState>());
+  function reconcile(next: SettingsState) {
+    const previous = new Map(state?.values.map((value) => [value.path, value]));
+    const current = new Map(next.values.map((value) => [value.path, value]));
+    for (const path of Object.keys(edits)) {
+      const field = next.fields.find((field) => field.path === path);
+      const active = current.get(path);
+      if (!field || !active || !canEditSetting(field, active)) {
+        conflicts[path] =
+          'This setting is no longer editable. Use the current value to remove your draft.';
+      } else if (!sameSetting(previous.get(path), active)) {
+        conflicts[path] = 'The active setting changed. Review your draft before saving.';
+      }
+    }
+    state = next;
+  }
+
+  async function readActive(preserveDraft = false) {
+    const next = await retryRead(() => settingsRequest<SettingsState>());
     await retryRead(() => {
       resetConfig();
       return fetchConfig();
     });
+    if (preserveDraft) reconcile(next);
+    else state = next;
   }
 
   async function load() {
@@ -104,6 +137,7 @@
       }
       state = await retryRead(() => settingsRequest<SettingsState>());
       edits = {};
+      conflicts = {};
       errors = [];
       needsReload = false;
       denied = false;
@@ -115,11 +149,72 @@
     }
   }
 
-  async function reload() {
-    if (busy || (dirty && !window.confirm('Reload settings and discard your unsaved draft?')))
+  async function refreshSettings() {
+    if (busy || denied) return;
+    if (!state) {
+      resetConfig();
+      await load();
       return;
-    resetConfig();
-    await load();
+    }
+    busy = true;
+    problem = '';
+    message = 'Refreshing settings…';
+    try {
+      await readActive(true);
+      errors = [];
+      needsReload = false;
+      message = conflictCount
+        ? 'Settings refreshed. Resolve the highlighted draft conflicts before saving.'
+        : 'Settings refreshed. Your unsaved changes have been kept.';
+    } catch (error) {
+      handleError(error);
+      needsReload = true;
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function applyConfiguration() {
+    if (busy || !state || state.pending?.status !== 'changed') return;
+    busy = true;
+    problem = '';
+    message = 'Reloading configuration. Service may be briefly interrupted…';
+    let reloaded = false;
+    try {
+      await reloadConfiguration();
+      reloaded = true;
+      await readActive(true);
+      errors = [];
+      needsReload = false;
+      message = conflictCount
+        ? 'Configuration reloaded. Resolve the highlighted draft conflicts before saving.'
+        : 'Configuration reloaded. Your unsaved changes have been kept.';
+    } catch (error) {
+      handleError(error);
+      needsReload = true;
+      if (denied) return;
+      if (reloaded) {
+        problem =
+          'Configuration was reloaded, but active settings could not be refreshed. Refresh settings before saving. If the server address or sign-in settings changed, reopen Hister using the new connection settings.';
+      } else {
+        if (!(error instanceof SettingsError)) {
+          problem =
+            'The reload response was lost. The configuration may have been applied. Refresh settings to check the active values before continuing.';
+        }
+        // A reload is never retried automatically, even when its response is lost.
+        try {
+          await readActive(true);
+        } catch (readError) {
+          if (readError instanceof SettingsError && [401, 403].includes(readError.status))
+            handleError(readError);
+          else
+            problem +=
+              ' Active settings could not be read. If the server address or sign-in settings changed, reopen Hister using the new connection settings.';
+        }
+      }
+    } finally {
+      busy = false;
+    }
   }
 
   function handleError(error: unknown) {
@@ -128,13 +223,14 @@
         denied = true;
         state = null;
         edits = {};
+        conflicts = {};
         problem = 'You do not have permission to configure this instance.';
       } else if (error.status === 409) {
         needsReload = true;
         problem =
           error.code === 'sources_changed'
-            ? 'Configuration sources changed or cannot be read. Reload the server configuration, then reload settings.'
-            : 'Settings changed since you opened this page. Reload settings before saving again.';
+            ? 'Configuration sources changed or cannot be read. Refresh settings to check the file changes.'
+            : 'Settings changed since you opened this page. Refresh settings before saving again.';
       } else {
         errors = error.fields;
         problem = error.fields.length ? 'Please correct the highlighted settings.' : error.message;
@@ -148,6 +244,7 @@
   function update(path: string, edit?: SettingEdit) {
     if (edit) edits[path] = edit;
     else delete edits[path];
+    delete conflicts[path];
     errors = errors.filter((error) => error.path !== path);
     if (!needsReload) problem = '';
     message = '';
@@ -156,13 +253,17 @@
   function discard() {
     if (busy || !dirty) return;
     edits = {};
+    conflicts = {};
     errors = [];
     if (!needsReload) problem = '';
     message = 'Unsaved changes discarded.';
   }
 
   function tabErrors(tab: string) {
-    return errors.filter((error) => error.path.split('.')[0] === tab);
+    return [
+      ...errors,
+      ...Object.entries(conflicts).map(([path, message]) => ({ path, message })),
+    ].filter((error) => error.path.split('.')[0] === tab);
   }
 
   function selectCategory(next: string) {
@@ -196,7 +297,7 @@
   }
 
   async function save() {
-    if (!state || busy || !dirty || needsReload) return;
+    if (!state || busy || !dirty || needsReload || state.pending || conflictCount) return;
     busy = true;
     errors = [];
     problem = '';
@@ -213,23 +314,33 @@
       message = 'Reconnecting and reading active settings…';
       await readActive();
       edits = {};
+      conflicts = {};
       message = 'Settings saved and applied.';
     } catch (error) {
       handleError(error);
+      if (error instanceof SettingsError && error.code === 'sources_changed') {
+        try {
+          await readActive(true);
+          if (state?.pending) problem = '';
+        } catch (readError) {
+          handleError(readError);
+        }
+        needsReload = true;
+      }
       if (submitted && !(error instanceof SettingsError && error.status < 500)) {
         needsReload = true;
         if (saved)
           problem =
-            'Settings were saved, but active settings could not be refreshed. Reload settings before making another change.';
+            'Settings were saved, but active settings could not be refreshed. Refresh settings before making another change.';
         else if (!(error instanceof SettingsError))
           problem =
-            'The save response was lost. The change may have been applied. Reload settings to check the active values before saving again.';
-        else problem += ' Reload settings before saving again.';
+            'The save response was lost. The change may have been applied. Refresh settings to check the active values before saving again.';
+        else problem += ' Refresh settings before saving again.';
         // Show the active values alongside the retained draft, without accepting
         // a new revision for another save until the owner explicitly reloads.
         if (!saved) {
           try {
-            await readActive();
+            await readActive(true);
           } catch (readError) {
             if (readError instanceof SettingsError && [401, 403].includes(readError.status))
               handleError(readError);
@@ -249,7 +360,16 @@
 <div class="bg-page-bg text-text-brand flex min-h-0 flex-1 flex-col">
   <div class="flex min-h-0 w-full flex-1 flex-col pt-5">
     <div class="flex shrink-0 flex-col px-4 md:px-6">
-      <h2 class="font-space text-2xl font-bold tracking-tight">Settings</h2>
+      <div class="flex items-center justify-between gap-3">
+        <h2 class="font-space text-2xl font-bold tracking-tight">Settings</h2>
+        {#if !denied}<Button
+            type="button"
+            variant="outline"
+            disabled={busy}
+            onclick={refreshSettings}
+            size="sm">Refresh settings</Button
+          >{/if}
+      </div>
       <p class="text-text-brand-muted my-2 text-sm">
         Configure appearance, search behavior, logging and indexing. Other settings are shown for
         reference.
@@ -264,13 +384,6 @@
       {#if !state || denied}
         <p role="status" class="text-text-brand-muted my-2 text-sm">{message}</p>
       {/if}
-      {#if needsReload || (!state && !denied && !busy)}<Button
-          type="button"
-          variant="outline"
-          disabled={busy}
-          onclick={reload}
-          class="mb-3 self-start">Reload settings</Button
-        >{/if}
     </div>
     {#if state && !denied}
       <div class="border-border-brand-muted flex min-h-0 flex-1 flex-col lg:flex-row lg:border-t">
@@ -317,6 +430,44 @@
             class="bg-page-bg min-h-0 flex-1 overflow-y-auto p-4 focus:outline-none md:p-6"
           >
             <div class="w-full max-w-5xl">
+              {#if state?.pending}
+                <div
+                  role="alert"
+                  aria-labelledby="configuration-warning-title"
+                  class="mb-4 flex items-start gap-3 border border-l-4 border-amber-500 bg-amber-50 p-4 text-sm text-amber-950 dark:bg-amber-950/40 dark:text-amber-100"
+                >
+                  <TriangleAlert
+                    class="mt-0.5 size-5 shrink-0 text-amber-700 dark:text-amber-400"
+                    aria-hidden="true"
+                  />
+                  <div class="min-w-0 space-y-2">
+                    <h3 id="configuration-warning-title" class="text-base font-semibold">
+                      {state.pending.status === 'changed'
+                        ? 'Configuration changes not applied'
+                        : 'Configuration could not be loaded'}
+                    </h3>
+                    {#if state.pending.status === 'changed'}
+                      <p>
+                        The local configuration file{#if localConfigFilename}
+                          {' '}(<code>{localConfigFilename}</code>){/if} has changed and needs to be reloaded.
+                      </p>
+                      <Button
+                        type="button"
+                        class="bg-amber-400 text-amber-950 hover:bg-amber-300"
+                        disabled={busy}
+                        onclick={applyConfiguration}>Reload configuration</Button
+                      >
+                    {:else}
+                      <p>
+                        {state.pending.status === 'unreadable'
+                          ? 'The configuration file cannot be read.'
+                          : 'The configuration file contains invalid settings.'} Hister is still using
+                        the previously loaded settings. Fix the file, then refresh settings.
+                      </p>
+                    {/if}
+                  </div>
+                </div>
+              {/if}
               {#each tabErrors(category).filter((error) => !state?.fields.some((field) => field.path === error.path)) as error}<p
                   class="text-hister-rose my-2 text-sm"
                 >
@@ -341,16 +492,21 @@
                     <div>
                       {#each group.fields as field (field.path)}
                         {@const active = values.get(field.path)}
+                        {@const pending = pendingValues.get(field.path)}
                         {#if active}<SettingsField
                             {field}
                             {active}
                             edit={edits[field.path]}
+                            conflict={conflicts[field.path]}
                             errors={errors
                               .filter((error) => error.path === field.path)
                               .map((error) => error.message)}
                             disabled={busy}
                             onEdit={(edit) => update(field.path, edit)}
                           />{/if}
+                        {#if pending && !sameSetting(active, pending)}
+                          <SettingsField {field} active={pending} preview onEdit={() => {}} />
+                        {/if}
                       {/each}
                     </div>
                   </section>
@@ -393,8 +549,10 @@
                   onclick={discard}
                   class="text-text-brand-secondary px-2 sm:px-3">Discard changes</Button
                 >
-                <Button type="submit" disabled={busy || !dirty || needsReload} class="px-2 sm:px-4"
-                  >Save and apply</Button
+                <Button
+                  type="submit"
+                  disabled={busy || !dirty || needsReload || !!state.pending || conflictCount > 0}
+                  class="px-2 sm:px-4">Save and apply</Button
                 >
               </div>
             </div>

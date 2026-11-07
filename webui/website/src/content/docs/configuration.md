@@ -759,8 +759,14 @@ behavior, log level or format, and indexing. Administrators can configure multi 
 Token protected instances require signing in; instances without authentication need no login.
 
 Keep one draft across category tabs, then choose **Save and apply**. Saving briefly interrupts
-service and refreshes the interface. Validation errors preserve your draft. If settings changed
-elsewhere or a save response was lost, reload settings and check the active values before retrying.
+service and refreshes the interface. Validation errors preserve your draft. Use **Refresh settings**
+to check for external changes without losing your draft. Resolve highlighted conflicts before saving.
+
+File changes appear as **Configured on disk, not applied**, alongside the active settings.
+Choose **Reload configuration** to apply them, with a brief service interruption. Unrelated draft
+edits are kept; settings that changed or became locked need review. Invalid or unreadable files
+block saving until you fix the file and refresh settings. If a save or reload response is lost,
+refresh settings and check the active values before retrying.
 
 Each setting shows its source. Explicit values in the main config, environment, or startup
 flags are locked, even when they equal a default. Commented examples do not lock settings.

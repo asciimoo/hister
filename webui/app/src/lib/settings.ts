@@ -58,6 +58,35 @@ export interface SettingsState {
   revision: string;
   fields: SettingField[];
   values: SettingValue[];
+  pending?: {
+    status: 'changed' | 'invalid' | 'unreadable';
+    values?: SettingValue[];
+  } | null;
+}
+
+export function sameSetting(a?: SettingValue, b?: SettingValue): boolean {
+  return (
+    !!a &&
+    !!b &&
+    JSON.stringify(a.value) === JSON.stringify(b.value) &&
+    a.secret_present === b.secret_present &&
+    a.editable === b.editable &&
+    a.source.kind === b.source.kind &&
+    a.source.name === b.source.name &&
+    a.source.locked === b.source.locked &&
+    a.source.web_selected === b.source.web_selected
+  );
+}
+
+export async function reloadConfiguration(): Promise<void> {
+  const response = await apiFetch('/reload', { method: 'POST', redirectOnForbidden: false });
+  if (!response.ok) {
+    throw new SettingsError(
+      response.status,
+      'reload_failed',
+      'Could not reload configuration. Check the configuration file and server logs, then refresh settings.',
+    );
+  }
 }
 
 export type SettingEdit =

@@ -17,19 +17,23 @@
     field,
     active,
     edit,
+    conflict,
     errors = [],
     disabled = false,
+    preview = false,
     onEdit,
   }: {
     field: SettingField;
     active: SettingValue;
     edit?: SettingEdit;
+    conflict?: string;
     errors?: string[];
     disabled?: boolean;
+    preview?: boolean;
     onEdit: (edit: SettingEdit | undefined) => void;
   } = $props();
   let sourceOpen = $state(false);
-  const editable = $derived(canEditSetting(field, active));
+  const editable = $derived(!preview && canEditSetting(field, active));
   const directories = $derived(
     !editable &&
       field.path === 'indexer.directories' &&
@@ -41,9 +45,9 @@
   const value = $derived(
     edit?.action === 'set' ? edit.value : edit?.action === 'reset' ? field.default : active.value,
   );
-  const id = $derived(`setting-${field.path}`);
+  const id = $derived(`${preview ? 'pending' : 'setting'}-${field.path}`);
   const description = $derived(
-    `${id}-description${edit ? ` ${id}-status` : ''}${errors.length ? ` ${id}-errors` : ''}`,
+    `${id}-description${edit ? ` ${id}-status` : ''}${errors.length ? ` ${id}-errors` : ''}${conflict ? ` ${id}-conflict` : ''}`,
   );
   const actionClass = 'text-text-brand-muted hover:text-text-brand h-8 px-1.5 text-xs font-normal';
   const directoryEmptyValues: Record<string, string> = {
@@ -73,12 +77,15 @@
 </script>
 
 <section
-  aria-label={field.label}
+  aria-label={preview ? `Pending ${field.label}` : field.label}
   class="border-border-brand-muted grid gap-x-8 gap-y-3 border-b px-4 py-4 last:border-b-0 md:px-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] {edit
     ? 'bg-hister-indigo/5'
     : ''}"
 >
   <div class="min-w-0 space-y-1 break-words {directories ? 'lg:col-span-2' : ''}">
+    {#if preview}<p class="text-text-brand-muted text-xs font-medium">
+        Configured on disk, not applied
+      </p>{/if}
     <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
       <div class="flex min-w-0 flex-wrap items-center gap-1">
         <svelte:element
@@ -239,6 +246,38 @@
     {#if errors.length}<div id={`${id}-errors`} class="text-hister-rose text-sm">
         {#each errors as error}<p>{error}</p>{/each}
       </div>{/if}
+    {#if conflict && edit}
+      <div
+        id={`${id}-conflict`}
+        role="alert"
+        class="border-hister-rose/40 space-y-2 border p-3 text-sm"
+      >
+        <p>{conflict}</p>
+        <p class="text-text-brand-muted [overflow-wrap:anywhere]">
+          Your draft: {edit.action === 'reset'
+            ? 'Reset to the inherited value'
+            : field.schema.sensitivity === 'none'
+              ? display(edit.value)
+              : 'Value hidden'}
+        </p>
+        <div class="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            {disabled}
+            onclick={() => onEdit(undefined)}>Use current value</Button
+          >
+          {#if editable}<Button
+              type="button"
+              variant="outline"
+              size="sm"
+              {disabled}
+              onclick={() => onEdit(edit)}>Keep my edit</Button
+            >{/if}
+        </div>
+      </div>
+    {/if}
     {#if editable}
       <div class="flex flex-wrap gap-2 lg:justify-end">
         {#if field.schema.type === 'list' || (field.schema.type === 'string' && (!field.schema.choices || field.schema.choices.includes('')))}
