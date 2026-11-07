@@ -42,8 +42,8 @@ func TestResolveLanguages(t *testing.T) {
 	}
 
 	for _, empty := range [][]string{nil, {}} {
-		if got, want := len(ResolveLanguages(empty)), len(Languages); got != want {
-			t.Fatalf("ResolveLanguages(%v) = %d languages, want all %d", empty, got, want)
+		if got, want := codesOf(t, empty), languages.DetectorCodes(); !slices.Equal(got, want) {
+			t.Fatalf("ResolveLanguages(%v) = %v, want all supported languages %v", empty, got, want)
 		}
 	}
 }
@@ -63,6 +63,35 @@ func TestResolveLanguagesPreservesModelOrder(t *testing.T) {
 	}
 }
 
+func TestResolveLanguagesReturnsIndependentSelections(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		codes []string
+	}{
+		{"nil selects all", nil},
+		{"empty selects all", []string{}},
+		{"restricted selection", []string{"en", "de"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			all := slices.Clone(ResolveLanguages(nil))
+			selected := ResolveLanguages(tc.codes)
+			want := slices.Clone(selected)
+			if len(selected) == 0 {
+				t.Fatal("expected a nonempty language selection")
+			}
+			// Restore the selection if a regression exposes shared state.
+			t.Cleanup(func() { copy(selected, want) })
+			selected[0] = lingua.Czech
+			if got := ResolveLanguages(tc.codes); !slices.Equal(got, want) {
+				t.Errorf("changing a returned selection affected the next selection: got %v, want %v", got, want)
+			}
+			if got := ResolveLanguages(nil); !slices.Equal(got, all) {
+				t.Errorf("changing a returned selection affected the defaults: got %v, want %v", got, all)
+			}
+		})
+	}
+}
+
 func TestUnsupportedLanguages(t *testing.T) {
 	if got := UnsupportedLanguages([]string{"en", "de", "nl", "id"}); len(got) != 0 {
 		t.Fatalf("UnsupportedLanguages = %v, want none", got)
@@ -71,8 +100,7 @@ func TestUnsupportedLanguages(t *testing.T) {
 	if !slices.Equal(got, []string{"xx", "zz"}) {
 		t.Fatalf("UnsupportedLanguages = %v, want [xx zz]", got)
 	}
-	// "cs" is commented out of Languages, so it must be reported rather than
-	// silently ignored.
+	// Czech has no bundled model, so it must be reported rather than silently ignored.
 	if got := UnsupportedLanguages([]string{"cs"}); !slices.Equal(got, []string{"cs"}) {
 		t.Fatalf("UnsupportedLanguages([cs]) = %v, want [cs]", got)
 	}
@@ -84,18 +112,22 @@ func TestUnsupportedLanguages(t *testing.T) {
 }
 
 func TestDetectionRegistryMatchesBundledModels(t *testing.T) {
+	models := make(map[string]bool)
+	for _, model := range ResolveLanguages(nil) {
+		models[languageCode(model)] = true
+	}
 	seen := make(map[string]bool)
 	for _, base := range language.Supported.BaseLanguages() {
 		resolved, err := languages.Resolve(base.String())
 		if err != nil || resolved.Detector == "" {
 			continue
 		}
-		if _, ok := SupportedLanguages[resolved.Detector]; !ok {
+		if !models[resolved.Detector] {
 			t.Errorf("candidate %s has no bundled model", resolved.Detector)
 		}
 		seen[resolved.Detector] = true
 	}
-	for code := range SupportedLanguages {
+	for code := range models {
 		if !seen[code] {
 			t.Errorf("bundled model %s is not a candidate", code)
 		}

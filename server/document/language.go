@@ -1,6 +1,7 @@
 package document
 
 import (
+	"slices"
 	"strings"
 	"unicode"
 
@@ -42,7 +43,7 @@ import (
 
 const UnknownLanguage = languages.Unknown
 
-var Languages = []lingua.Language{
+var supportedLanguages = []lingua.Language{
 	lingua.Arabic,    // ar
 	lingua.Bokmal,    // nb
 	lingua.Bulgarian, // bg
@@ -81,15 +82,6 @@ func languageCode(l lingua.Language) string {
 	return strings.ToLower(l.IsoCode639_1().String())
 }
 
-// SupportedLanguages maps each bundled model's canonical code to lingua.
-var SupportedLanguages = func() map[string]lingua.Language {
-	m := make(map[string]lingua.Language, len(Languages))
-	for _, l := range Languages {
-		m[languageCode(l)] = l
-	}
-	return m
-}()
-
 // UnsupportedLanguages returns the codes that ResolveLanguages would drop, so
 // callers can reject a misspelled configuration instead of silently changing
 // the set of detection candidates.
@@ -98,16 +90,16 @@ func UnsupportedLanguages(codes []string) []string {
 	return unsupported
 }
 
-// ResolveLanguages maps language tags onto lingua models, preserving the
-// order of Languages and dropping codes that are not supported. An empty list
-// resolves to every supported language.
+// ResolveLanguages maps language tags onto lingua models in model order,
+// dropping codes that are not supported. An empty list resolves to every
+// supported language. The caller can modify the returned slice independently.
 func ResolveLanguages(codes []string) []lingua.Language {
 	if len(codes) == 0 {
-		return Languages
+		return slices.Clone(supportedLanguages)
 	}
 	wanted, _ := languages.NormalizeCandidates(codes)
 	langs := make([]lingua.Language, 0, len(wanted))
-	for _, l := range Languages {
+	for _, l := range supportedLanguages {
 		if _, ok := wanted[languageCode(l)]; ok {
 			langs = append(langs, l)
 		}

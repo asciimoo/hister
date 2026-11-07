@@ -92,7 +92,7 @@ type indexOptions struct {
 	DetectLanguages bool
 	KeepStopwords   bool
 	// Languages restricts detection to these ISO 639-1 codes. Empty means every
-	// language document.Languages supports.
+	// language supported by the document detector.
 	Languages []string
 	// LowAccuracy restricts lingua to its trigram models.
 	LowAccuracy bool
