@@ -444,7 +444,7 @@ func TestWatchedDirectoryStateCanBeEdited(t *testing.T) {
 	if err := os.WriteFile(filename, []byte("# defaults\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "config.web.yml"), []byte("indexer:\n  directories:\n    - path: /docs\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "config.web.yml"), []byte("indexer:\n  directories:\n    - path: ~/docs\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	c, _, err := LoadForInspection(filename, true)
@@ -460,12 +460,17 @@ func TestWatchedDirectoryStateCanBeEdited(t *testing.T) {
 			t.Fatal(err)
 		}
 		// A browser preserves untouched properties when changing one row member.
-		value = []byte(strings.Replace(string(value), "/docs", "/other", 1))
+		value = []byte(strings.Replace(string(value), "~/docs", "~/other", 1))
 		next, fields := c.PrepareDraft([]SettingEdit{{Path: state.Path, Action: "set", Value: value}})
 		if next == nil || len(fields) != 0 {
 			t.Fatalf("cannot edit a stored directory row: %v", fields)
 		}
+		if len(next.Indexer.Directories) != 1 || next.Indexer.Directories[0].Path != "~/other" {
+			t.Fatalf("edited directory path was not retained: %+v", next.Indexer.Directories)
+		}
+		return
 	}
+	t.Fatal("indexer.directories field is missing")
 }
 
 func TestIndexerDraftSettings(t *testing.T) {
