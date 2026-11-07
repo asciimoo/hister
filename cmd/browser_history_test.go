@@ -4,6 +4,7 @@ package cmd
 
 import (
 	"path/filepath"
+	"runtime"
 	"slices"
 	"testing"
 
@@ -73,19 +74,68 @@ func TestResolveHistoryImportsNamedDB(t *testing.T) {
 
 	safari := filepath.Join(dir, "Safari", "History.db")
 	writeSafariHistoryFile(t, safari, map[string]int64{"https://example.com": 1})
-	got, err = resolveHistoryImports("", safari)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(got) != 1 || got[0].table != "safari" {
-		t.Fatalf("safari History.db without --browser = %#v", got)
+	for _, browser := range []string{"", "safari"} {
+		got, err = resolveHistoryImports(browser, safari)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got) != 1 || got[0].table != "safari" || got[0].databaseFile != safari {
+			t.Fatalf("resolveHistoryImports(%q, %q) = %#v", browser, safari, got)
+		}
 	}
 }
 
 func TestResolveHistoryImportsRejectsUnknownBrowser(t *testing.T) {
-	if _, err := resolveHistoryImports("safari", ""); err == nil {
-		t.Fatal("expected safari to be rejected")
+	isolateBrowserHistoryHome(t)
+
+	const browser = "not-a-real-browser"
+	_, err := resolveHistoryImports(browser, "")
+	if want := "unknown --browser " + browser; err == nil || err.Error() != want {
+		t.Fatalf("resolveHistoryImports(%q, %q) error = %v, want %q", browser, "", err, want)
 	}
+}
+
+func TestResolveHistoryImportsSafariDiscovery(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		createDB bool
+	}{
+		{name: "missing"},
+		{name: "present", createDB: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			home := isolateBrowserHistoryHome(t)
+			safari := filepath.Join(home, "Library", "Safari", "History.db")
+			if tc.createDB {
+				writeSafariHistoryFile(t, safari, map[string]int64{"https://example.com": 1})
+			}
+
+			got, err := resolveHistoryImports("safari", "")
+			if !tc.createDB || runtime.GOOS != "darwin" {
+				const want = "no history database found for browser safari"
+				if err == nil || err.Error() != want {
+					t.Fatalf("resolveHistoryImports(safari) error = %v, want %q", err, want)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(got) != 1 || got[0].table != "safari" || got[0].databaseFile != safari {
+				t.Fatalf("resolveHistoryImports(safari) = %#v, want Safari database %q", got, safari)
+			}
+		})
+	}
+}
+
+func isolateBrowserHistoryHome(t *testing.T) string {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("LOCALAPPDATA", filepath.Join(home, "AppData", "Local"))
+	t.Setenv("APPDATA", filepath.Join(home, "AppData", "Roaming"))
+	return home
 }
 
 func TestBrowserImportJobsFiltersByPrefix(t *testing.T) {
