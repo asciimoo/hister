@@ -1385,6 +1385,128 @@ test('Indexer collections retain invalid drafts and support reset, clear and sou
   ).toContainText('/srv/original');
 });
 
+test('locked watched directories show readable details without editing controls', async ({
+  page,
+}) => {
+  const state = await indexerSettingsAPI(page);
+  const directories = state.values.find((field) => field.path === 'indexer.directories')!;
+  const longPath = `/srv/${'archive'.repeat(20)}/notes`;
+  const longPattern = `${'private'.repeat(20)}*`;
+  directories.value = [
+    {
+      path: longPath,
+      label: 'Research notes',
+      user: 'alice',
+      filetypes: ['md', 'txt'],
+      patterns: ['note*', 'journal*'],
+      excludes: ['secret*', longPattern],
+      include_hidden: true,
+      delete_on_remove: false,
+    },
+    {
+      path: '/srv/books',
+      label: 'Books',
+      user: 'bob',
+      filetypes: ['pdf'],
+      patterns: ['book*'],
+      excludes: ['draft*'],
+      include_hidden: false,
+      delete_on_remove: true,
+    },
+  ];
+  directories.editable = false;
+  Object.assign(directories.source, { kind: 'file', locked: true, web_selected: true });
+  directories.reason = 'This setting is managed in the main configuration.';
+  await page.goto('/settings?tab=indexer');
+  const region = page.getByRole('region', { name: 'Watched directories', exact: true });
+  const first = region.getByRole('group', { name: 'Watched directories 1', exact: true });
+  await expect(first.getByRole('heading', { name: longPath, exact: true })).toBeVisible();
+  await expect(first.getByRole('term')).toHaveText([
+    'Label',
+    'Owner',
+    'File types',
+    'Include patterns',
+    'Exclude patterns',
+    'Include hidden files',
+    'Delete from index when removed',
+  ]);
+  await expect(first.getByRole('definition')).toHaveText([
+    'Research notes',
+    'alice',
+    'md txt',
+    'note* journal*',
+    `secret* ${longPattern}`,
+    'Enabled',
+    'Disabled',
+  ]);
+  const second = region.getByRole('group', { name: 'Watched directories 2', exact: true });
+  await expect(second.getByRole('heading', { name: '/srv/books', exact: true })).toBeVisible();
+  await expect(second.getByRole('definition')).toHaveText([
+    'Books',
+    'bob',
+    'pdf',
+    'book*',
+    'draft*',
+    'Disabled',
+    'Enabled',
+  ]);
+  await expect(region.getByRole('textbox')).toHaveCount(0);
+  await expect(region.getByRole('switch')).toHaveCount(0);
+  await expect(region.getByRole('button')).toHaveCount(1);
+  await expect(page.getByRole('button', { name: 'Save and apply', exact: true })).toBeDisabled();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await region
+    .getByRole('button', {
+      name: 'Locked: Source information for Watched directories',
+      exact: true,
+    })
+    .click();
+  await expect(page.getByRole('tooltip')).toContainText('Source: Main configuration');
+  await expect(page.getByRole('tooltip')).toContainText(
+    'This setting is managed in the main configuration.',
+  );
+  await expect(page.getByRole('tooltip')).toContainText(
+    'A stored web selection is overridden by this source.',
+  );
+});
+
+test('locked watched directories explain empty options and an empty collection', async ({
+  page,
+}) => {
+  const state = await indexerSettingsAPI(page);
+  const directories = state.values.find((field) => field.path === 'indexer.directories')!;
+  directories.value = [
+    { path: '~/Documents', label: '', user: '', include_hidden: false, delete_on_remove: false },
+    { path: '/srv/shared', label: '', user: '', filetypes: [], patterns: [], excludes: [] },
+  ];
+  directories.editable = false;
+  Object.assign(directories.source, { kind: 'environment', locked: true });
+  await page.goto('/settings?tab=indexer');
+  const region = page.getByRole('region', { name: 'Watched directories', exact: true });
+  for (const name of ['Watched directories 1', 'Watched directories 2']) {
+    await expect(
+      region.getByRole('group', { name, exact: true }).getByRole('definition'),
+    ).toHaveText([
+      'None',
+      'Everyone with search access',
+      'All file types',
+      'All file names',
+      'None',
+      'Disabled',
+      'Disabled',
+    ]);
+  }
+  for (const empty of [[], null]) {
+    directories.value = empty;
+    await page.reload();
+    await expect(
+      region.getByText('No watched directories configured.', { exact: true }),
+    ).toBeVisible();
+    await expect(region.getByRole('group')).toHaveCount(0);
+    await expect(region.getByRole('button')).toHaveCount(1);
+  }
+});
+
 test('language names describe active and locked selections', async ({ page }) => {
   const state = await indexerSettingsAPI(page);
   const languages = state.values.find((field) => field.path === 'indexer.languages')!;

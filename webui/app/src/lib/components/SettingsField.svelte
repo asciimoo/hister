@@ -3,7 +3,7 @@
   import { Button } from '@hister/components/ui/button';
   import SettingInput from './SettingInput.svelte';
   import * as Tooltip from '@hister/components/ui/tooltip';
-  import { Eye, Info, Lock, Pencil } from '@lucide/svelte';
+  import { Check, Eye, Folder, Info, Lock, Minus, Pencil } from '@lucide/svelte';
   import {
     canEditSetting,
     choiceLabel,
@@ -30,6 +30,14 @@
   } = $props();
   let sourceOpen = $state(false);
   const editable = $derived(canEditSetting(field, active));
+  const directories = $derived(
+    !editable &&
+      field.path === 'indexer.directories' &&
+      field.schema.sensitivity === 'none' &&
+      (Array.isArray(active.value) || active.value === null)
+      ? ((active.value ?? []) as Record<string, unknown>[])
+      : undefined,
+  );
   const value = $derived(
     edit?.action === 'set' ? edit.value : edit?.action === 'reset' ? field.default : active.value,
   );
@@ -38,6 +46,13 @@
     `${id}-description${edit ? ` ${id}-status` : ''}${errors.length ? ` ${id}-errors` : ''}`,
   );
   const actionClass = 'text-text-brand-muted hover:text-text-brand h-8 px-1.5 text-xs font-normal';
+  const directoryEmptyValues: Record<string, string> = {
+    label: 'None',
+    user: 'Everyone with search access',
+    filetypes: 'All file types',
+    patterns: 'All file names',
+    excludes: 'None',
+  };
   function set(value: unknown) {
     onEdit(
       JSON.stringify(value) === JSON.stringify(active.value)
@@ -63,7 +78,7 @@
     ? 'bg-hister-indigo/5'
     : ''}"
 >
-  <div class="min-w-0 space-y-1 break-words">
+  <div class="min-w-0 space-y-1 break-words {directories ? 'lg:col-span-2' : ''}">
     <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
       <div class="flex min-w-0 flex-wrap items-center gap-1">
         <svelte:element
@@ -129,12 +144,76 @@
       {field.description}
     </p>
   </div>
-  <div class="min-w-0 space-y-2 break-words">
+  <div class="min-w-0 space-y-2 break-words {directories ? 'lg:col-span-2' : ''}">
     <div class="flex min-h-8 items-center lg:justify-end">
       {#if field.schema.sensitivity !== 'none'}
         <p {id} class="text-text-brand min-w-0 text-sm">
           {active.secret_present ? 'Value stored (hidden)' : 'No stored value'}
         </p>
+      {:else if directories}
+        <div {id} class="w-full min-w-0 space-y-3" aria-describedby={description}>
+          {#each directories as directory, index}
+            <div
+              role="group"
+              aria-label={`${field.label} ${index + 1}`}
+              class="border-border-brand-muted min-w-0 border"
+            >
+              <div class="bg-muted/30 flex min-w-0 items-start gap-3 p-4">
+                <Folder class="text-text-brand-muted mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                <h3
+                  class="text-text-brand min-w-0 font-mono text-sm font-medium [overflow-wrap:anywhere]"
+                >
+                  {String(directory.path ?? '')}
+                </h3>
+              </div>
+              <dl class="grid min-w-0 gap-x-8 gap-y-4 p-4 sm:grid-cols-2">
+                {#each field.schema.items?.properties ?? [] as property (property.name)}
+                  {#if property.name !== 'path'}
+                    {@const member = directory[property.name]}
+                    <div class="min-w-0 space-y-1">
+                      <dt class="text-text-brand-muted text-xs">{property.label}</dt>
+                      <dd class="text-text-brand min-w-0 text-sm [overflow-wrap:anywhere]">
+                        {#if property.schema.sensitivity !== 'none'}
+                          Value hidden
+                        {:else if property.schema.type === 'boolean'}
+                          <span class="inline-flex items-center gap-1.5">
+                            {#if member === true}
+                              <Check class="size-3.5" aria-hidden="true" />Enabled
+                            {:else}
+                              <Minus
+                                class="text-text-brand-muted size-3.5"
+                                aria-hidden="true"
+                              />Disabled
+                            {/if}
+                          </span>
+                        {:else if member == null || member === '' || (Array.isArray(member) && member.length === 0)}
+                          <span class="text-text-brand-muted">
+                            {directoryEmptyValues[property.name] ?? 'None'}
+                          </span>
+                        {:else if Array.isArray(member)}
+                          <div class="flex min-w-0 flex-wrap gap-1.5">
+                            {#each member as item}
+                              <Badge
+                                variant="outline"
+                                class="border-border-brand-muted text-text-brand max-w-full font-mono font-normal whitespace-normal"
+                              >
+                                {String(item)}
+                              </Badge>{' '}
+                            {/each}
+                          </div>
+                        {:else}
+                          {display(member)}
+                        {/if}
+                      </dd>
+                    </div>
+                  {/if}
+                {/each}
+              </dl>
+            </div>
+          {:else}
+            <p class="text-text-brand-muted text-sm">No watched directories configured.</p>
+          {/each}
+        </div>
       {:else if !editable}
         <p {id} class="text-text-brand min-w-0 text-sm">{display(active.value)}</p>
       {:else}
