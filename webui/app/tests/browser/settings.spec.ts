@@ -1559,10 +1559,11 @@ test('watched directory fields indicate which parameters are required or optiona
     { path: '/srv/notes' },
   ];
   await page.goto('/settings?tab=indexer');
-  await page.getByRole('button', { name: 'Add Watched directories item', exact: true }).click();
-
   for (const name of ['Watched directories 1', 'Watched directories 2']) {
     const row = page.getByRole('group', { name, exact: true });
+    if (name.endsWith('1')) await row.getByRole('button', { name: 'Edit', exact: true }).click();
+    else await page.getByRole('button', { name: 'Add directory', exact: true }).click();
+    await row.getByText('Filters and options', { exact: true }).click();
     await expect(row.getByText('Required', { exact: true })).toBeVisible();
     await expect(row.getByText('Optional', { exact: true })).toHaveCount(7);
     for (const marker of await row.getByText('Optional', { exact: true }).all()) {
@@ -1583,6 +1584,7 @@ test('watched directory fields indicate which parameters are required or optiona
         row.getByRole('switch', { name: label, exact: true }),
       ).toHaveAccessibleDescription('Optional');
     }
+    await row.getByRole('button', { name: 'Cancel', exact: true }).click();
   }
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
@@ -1603,11 +1605,12 @@ test('Indexer controls save languages and structured directories in the shared d
   await expect(languages.getByRole('option')).toHaveText(['English', 'Hungarian', 'German']);
   await languages.selectOption([{ label: 'English' }, { label: 'Hungarian' }]);
   await page.getByRole('spinbutton', { name: 'Maximum file size', exact: true }).fill('8');
-  await page.getByRole('button', { name: 'Add Watched directories item', exact: true }).click();
+  await page.getByRole('button', { name: 'Add directory', exact: true }).click();
   const row = page.getByRole('group', { name: 'Watched directories 1', exact: true });
   await row.getByRole('textbox', { name: 'Path', exact: true }).fill('/srv/notes');
   await row.getByRole('textbox', { name: 'Owner', exact: true }).fill('alice');
   await row.getByRole('textbox', { name: 'Label', exact: true }).fill('notes');
+  await row.getByText('Filters and options', { exact: true }).click();
   await row.getByRole('textbox', { name: 'File types', exact: true }).fill('txt\nmd');
   await row.getByRole('textbox', { name: 'Include patterns', exact: true }).fill('note*');
   await row.getByRole('textbox', { name: 'Exclude patterns', exact: true }).fill('secret*');
@@ -1616,6 +1619,7 @@ test('Indexer controls save languages and structured directories in the shared d
   await page.getByRole('tab', { name: 'App', exact: true }).click();
   await page.getByRole('tab', { name: 'Indexer', exact: true }).click();
   await expect(row.getByRole('textbox', { name: 'Path', exact: true })).toHaveValue('/srv/notes');
+  await row.getByRole('button', { name: 'Add directory', exact: true }).click();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
   await expect(page.getByRole('status')).toContainText('Settings saved and applied');
@@ -1669,8 +1673,12 @@ test('Indexer collections retain invalid drafts and support reset, clear and sou
   });
   await page.goto('/settings');
   await page.getByRole('tab', { name: 'Indexer', exact: true }).click();
+  await page
+    .getByRole('group', { name: 'Watched directories 1', exact: true })
+    .getByRole('button', { name: 'Edit', exact: true })
+    .click();
   await page.getByRole('textbox', { name: 'Path', exact: true }).fill('/missing');
-  await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
+  await page.getByRole('button', { name: 'Done', exact: true }).click();
   await expect(
     page.getByText('Directory 1: Choose an existing directory.', { exact: true }),
   ).toBeVisible();
@@ -1690,9 +1698,7 @@ test('Indexer collections retain invalid drafts and support reset, clear and sou
   directories.editable = false;
   await page.reload();
   await page.getByRole('tab', { name: 'Indexer', exact: true }).click();
-  await expect(
-    page.getByRole('button', { name: 'Add Watched directories item', exact: true }),
-  ).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Add directory', exact: true })).toHaveCount(0);
   await expect(page.getByRole('textbox', { name: 'Path', exact: true })).toHaveCount(0);
   await expect(
     page.getByRole('region', { name: 'Watched directories', exact: true }),
@@ -1947,6 +1953,200 @@ async function crawlerSettingsAPI(page: Page) {
   return state;
 }
 
+test('collection items switch between summaries and cancellable editors', async ({ page }) => {
+  await crawlerSettingsAPI(page);
+  const applied: any[] = [];
+  await page.route('**/api/settings/apply', async (route) => {
+    applied.push(route.request().postDataJSON());
+    await route.fulfill({ json: { saved: true } });
+  });
+  await page.goto('/settings?tab=crawler');
+  const cookie = page.getByRole('group', { name: 'Crawler cookies 1', exact: true });
+  await expect(cookie.getByRole('textbox')).toHaveCount(0);
+  await expect(cookie).toContainText('session');
+  await expect(cookie).toContainText('example.com');
+  await cookie.getByRole('button', { name: 'Edit', exact: true }).click();
+  await cookie.getByLabel('Name', { exact: true }).fill('changed');
+  await expect(page.getByRole('button', { name: 'Save and apply', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Add header', exact: true })).toBeDisabled();
+  await page.getByRole('tab', { name: 'App', exact: true }).click();
+  await page.getByRole('button', { name: 'Continue editing', exact: true }).click();
+  await expect(cookie.getByLabel('Name', { exact: true })).toHaveValue('changed');
+  await cookie.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(cookie).toContainText('session');
+  await expect(page.getByRole('button', { name: 'Save and apply', exact: true })).toBeDisabled();
+
+  await cookie.getByRole('button', { name: 'Edit', exact: true }).click();
+  await cookie.getByRole('combobox', { name: 'Value action', exact: true }).selectOption('replace');
+  await cookie.getByLabel('Value replacement', { exact: true }).fill('private-cookie-draft');
+  await cookie.getByRole('button', { name: 'Done', exact: true }).click();
+  await expect(cookie.getByRole('textbox')).toHaveCount(0);
+  await expect(cookie.getByRole('button', { name: 'Edit', exact: true })).toBeFocused();
+  await expect(cookie).toContainText('Unsaved');
+  await expect(cookie).not.toContainText('private-cookie-draft');
+  await expect(cookie).not.toContainText('cookie-reference');
+  expect(applied).toHaveLength(0);
+  await cookie.getByRole('button', { name: 'Edit', exact: true }).click();
+  await cookie.getByLabel('Value replacement', { exact: true }).fill('cancelled-value');
+  await cookie.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await page.getByRole('button', { name: 'Remove Crawler cookies item 1', exact: true }).click();
+  await expect(cookie).toHaveCount(0);
+  await page.getByRole('button', { name: 'Undo removal', exact: true }).click();
+  await expect(cookie).toContainText('session');
+  await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Settings saved and applied');
+  expect(applied[0].edits[0].value[0].value.value).toBe('private-cookie-draft');
+});
+
+test('new collection items validate before collapsing and Cancel removes unfinished rows', async ({
+  page,
+}) => {
+  await crawlerSettingsAPI(page);
+  const validated: any[] = [];
+  await page.route('**/api/settings/validate', async (route) => {
+    const draft = route.request().postDataJSON();
+    validated.push(draft);
+    const cookies = draft.edits.find((edit: any) => edit.path === 'crawler.cookies')?.value;
+    if (cookies?.at(-1)?.domain === 'invalid') {
+      await route.fulfill({
+        status: 422,
+        json: {
+          code: 'invalid_settings',
+          errors: [
+            { path: 'crawler.cookies', code: 'invalid_value', message: 'Check the cookie domain.' },
+          ],
+        },
+      });
+    } else await route.fulfill({ json: { revision: 'revision-1' } });
+  });
+  await page.goto('/settings?tab=crawler');
+  await page.getByRole('button', { name: 'Add cookie', exact: true }).click();
+  const cookie = page.getByRole('group', { name: 'Crawler cookies 2', exact: true });
+  await cookie.getByLabel('Name', { exact: true }).fill('new-session');
+  await cookie.getByLabel('Domain', { exact: true }).fill('invalid');
+  await cookie.getByLabel('Value', { exact: true }).fill('new-secret');
+  await cookie.getByRole('button', { name: 'Add cookie', exact: true }).click();
+  await expect(page.getByText('Check the cookie domain.', { exact: true })).toBeVisible();
+  await expect(cookie.getByLabel('Value', { exact: true })).toHaveValue('new-secret');
+  await cookie.getByLabel('Domain', { exact: true }).fill('valid.example');
+  await cookie.getByRole('button', { name: 'Add cookie', exact: true }).click();
+  await expect(cookie.getByRole('textbox')).toHaveCount(0);
+  expect(validated).toHaveLength(2);
+  await page.getByRole('button', { name: 'Add cookie', exact: true }).click();
+  const unfinished = page.getByRole('group', { name: 'Crawler cookies 3', exact: true });
+  await unfinished.getByLabel('Name', { exact: true }).fill('discard-me');
+  await unfinished.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(unfinished).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Add header', exact: true }).click();
+  const header = page.getByRole('group', { name: 'Crawler headers 3', exact: true });
+  await header.getByLabel('Name', { exact: true }).fill('AUTHORIZATION');
+  await header.getByLabel('Value', { exact: true }).fill('duplicate');
+  await header.getByRole('button', { name: 'Add header', exact: true }).click();
+  await expect(header.getByRole('alert')).toContainText('Names must be unique');
+  expect(validated).toHaveLength(2);
+  await header.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(header).toHaveCount(0);
+});
+
+test('watched directory editors show filters on demand and collapse into useful summaries', async ({
+  page,
+}) => {
+  await indexerSettingsAPI(page);
+  await page.goto('/settings?tab=indexer');
+  await page.getByRole('button', { name: 'Add directory', exact: true }).click();
+  const directory = page.getByRole('group', { name: 'Watched directories 1', exact: true });
+  await directory.getByLabel('Path', { exact: true }).fill('/home/me/notes');
+  await directory.getByLabel('Owner', { exact: true }).fill('alice');
+  await expect(directory.getByLabel('File types', { exact: true })).toBeHidden();
+  await directory.getByText('Filters and options', { exact: true }).click();
+  await directory.getByLabel('File types', { exact: true }).fill('md\ntxt');
+  await directory.getByRole('button', { name: 'Add directory', exact: true }).click();
+  await expect(directory.getByRole('textbox')).toHaveCount(0);
+  await expect(directory).toContainText('/home/me/notes');
+  await expect(directory).toContainText('alice');
+  await expect(directory).toContainText('md, txt');
+  await expect(directory).toContainText('Unsaved');
+  await directory.getByRole('button', { name: 'Edit', exact: true }).click();
+  await directory.getByLabel('Path', { exact: true }).fill('/cancelled');
+  await page.getByRole('tab', { name: 'App', exact: true }).click();
+  await page.getByRole('tab', { name: 'Indexer', exact: true }).click();
+  await expect(directory.getByLabel('Path', { exact: true })).toHaveValue('/cancelled');
+  await directory.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(directory).toContainText('/home/me/notes');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+test('open collection editors retain refresh conflicts and can be discarded after a source lock', async ({
+  page,
+}) => {
+  const state = await crawlerSettingsAPI(page);
+  await page.goto('/settings?tab=crawler');
+  const cookie = page.getByRole('group', { name: 'Crawler cookies 1', exact: true });
+  await cookie.getByRole('button', { name: 'Edit', exact: true }).click();
+  await cookie.getByRole('combobox', { name: 'Value action', exact: true }).selectOption('replace');
+  await cookie.getByLabel('Value replacement', { exact: true }).fill('private-open-draft');
+  state.revision = 'revision-2';
+  const cookies = state.values.find((value) => value.path === 'crawler.cookies')!;
+  (cookies.value as any[])[0].value.ref = 'changed-reference';
+  await page.getByRole('button', { name: 'Refresh settings', exact: true }).click();
+  await expect(
+    page.getByText(
+      'Stored secret references changed. Use the current value and reapply your edits.',
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await expect(cookie.getByLabel('Value replacement', { exact: true })).toHaveValue(
+    'private-open-draft',
+  );
+  await expect(cookie.getByRole('button', { name: 'Done', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: 'Use current value', exact: true }).click();
+  await expect(cookie.getByLabel('Value replacement', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Save and apply', exact: true })).toBeDisabled();
+
+  await cookie.getByRole('button', { name: 'Edit', exact: true }).click();
+  cookies.editable = false;
+  cookies.source = { kind: 'file', locked: true, web_selected: true };
+  state.revision = 'revision-3';
+  await page.getByRole('button', { name: 'Refresh settings', exact: true }).click();
+  await expect(
+    page.getByText(
+      'This setting is no longer editable. Use the current value to remove your draft.',
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Cancel edit', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Continue editing', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Use current value', exact: true })).toHaveCount(0);
+});
+
+test('finishing a collection item keeps unrelated validation errors available', async ({
+  page,
+}) => {
+  await crawlerSettingsAPI(page);
+  await page.route('**/api/settings/validate', (route) =>
+    route.fulfill({
+      status: 422,
+      json: {
+        code: 'invalid_settings',
+        errors: [
+          { path: 'crawler.timeout', code: 'invalid_value', message: 'Choose a positive timeout.' },
+        ],
+      },
+    }),
+  );
+  await page.goto('/settings?tab=crawler');
+  await page.getByRole('spinbutton', { name: 'Crawler timeout', exact: true }).fill('0');
+  await page.getByRole('button', { name: 'Add header', exact: true }).click();
+  const header = page.getByRole('group', { name: 'Crawler headers 3', exact: true });
+  await header.getByLabel('Name', { exact: true }).fill('x-new');
+  await header.getByLabel('Value', { exact: true }).fill('private-value');
+  await header.getByRole('button', { name: 'Add header', exact: true }).click();
+  await expect(header.getByRole('textbox')).toHaveCount(0);
+  await expect(header).toContainText('x-new');
+  await expect(page.getByText('Choose a positive timeout.', { exact: true })).toBeVisible();
+});
+
 test('crawler controls preserve secret rows and submit one typed draft', async ({ page }) => {
   await crawlerSettingsAPI(page);
   let draft: any;
@@ -1960,11 +2160,13 @@ test('crawler controls preserve secret rows and submit one typed draft', async (
   await page.getByRole('spinbutton', { name: 'Capture delay', exact: true }).fill('0.25');
   await page.getByRole('spinbutton', { name: 'Browser port', exact: true }).fill('9223');
   await page.getByRole('button', { name: 'Remove Crawler headers item 2', exact: true }).click();
-  await page.getByRole('button', { name: 'Add Crawler headers item', exact: true }).click();
+  await page.getByRole('button', { name: 'Add header', exact: true }).click();
   const header = page.getByRole('group', { name: 'Crawler headers 2', exact: true });
   await header.getByRole('textbox', { name: 'Name', exact: true }).fill('x-new');
   await header.getByLabel('Value', { exact: true }).fill('new-private-header');
+  await header.getByRole('button', { name: 'Add header', exact: true }).click();
   const cookie = page.getByRole('group', { name: 'Crawler cookies 1', exact: true });
+  await cookie.getByRole('button', { name: 'Edit', exact: true }).click();
   await expect(cookie.getByRole('combobox', { name: 'Value action', exact: true })).toHaveValue(
     'keep',
   );
@@ -1977,7 +2179,11 @@ test('crawler controls preserve secret rows and submit one typed draft', async (
   await page.getByRole('tab', { name: 'App', exact: true }).click();
   await page.getByRole('textbox', { name: 'Title', exact: true }).fill('Crawler archive');
   await page.getByRole('tab', { name: 'Crawler', exact: true }).click();
-  await expect(header.getByLabel('Value', { exact: true })).toHaveValue('new-private-header');
+  await expect(header).toContainText('x-new');
+  await expect(cookie.getByLabel('Value replacement', { exact: true })).toHaveValue(
+    'new-private-cookie',
+  );
+  await cookie.getByRole('button', { name: 'Done', exact: true }).click();
   expect(
     await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage })),
   ).not.toContain('new-private');
@@ -2062,9 +2268,7 @@ test('crawler source locks disable complete collections', async ({ page }) => {
   await expect(page.getByRole('combobox', { name: 'Crawler backend', exact: true })).toHaveValue(
     'http',
   );
-  await expect(
-    page.getByRole('button', { name: 'Add Crawler headers item', exact: true }),
-  ).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Add header', exact: true })).toHaveCount(0);
   await expect(
     page.getByRole('button', { name: 'Clear Crawler headers', exact: true }),
   ).toHaveCount(0);
@@ -2097,7 +2301,7 @@ test('new crawler cookies accept a value directly and preserve existing secrets'
     await route.fulfill({ json: { saved: true } });
   });
   await page.goto('/settings?tab=crawler');
-  await page.getByRole('button', { name: 'Add Crawler cookies item', exact: true }).click();
+  await page.getByRole('button', { name: 'Add cookie', exact: true }).click();
   const cookie = page.getByRole('group', { name: 'Crawler cookies 2', exact: true });
   await expect(cookie).toBeVisible();
   await expect(cookie.getByRole('combobox', { name: 'Value action', exact: true })).toHaveCount(0);
@@ -2108,7 +2312,9 @@ test('new crawler cookies accept a value directly and preserve existing secrets'
   await cookie.getByRole('textbox', { name: 'Domain', exact: true }).fill('other.example');
   await value.fill('new-cookie-value');
   await expect(cookie.getByRole('combobox')).toHaveCount(0);
+  await cookie.getByRole('button', { name: 'Add cookie', exact: true }).click();
   const stored = page.getByRole('group', { name: 'Crawler cookies 1', exact: true });
+  await stored.getByRole('button', { name: 'Edit', exact: true }).click();
   await expect(stored.getByRole('combobox', { name: 'Value action', exact: true })).toHaveValue(
     'keep',
   );
@@ -2116,12 +2322,15 @@ test('new crawler cookies accept a value directly and preserve existing secrets'
   await stored.getByLabel('Value replacement', { exact: true }).fill('discarded-cookie-value');
   await stored.getByRole('combobox', { name: 'Value action', exact: true }).selectOption('clear');
   await expect(stored.getByLabel('Value replacement', { exact: true })).toHaveCount(0);
-  await expect(value).toHaveValue('new-cookie-value');
+  await expect(cookie).toContainText('new-session');
   await stored.getByRole('combobox', { name: 'Value action', exact: true }).selectOption('keep');
+  await stored.getByRole('button', { name: 'Done', exact: true }).click();
+  await cookie.getByRole('button', { name: 'Edit', exact: true }).click();
 
   await page.getByRole('tab', { name: 'App', exact: true }).click();
   await page.getByRole('tab', { name: 'Crawler', exact: true }).click();
   await expect(value).toHaveValue('new-cookie-value');
+  await cookie.getByRole('button', { name: 'Done', exact: true }).click();
   await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
   await expect(page.getByRole('status')).toContainText('Settings saved and applied');
   expect(draft.edits).toEqual([

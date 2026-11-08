@@ -2,7 +2,7 @@
   import { Button } from '@hister/components/ui/button';
   import { Input } from '@hister/components/ui/input';
   import { Switch } from '@hister/components/ui/switch';
-  import { choiceLabel, type SettingSchema } from '#lib/settings.js';
+  import { choiceLabel, emptySettingValue as empty, type SettingSchema } from '#lib/settings.js';
   import SettingInput from './SettingInput.svelte';
 
   let {
@@ -58,19 +58,6 @@
       ),
     );
     return true;
-  }
-
-  function empty(schema: SettingSchema): unknown {
-    if (schema.sensitivity === 'secret' || schema.sensitivity === 'url') return { action: 'clear' };
-    if (schema.type === 'object')
-      return Object.fromEntries(
-        (schema.properties ?? []).map((property) => [property.name, empty(property.schema)]),
-      );
-    if (schema.type === 'list') return [];
-    if (schema.type === 'dictionary') return {};
-    if (schema.type === 'boolean') return false;
-    if (schema.type === 'integer') return schema.min ?? 0;
-    return '';
   }
 </script>
 

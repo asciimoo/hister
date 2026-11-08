@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount, onDestroy, tick } from 'svelte';
   import { MediaQuery } from 'svelte/reactivity';
   import { beforeNavigate, goto } from '$app/navigation';
   import { page } from '$app/state';
@@ -19,10 +19,14 @@
     type SettingsState,
     type SettingEdit,
     type SettingError,
+    type SettingItemEditor,
+    type SettingRemoval,
   } from '#lib/settings.js';
 
   let state = $state<SettingsState | null>(null);
   let edits = $state<Record<string, SettingEdit>>({});
+  let editor = $state<SettingItemEditor | null>(null);
+  let removal = $state<SettingRemoval | null>(null);
   let conflicts = $state<Record<string, string>>({});
   let errors = $state<SettingError[]>([]);
   let busy = $state(true);
@@ -38,7 +42,9 @@
   const category = $derived(
     categories.includes(requestedCategory) ? requestedCategory : (categories[0] ?? 'app'),
   );
-  const editCount = $derived(Object.keys(edits).length);
+  const editCount = $derived(
+    new Set([...Object.keys(edits), ...(editor ? [editor.path] : [])]).size,
+  );
   const dirty = $derived(editCount > 0);
   const conflictCount = $derived(Object.keys(conflicts).length);
   const values = $derived(new Map(state?.values.map((value) => [value.path, value]) ?? []));
@@ -59,6 +65,8 @@
   onDestroy(() => {
     destroyed = true;
     edits = {};
+    editor = null;
+    removal = null;
   });
   beforeNavigate((navigation) => {
     if (navigation.shallow && navigation.to?.url.pathname === page.url.pathname) return;
@@ -97,7 +105,7 @@
   function reconcile(next: SettingsState) {
     const previous = new Map(state?.values.map((value) => [value.path, value]));
     const current = new Map(next.values.map((value) => [value.path, value]));
-    for (const path of Object.keys(edits)) {
+    for (const path of new Set([...Object.keys(edits), ...(editor ? [editor.path] : [])])) {
       const field = next.fields.find((field) => field.path === path);
       const active = current.get(path);
       if (!field || !active || !canEditSetting(field, active)) {
@@ -111,6 +119,8 @@
       }
     }
     state = next;
+    // A removal snapshot may contain references from the previous revision.
+    removal = null;
   }
 
   async function readActive(preserveDraft = false) {
@@ -227,6 +237,8 @@
         denied = true;
         state = null;
         edits = {};
+        editor = null;
+        removal = null;
         conflicts = {};
         problem = 'You do not have permission to configure this instance.';
       } else if (error.status === 409) {
@@ -246,6 +258,8 @@
   }
 
   function update(path: string, edit?: SettingEdit) {
+    if (editor?.path === path) editor = null;
+    if (removal?.path === path) removal = null;
     if (edit) edits[path] = edit;
     else delete edits[path];
     delete conflicts[path];
@@ -254,9 +268,86 @@
     message = '';
   }
 
+  async function changeEditor(next: SettingItemEditor | null) {
+    const previous = editor;
+    editor = next;
+    if (!next && previous) {
+      errors = errors.filter((error) => error.path !== previous.path);
+      if (!edits[previous.path]) delete conflicts[previous.path];
+      if (!needsReload) problem = '';
+      await tick();
+      document
+        .getElementById(
+          `setting-${previous.path}-${previous.index === null ? 'add' : `${previous.index}-edit`}`,
+        )
+        ?.focus();
+    }
+  }
+
+  function collectionEdit(path: string, value: unknown): SettingEdit | undefined {
+    return JSON.stringify(value) === JSON.stringify(values.get(path)?.value)
+      ? undefined
+      : { path, action: 'set', value };
+  }
+
+  async function finishItem(path: string, value: unknown) {
+    if (!state || busy || needsReload || state.pending || conflicts[path] || editor?.path !== path)
+      return;
+    const edit = collectionEdit(path, value);
+    const draft = Object.values(edits).filter((edit) => edit.path !== path);
+    if (edit) draft.push(edit);
+    busy = true;
+    problem = '';
+    message = 'Checking item…';
+    let otherErrors: SettingError[] = [];
+    try {
+      try {
+        await settingsRequest('/validate', { revision: state.revision, edits: draft });
+      } catch (error) {
+        // Other fields can be corrected after finishing this item.
+        if (
+          error instanceof SettingsError &&
+          error.status === 422 &&
+          error.fields.length &&
+          error.fields.every((field) => field.path && field.path !== path)
+        )
+          otherErrors = error.fields;
+        else throw error;
+      }
+      const finished = editor;
+      update(path, edit);
+      errors = otherErrors;
+      message = 'Item ready. Save and apply activates your changes.';
+      // The summary button must be enabled before returning keyboard focus.
+      busy = false;
+      await tick();
+      document
+        .getElementById(
+          `setting-${path}-${finished?.index === null ? 'add' : `${finished?.index}-edit`}`,
+        )
+        ?.focus();
+    } catch (error) {
+      handleError(error);
+    } finally {
+      busy = false;
+    }
+  }
+
+  function removeItem(path: string, value: unknown, previous: unknown) {
+    update(path, collectionEdit(path, value));
+    removal = { path, value: previous };
+  }
+
+  function undoRemoval() {
+    if (!removal) return;
+    update(removal.path, collectionEdit(removal.path, removal.value));
+  }
+
   function discard() {
     if (busy || !dirty) return;
     edits = {};
+    editor = null;
+    removal = null;
     conflicts = {};
     errors = [];
     if (!needsReload) problem = '';
@@ -301,7 +392,7 @@
   }
 
   async function save() {
-    if (!state || busy || !dirty || needsReload || state.pending || conflictCount) return;
+    if (!state || busy || !dirty || editor || needsReload || state.pending || conflictCount) return;
     busy = true;
     errors = [];
     problem = '';
@@ -316,6 +407,7 @@
       await settingsRequest('/apply', draft);
       saved = true;
       edits = {};
+      removal = null;
       conflicts = {};
       message = 'Reconnecting and reading active settings…';
       await readActive();
@@ -508,6 +600,13 @@
                               .filter((error) => error.path === field.path)
                               .map((error) => error.message)}
                             disabled={busy}
+                            {editor}
+                            {removal}
+                            blocked={needsReload || !!state.pending}
+                            onEditor={changeEditor}
+                            onDone={(value) => finishItem(field.path, value)}
+                            onRemove={(value, previous) => removeItem(field.path, value, previous)}
+                            onUndoRemoval={undoRemoval}
                             onEdit={(edit) => update(field.path, edit)}
                           />{/if}
                         {#if pending && !sameSetting(active, pending)}
@@ -531,6 +630,34 @@
               class="flex w-full max-w-5xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
             >
               <div class="min-w-0 sm:flex-1">
+                {#if editor}
+                  <p class="text-text-brand text-sm">
+                    Finish or cancel the open item before saving.
+                  </p>
+                  <div class="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="link"
+                      size="sm"
+                      disabled={busy}
+                      onclick={async () => {
+                        if (!editor) return;
+                        selectCategory(editor.path.split('.')[0]);
+                        await tick();
+                        document
+                          .getElementById(`setting-${editor.path}`)
+                          ?.scrollIntoView({ block: 'nearest' });
+                      }}>Continue editing</Button
+                    >
+                    <Button
+                      type="button"
+                      variant="link"
+                      size="sm"
+                      disabled={busy}
+                      onclick={() => changeEditor(null)}>Cancel edit</Button
+                    >
+                  </div>
+                {/if}
                 <p
                   aria-live="polite"
                   aria-atomic="true"
@@ -557,7 +684,12 @@
                 >
                 <Button
                   type="submit"
-                  disabled={busy || !dirty || needsReload || !!state.pending || conflictCount > 0}
+                  disabled={busy ||
+                    !dirty ||
+                    !!editor ||
+                    needsReload ||
+                    !!state.pending ||
+                    conflictCount > 0}
                   class="px-2 sm:px-4">Save and apply</Button
                 >
               </div>

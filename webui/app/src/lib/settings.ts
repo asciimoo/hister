@@ -37,6 +37,35 @@ export interface SettingField {
   requires_confirmation: boolean;
 }
 
+// The open item is separate from the page draft until Add or Done succeeds.
+export interface SettingItemEditor {
+  path: string;
+  index: number | null;
+  name: string;
+  value: unknown;
+}
+
+export interface SettingRemoval {
+  path: string;
+  value: unknown;
+}
+
+export function emptySettingValue(schema: SettingSchema): unknown {
+  if (schema.sensitivity === 'secret' || schema.sensitivity === 'url') return { action: 'clear' };
+  if (schema.type === 'object')
+    return Object.fromEntries(
+      (schema.properties ?? []).map((property) => [
+        property.name,
+        emptySettingValue(property.schema),
+      ]),
+    );
+  if (schema.type === 'list') return [];
+  if (schema.type === 'dictionary') return {};
+  if (schema.type === 'boolean') return false;
+  if (schema.type === 'integer' || schema.type === 'number') return schema.min ?? 0;
+  return '';
+}
+
 export function choiceLabel(schema: SettingSchema, value: string): string {
   return schema.choice_labels?.[value] ?? value;
 }

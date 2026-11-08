@@ -762,6 +762,12 @@ Keep one draft across category tabs, then choose **Save and apply**. Saving brie
 service and refreshes the interface. Validation errors preserve your draft. Use **Refresh settings**
 to check for external changes without losing your draft. Resolve highlighted conflicts before saving.
 
+Cookies, headers, and watched directories show compact summaries. Choose **Edit** to open an
+item, then **Done** to check it and return to its summary. New items use **Add cookie**,
+**Add header**, or **Add directory**. **Cancel** discards the open item's edits; **Undo removal**
+restores a removed item. Directory filters are under **Filters and options**. Finish or cancel
+the open item before choosing **Save and apply** to activate the complete draft.
+
 File changes appear as **Configured on disk, not applied**, alongside the active settings.
 Choose **Reload configuration** to apply them, with a brief service interruption. Unrelated draft
 edits are kept; settings that changed or became locked need review. Invalid or unreadable files

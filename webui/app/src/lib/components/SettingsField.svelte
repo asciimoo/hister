@@ -2,6 +2,7 @@
   import { Badge } from '@hister/components/ui/badge';
   import { Button } from '@hister/components/ui/button';
   import SettingInput from './SettingInput.svelte';
+  import SettingsCollection from './SettingsCollection.svelte';
   import * as Tooltip from '@hister/components/ui/tooltip';
   import { Check, Eye, Folder, Info, Lock, Minus, Pencil } from '@lucide/svelte';
   import {
@@ -11,6 +12,8 @@
     type SettingField,
     type SettingValue,
     type SettingEdit,
+    type SettingItemEditor,
+    type SettingRemoval,
   } from '#lib/settings.js';
 
   let {
@@ -21,6 +24,13 @@
     errors = [],
     disabled = false,
     preview = false,
+    editor = null,
+    removal = null,
+    blocked = false,
+    onEditor = () => {},
+    onDone = async () => {},
+    onRemove = () => {},
+    onUndoRemoval = () => {},
     onEdit,
   }: {
     field: SettingField;
@@ -30,10 +40,21 @@
     errors?: string[];
     disabled?: boolean;
     preview?: boolean;
+    editor?: SettingItemEditor | null;
+    removal?: SettingRemoval | null;
+    blocked?: boolean;
+    onEditor?: (editor: SettingItemEditor | null) => void;
+    onDone?: (value: unknown) => Promise<void>;
+    onRemove?: (value: unknown, previous: unknown) => void;
+    onUndoRemoval?: () => void;
     onEdit: (edit: SettingEdit | undefined) => void;
   } = $props();
   let sourceOpen = $state(false);
   const editable = $derived(!preview && canEditSetting(field, active));
+  const collection = $derived(
+    field.schema.type === 'dictionary' ||
+      (field.schema.type === 'list' && field.schema.items?.type === 'object'),
+  );
   const directories = $derived(
     !editable &&
       field.path === 'indexer.directories' &&
@@ -224,6 +245,21 @@
         </div>
       {:else if !editable}
         <p {id} class="text-text-brand min-w-0 text-sm">{display(active.value)}</p>
+      {:else if collection}
+        <SettingsCollection
+          {id}
+          {field}
+          {value}
+          activeValue={active.value}
+          {editor}
+          {removal}
+          {disabled}
+          blocked={blocked || !!conflict}
+          {onEditor}
+          {onDone}
+          {onRemove}
+          {onUndoRemoval}
+        />
       {:else}
         <SettingInput
           {id}
@@ -237,7 +273,7 @@
         />
       {/if}
     </div>
-    {#if edit}
+    {#if edit && !collection}
       <p id={`${id}-status`} class="text-text-brand-muted text-xs break-words">
         Current value: {display(active.value)}. {edit.action === 'reset'
           ? 'Reset to the inherited value on save.'
@@ -247,7 +283,7 @@
     {#if errors.length}<div id={`${id}-errors`} class="text-hister-rose text-sm">
         {#each errors as error}<p>{error}</p>{/each}
       </div>{/if}
-    {#if conflict && edit}
+    {#if conflict && (edit || editor?.path === field.path)}
       <div
         id={`${id}-conflict`}
         role="alert"
@@ -255,10 +291,10 @@
       >
         <p>{conflict}</p>
         <p class="text-text-brand-muted [overflow-wrap:anywhere]">
-          Your draft: {edit.action === 'reset'
+          Your draft: {edit?.action === 'reset'
             ? 'Reset to the inherited value'
             : field.schema.sensitivity === 'none'
-              ? display(edit.value)
+              ? display(edit?.value ?? editor?.value)
               : 'Value hidden'}
         </p>
         <div class="flex flex-wrap gap-2">
@@ -269,7 +305,7 @@
             {disabled}
             onclick={() => onEdit(undefined)}>Use current value</Button
           >
-          {#if editable && field.schema.sensitivity === 'none'}<Button
+          {#if editable && edit && field.schema.sensitivity === 'none'}<Button
               type="button"
               variant="outline"
               size="sm"
