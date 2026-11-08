@@ -1513,7 +1513,14 @@ async function indexerSettingsAPI(page: Page) {
           collection: 'none',
           sensitivity: 'none',
           properties: [
-            { name: 'path', label: 'Path', schema: text },
+            {
+              name: 'path',
+              label: 'Path',
+              description:
+                'Existing absolute server path or ~/ path. Directories must not overlap.',
+              required: true,
+              schema: text,
+            },
             { name: 'label', label: 'Label', schema: text },
             { name: 'user', label: 'Owner', schema: text },
             { name: 'filetypes', label: 'File types', schema: list },
@@ -1543,6 +1550,42 @@ async function indexerSettingsAPI(page: Page) {
   }
   return state;
 }
+
+test('watched directory fields indicate which parameters are required or optional', async ({
+  page,
+}) => {
+  const state = await indexerSettingsAPI(page);
+  state.values.find((field) => field.path === 'indexer.directories')!.value = [
+    { path: '/srv/notes' },
+  ];
+  await page.goto('/settings?tab=indexer');
+  await page.getByRole('button', { name: 'Add Watched directories item', exact: true }).click();
+
+  for (const name of ['Watched directories 1', 'Watched directories 2']) {
+    const row = page.getByRole('group', { name, exact: true });
+    await expect(row.getByText('Required', { exact: true })).toBeVisible();
+    await expect(row.getByText('Optional', { exact: true })).toHaveCount(7);
+    for (const marker of await row.getByText('Optional', { exact: true }).all()) {
+      await expect(marker).toBeVisible();
+    }
+    await expect(
+      row.getByRole('textbox', { name: 'Path', exact: true }),
+    ).toHaveAccessibleDescription(
+      'Required Existing absolute server path or ~/ path. Directories must not overlap.',
+    );
+    for (const label of ['Label', 'Owner', 'File types', 'Include patterns', 'Exclude patterns']) {
+      await expect(
+        row.getByRole('textbox', { name: label, exact: true }),
+      ).toHaveAccessibleDescription('Optional');
+    }
+    for (const label of ['Include hidden files', 'Delete from index when removed']) {
+      await expect(
+        row.getByRole('switch', { name: label, exact: true }),
+      ).toHaveAccessibleDescription('Optional');
+    }
+  }
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
 
 test('Indexer controls save languages and structured directories in the shared draft', async ({
   page,

@@ -171,7 +171,12 @@
     {#each schema.properties ?? [] as property (property.name)}
       {@const memberID = `${id}-${property.name}`}
       <div class="min-w-0 space-y-1">
-        <label for={memberID} class="text-sm font-medium">{property.label}</label>
+        <div class="flex flex-wrap items-baseline gap-x-2">
+          <label for={memberID} class="text-sm font-medium">{property.label}</label>
+          <span id={`${memberID}-requirement`} class="text-text-brand-muted text-xs">
+            {property.required ? 'Required' : 'Optional'}
+          </span>
+        </div>
         {#if property.description}<p
             id={`${memberID}-description`}
             class="text-text-brand-muted text-xs"
@@ -185,7 +190,7 @@
           value={record[property.name]}
           {disabled}
           {invalid}
-          description={property.description ? `${memberID}-description` : undefined}
+          description={`${memberID}-requirement${property.description ? ` ${memberID}-description` : ''}`}
           onChange={(value) => onChange({ ...record, [property.name]: value })}
         />
       </div>
