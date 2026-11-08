@@ -248,7 +248,7 @@ func closeRuntimeDatabase() {
 
 // save shares the runtime owner's lock with explicit reloads. Once accepted,
 // completion is independent of the HTTP connection, including a lost response.
-func (r *serverRuntime) save(lease *runtimeRequest, edits []config.SettingEdit) (int, any) {
+func (r *serverRuntime) save(lease *runtimeRequest, edits []config.SettingEdit, revision string) (int, any) {
 	lease.finish()
 	r.reloadMu.Lock()
 	defer r.reloadMu.Unlock()
@@ -262,7 +262,7 @@ func (r *serverRuntime) save(lease *runtimeRequest, edits []config.SettingEdit) 
 	if !old.SourcesUnchanged(r.overrides...) {
 		return failure(http.StatusConflict, "sources_changed", "Configuration sources changed; reload and read settings again.")
 	}
-	next, fields := prepareConfigurationDraft(old, edits)
+	next, fields := prepareConfigurationDraft(old, edits, revision)
 	if len(fields) > 0 {
 		return http.StatusUnprocessableEntity, map[string]any{"code": "invalid_settings", "errors": fields}
 	}

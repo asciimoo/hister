@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -68,7 +69,7 @@ func TestFieldCatalogPreservesEditorContract(t *testing.T) {
 			t.Fatalf("incomplete description for %s", field.Path)
 		}
 		ordinaryIndexer := field.Category == "indexer" && !strings.HasPrefix(field.Path, "indexer.pdf_parser.")
-		if field.Category != "app" && field.Path != "server.address" && !ordinaryIndexer {
+		if field.Category != "app" && field.Path != "server.address" && !ordinaryIndexer && field.Category != "crawler" {
 			if field.Schema.Type != "unknown" || field.Schema.Sensitivity != "unknown" || field.Default != nil || field.ReadOnlyReason == "" {
 				t.Fatalf("unsupported setting %s gained editing support or exposed defaults", field.Path)
 			}
@@ -270,11 +271,19 @@ func TestFieldStatesRedactDeferredSettings(t *testing.T) {
 		for _, state := range c.FieldStates() {
 			states[state.Path] = state
 		}
-		for _, path := range []string{"server.database", "server.oauth", "crawler.headers", "crawler.cookies", "crawler.backend_options", "semantic_search.api_key", "semantic_search.headers", "extractors"} {
+		for _, path := range []string{"server.database", "server.oauth", "semantic_search.api_key", "semantic_search.headers", "extractors"} {
 			state, exists := states[path]
 			if !exists || state.Editable || state.Reason == "" || state.Value != nil || state.SecretPresent != populated {
 				t.Errorf("incorrect redaction for %s with populated=%v: %+v", path, populated, state)
 			}
+		}
+		for _, path := range []string{"crawler.headers", "crawler.cookies"} {
+			if state := states[path]; !state.Editable || state.SecretPresent != populated {
+				t.Fatalf("incorrect editable secret collection: %s", path)
+			}
+		}
+		if populated && (states["crawler.backend_options"].Value != nil || states["crawler.backend_options"].Editable) {
+			t.Fatal("undescribed backend options were exposed")
 		}
 		raw, err := json.Marshal(c.FieldStates())
 		if err != nil || strings.Contains(string(raw), "private-credential") {
@@ -471,6 +480,227 @@ func TestWatchedDirectoryStateCanBeEdited(t *testing.T) {
 		return
 	}
 	t.Fatal("indexer.directories field is missing")
+}
+
+func TestCrawlerProxyValidationPreservesEmptyProxyBehavior(t *testing.T) {
+	c := CreateDefaultConfig()
+	c.Crawler.Proxy = " \t"
+	if fields := c.ValidateFields(); len(fields) > 0 {
+		t.Fatalf("blank proxy should retain default behavior: %v", fields)
+	}
+}
+
+func TestCrawlerSocketSurvivesBackendOptionEdits(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HISTER_DATA_DIR", dir)
+	filename := filepath.Join(dir, "config.yml")
+	if err := os.WriteFile(filename, []byte("# defaults\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "config.web.yml"), []byte("crawler:\n  backend: bidi\n  backend_options:\n    socket: ws://127.0.0.1:9222/private-socket-secret\n    capture_delay: 0.25\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c, _, err := LoadForInspection(filename, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, state := range c.FieldStatesForRevision("current-revision") {
+		if state.Path != "crawler.backend_options" {
+			continue
+		}
+		options := state.Value.(map[string]any)
+		options["capture_delay"] = 0.5
+		value, _ := json.Marshal(options)
+		next, fields := c.PrepareDraftForRevision("current-revision", []SettingEdit{{Path: state.Path, Action: "set", Value: value}})
+		if next == nil || len(fields) > 0 || next.Crawler.BackendOptions["socket"] != "ws://127.0.0.1:9222/private-socket-secret" {
+			t.Fatalf("changing capture delay lost stored socket: %v", fields)
+		}
+		return
+	}
+	t.Fatal("backend options absent")
+}
+
+func TestCrawlerSocketDiagnosticRedaction(t *testing.T) {
+	c := CreateDefaultConfig()
+	c.Crawler.BackendOptions = map[string]any{"socket": "ws://127.0.0.1:9222/private-socket-secret", "capture_delay": 0.25}
+	redacted, err := c.Redacted()
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.Marshal(redacted)
+	if strings.Contains(string(raw), "private-socket-secret") {
+		t.Fatal("diagnostic output exposed socket credential")
+	}
+}
+
+func TestCrawlerSecretCollectionDrafts(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HISTER_DATA_DIR", dir)
+	filename := filepath.Join(dir, "config.yml")
+	if err := os.WriteFile(filename, []byte("# defaults\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	raw := "crawler:\n  headers:\n    Authorization: private-header\n    X-Remove: old-value\n  cookies:\n    - name: session\n      value: private-cookie\n      domain: example.com\n      path: /\n"
+	if err := os.WriteFile(filepath.Join(dir, "config.web.yml"), []byte(raw), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c, _, err := LoadForInspection(filename, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	states := map[string]FieldState{}
+	for _, state := range c.FieldStatesForRevision("revision-one") {
+		states[state.Path] = state
+	}
+	encoded, _ := json.Marshal(states)
+	if strings.Contains(string(encoded), "private-header") || strings.Contains(string(encoded), "private-cookie") {
+		t.Fatal("read exposed credentials")
+	}
+	headers, ok := states["crawler.headers"].Value.(map[string]any)
+	if !ok || !states["crawler.headers"].Editable {
+		t.Fatalf("header editor unavailable: %+v", states["crawler.headers"])
+	}
+	delete(headers, "x-remove")
+	headers["x-new"] = map[string]any{"action": "replace", "value": "new-secret"}
+	headerJSON, _ := json.Marshal(headers)
+	cookieJSON, _ := json.Marshal(states["crawler.cookies"].Value)
+	edits := []SettingEdit{{Path: "crawler.headers", Action: "set", Value: headerJSON}, {Path: "crawler.cookies", Action: "set", Value: cookieJSON}}
+	next, fields := c.PrepareDraftForRevision("revision-one", edits)
+	if next == nil || len(fields) > 0 {
+		t.Fatalf("secret preservation failed: %v", fields)
+	}
+	if next.Crawler.Headers["authorization"] != "private-header" || next.Crawler.Headers["x-new"] != "new-secret" || len(next.Crawler.Headers) != 2 || next.Crawler.Cookies[0].Value != "private-cookie" {
+		t.Fatal("collection replacement lost kept secrets or retained removed members")
+	}
+	if len(c.Crawler.Headers) != 2 || c.Crawler.Headers["x-new"] != "" {
+		t.Fatal("draft mutated active secrets")
+	}
+	for _, rev := range []string{"", "revision-two"} {
+		if candidate, errors := c.PrepareDraftForRevision(rev, edits); candidate != nil || len(errors) == 0 {
+			t.Fatal("accepted secret references outside their revision")
+		}
+	}
+	moved := strings.Replace(string(cookieJSON), "example.com", "other.example", 1)
+	if candidate, errors := c.PrepareDraftForRevision("revision-one", []SettingEdit{{Path: "crawler.cookies", Action: "set", Value: json.RawMessage(moved)}}); candidate != nil || len(errors) == 0 {
+		t.Fatal("allowed kept cookie credential to move to another domain")
+	}
+	for _, value := range []string{`{"authorization":{"action":"replace","value":"one"},"Authorization":{"action":"replace","value":"two"}}`, `{"authorization":"private-input"}`, `{"authorization":{"action":"keep","ref":"forged"}}`, `{"authorization":{"action":"replace","value":"private-input","extra":true}}`, `{"Bad Header":{"action":"replace","value":"private-input"}}`, `{"authorization":{"action":"replace","value":"private-input\r\nInjected: value"}}`} {
+		candidate, errors := c.PrepareDraftForRevision("revision-one", []SettingEdit{{Path: "crawler.headers", Action: "set", Value: json.RawMessage(value)}})
+		if candidate != nil || len(errors) == 0 {
+			t.Fatalf("accepted invalid secret draft: %s", value)
+		}
+		if strings.Contains(fmt.Sprint(errors), "private-input") {
+			t.Fatal("validation exposed a credential")
+		}
+	}
+	for _, value := range []string{`{"authorization":{"action":"clear"}}`, `{}`} {
+		candidate, errors := c.PrepareDraftForRevision("revision-one", []SettingEdit{{Path: "crawler.headers", Action: "set", Value: json.RawMessage(value)}})
+		if candidate == nil || len(errors) > 0 || candidate.Crawler.Headers["authorization"] != "" {
+			t.Fatalf("cannot clear headers: %v", errors)
+		}
+	}
+}
+
+func TestCrawlerBackendOptionDrafts(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HISTER_DATA_DIR", dir)
+	filename := filepath.Join(dir, "config.yml")
+	if err := os.WriteFile(filename, []byte("# defaults\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c, _, err := LoadForInspection(filename, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	next, fields := c.PrepareDraft([]SettingEdit{
+		{Path: "crawler.backend", Action: "set", Value: json.RawMessage(`"bidi"`)},
+		{Path: "crawler.backend_options", Action: "set", Value: json.RawMessage(`{"capture_delay":0.25,"host":"127.0.0.1","port":9223}`)},
+	})
+	if next == nil || len(fields) > 0 {
+		t.Fatalf("backend options rejected: %v", fields)
+	}
+	if next.Crawler.BackendOptions["capture_delay"] != 0.25 || next.Crawler.BackendOptions["port"] != 9223 {
+		t.Fatalf("typed options lost: %v", next.Crawler.BackendOptions)
+	}
+	write, err := next.StageManaged()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = write.Close() }()
+	if err := write.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	loaded, _, err := LoadForInspection(filename, true)
+	if err != nil || loaded.Crawler.BackendOptions["capture_delay"] != 0.25 {
+		t.Fatalf("backend options failed after restart: %v", err)
+	}
+	for _, value := range []string{`{"exec_path":"/bin/sh"}`, `{"args":["--unsafe"]}`, `{"unknown":true}`, `{"capture_delay":-1}`, `{"capture_delay":1e100}`, `{"port":0}`, `{"port":65536}`, `{"host":"private-input/path"}`, `{"capture_delay":"1s"}`} {
+		candidate, errors := loaded.PrepareDraft([]SettingEdit{{Path: "crawler.backend_options", Action: "set", Value: json.RawMessage(value)}})
+		if candidate != nil || len(errors) == 0 || errors[0].Path != "crawler.backend_options" {
+			t.Errorf("accepted unsupported options %s: %v", value, errors)
+		}
+	}
+	if candidate, errors := loaded.PrepareDraft([]SettingEdit{{Path: "crawler.backend", Action: "set", Value: json.RawMessage(`"http"`)}}); candidate != nil || len(errors) == 0 {
+		t.Fatal("accepted options for the wrong backend")
+	}
+	cleared, fields := loaded.PrepareDraft([]SettingEdit{{Path: "crawler.backend", Action: "set", Value: json.RawMessage(`"http"`)}, {Path: "crawler.backend_options", Action: "set", Value: json.RawMessage(`{}`)}})
+	if cleared == nil || len(fields) > 0 || len(cleared.Crawler.BackendOptions) != 0 {
+		t.Fatalf("cannot clear options while changing backend: %v", fields)
+	}
+	for _, content := range []string{"crawler:\n  backend_options:\n    exec_path: /bin/sh\n", "crawler:\n  backend_options:\n    unknown: true\n"} {
+		if err := os.WriteFile(filepath.Join(dir, "config.web.yml"), []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, _, err := LoadForInspection(filename, true); err == nil {
+			t.Fatal("managed file allowed restricted options")
+		}
+	}
+}
+
+func TestCrawlerDraftSettings(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HISTER_DATA_DIR", dir)
+	filename := filepath.Join(dir, "config.yml")
+	if err := os.WriteFile(filename, []byte("# defaults\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c, _, err := LoadForInspection(filename, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	next, fields := c.PrepareDraft([]SettingEdit{
+		{Path: "crawler.timeout", Action: "set", Value: json.RawMessage(`30`)},
+		{Path: "crawler.delay", Action: "set", Value: json.RawMessage(`2`)},
+		{Path: "crawler.no_robots", Action: "set", Value: json.RawMessage(`true`)},
+		{Path: "crawler.backend", Action: "set", Value: json.RawMessage(`"chromedp"`)},
+		{Path: "crawler.user_agent", Action: "set", Value: json.RawMessage(`"ArchiveBot/1.0"`)},
+	})
+	if next == nil || len(fields) != 0 {
+		t.Fatalf("crawler draft rejected: %v", fields)
+	}
+	if next.Crawler.Timeout != 30 || next.Crawler.Delay != 2 || !next.Crawler.NoRobots || next.Crawler.Backend != "chromedp" || next.Crawler.UserAgent != "ArchiveBot/1.0" {
+		t.Fatalf("crawler draft not applied: %+v", next.Crawler)
+	}
+	if c.Crawler.Timeout != 5 || c.Crawler.Backend != "http" {
+		t.Fatal("draft changed active configuration")
+	}
+	for _, tc := range []struct{ path, value string }{
+		{"crawler.timeout", `-1`},
+		{"crawler.timeout", `9223372036854775807`},
+		{"crawler.delay", `-1`},
+		{"crawler.delay", `1.5`},
+		{"crawler.backend", `"unknown"`},
+		{"crawler.user_agent", `"private-input\r\nInjected: value"`},
+		{"crawler", `{"backend_options":{"exec_path":"/bin/sh"}}`},
+	} {
+		candidate, errors := c.PrepareDraft([]SettingEdit{{Path: tc.path, Action: "set", Value: json.RawMessage(tc.value)}})
+		if candidate != nil || len(errors) == 0 || errors[0].Path != tc.path {
+			t.Errorf("accepted %s: %v", tc.path, errors)
+		}
+		if strings.Contains(fmt.Sprint(errors), "private-input") {
+			t.Fatal("validation disclosed a value")
+		}
+	}
 }
 
 func TestIndexerDraftSettings(t *testing.T) {

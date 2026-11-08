@@ -176,11 +176,10 @@ func (c *Config) Validate() error {
 	if err := c.validateOAuth(); err != nil {
 		return err
 	}
-	switch c.Crawler.Backend {
-	case "", "http", "chromedp", "bidi":
-	default:
-		return errors.New("crawler.backend must be http, chromedp, or bidi")
+	if fields := c.Crawler.ValidateFields(); len(fields) > 0 {
+		return fields[0]
 	}
+
 	_, err := c.CompileSensitiveContentPatterns()
 	return err
 }
@@ -218,11 +217,8 @@ func (c *Config) ValidateFields() []FieldError {
 	check("semantic_search", "Check the embedding endpoint, model, dimensions, and context length.", candidate.validateSemanticSearch())
 	check("indexer", "Check the indexer settings.", candidate.Indexer.Validate())
 	check("server.oauth", "Check provider names, required credentials, and provider settings.", candidate.validateOAuth())
-	switch candidate.Crawler.Backend {
-	case "", "http", "chromedp", "bidi":
-	default:
-		check("crawler.backend", "Choose http, chromedp, or bidi.", errors.New("invalid backend"))
-	}
+	fields = append(fields, candidate.Crawler.ValidateFields()...)
+
 	_, err := candidate.CompileSensitiveContentPatterns()
 	check("sensitive_content_patterns", "Use valid regular expressions that can be combined.", err)
 	// Keep the existing complete validator authoritative as more checks are added.
@@ -245,6 +241,15 @@ func (c *Config) Redacted() (map[string]any, error) {
 		return nil, err
 	}
 	redactMap(result)
+	// The crawler socket can contain credentials in its path as well as its
+	// query or userinfo. Its explicit editor metadata treats the whole URL as secret.
+	if crawler, ok := result["crawler"].(map[string]any); ok {
+		if options, ok := crawler["backend_options"].(map[string]any); ok {
+			if socket, ok := options["socket"].(string); ok && socket != "" {
+				options["socket"] = redactedValue
+			}
+		}
+	}
 	return result, nil
 }
 

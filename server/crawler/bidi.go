@@ -85,11 +85,11 @@ func newBidiFetcher(cfg *config.CrawlerConfig) (*bidiFetcher, error) {
 		return nil, fmt.Errorf("bidi backend: %w", err)
 	}
 
-	log.Debug().Str("ws_url", wsURL).Msg("crawler: connecting to BiDi browser")
+	log.Debug().Msg("crawler: connecting to BiDi browser")
 
 	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	if err != nil {
-		return nil, fmt.Errorf("bidi backend: failed to connect to %s: %w", wsURL, err)
+		return nil, fmt.Errorf("bidi backend: failed to connect to the configured browser socket")
 	}
 
 	// The default read limit (32 KB) is far too small for BiDi responses
@@ -160,10 +160,10 @@ func buildBidiWSURL(opts map[string]any) (string, error) {
 		}
 		u, err := url.Parse(s)
 		if err != nil {
-			return "", fmt.Errorf("invalid socket URL %q: %w", s, err)
+			return "", fmt.Errorf("invalid browser socket URL")
 		}
 		if u.Scheme != "ws" && u.Scheme != "wss" {
-			return "", fmt.Errorf("socket URL must use ws:// or wss:// scheme, got %q", u.Scheme)
+			return "", fmt.Errorf("socket URL must use ws:// or wss:// scheme")
 		}
 		return s, nil
 	}

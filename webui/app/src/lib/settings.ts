@@ -9,9 +9,11 @@ export interface SettingSchema {
   min?: number;
   max?: number;
   max_length?: number;
+  min_length?: number;
   max_items?: number;
   choices?: string[];
   choice_labels?: Record<string, string>;
+  secret_scope?: string[];
   items?: SettingSchema;
   properties?: {
     name: string;
@@ -187,16 +189,15 @@ export function canEditSetting(field: SettingField, value: SettingValue): boolea
     !value.source.locked &&
     !field.read_only_reason &&
     !field.requires_confirmation &&
-    field.schema.sensitivity === 'none' &&
     supportsControl(field.schema)
   );
 }
 
 function supportsControl(schema: SettingSchema): boolean {
-  if (schema.sensitivity !== 'none') return false;
-  if (schema.type === 'list')
+  if (!['none', 'secret', 'url', 'mixed'].includes(schema.sensitivity)) return false;
+  if (schema.type === 'list' || schema.type === 'dictionary')
     return (
-      schema.control === 'list' &&
+      schema.control === schema.type &&
       schema.collection === 'replace' &&
       !!schema.items &&
       supportsControl(schema.items)
@@ -204,11 +205,12 @@ function supportsControl(schema: SettingSchema): boolean {
   if (schema.type === 'object')
     return (
       schema.control === 'object' &&
-      schema.collection === 'none' &&
+      ['none', 'replace'].includes(schema.collection) &&
       !!schema.properties?.length &&
       schema.properties.every((property) => supportsControl(property.schema))
     );
   return (
-    schema.collection === 'none' && ['text', 'number', 'select', 'switch'].includes(schema.control)
+    schema.collection === 'none' &&
+    ['text', 'number', 'select', 'switch', 'secret', 'url'].includes(schema.control)
   );
 }

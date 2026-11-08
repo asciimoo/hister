@@ -58,6 +58,7 @@
   });
   onDestroy(() => {
     destroyed = true;
+    edits = {};
   });
   beforeNavigate((navigation) => {
     if (navigation.shallow && navigation.to?.url.pathname === page.url.pathname) return;
@@ -103,7 +104,10 @@
         conflicts[path] =
           'This setting is no longer editable. Use the current value to remove your draft.';
       } else if (!sameSetting(previous.get(path), active)) {
-        conflicts[path] = 'The active setting changed. Review your draft before saving.';
+        conflicts[path] =
+          field.schema.sensitivity === 'none'
+            ? 'The active setting changed. Review your draft before saving.'
+            : 'Stored secret references changed. Use the current value and reapply your edits.';
       }
     }
     state = next;
@@ -311,6 +315,8 @@
       submitted = true;
       await settingsRequest('/apply', draft);
       saved = true;
+      edits = {};
+      conflicts = {};
       message = 'Reconnecting and reading active settings…';
       await readActive();
       edits = {};
@@ -371,8 +377,8 @@
           >{/if}
       </div>
       <p class="text-text-brand-muted my-2 text-sm">
-        Configure appearance, search behavior, logging and indexing. Other settings are shown for
-        reference.
+        Configure appearance, search behavior, logging, indexing and crawling. Other settings are
+        shown for reference.
       </p>
       {#if problem}<div role="alert" class="text-hister-rose my-2 text-sm">
           <p>{problem}{needsReload && dirty ? ' Your draft is still here.' : ''}</p>

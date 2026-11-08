@@ -755,7 +755,7 @@ hister listen --config /path/to/my/config.yml
 ## Settings in the Web Interface
 
 Open **Settings** from the navigation menu to change appearance, snippet length, search
-behavior, log level or format, and indexing. Administrators can configure multi user instances.
+behavior, log level or format, indexing, and crawler defaults. Administrators can configure multi user instances.
 Token protected instances require signing in; instances without authentication need no login.
 
 Keep one draft across category tabs, then choose **Save and apply**. Saving briefly interrupts
@@ -775,7 +775,7 @@ value. A locked setting can retain a web selection that takes effect when its ov
 
 Web selections persist in `config.web.yml` inside the data directory, including when there is
 no main config file. Saving does not rewrite your main configuration. Categories other than
-App and Indexer, and connection or authentication settings, are currently read only. Stored credentials stay hidden.
+App, Indexer, and Crawler, and connection or authentication settings, are currently read only. Stored credentials stay hidden.
 
 The **Indexer** tab offers language detection, a language multiselect, detection accuracy,
 stopword handling, and the maximum file size in MiB. Select at least two languages, or clear
@@ -794,6 +794,26 @@ Delete those documents separately if their previous visibility is no longer appr
 or renamed. It never deletes files from disk. **Clear** on a collection selects an empty list;
 **Reset** removes the web selection. An authoritative directory or language list locks the
 whole collection. PDF parser controls remain managed in the main configuration.
+
+The **Crawler** tab controls request timeout and delay in seconds, robots checks, backend,
+proxy, user agent, headers, and cookies. Browser options include fractional capture delay and
+BiDi host, port, and socket URL. Remove options that do not belong to the selected backend.
+An executable path or any other authoritative backend option locks the entire options collection.
+Executable paths remain managed in the main configuration.
+
+Saved crawler settings apply to subsequent commands using this instance's configuration and
+data directory. Running crawls retain their settings. Remote CLI clients use their own local
+configuration. Saving does not start a crawl or check browser or proxy connectivity.
+Headers, cookies, and user agent apply to HTTP and Chrome crawls; BiDi uses its browser's values.
+Proxy URLs support HTTP and SOCKS5 without credentials.
+
+Stored header, cookie, proxy, and socket values stay hidden. Choose **Keep** or **Replace**.
+**Clear** selects an empty header, cookie, or proxy value; remove a socket selection to use
+host and port. **Reset** separately removes the web selection. Replacing a collection
+preserves rows marked **Keep** and removes omitted rows. Changing a cookie's name, domain,
+or path requires replacing or clearing its value. An authoritative member locks the whole
+collection. After a revision conflict, use the current values and reapply secret edits.
+Replacement values remain only in the open page and are discarded after saving or leaving it.
 
 ## Reloading a Running Server
 

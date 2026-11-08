@@ -242,7 +242,7 @@ func TestSettingsDirectoryOwnership(t *testing.T) {
 }
 
 func TestConfigurationDraftValidation(t *testing.T) {
-	cfg, handler := newConfigurationTestServer(t, "token", "semantic_search:\n  api_key: private-api-key\ncrawler:\n  headers:\n    X-Key: private-header\n  proxy: https://user:private-proxy@example.com\n")
+	cfg, handler := newConfigurationTestServer(t, "token", "semantic_search:\n  api_key: private-api-key\ncrawler:\n  headers:\n    X-Key: private-header\n  proxy: http://private-proxy.example.com:8080\n")
 	headers := map[string]string{"Authorization": "Bearer private-token", "Origin": "hister://", "Content-Type": "application/json"}
 	revision, initial := readConfigurationState(t, handler, headers)
 	mainBefore, err := os.ReadFile(cfg.Filename())

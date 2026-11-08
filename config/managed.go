@@ -308,6 +308,24 @@ func validateManagedNode(node *yaml.Node, typ reflect.Type, path string) error {
 	case "app.directory", "app.log_file", "server.database", "server.proxy_auth_header", "indexer.pdf_parser.command", "indexer.pdf_parser.args":
 		return fmt.Errorf("%s is file managed", path)
 	}
+	if path == "crawler.backend_options" {
+		if node.Kind != yaml.MappingNode {
+			return invalid()
+		}
+		for i := 0; i < len(node.Content); i += 2 {
+			if node.Content[i].Tag != "!!str" || node.Content[i+1].Kind != yaml.ScalarNode {
+				return invalid()
+			}
+		}
+		var value map[string]any
+		if err := node.Decode(&value); err != nil {
+			return invalid()
+		}
+		if _, message := crawlerBackendSchema().ValidateValue(value); message != "" {
+			return invalid()
+		}
+		return nil
+	}
 	if strings.HasPrefix(path, "server.oauth.") {
 		switch path[strings.LastIndexByte(path, '.')+1:] {
 		case "identity_claim", "admin_groups", "groups_claim":

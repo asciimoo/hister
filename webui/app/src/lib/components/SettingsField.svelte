@@ -65,6 +65,7 @@
     );
   }
   function display(value: unknown): string {
+    if (field.schema.sensitivity !== 'none') return 'Value hidden';
     if (value === undefined || value === null) return 'Not available';
     if (value === '') return 'Empty';
     if (typeof value === 'boolean') return value ? 'Enabled' : 'Disabled';
@@ -153,7 +154,7 @@
   </div>
   <div class="min-w-0 space-y-2 break-words {directories ? 'lg:col-span-2' : ''}">
     <div class="flex min-h-8 items-center lg:justify-end">
-      {#if field.schema.sensitivity !== 'none'}
+      {#if field.schema.sensitivity !== 'none' && !editable}
         <p {id} class="text-text-brand min-w-0 text-sm">
           {active.secret_present ? 'Value stored (hidden)' : 'No stored value'}
         </p>
@@ -268,7 +269,7 @@
             {disabled}
             onclick={() => onEdit(undefined)}>Use current value</Button
           >
-          {#if editable}<Button
+          {#if editable && field.schema.sensitivity === 'none'}<Button
               type="button"
               variant="outline"
               size="sm"
@@ -280,7 +281,7 @@
     {/if}
     {#if editable}
       <div class="flex flex-wrap gap-2 lg:justify-end">
-        {#if field.schema.type === 'list' || (field.schema.type === 'string' && (!field.schema.choices || field.schema.choices.includes('')))}
+        {#if field.schema.collection === 'replace' || (field.schema.type === 'string' && !field.schema.min_length && (!field.schema.choices || field.schema.choices.includes('')))}
           <Button
             type="button"
             variant="link"
@@ -292,7 +293,14 @@
               onEdit({
                 path: field.path,
                 action: 'set',
-                value: field.schema.type === 'list' ? [] : '',
+                value:
+                  field.schema.type === 'list'
+                    ? []
+                    : ['object', 'dictionary'].includes(field.schema.type)
+                      ? {}
+                      : field.schema.sensitivity === 'none'
+                        ? ''
+                        : { action: 'clear' },
               })}>Clear</Button
           >
         {/if}

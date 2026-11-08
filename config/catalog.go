@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"math"
 	"net/url"
 	"path/filepath"
 	"reflect"
@@ -29,11 +30,13 @@ type SettingSchema struct {
 	Min          *int              `json:"min,omitempty"`
 	Max          *int              `json:"max,omitempty"`
 	MaxLength    int               `json:"max_length,omitempty"`
+	MinLength    int               `json:"min_length,omitempty"`
 	MaxItems     int               `json:"max_items,omitempty"`
 	Choices      []string          `json:"choices,omitempty"`
 	ChoiceLabels map[string]string `json:"choice_labels,omitempty"`
 	Items        *SettingSchema    `json:"items,omitempty"`
 	Properties   []SettingProperty `json:"properties,omitempty"`
+	SecretScope  []string          `json:"secret_scope,omitempty"`
 }
 
 // SettingProperty describes one member of a structured collection item.
@@ -72,6 +75,11 @@ type FieldState struct {
 // FieldStates contains only described values and safe displays of secrets.
 // It does not expose the main configuration or managed selections wholesale.
 func (c *Config) FieldStates(fields ...FieldMetadata) []FieldState {
+	return c.FieldStatesForRevision("", fields...)
+}
+
+// FieldStatesForRevision supplies opaque secret references for one active revision.
+func (c *Config) FieldStatesForRevision(revision string, fields ...FieldMetadata) []FieldState {
 	if len(fields) == 0 {
 		fields = FieldCatalog()
 	}
@@ -81,6 +89,15 @@ func (c *Config) FieldStates(fields ...FieldMetadata) []FieldState {
 		state := FieldState{Path: field.Path, Value: settingValue(c, field.Path), Source: source, Editable: !source.Locked && field.ReadOnlyReason == "", Reason: field.ReadOnlyReason}
 		if source.Locked {
 			state.Reason = source.Reason
+		}
+		if state.Editable && (field.Schema.Sensitivity == "mixed" || field.Schema.Sensitivity == "secret" || field.Schema.Sensitivity == "url") {
+			value, refs, err := c.secretSettingState(field, revision)
+			state.Value, state.SecretPresent = value, len(refs) > 0
+			if err != nil {
+				state.Value, state.Editable, state.Reason = nil, false, "This collection contains undescribed or file managed options."
+			}
+			states = append(states, state)
+			continue
 		}
 		switch field.Schema.Sensitivity {
 		case "secret", "url":
@@ -141,7 +158,7 @@ type FieldError struct {
 func (e FieldError) Error() string { return e.Path + ": " + e.Message }
 
 // SettingEdit expresses intent without accepting complete configuration objects.
-// Ordinary fields accept set and reset. Secret actions belong to later categories.
+// Fields accept set and reset. Secret values carry keep, replace, or clear actions.
 type SettingEdit struct {
 	Path   string          `json:"path"`
 	Action string          `json:"action"`
@@ -152,6 +169,11 @@ type SettingEdit struct {
 // It never reads files, changes the process environment, or opens runtime resources.
 // Additional validators belong to extension owners and must also be side effect free.
 func (c *Config) PrepareDraft(edits []SettingEdit, validators ...func(*Config) []FieldError) (*Config, []FieldError) {
+	return c.PrepareDraftForRevision("", edits, validators...)
+}
+
+// PrepareDraftForRevision resolves kept secrets only within the active revision.
+func (c *Config) PrepareDraftForRevision(revision string, edits []SettingEdit, validators ...func(*Config) []FieldError) (*Config, []FieldError) {
 	if c.composition == nil {
 		return nil, []FieldError{{Code: "unavailable", Message: "Load the configuration before preparing a draft."}}
 	}
@@ -207,10 +229,27 @@ func (c *Config) PrepareDraft(edits []SettingEdit, validators ...func(*Config) [
 				reject("invalid_value", "Supply one valid JSON value.")
 				continue
 			}
+			if field.Schema.Sensitivity != "none" {
+				value, err = c.resolveSettingSecrets(field, revision, value)
+				if err != nil {
+					reject("invalid_secret", err.Error())
+					continue
+				}
+			}
 			normalized, message := field.Schema.ValidateValue(value)
 			if message != "" {
 				reject("invalid_value", message)
 				continue
+			}
+			if edit.Path == "crawler.headers" {
+				headers := make(map[string]string)
+				for name, value := range normalized.(map[string]any) {
+					headers[name] = value.(string)
+				}
+				if message := validateCrawlerHeaders(headers); message != "" {
+					reject("invalid_value", message)
+					continue
+				}
 			}
 			selections[edit.Path] = normalized
 		default:
@@ -319,6 +358,7 @@ func FieldCatalog() []FieldMetadata {
 		groupDocumentProcessing    = "Document processing"
 	)
 	minSnippet, maxSnippet := 1, 10000
+	minSeconds, maxSeconds := 0, int(min(int64(^uint(0)>>1), int64((1<<63-1)/1000000000)))
 	minFileSize, maxFileSize := 1, int(min(int64(^uint(0)>>1), int64((1<<63-1)/(1024*1024))))
 	fields := []FieldMetadata{
 		{
@@ -492,15 +532,15 @@ func FieldCatalog() []FieldMetadata {
 		fileManagedField("indexer.pdf_parser.command", groupPDFExtraction, "PDF parser command", "Optional executable used to extract PDF text."),
 		fileManagedField("indexer.pdf_parser.args", groupPDFExtraction, "PDF parser arguments", "Arguments passed to the PDF parser command."),
 		fileManagedField("indexer.pdf_parser.timeout", groupPDFExtraction, "PDF parser timeout", "Maximum time in seconds for parsing a PDF."),
-		fileManagedField("crawler.timeout", groupCrawlBehavior, "Crawler timeout", "Maximum time in seconds for a crawl request."),
-		fileManagedField("crawler.delay", groupCrawlBehavior, "Crawler delay", "Delay in seconds between crawl requests."),
-		fileManagedField("crawler.no_robots", groupCrawlBehavior, "Ignore robots rules", "Disable robots.txt checks during crawling."),
-		fileManagedField("crawler.backend", groupPageFetching, "Crawler backend", "Backend used to fetch web pages."),
-		fileManagedField("crawler.backend_options", groupPageFetching, "Crawler backend options", "Additional options supplied to the selected backend."),
-		fileManagedField("crawler.proxy", groupRequests, "Crawler proxy", "Proxy used for crawl requests."),
-		fileManagedField("crawler.user_agent", groupRequests, "Crawler user agent", "User agent sent with crawl requests."),
-		fileManagedField("crawler.headers", groupRequests, "Crawler headers", "Additional HTTP headers sent with crawl requests."),
-		fileManagedField("crawler.cookies", groupRequests, "Crawler cookies", "Cookies sent with crawl requests."),
+		{Path: "crawler.timeout", Group: groupCrawlBehavior, Label: "Crawler timeout", Description: "Maximum time in seconds for a crawl request. Zero uses five seconds.", Schema: SettingSchema{Sensitivity: "none", Min: &minSeconds, Max: &maxSeconds}},
+		{Path: "crawler.delay", Group: groupCrawlBehavior, Label: "Crawler delay", Description: "Delay in seconds between crawl requests. Zero disables the delay.", Schema: SettingSchema{Sensitivity: "none", Min: &minSeconds, Max: &maxSeconds}},
+		{Path: "crawler.no_robots", Group: groupCrawlBehavior, Label: "Ignore robots rules", Description: "Disable robots.txt checks for subsequent crawls.", Schema: SettingSchema{Sensitivity: "none"}},
+		{Path: "crawler.backend", Group: groupPageFetching, Label: "Crawler backend", Description: "Backend for subsequent crawls. Browser backends require an installed or running browser.", Schema: SettingSchema{Sensitivity: "none", Choices: []string{"", "http", "chromedp", "bidi"}}},
+		{Path: "crawler.backend_options", Group: groupPageFetching, Label: "Crawler backend options", Description: "Options replace the entire collection. Capture delay applies to browser backends. Host and port apply only to BiDi. Executable selections remain file managed.", Schema: crawlerBackendSchema()},
+		{Path: "crawler.proxy", Group: groupRequests, Label: "Crawler proxy", Description: "HTTP or SOCKS5 proxy URL for subsequent crawls. Proxy credentials are not supported. Clear uses the default proxy behavior.", Schema: SettingSchema{Sensitivity: "secret", MaxLength: 4096}},
+		{Path: "crawler.user_agent", Group: groupRequests, Label: "Crawler user agent", Description: "User agent for HTTP and Chrome crawls. BiDi uses its browser settings. Empty uses the crawler default.", Schema: SettingSchema{Sensitivity: "none", MaxLength: 4096}},
+		{Path: "crawler.headers", Group: groupRequests, Label: "Crawler headers", Description: "Headers for HTTP and Chrome crawls. BiDi uses its browser settings. Values remain hidden. Removing a row removes that header; Clear removes all headers.", Schema: SettingSchema{Type: "dictionary", Control: "dictionary", Collection: "replace", Sensitivity: "mixed", MaxItems: 128, Items: &SettingSchema{Type: "string", Control: "secret", Collection: "none", Sensitivity: "secret", MaxLength: 16384}}},
+		{Path: "crawler.cookies", Group: groupRequests, Label: "Crawler cookies", Description: "Cookies for HTTP and Chrome crawls, scoped to domains and paths. BiDi uses its browser cookies. Keep preserves a stored value. Changing its name, domain, or path requires Replace or Clear.", Schema: crawlerCookieSchema()},
 		fileManagedField("semantic_search.enable", groupSearchBehavior, "Semantic search", "Enable search by meaning using document embeddings."),
 		fileManagedField("semantic_search.similarity_threshold", groupSearchBehavior, "Similarity threshold", "Minimum similarity required for a semantic result."),
 		fileManagedField("semantic_search.result_limit", groupSearchBehavior, "Semantic result limit", "Maximum number of semantic results to consider."),
@@ -534,6 +574,12 @@ func FieldCatalog() []FieldMetadata {
 			continue
 		}
 		value := settingValue(defaults, field.Path)
+		if field.Schema.Type == "object" && value == nil {
+			value = map[string]any{}
+		}
+		if field.Schema.Type == "object" && reflect.ValueOf(value).Kind() == reflect.Map && reflect.ValueOf(value).IsNil() {
+			value = map[string]any{}
+		}
 		if field.Schema.Type == "list" && reflect.ValueOf(value).IsNil() {
 			value = []any{}
 		}
@@ -565,6 +611,29 @@ func FieldCatalog() []FieldMetadata {
 		}
 	}
 	return fields
+}
+
+func crawlerBackendSchema() SettingSchema {
+	zero, maxSeconds, minPort, maxPort := 0, 86400, 1, 65535
+	return SettingSchema{Type: "object", Control: "object", Collection: "replace", Sensitivity: "mixed", Properties: []SettingProperty{
+		{Name: "capture_delay", Label: "Capture delay", Description: "Seconds to wait after page load before capturing HTML. Browser backends only. Default: 0.", Schema: SettingSchema{Type: "number", Control: "number", Collection: "none", Sensitivity: "none", Min: &zero, Max: &maxSeconds}},
+		{Name: "host", Label: "Browser host", Description: "BiDi browser host. Default: 127.0.0.1.", Schema: SettingSchema{Type: "string", Control: "text", Collection: "none", Sensitivity: "none", MaxLength: 253}},
+		{Name: "port", Label: "Browser port", Description: "BiDi browser port. Default: 9222.", Schema: SettingSchema{Type: "integer", Control: "number", Collection: "none", Sensitivity: "none", Min: &minPort, Max: &maxPort}},
+		{Name: "socket", Label: "Browser socket URL", Description: "Full ws:// or wss:// BiDi URL. When selected, overrides host and port. Remove to use host and port.", Schema: SettingSchema{Type: "string", Control: "secret", Collection: "none", Sensitivity: "secret", MinLength: 1, MaxLength: 4096}},
+	}}
+}
+
+func crawlerCookieSchema() SettingSchema {
+	text := SettingSchema{Type: "string", Control: "text", Collection: "none", Sensitivity: "none", MaxLength: 4096}
+	secret := SettingSchema{Type: "string", Control: "secret", Collection: "none", Sensitivity: "secret", MaxLength: 16384}
+	return SettingSchema{Type: "list", Control: "list", Collection: "replace", Sensitivity: "mixed", MaxItems: 128, Items: &SettingSchema{
+		Type: "object", Control: "object", Collection: "none", Sensitivity: "mixed", SecretScope: []string{"name", "domain", "path"}, Properties: []SettingProperty{
+			{Name: "name", Label: "Name", Required: true, Schema: text},
+			{Name: "domain", Label: "Domain", Required: true, Schema: text},
+			{Name: "path", Label: "Path", Description: "Empty uses /.", Schema: text},
+			{Name: "value", Label: "Value", Required: true, Schema: secret},
+		},
+	}}
 }
 
 func directorySchema() SettingSchema {
@@ -629,6 +698,9 @@ func (s SettingSchema) ValidateValue(value any) (any, string) {
 		if !utf8.ValidString(v) || strings.ContainsRune(v, '\x00') {
 			return nil, "Must be valid text without NUL characters."
 		}
+		if utf8.RuneCountInString(v) < s.MinLength {
+			return nil, fmt.Sprintf("Must contain at least %d characters.", s.MinLength)
+		}
 		if s.MaxLength > 0 && utf8.RuneCountInString(v) > s.MaxLength {
 			return nil, fmt.Sprintf("Must contain at most %d characters.", s.MaxLength)
 		}
@@ -647,6 +719,32 @@ func (s SettingSchema) ValidateValue(value any) (any, string) {
 			return v, ""
 		}
 		return nil, "Must be a boolean."
+	case "number":
+		var n float64
+		switch v := value.(type) {
+		case json.Number:
+			var err error
+			n, err = v.Float64()
+			if err != nil {
+				return nil, "Must be a finite number."
+			}
+		case float64:
+			n = v
+		case int:
+			n = float64(v)
+		default:
+			return nil, "Must be a number."
+		}
+		if math.IsNaN(n) || math.IsInf(n, 0) {
+			return nil, "Must be a finite number."
+		}
+		if s.Min != nil && n < float64(*s.Min) {
+			return nil, fmt.Sprintf("Must be at least %d.", *s.Min)
+		}
+		if s.Max != nil && n > float64(*s.Max) {
+			return nil, fmt.Sprintf("Must be at most %d.", *s.Max)
+		}
+		return n, ""
 	case "integer":
 		var n int
 		switch v := value.(type) {
@@ -746,27 +844,30 @@ func (s SettingSchema) ValidateValue(value any) (any, string) {
 // or secret policies from a current value. Extension owners call it on registration.
 func (s SettingSchema) ValidateDefinition() error {
 	invalid := func() error { return fmt.Errorf("incomplete or inconsistent setting schema") }
-	if s.Sensitivity != "none" && s.Sensitivity != "secret" && s.Sensitivity != "url" {
+	if s.Sensitivity != "none" && s.Sensitivity != "secret" && s.Sensitivity != "url" && s.Sensitivity != "mixed" {
 		return invalid()
 	}
 	if s.Min != nil && s.Max != nil && *s.Min > *s.Max {
 		return invalid()
 	}
-	if s.MaxLength < 0 || s.MaxItems < 0 {
+	if s.MaxLength < 0 || s.MinLength < 0 || (s.MaxLength > 0 && s.MinLength > s.MaxLength) || s.MaxItems < 0 {
 		return invalid()
 	}
-	if s.Type != "integer" && (s.Min != nil || s.Max != nil) {
+	if s.Type != "integer" && s.Type != "number" && (s.Min != nil || s.Max != nil) {
 		return invalid()
 	}
-	if s.Type != "string" && (s.MaxLength != 0 || len(s.Choices) != 0) {
+	if s.Type != "string" && (s.MaxLength != 0 || s.MinLength != 0 || len(s.Choices) != 0) {
 		return invalid()
 	}
-	if s.Type != "object" && len(s.Properties) != 0 {
+	if s.Type != "object" && (len(s.Properties) != 0 || len(s.SecretScope) != 0) {
 		return invalid()
 	}
 	switch s.Type {
 	case "string":
 		if s.Control != "text" && s.Control != "select" && s.Control != "url" && s.Control != "secret" {
+			return invalid()
+		}
+		if s.Sensitivity == "mixed" {
 			return invalid()
 		}
 		if s.Control == "select" && len(s.Choices) == 0 {
@@ -788,23 +889,29 @@ func (s SettingSchema) ValidateDefinition() error {
 		if s.Control != "switch" || s.Sensitivity != "none" {
 			return invalid()
 		}
-	case "integer":
+	case "integer", "number":
 		if s.Control != "number" || s.Sensitivity != "none" {
 			return invalid()
 		}
 	case "object":
-		if s.Control != "object" || s.Sensitivity != "none" || len(s.Properties) == 0 {
+		if s.Control != "object" || (s.Sensitivity != "none" && s.Sensitivity != "mixed") || len(s.Properties) == 0 {
 			return invalid()
 		}
 		seen := make(map[string]bool)
 		for _, property := range s.Properties {
-			if property.Name == "" || property.Label == "" || seen[property.Name] || property.Schema.Sensitivity != "none" {
+			if property.Name == "" || property.Label == "" || seen[property.Name] || (property.Schema.Sensitivity != "none" && s.Sensitivity != "mixed") {
 				return invalid()
 			}
 			if err := property.Schema.ValidateDefinition(); err != nil {
 				return err
 			}
 			seen[property.Name] = true
+		}
+		for _, name := range s.SecretScope {
+			index := slices.IndexFunc(s.Properties, func(p SettingProperty) bool { return p.Name == name })
+			if index < 0 || s.Properties[index].Schema.Sensitivity != "none" || s.Properties[index].Schema.Type != "string" {
+				return invalid()
+			}
 		}
 	case "list", "dictionary":
 		if s.Control != s.Type || s.Collection != "replace" || s.Items == nil || s.Sensitivity == "url" {
@@ -813,14 +920,14 @@ func (s SettingSchema) ValidateDefinition() error {
 		if err := s.Items.ValidateDefinition(); err != nil {
 			return err
 		}
-		if s.Items.Sensitivity != "none" && s.Sensitivity != "secret" {
+		if s.Items.Sensitivity != "none" && s.Sensitivity != "secret" && s.Sensitivity != "mixed" {
 			return invalid()
 		}
 		return nil
 	default:
 		return invalid()
 	}
-	if s.Collection != "none" || s.Items != nil || s.MaxItems != 0 {
+	if (s.Collection != "none" && (s.Type != "object" || s.Collection != "replace")) || s.Items != nil || s.MaxItems != 0 {
 		return invalid()
 	}
 	return nil

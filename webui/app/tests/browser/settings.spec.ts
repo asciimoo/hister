@@ -1841,3 +1841,363 @@ test('language names describe active and locked selections', async ({ page }) =>
   );
   await expect(page.getByRole('listbox', { name: 'Languages', exact: true })).toHaveCount(0);
 });
+
+async function crawlerSettingsAPI(page: Page) {
+  const { state } = await settingsAPI(page);
+  const text = { type: 'string', control: 'text', collection: 'none', sensitivity: 'none' };
+  const secret = { ...text, control: 'secret', sensitivity: 'secret' };
+  const number = {
+    type: 'integer',
+    control: 'number',
+    collection: 'none',
+    sensitivity: 'none',
+    min: 0,
+  };
+  const fields = [
+    { path: 'crawler.timeout', label: 'Crawler timeout', schema: number, value: 5 },
+    {
+      path: 'crawler.backend',
+      label: 'Crawler backend',
+      schema: { ...text, control: 'select', choices: ['http', 'chromedp', 'bidi'] },
+      value: 'http',
+    },
+    {
+      path: 'crawler.backend_options',
+      label: 'Crawler backend options',
+      schema: {
+        type: 'object',
+        control: 'object',
+        collection: 'replace',
+        sensitivity: 'mixed',
+        properties: [
+          {
+            name: 'capture_delay',
+            label: 'Capture delay',
+            schema: { ...number, type: 'number', max: 86400 },
+          },
+          { name: 'port', label: 'Browser port', schema: { ...number, min: 1, max: 65535 } },
+          { name: 'socket', label: 'Browser socket URL', schema: { ...secret, min_length: 1 } },
+        ],
+      },
+      value: {},
+    },
+    { path: 'crawler.proxy', label: 'Crawler proxy', schema: secret, value: { action: 'clear' } },
+    {
+      path: 'crawler.headers',
+      label: 'Crawler headers',
+      schema: {
+        type: 'dictionary',
+        control: 'dictionary',
+        collection: 'replace',
+        sensitivity: 'mixed',
+        items: secret,
+      },
+      value: {
+        authorization: { action: 'keep', ref: 'header-reference' },
+        'x-remove': { action: 'keep', ref: 'remove-reference' },
+      },
+    },
+    {
+      path: 'crawler.cookies',
+      label: 'Crawler cookies',
+      schema: {
+        type: 'list',
+        control: 'list',
+        collection: 'replace',
+        sensitivity: 'mixed',
+        items: {
+          type: 'object',
+          control: 'object',
+          collection: 'none',
+          sensitivity: 'mixed',
+          properties: [
+            { name: 'name', label: 'Name', required: true, schema: text },
+            { name: 'domain', label: 'Domain', required: true, schema: text },
+            { name: 'path', label: 'Path', schema: text },
+            { name: 'value', label: 'Value', required: true, schema: secret },
+          ],
+        },
+      },
+      value: [
+        {
+          name: 'session',
+          domain: 'example.com',
+          path: '/',
+          value: { action: 'keep', ref: 'cookie-reference' },
+        },
+      ],
+    },
+  ];
+  for (const field of fields) {
+    state.fields.push({
+      ...field,
+      category: 'crawler',
+      description: `${field.label} description.`,
+      effect: 'runtime',
+      requires_confirmation: false,
+    });
+    state.values.push({
+      path: field.path,
+      value: field.value,
+      editable: true,
+      secret_present: ['crawler.headers', 'crawler.cookies'].includes(field.path),
+      source: { kind: 'web', locked: false, web_selected: true },
+    });
+  }
+  return state;
+}
+
+test('crawler controls preserve secret rows and submit one typed draft', async ({ page }) => {
+  await crawlerSettingsAPI(page);
+  let draft: any;
+  await page.route('**/api/settings/apply', async (route) => {
+    draft = route.request().postDataJSON();
+    await route.fulfill({ json: { saved: true } });
+  });
+  await page.goto('/settings?tab=crawler');
+  await page.getByRole('spinbutton', { name: 'Crawler timeout', exact: true }).fill('12');
+  await page.getByRole('combobox', { name: 'Crawler backend', exact: true }).selectOption('bidi');
+  await page.getByRole('spinbutton', { name: 'Capture delay', exact: true }).fill('0.25');
+  await page.getByRole('spinbutton', { name: 'Browser port', exact: true }).fill('9223');
+  await page.getByRole('button', { name: 'Remove Crawler headers item 2', exact: true }).click();
+  await page.getByRole('button', { name: 'Add Crawler headers item', exact: true }).click();
+  const header = page.getByRole('group', { name: 'Crawler headers 2', exact: true });
+  await header.getByRole('textbox', { name: 'Name', exact: true }).fill('x-new');
+  await header.getByLabel('Value', { exact: true }).fill('new-private-header');
+  const cookie = page.getByRole('group', { name: 'Crawler cookies 1', exact: true });
+  await expect(cookie.getByRole('combobox', { name: 'Value action', exact: true })).toHaveValue(
+    'keep',
+  );
+  await cookie.getByRole('combobox', { name: 'Value action', exact: true }).selectOption('replace');
+  await cookie.getByLabel('Value replacement', { exact: true }).fill('new-private-cookie');
+  await expect(cookie.getByLabel('Value replacement', { exact: true })).toHaveAttribute(
+    'type',
+    'password',
+  );
+  await page.getByRole('tab', { name: 'App', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Title', exact: true }).fill('Crawler archive');
+  await page.getByRole('tab', { name: 'Crawler', exact: true }).click();
+  await expect(header.getByLabel('Value', { exact: true })).toHaveValue('new-private-header');
+  expect(
+    await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage })),
+  ).not.toContain('new-private');
+  await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Settings saved and applied');
+  expect(draft.edits).toEqual(
+    expect.arrayContaining([
+      { path: 'crawler.timeout', action: 'set', value: 12 },
+      { path: 'crawler.backend', action: 'set', value: 'bidi' },
+      {
+        path: 'crawler.backend_options',
+        action: 'set',
+        value: { capture_delay: 0.25, port: 9223 },
+      },
+      {
+        path: 'crawler.headers',
+        action: 'set',
+        value: {
+          authorization: { action: 'keep', ref: 'header-reference' },
+          'x-new': { action: 'replace', value: 'new-private-header' },
+        },
+      },
+      { path: 'app.title', action: 'set', value: 'Crawler archive' },
+    ]),
+  );
+  expect(
+    draft.edits.find((edit: any) => edit.path === 'crawler.cookies').value[0].value,
+  ).toMatchObject({ action: 'replace', value: 'new-private-cookie' });
+  await expect(page.getByLabel('Value replacement', { exact: true })).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+test('crawler collection Clear and Reset differ and errors retain secret drafts', async ({
+  page,
+}) => {
+  await crawlerSettingsAPI(page);
+  const drafts: any[] = [];
+  await page.route('**/api/settings/validate', async (route) => {
+    drafts.push(route.request().postDataJSON());
+    await route.fulfill({
+      status: 422,
+      json: {
+        code: 'invalid_settings',
+        errors: [
+          { path: 'crawler.cookies', code: 'invalid_value', message: 'Check the cookie domain.' },
+        ],
+      },
+    });
+  });
+  await page.goto('/settings?tab=crawler');
+  await page.getByRole('button', { name: 'Clear Crawler headers', exact: true }).click();
+  await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
+  await expect(page.getByText('Check the cookie domain.', { exact: true })).toBeVisible();
+  expect(drafts[0].edits).toEqual([{ path: 'crawler.headers', action: 'set', value: {} }]);
+  await page.getByRole('button', { name: 'Reset Crawler headers', exact: true }).click();
+  await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
+  await expect.poll(() => drafts.length).toBe(2);
+  expect(drafts[1].edits).toEqual([{ path: 'crawler.headers', action: 'reset' }]);
+  const proxy = page.getByRole('region', { name: 'Crawler proxy', exact: true });
+  await proxy.getByLabel('Crawler proxy', { exact: true }).fill('http://proxy.example:8080');
+  await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
+  await expect.poll(() => drafts.length).toBe(3);
+  await expect(proxy.getByLabel('Crawler proxy', { exact: true })).toHaveValue(
+    'http://proxy.example:8080',
+  );
+});
+
+test('crawler source locks disable complete collections', async ({ page }) => {
+  const state = await crawlerSettingsAPI(page);
+  for (const path of ['crawler.headers', 'crawler.backend_options']) {
+    const value = state.values.find((value) => value.path === path)!;
+    value.editable = false;
+    value.source = {
+      kind: 'environment',
+      name: 'HISTER__CRAWLER__HEADERS__AUTHORIZATION',
+      locked: true,
+      web_selected: true,
+    };
+    value.reason = 'Controlled by environment';
+  }
+  await page.goto('/settings?tab=crawler');
+  await expect(page.getByRole('combobox', { name: 'Crawler backend', exact: true })).toHaveValue(
+    'http',
+  );
+  await expect(
+    page.getByRole('button', { name: 'Add Crawler headers item', exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole('button', { name: 'Clear Crawler headers', exact: true }),
+  ).toHaveCount(0);
+  await expect(page.getByRole('spinbutton', { name: 'Capture delay', exact: true })).toHaveCount(0);
+});
+
+test('crawler optional socket accepts a new value and can remove its selection', async ({
+  page,
+}) => {
+  await crawlerSettingsAPI(page);
+  await page.goto('/settings?tab=crawler');
+  const value = page.getByLabel('Browser socket URL', { exact: true });
+  await expect(value).toHaveAttribute('type', 'password');
+  await expect(
+    page.getByRole('combobox', { name: 'Browser socket URL action', exact: true }),
+  ).toHaveCount(0);
+  await value.fill('ws://127.0.0.1:9222/session');
+  await page.getByRole('button', { name: 'Remove Browser socket URL', exact: true }).click();
+  await expect(value).toHaveValue('');
+  await expect(page.getByRole('button', { name: 'Save and apply', exact: true })).toBeDisabled();
+});
+
+test('new crawler cookies accept a value directly and preserve existing secrets', async ({
+  page,
+}) => {
+  await crawlerSettingsAPI(page);
+  let draft: any;
+  await page.route('**/api/settings/apply', async (route) => {
+    draft = route.request().postDataJSON();
+    await route.fulfill({ json: { saved: true } });
+  });
+  await page.goto('/settings?tab=crawler');
+  await page.getByRole('button', { name: 'Add Crawler cookies item', exact: true }).click();
+  const cookie = page.getByRole('group', { name: 'Crawler cookies 2', exact: true });
+  await expect(cookie).toBeVisible();
+  await expect(cookie.getByRole('combobox', { name: 'Value action', exact: true })).toHaveCount(0);
+  const value = cookie.getByLabel('Value', { exact: true });
+  await expect(value).toHaveAttribute('type', 'password');
+  await expect(value).toHaveValue('');
+  await cookie.getByRole('textbox', { name: 'Name', exact: true }).fill('new-session');
+  await cookie.getByRole('textbox', { name: 'Domain', exact: true }).fill('other.example');
+  await value.fill('new-cookie-value');
+  await expect(cookie.getByRole('combobox')).toHaveCount(0);
+  const stored = page.getByRole('group', { name: 'Crawler cookies 1', exact: true });
+  await expect(stored.getByRole('combobox', { name: 'Value action', exact: true })).toHaveValue(
+    'keep',
+  );
+  await stored.getByRole('combobox', { name: 'Value action', exact: true }).selectOption('replace');
+  await stored.getByLabel('Value replacement', { exact: true }).fill('discarded-cookie-value');
+  await stored.getByRole('combobox', { name: 'Value action', exact: true }).selectOption('clear');
+  await expect(stored.getByLabel('Value replacement', { exact: true })).toHaveCount(0);
+  await expect(value).toHaveValue('new-cookie-value');
+  await stored.getByRole('combobox', { name: 'Value action', exact: true }).selectOption('keep');
+
+  await page.getByRole('tab', { name: 'App', exact: true }).click();
+  await page.getByRole('tab', { name: 'Crawler', exact: true }).click();
+  await expect(value).toHaveValue('new-cookie-value');
+  await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Settings saved and applied');
+  expect(draft.edits).toEqual([
+    {
+      path: 'crawler.cookies',
+      action: 'set',
+      value: [
+        {
+          name: 'session',
+          domain: 'example.com',
+          path: '/',
+          value: { action: 'keep', ref: 'cookie-reference' },
+        },
+        {
+          name: 'new-session',
+          domain: 'other.example',
+          path: '',
+          value: { action: 'replace', value: 'new-cookie-value' },
+        },
+      ],
+    },
+  ]);
+});
+
+test('an empty crawler proxy accepts a URL directly and offers actions only after saving', async ({
+  page,
+}) => {
+  const state = await crawlerSettingsAPI(page);
+  const proxy = state.values.find((field) => field.path === 'crawler.proxy')!;
+  proxy.source = { kind: 'default', locked: false, web_selected: false };
+  const drafts: any[] = [];
+  await page.route('**/api/settings/apply', async (route) => {
+    const draft = route.request().postDataJSON();
+    drafts.push(draft);
+    const edit = draft.edits.find((edit: any) => edit.path === 'crawler.proxy');
+    state.revision = `revision-${drafts.length + 1}`;
+    const stored =
+      edit.action === 'set' && edit.value.action === 'replace' && edit.value.value !== '';
+    proxy.value = stored ? { action: 'keep', ref: 'saved-proxy-reference' } : { action: 'clear' };
+    proxy.secret_present = stored;
+    proxy.source = {
+      kind: edit.action === 'reset' ? 'default' : 'web',
+      locked: false,
+      web_selected: edit.action !== 'reset',
+    };
+    await route.fulfill({ json: { saved: true } });
+  });
+  await page.goto('/settings?tab=crawler');
+  const region = page.getByRole('region', { name: 'Crawler proxy', exact: true });
+  const input = region.getByLabel('Crawler proxy', { exact: true });
+  const action = region.getByRole('combobox', { name: 'Crawler proxy action', exact: true });
+  await expect(input).toBeVisible();
+  await expect(input).toHaveValue('');
+  await expect(action).toHaveCount(0);
+  await input.fill('http://proxy.example:8080');
+  await expect(action).toHaveCount(0);
+  await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Settings saved and applied');
+  expect(drafts[0].edits).toEqual([
+    {
+      path: 'crawler.proxy',
+      action: 'set',
+      value: { action: 'replace', value: 'http://proxy.example:8080' },
+    },
+  ]);
+  await expect(action).toHaveValue('keep');
+  await action.selectOption('clear');
+  await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
+  await expect(input).toBeVisible();
+  await expect(input).toHaveValue('');
+  await expect(action).toHaveCount(0);
+  expect(drafts[1].edits).toEqual([
+    {
+      path: 'crawler.proxy',
+      action: 'set',
+      value: { action: 'clear', ref: 'saved-proxy-reference' },
+    },
+  ]);
+});

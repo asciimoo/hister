@@ -20,14 +20,18 @@ func configurationCatalog(current *config.Config) []config.FieldMetadata {
 	return append(fields, extractor.NewDefaultRegistry().ConfigurationFields(current.Extractors)...)
 }
 
-func configurationStates(current *config.Config) []config.FieldState {
-	return append(current.FieldStates(), extractor.NewDefaultRegistry().ConfigurationStates(current)...)
+func configurationStates(current *config.Config, revision string) []config.FieldState {
+	return append(current.FieldStatesForRevision(revision), extractor.NewDefaultRegistry().ConfigurationStates(current)...)
 }
 
 // prepareConfigurationDraft keeps extractor validation in the server layer.
 // The config package owns composition and never imports the extractor runtime.
-func prepareConfigurationDraft(current *config.Config, edits []config.SettingEdit) (*config.Config, []config.FieldError) {
-	return current.PrepareDraft(edits, func(candidate *config.Config) []config.FieldError {
+func prepareConfigurationDraft(current *config.Config, edits []config.SettingEdit, revisions ...string) (*config.Config, []config.FieldError) {
+	revision := ""
+	if len(revisions) > 0 {
+		revision = revisions[0]
+	}
+	return current.PrepareDraftForRevision(revision, edits, func(candidate *config.Config) []config.FieldError {
 		errors := extractor.ValidateConfiguration(candidate.Extractors)
 		for _, edit := range edits {
 			if edit.Path == "indexer.directories" {
@@ -66,13 +70,13 @@ func serveSettings(c *webContext) {
 		if len(extractor.ValidateConfiguration(next.Extractors)) > 0 {
 			pending = &pendingConfiguration{Status: "invalid"}
 		} else {
-			pending = &pendingConfiguration{Status: "changed", Values: configurationStates(next)}
+			pending = &pendingConfiguration{Status: "changed", Values: configurationStates(next, "")}
 		}
 	}
 	c.JSON(map[string]any{
 		"revision": c.reloader.revision,
 		"fields":   configurationCatalog(c.Config),
-		"values":   configurationStates(c.Config),
+		"values":   configurationStates(c.Config, c.reloader.revision),
 		"pending":  pending,
 	})
 }
@@ -82,12 +86,12 @@ func serveValidateSettings(c *webContext) {
 	if !ok {
 		return
 	}
-	candidate, fields := prepareConfigurationDraft(c.Config, edits)
+	candidate, fields := prepareConfigurationDraft(c.Config, edits, c.reloader.revision)
 	if len(fields) > 0 {
 		c.JSONStatus(http.StatusUnprocessableEntity, map[string]any{"code": "invalid_settings", "errors": fields})
 		return
 	}
-	c.JSON(map[string]any{"revision": c.reloader.revision, "values": configurationStates(candidate)})
+	c.JSON(map[string]any{"revision": c.reloader.revision, "values": configurationStates(candidate, "")})
 }
 
 func serveApplySettings(c *webContext) {
@@ -102,7 +106,7 @@ func serveApplySettings(c *webContext) {
 	}
 	c.releaseConfig()
 	lease.actorID = c.UserID
-	status, result := lease.runtime.save(lease, edits)
+	status, result := lease.runtime.save(lease, edits, c.reloader.revision)
 	c.JSONStatus(status, result)
 }
 

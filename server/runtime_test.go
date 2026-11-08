@@ -121,6 +121,69 @@ func TestSettingsDirectoryValidation(t *testing.T) {
 	}
 }
 
+func TestSettingsCrawlerSecretPersistence(t *testing.T) {
+	cfg, handler, _ := newReloadTestServer(t, false)
+	mainBefore, err := os.ReadFile(cfg.Filename())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(cfg.FullPath("config.web.yml"), []byte("crawler:\n  headers:\n    Authorization: saved-header-secret\n    X-Remove: old\n  cookies:\n    - name: session\n      value: saved-cookie-secret\n      domain: example.com\n      path: /\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if status := reloadRequest(t, handler, "secret"); status != http.StatusOK {
+		t.Fatalf("reload: %d", status)
+	}
+	headers := map[string]string{"Origin": "hister://", "X-Access-Token": "secret"}
+	revision, states := readConfigurationState(t, handler, headers)
+	values := states["crawler.headers"].Value.(map[string]any)
+	delete(values, "x-remove")
+	values["x-new"] = map[string]any{"action": "replace", "value": "new-header-secret"}
+	headerJSON, _ := json.Marshal(values)
+	cookieJSON, _ := json.Marshal(states["crawler.cookies"].Value)
+	body := fmt.Sprintf(`{"revision":%q,"edits":[{"path":"crawler.headers","action":"set","value":%s},{"path":"crawler.cookies","action":"set","value":%s},{"path":"crawler.timeout","action":"set","value":12}]}`, revision, headerJSON, cookieJSON)
+	for _, op := range []string{"validate", "apply"} {
+		response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/"+op, strings.NewReader(body), headers)
+		if response.Code != http.StatusOK {
+			t.Fatalf("%s: %d %s", op, response.Code, response.Body)
+		}
+		for _, secret := range []string{"saved-header-secret", "saved-cookie-secret", "new-header-secret"} {
+			if strings.Contains(response.Body.String(), secret) {
+				t.Fatal("response exposed credentials")
+			}
+		}
+	}
+	loaded, _, err := config.LoadForInspection(cfg.Filename(), true)
+	if err != nil || loaded.Crawler.Timeout != 12 || loaded.Crawler.Headers["authorization"] != "saved-header-secret" || loaded.Crawler.Headers["x-new"] != "new-header-secret" || len(loaded.Crawler.Headers) != 2 || loaded.Crawler.Cookies[0].Value != "saved-cookie-secret" {
+		t.Fatalf("restart lost crawler selections: %v", err)
+	}
+	fresh, _ := readConfigurationState(t, handler, headers)
+	// Updating the request revision cannot make an old secret reference valid.
+	stale := strings.Replace(body, revision, fresh, 1)
+	response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(stale), headers)
+	if response.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("stale credential accepted: %d %s", response.Code, response.Body)
+	}
+	for _, action := range []string{"set", "reset"} {
+		revision, _ = readConfigurationState(t, handler, headers)
+		edits := `[{"path":"crawler.headers","action":"set","value":{}},{"path":"crawler.cookies","action":"set","value":[]}]`
+		if action == "reset" {
+			edits = `[{"path":"crawler.headers","action":"reset"},{"path":"crawler.cookies","action":"reset"}]`
+		}
+		response = testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":%s}`, revision, edits)), headers)
+		if response.Code != http.StatusOK {
+			t.Fatalf("%s: %d %s", action, response.Code, response.Body)
+		}
+		loaded, _, err = config.LoadForInspection(cfg.Filename(), true)
+		if err != nil || len(loaded.Crawler.Headers) != 0 || len(loaded.Crawler.Cookies) != 0 || loaded.Source("crawler.cookies").WebSelected != (action == "set") {
+			t.Fatalf("clear/reset did not persist: %v", err)
+		}
+	}
+	after, _ := os.ReadFile(cfg.Filename())
+	if string(after) != string(mainBefore) {
+		t.Fatal("crawler save changed main file")
+	}
+}
+
 func TestSettingsIndexerPersistenceAndWatching(t *testing.T) {
 	cfg, handler, _ := newReloadTestServer(t, false)
 	mainPath := filepath.Join(cfg.App.Directory, "config.yml")

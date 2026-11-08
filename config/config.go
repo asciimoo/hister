@@ -15,6 +15,7 @@ import (
 	"html/template"
 	"maps"
 	"net"
+	"net/http"
 	"net/netip"
 	"net/url"
 	"os"
@@ -270,6 +271,126 @@ type CrawlerConfig struct {
 	Headers        map[string]string `yaml:"headers"         mapstructure:"headers"`
 	Cookies        []CrawlerCookie   `yaml:"cookies"         mapstructure:"cookies"`
 	NoRobots       bool              `yaml:"no_robots"       mapstructure:"no_robots"`
+}
+
+// ValidateFields checks crawler settings without opening a connection or browser.
+func (c *CrawlerConfig) ValidateFields() []FieldError {
+	var fields []FieldError
+	reject := func(path, message string) {
+		fields = append(fields, FieldError{Path: "crawler." + path, Code: "invalid_value", Message: message})
+	}
+	for _, field := range FieldCatalog() {
+		if field.Category != "crawler" || field.ReadOnlyReason != "" {
+			continue
+		}
+		// Collection and secret values are checked by their owning validators.
+		if field.Schema.Sensitivity != "none" || field.Schema.Collection != "none" {
+			continue
+		}
+		if _, message := field.Schema.ValidateValue(settingValue(&Config{Crawler: *c}, field.Path)); message != "" {
+			fields = append(fields, FieldError{Path: field.Path, Code: "invalid_value", Message: message})
+		}
+	}
+	for name, value := range c.BackendOptions {
+		allowed := (name == "capture_delay" && (c.Backend == "chromedp" || c.Backend == "bidi")) ||
+			((name == "host" || name == "port" || name == "socket") && c.Backend == "bidi") ||
+			(name == "exec_path" && c.Backend == "chromedp")
+		if !allowed {
+			reject("backend_options", "An option is unsupported by the selected backend.")
+			continue
+		}
+		switch name {
+		case "capture_delay":
+			// Main files retain duration string support used by the crawler.
+			if text, ok := value.(string); ok {
+				duration, err := time.ParseDuration(text)
+				if err != nil || duration < 0 {
+					reject("backend_options", "Use a nonnegative capture delay in seconds or a duration string.")
+				}
+			} else if _, message := crawlerBackendSchema().Properties[0].Schema.ValidateValue(value); message != "" {
+				reject("backend_options", "Use a capture delay between 0 and 86400 seconds.")
+			}
+		case "port":
+			port, err := strconv.Atoi(fmt.Sprint(value))
+			if err != nil || port < 1 || port > 65535 {
+				reject("backend_options", "Use a browser port between 1 and 65535.")
+			}
+		case "host":
+			host, ok := value.(string)
+			if !ok || host == "" || strings.ContainsAny(host, " /\\?#@\r\n\t") {
+				reject("backend_options", "Use a browser hostname or IP address without a path or credentials.")
+			}
+		case "socket":
+			text, ok := value.(string)
+			u, err := url.Parse(text)
+			if !ok || err != nil || (u.Scheme != "ws" && u.Scheme != "wss") || u.Hostname() == "" || u.Fragment != "" {
+				reject("backend_options", "Use a ws:// or wss:// browser socket URL with a host and no fragment.")
+			}
+		case "exec_path":
+			if _, ok := value.(string); !ok {
+				reject("backend_options", "The file managed executable path must be a string.")
+			}
+		}
+	}
+	if strings.ContainsAny(c.UserAgent, "\r\n") {
+		reject("user_agent", "Use a single line for the user agent.")
+	}
+	if proxy := strings.TrimSpace(c.Proxy); proxy != "" {
+		u, err := url.Parse(proxy)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "socks5") || u.Hostname() == "" || u.User != nil || (u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.Fragment != "" {
+			reject("proxy", "Use an HTTP or SOCKS5 proxy URL with a host, without credentials, a path, query, or fragment.")
+		}
+	}
+	if message := validateCrawlerHeaders(c.Headers); message != "" {
+		reject("headers", message)
+	}
+	seenCookies := make(map[string]bool)
+	for _, cookie := range c.Cookies {
+		domain := strings.TrimPrefix(cookie.Domain, ".")
+		key := secretScope(cookie.Name, strings.ToLower(domain), cookie.Path)
+		parsed := http.Cookie{Name: cookie.Name, Value: cookie.Value, Domain: cookie.Domain, Path: cookie.Path}
+		if parsed.Valid() != nil || domain == "" || strings.ContainsAny(domain, " /\\:@?#\r\n\t") || (cookie.Path != "" && !strings.HasPrefix(cookie.Path, "/")) || seenCookies[key] {
+			reject("cookies", "Use valid cookies with unique names per domain and path. A domain is required and paths must start with /.")
+		}
+		seenCookies[key] = true
+	}
+
+	return fields
+}
+
+func validateCrawlerHeaders(headers map[string]string) string {
+	seen := make(map[string]bool)
+	for name, value := range headers {
+		lower := strings.ToLower(name)
+		if !validHTTPToken(name) || seen[lower] || !validHeaderValue(value) {
+			return "Use unique HTTP header names and values without control characters."
+		}
+		seen[lower] = true
+	}
+	return ""
+}
+
+func validHTTPToken(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, c := range value {
+		letter := (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+		digit := c >= '0' && c <= '9'
+		if !letter && !digit && !strings.ContainsRune("!#$%&'*+-.^_`|~", c) {
+			return false
+		}
+	}
+	return true
+}
+
+func validHeaderValue(value string) bool {
+	for _, c := range value {
+		if c == 127 || (c < 32 && c != '\t') {
+			return false
+		}
+	}
+	return true
 }
 
 type Hotkeys struct {

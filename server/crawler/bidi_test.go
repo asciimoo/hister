@@ -3,6 +3,7 @@
 package crawler
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -11,6 +12,8 @@ import (
 	"testing"
 
 	"github.com/gorilla/websocket"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 
 	"github.com/asciimoo/hister/config"
 )
@@ -333,5 +336,23 @@ func TestBidiNavigationStatusIsPerFetch(t *testing.T) {
 	status = 200
 	if _, _, _, err := f.fetchPage(context.Background(), "http://example.invalid/"); err != nil {
 		t.Fatalf("fetchPage() error = %v", err)
+	}
+}
+
+func TestBidiSocketCredentialsStayOutOfErrorsAndLogs(t *testing.T) {
+	var output bytes.Buffer
+	previous := log.Logger
+	log.Logger = zerolog.New(&output).Level(zerolog.DebugLevel)
+	t.Cleanup(func() { log.Logger = previous })
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusForbidden) }))
+	defer server.Close()
+	for _, socket := range []string{"ws" + strings.TrimPrefix(server.URL, "http") + "/private-socket-secret", "ws://host/%private-socket-secret"} {
+		_, err := newBidiFetcher(&config.CrawlerConfig{BackendOptions: map[string]any{"socket": socket}})
+		if err == nil {
+			t.Fatal("expected connection or URL error")
+		}
+		if strings.Contains(err.Error(), "private-socket-secret") || strings.Contains(output.String(), "private-socket-secret") {
+			t.Fatal("socket credential exposed in errors or logs")
+		}
 	}
 }
