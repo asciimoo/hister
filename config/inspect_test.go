@@ -95,8 +95,8 @@ func TestFieldCatalogPreservesEditorContract(t *testing.T) {
 	if snippet.Default != 300 || snippet.Schema.Control != "number" || snippet.Schema.Min == nil || *snippet.Schema.Min != 1 || snippet.Schema.Max == nil || *snippet.Schema.Max != 10000 {
 		t.Fatal("lost the snippet default or inclusive limits")
 	}
-	if !slices.Equal(fields["app.color_scheme"].Schema.Choices, []string{"automatic", "light", "dark"}) || !slices.Equal(fields["app.log_format"].Schema.Choices, []string{"", "text", "json"}) {
-		t.Fatal("lost select choices, including the empty default option")
+	if !slices.Equal(fields["app.color_scheme"].Schema.Choices, []string{"automatic", "light", "dark"}) || !slices.Equal(fields["app.log_format"].Schema.Choices, []string{"text", "json"}) {
+		t.Fatal("lost concrete select choices")
 	}
 	if toggle := fields["app.show_suggestions"]; toggle.Default != false || toggle.Schema.Control != "switch" {
 		t.Fatal("lost an explicit false default or boolean control")
@@ -114,6 +114,71 @@ func TestFieldCatalogPreservesEditorContract(t *testing.T) {
 	}
 	if fields["app.directory"].ReadOnlyReason == "" || fields["app.log_file"].ReadOnlyReason == "" {
 		t.Fatal("storage locations became editable")
+	}
+}
+
+func TestSelectSettingsUseConcreteDefaults(t *testing.T) {
+	c := CreateDefaultConfig()
+	if c.App.LogLevel != "info" || c.App.LogFormat != "text" || c.Crawler.Backend != "http" || c.Indexer.LanguageDetectionAccuracy != "low" {
+		t.Fatalf("defaults must contain concrete choices: log level=%q, log format=%q, backend=%q, accuracy=%q", c.App.LogLevel, c.App.LogFormat, c.Crawler.Backend, c.Indexer.LanguageDetectionAccuracy)
+	}
+	for _, field := range FieldCatalog() {
+		if field.Schema.Control != "select" {
+			continue
+		}
+		if slices.Contains(field.Schema.Choices, "") {
+			t.Errorf("%s offers an empty choice", field.Path)
+		}
+		if _, message := field.Schema.ValidateValue(""); message == "" {
+			t.Errorf("%s accepts an empty choice", field.Path)
+		}
+	}
+}
+
+func TestSelectDraftsRequireChoicesAndResetToConcreteDefaults(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HISTER_DATA_DIR", dir)
+	filename := filepath.Join(dir, "config.yml")
+	if err := os.WriteFile(filename, []byte("# defaults\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c, _, err := LoadForInspection(filename, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct{ path, choice, inherited string }{
+		{"app.log_level", "error", "info"},
+		{"app.log_format", "json", "text"},
+		{"indexer.language_detection_accuracy", "high", "low"},
+		{"crawler.backend", "bidi", "http"},
+	} {
+		t.Run(tc.path, func(t *testing.T) {
+			empty, fields := c.PrepareDraft([]SettingEdit{{Path: tc.path, Action: "set", Value: json.RawMessage(`""`)}})
+			if empty != nil || len(fields) != 1 || fields[0].Path != tc.path || fields[0].Code != "invalid_value" {
+				t.Fatalf("empty selection must be rejected: %v", fields)
+			}
+			choice, err := json.Marshal(tc.choice)
+			if err != nil {
+				t.Fatal(err)
+			}
+			next, fields := c.PrepareDraft([]SettingEdit{{Path: tc.path, Action: "set", Value: choice}})
+			if next == nil || len(fields) != 0 {
+				t.Fatalf("concrete choice rejected: %v", fields)
+			}
+			reset, fields := next.PrepareDraft([]SettingEdit{{Path: tc.path, Action: "reset"}})
+			if reset == nil || len(fields) != 0 {
+				t.Fatalf("reset rejected: %v", fields)
+			}
+			for _, state := range reset.FieldStates() {
+				if state.Path == tc.path {
+					if state.Value != tc.inherited || state.Source.Kind != "default" || state.Source.WebSelected {
+						t.Fatalf("reset did not restore %q without a web override: %+v", tc.inherited, state)
+					}
+					return
+				}
+			}
+			t.Fatal("reset setting is missing")
+		})
 	}
 }
 

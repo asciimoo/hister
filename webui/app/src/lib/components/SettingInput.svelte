@@ -121,7 +121,7 @@
     class={`${controlClass} cursor-pointer`}
   >
     {#each schema.choices ?? [] as choice}<option value={choice}
-        >{choiceLabel(schema, choice) || 'Default'}</option
+        >{choiceLabel(schema, choice)}</option
       >{/each}
   </select>
 {:else if schema.control === 'number'}

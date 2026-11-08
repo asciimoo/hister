@@ -795,6 +795,7 @@ func CreateDefaultConfig() *Config {
 			ColorScheme:            "automatic",
 			SnippetLength:          300,
 			LogLevel:               "info",
+			LogFormat:              "text",
 			OpenResultsOnNewTab:    false,
 			ShowSuggestions:        false,
 			RedirectOnNoResults:    true,
