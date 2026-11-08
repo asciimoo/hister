@@ -3,7 +3,9 @@
   import { MediaQuery } from 'svelte/reactivity';
   import { beforeNavigate, goto } from '$app/navigation';
   import { page } from '$app/state';
+  import { Badge } from '@hister/components/ui/badge';
   import { Button } from '@hister/components/ui/button';
+  import * as Tooltip from '@hister/components/ui/tooltip';
   import { TriangleAlert } from '@lucide/svelte';
   import { fetchConfig, resetConfig } from '#lib/api.js';
   import { redirectToAuth } from '#lib/auth-navigation.js';
@@ -42,9 +44,8 @@
   const category = $derived(
     categories.includes(requestedCategory) ? requestedCategory : (categories[0] ?? 'app'),
   );
-  const editCount = $derived(
-    new Set([...Object.keys(edits), ...(editor ? [editor.path] : [])]).size,
-  );
+  const editedPaths = $derived(new Set([...Object.keys(edits), ...(editor ? [editor.path] : [])]));
+  const editCount = $derived(editedPaths.size);
   const dirty = $derived(editCount > 0);
   const conflictCount = $derived(Object.keys(conflicts).length);
   const values = $derived(new Map(state?.values.map((value) => [value.path, value]) ?? []));
@@ -493,23 +494,54 @@
         >
           {#each categories as item, index}
             {@const count = tabErrors(item).length}
-            <button
-              type="button"
-              role="tab"
-              id={`tab-${item}`}
-              aria-controls={`panel-${item}`}
-              aria-selected={category === item}
-              tabindex={category === item ? 0 : -1}
-              onclick={() => selectCategory(item)}
-              onkeydown={(event) => tabKeydown(event, index)}
-              class="font-inter hover:bg-muted-surface shrink-0 cursor-pointer border-b-2 px-3 py-2 text-sm whitespace-nowrap transition-colors lg:border-b-0 lg:border-l-2 lg:py-3 lg:text-left lg:whitespace-normal {category ===
-              item
-                ? 'border-hister-indigo text-text-brand lg:bg-hister-indigo/10 font-semibold'
-                : 'text-text-brand-muted border-transparent font-medium'}"
-              >{categoryLabels[item] ?? item}{count
-                ? ` (${count} ${count === 1 ? 'error' : 'errors'})`
-                : ''}</button
-            >
+            {@const unsavedCount = state.fields.filter(
+              (field) => field.category === item && editedPaths.has(field.path),
+            ).length}
+            {@const unsavedDescription = `Number of unsaved items: ${unsavedCount}`}
+            <div class="relative shrink-0">
+              <button
+                type="button"
+                role="tab"
+                id={`tab-${item}`}
+                aria-controls={`panel-${item}`}
+                aria-selected={category === item}
+                aria-describedby={unsavedCount ? `tab-${item}-unsaved` : undefined}
+                tabindex={category === item ? 0 : -1}
+                onclick={() => selectCategory(item)}
+                onkeydown={(event) => tabKeydown(event, index)}
+                class="font-inter hover:bg-muted-surface w-full cursor-pointer border-b-2 px-3 py-2 text-sm whitespace-nowrap transition-colors lg:border-b-0 lg:border-l-2 lg:py-3 lg:text-left lg:whitespace-normal {unsavedCount
+                  ? 'pr-12'
+                  : ''} {category === item
+                  ? 'border-hister-indigo text-text-brand lg:bg-hister-indigo/10 font-semibold'
+                  : 'text-text-brand-muted border-transparent font-medium'}"
+                >{categoryLabels[item] ?? item}{count
+                  ? ` (${count} ${count === 1 ? 'error' : 'errors'})`
+                  : ''}</button
+              >
+              {#if unsavedCount}
+                <span id={`tab-${item}-unsaved`} hidden>{unsavedDescription}</span>
+                <Tooltip.Provider delayDuration={0}>
+                  <Tooltip.Root>
+                    <Tooltip.Trigger
+                      aria-label={`Unsaved items in ${categoryLabels[item] ?? item}`}
+                      aria-describedby={`tab-${item}-unsaved`}
+                      tabindex={category === item ? 0 : -1}
+                      class="focus-visible:outline-ring absolute top-1/2 right-3 -translate-y-1/2 cursor-help outline-none focus-visible:outline-2 focus-visible:outline-offset-2"
+                    >
+                      <Badge
+                        variant="outline"
+                        aria-hidden="true"
+                        class="border-hister-indigo/30 bg-hister-indigo/10 text-text-brand min-w-5 px-1.5 tabular-nums"
+                        >{unsavedCount}</Badge
+                      >
+                    </Tooltip.Trigger>
+                    <Tooltip.Content role="tooltip" side="bottom" sideOffset={6}>
+                      {unsavedDescription}
+                    </Tooltip.Content>
+                  </Tooltip.Root>
+                </Tooltip.Provider>
+              {/if}
+            </div>
           {/each}
         </div>
         <form

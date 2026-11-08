@@ -103,6 +103,102 @@ async function settingsAPI(page: Page, config: Record<string, unknown> = {}) {
   return { state, publicConfig };
 }
 
+test('category badges count unsaved fields and clear after restoring, discarding or saving', async ({
+  page,
+  isMobile,
+}) => {
+  await crawlerSettingsAPI(page);
+  await page.route('**/api/settings/apply', (route) => route.fulfill({ json: { saved: true } }));
+  await page.goto('/settings');
+  const app = page.getByRole('tab', { name: 'App', exact: true });
+  const appBadge = page.getByRole('button', { name: 'Unsaved items in App', exact: true });
+  const crawler = page.getByRole('tab', { name: 'Crawler', exact: true });
+  const crawlerBadge = page.getByRole('button', { name: 'Unsaved items in Crawler', exact: true });
+  const server = page.getByRole('tab', { name: 'Server', exact: true });
+  const title = page.getByRole('textbox', { name: 'Title', exact: true });
+  await expect(app).toHaveText('App');
+  await expect(appBadge).toHaveCount(0);
+  await expect(crawler).toHaveText('Crawler');
+  await expect(crawlerBadge).toHaveCount(0);
+  await title.fill('Draft title');
+  await title.fill('Revised draft title');
+  await expect(appBadge.getByText('1', { exact: true })).toBeVisible();
+  await page.getByRole('spinbutton', { name: 'Snippet length', exact: true }).fill('420');
+  await expect(appBadge.getByText('2', { exact: true })).toBeVisible();
+  if (!isMobile) {
+    await appBadge.getByText('2', { exact: true }).hover();
+    await expect(page.getByRole('tooltip')).toHaveText('Number of unsaved items: 2');
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('tooltip')).not.toBeVisible();
+  }
+  await app.focus();
+  await expect(app).toHaveAccessibleDescription('Number of unsaved items: 2');
+  await expect(page.getByRole('tooltip')).not.toBeVisible();
+  await crawler.click();
+  await page.getByRole('spinbutton', { name: 'Crawler timeout', exact: true }).fill('10');
+  await expect(appBadge.getByText('2', { exact: true })).toBeVisible();
+  await expect(crawlerBadge.getByText('1', { exact: true })).toBeVisible();
+  await expect(server).toHaveText('Server');
+  await app.click();
+  await title.fill('Hister');
+  await expect(appBadge.getByText('1', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Undo Snippet length', exact: true }).click();
+  await expect(app).toHaveText('App');
+  await expect(appBadge).toHaveCount(0);
+  await page.getByRole('button', { name: 'Reset Show suggestions', exact: true }).click();
+  await expect(appBadge.getByText('1', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Discard changes', exact: true }).click();
+  await expect(app).toHaveText('App');
+  await expect(appBadge).toHaveCount(0);
+  await expect(crawler).toHaveText('Crawler');
+  await expect(crawlerBadge).toHaveCount(0);
+  await title.fill('Saved title');
+  await expect(appBadge.getByText('1', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
+  await expect(page.getByRole('status')).toHaveText('Settings saved and applied.');
+  await expect(app).toHaveText('App');
+  await expect(appBadge).toHaveCount(0);
+});
+
+test('unsaved count tooltips open from badges without opening from category tabs', async ({
+  page,
+  isMobile,
+}) => {
+  await settingsAPI(page);
+  await page.goto('/settings');
+  await page.getByRole('textbox', { name: 'Title', exact: true }).fill('Draft title');
+  const app = page.getByRole('tab', { name: 'App', exact: true });
+  const tooltip = page.getByRole('tooltip');
+  await app.focus();
+  await expect(app).toBeFocused();
+  await expect(tooltip).not.toBeVisible();
+  await expect(app).toHaveAccessibleDescription('Number of unsaved items: 1');
+  if (!isMobile) {
+    await app.hover({ position: { x: 8, y: 8 } });
+    await expect(tooltip).not.toBeVisible();
+    await page.mouse.move(0, 0);
+  }
+  const badge = page.getByRole('button', { name: 'Unsaved items in App', exact: true });
+  await page.keyboard.press('Tab');
+  await expect(badge).toBeFocused();
+  await expect(tooltip).toHaveText('Number of unsaved items: 1');
+  await page.keyboard.press('Escape');
+  await expect(tooltip).not.toBeVisible();
+  await page.getByRole('button', { name: 'Refresh settings', exact: true }).focus();
+  if (!isMobile) {
+    await badge.hover();
+    await expect(tooltip).toHaveText('Number of unsaved items: 1');
+    await page.mouse.move(0, 0);
+    await expect(tooltip).not.toBeVisible();
+  }
+  await app.focus();
+  await page.keyboard.press(isMobile ? 'ArrowRight' : 'ArrowDown');
+  await expect(page.getByRole('tab', { name: 'Server', exact: true })).toBeFocused();
+  await page.keyboard.press(isMobile ? 'ArrowLeft' : 'ArrowUp');
+  await expect(app).toBeFocused();
+  await expect(tooltip).not.toBeVisible();
+});
+
 test('settings tab selection is restored after a reload', async ({ page }) => {
   await settingsAPI(page);
   await page.goto('/settings?source=bookmark#preferences');
@@ -1961,18 +2057,26 @@ test('collection items switch between summaries and cancellable editors', async 
     await route.fulfill({ json: { saved: true } });
   });
   await page.goto('/settings?tab=crawler');
+  const crawler = page.getByRole('tab', { name: 'Crawler', exact: true });
+  const crawlerBadge = page.getByRole('button', { name: 'Unsaved items in Crawler', exact: true });
+  await expect(crawler).toHaveText('Crawler');
+  await expect(crawlerBadge).toHaveCount(0);
   const cookie = page.getByRole('group', { name: 'Crawler cookies 1', exact: true });
   await expect(cookie.getByRole('textbox')).toHaveCount(0);
   await expect(cookie).toContainText('session');
   await expect(cookie).toContainText('example.com');
   await cookie.getByRole('button', { name: 'Edit', exact: true }).click();
   await cookie.getByLabel('Name', { exact: true }).fill('changed');
+  await expect(crawlerBadge.getByText('1', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Save and apply', exact: true })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Add header', exact: true })).toBeDisabled();
   await page.getByRole('tab', { name: 'App', exact: true }).click();
+  await expect(crawlerBadge.getByText('1', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Continue editing', exact: true }).click();
   await expect(cookie.getByLabel('Name', { exact: true })).toHaveValue('changed');
   await cookie.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(crawler).toHaveText('Crawler');
+  await expect(crawlerBadge).toHaveCount(0);
   await expect(cookie).toContainText('session');
   await expect(page.getByRole('button', { name: 'Save and apply', exact: true })).toBeDisabled();
 
@@ -1980,6 +2084,7 @@ test('collection items switch between summaries and cancellable editors', async 
   await cookie.getByRole('combobox', { name: 'Value action', exact: true }).selectOption('replace');
   await cookie.getByLabel('Value replacement', { exact: true }).fill('private-cookie-draft');
   await cookie.getByRole('button', { name: 'Done', exact: true }).click();
+  await expect(crawlerBadge.getByText('1', { exact: true })).toBeVisible();
   await expect(cookie.getByRole('textbox')).toHaveCount(0);
   await expect(cookie.getByRole('button', { name: 'Edit', exact: true })).toBeFocused();
   await expect(cookie).toContainText('Unsaved');
@@ -1988,6 +2093,7 @@ test('collection items switch between summaries and cancellable editors', async 
   expect(applied).toHaveLength(0);
   await cookie.getByRole('button', { name: 'Edit', exact: true }).click();
   await cookie.getByLabel('Value replacement', { exact: true }).fill('cancelled-value');
+  await expect(crawlerBadge.getByText('1', { exact: true })).toBeVisible();
   await cookie.getByRole('button', { name: 'Cancel', exact: true }).click();
   await page.getByRole('button', { name: 'Remove Crawler cookies item 1', exact: true }).click();
   await expect(cookie).toHaveCount(0);
@@ -1995,6 +2101,8 @@ test('collection items switch between summaries and cancellable editors', async 
   await expect(cookie).toContainText('session');
   await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
   await expect(page.getByRole('status')).toContainText('Settings saved and applied');
+  await expect(crawler).toHaveText('Crawler');
+  await expect(crawlerBadge).toHaveCount(0);
   expect(applied[0].edits[0].value[0].value.value).toBe('private-cookie-draft');
 });
 
