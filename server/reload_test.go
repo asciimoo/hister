@@ -174,7 +174,7 @@ func TestPrepareConfigurationDraftValidatesFreshExtractors(t *testing.T) {
 				for _, field := range fields {
 					paths[field.Path] = true
 				}
-				if !paths["extractors.ytdlp"] || !paths["extractors.basic"] {
+				if !paths["extractors.ytdlp.options.max_concurrent_jobs"] || !paths["extractors.basic"] {
 					t.Fatalf("extractor errors lack stable paths: %v", fields)
 				}
 				encoded, err := json.Marshal(fields)
@@ -214,6 +214,124 @@ func readConfigurationState(t *testing.T, handler http.Handler, headers map[stri
 		values[field.Path] = field
 	}
 	return state.Revision, values
+}
+
+func TestSettingsExtractorDrafts(t *testing.T) {
+	cfg, handler := newConfigurationTestServer(t, "token", "")
+	headers := map[string]string{"Authorization": "Bearer private-token", "Origin": "hister://", "Content-Type": "application/json"}
+	revision, initial := readConfigurationState(t, handler, headers)
+	if !initial["extractors.markdown.enable"].Editable || !initial["extractors.ytdlp.options.timeout"].Editable || initial["extractors.ytdlp.options.timeout"].Value != float64(15) {
+		t.Fatal("extractor controls do not expose editable defaults")
+	}
+	edits := `[{"path":"extractors.ytdlp.options.timeout","action":"set","value":10},{"path":"extractors.ytdlp.options.fetch_subtitles","action":"set","value":true},{"path":"extractors.ytdlp.options.extra_domains","action":"set","value":["video.example"]},{"path":"semantic_search.semantic_weight","action":"set","value":0.65}]`
+	response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/validate", strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":%s}`, revision, edits)), headers)
+	if response.Code != http.StatusOK {
+		t.Fatalf("typed extractor draft rejected: %d %s", response.Code, response.Body)
+	}
+	var result struct {
+		Values []config.FieldState `json:"values"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	for _, value := range result.Values {
+		if value.Path == "extractors.ytdlp.enable" && value.Value != false {
+			t.Fatal("editing an option enabled the extractor")
+		}
+		if value.Path == "extractors.ytdlp.options.timeout" && value.Value != float64(10) {
+			t.Fatal("typed extractor selection was lost")
+		}
+	}
+	for _, edit := range []string{
+		`{"path":"extractors.ytdlp.options.binary","action":"set","value":"private-executable"}`,
+		`{"path":"extractors.ytdlp.options.extra_args","action":"set","value":["--exec","private-command"]}`,
+		`{"path":"extractors.ytdlp.options","action":"set","value":{"binary":"private-executable"}}`,
+		`{"path":"extractors.ytdlp.options.unknown","action":"set","value":"private-secret"}`,
+		`{"path":"extractors.ytdlp.options.timeout","action":"set","value":-1}`,
+		`{"path":"extractors.ytdlp.options.extra_domains","action":"set","value":["https://private-host/path"]}`,
+	} {
+		response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/validate", strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":[%s]}`, revision, edit)), headers)
+		if response.Code != http.StatusUnprocessableEntity || strings.Contains(response.Body.String(), "private-") {
+			t.Errorf("unsafe or invalid extractor draft: %d %s", response.Code, response.Body)
+		}
+	}
+	if cfg.Extractors["ytdlp"] != nil {
+		t.Fatal("draft validation mutated the active extractor selections")
+	}
+}
+
+func TestExtractorManagedSettingsRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HISTER_DATA_DIR", dir)
+	filename := filepath.Join(dir, "config.yml")
+	if err := os.WriteFile(filename, []byte("# defaults\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	current, _, err := config.LoadForInspection(filename, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	edits := []config.SettingEdit{
+		{Path: "extractors.ytdlp.options.fetch_subtitles", Action: "set", Value: json.RawMessage(`true`)},
+		{Path: "extractors.ytdlp.options.extra_domains", Action: "set", Value: json.RawMessage(`[]`)},
+		{Path: "extractors.ytdlp.options.cookies_file", Action: "set", Value: json.RawMessage(`{"action":"replace","value":"private-cookie-file"}`)},
+		{Path: "semantic_search.api_key", Action: "set", Value: json.RawMessage(`{"action":"replace","value":"private-api-key"}`)},
+	}
+	next, fields := prepareConfigurationDraft(current, edits, "first")
+	if len(fields) != 0 {
+		t.Fatal(fields)
+	}
+	write, err := next.StageManaged()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := write.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
+	if err := write.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	reloaded, _, err := config.LoadForInspection(filename, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reloaded.Extractors["ytdlp"].Enabled(false) || reloaded.Extractors["ytdlp"].Options["cookies_file"] != "private-cookie-file" || reloaded.SemanticSearch.APIKey != "private-api-key" {
+		t.Fatal("restart lost extractor defaults or stored secrets")
+	}
+	diagnostic, err := reloaded.Redacted()
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(diagnostic)
+	if err != nil || strings.Contains(string(encoded), "private-") {
+		t.Fatal("diagnostics exposed an extractor or semantic credential")
+	}
+	for _, state := range configurationStates(reloaded, "second") {
+		if state.Path == "extractors.ytdlp.options.cookies_file" {
+			value, err := json.Marshal(state.Value)
+			if err != nil || strings.Contains(string(value), "private-cookie-file") {
+				t.Fatal("extractor secret exposed")
+			}
+			kept, fields := prepareConfigurationDraft(reloaded, []config.SettingEdit{{Path: state.Path, Action: "set", Value: value}}, "second")
+			if len(fields) != 0 || kept.Extractors["ytdlp"].Options["cookies_file"] != "private-cookie-file" {
+				t.Fatalf("cannot preserve extractor secret: %v", fields)
+			}
+		}
+	}
+	reset, fields := prepareConfigurationDraft(reloaded, []config.SettingEdit{{Path: "extractors.ytdlp.options.fetch_subtitles", Action: "reset"}})
+	if len(fields) != 0 || reset.Extractors["ytdlp"].Options["fetch_subtitles"] != nil {
+		t.Fatalf("reset did not remove only the selected option: %v", fields)
+	}
+	for _, options := range []string{"binary: private-executable", "extra_args: [--exec, private-command]", "unknown: private-secret", "timeout: invalid", "timeout: -1"} {
+		if err := os.WriteFile(filepath.Join(dir, "config.web.yml"), []byte("extractors:\n  ytdlp:\n    options:\n      "+options+"\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, _, err := config.LoadForInspection(filename, true); err == nil || strings.Contains(err.Error(), "private-") {
+			t.Fatalf("unsafe managed extractor option accepted or disclosed: %v", err)
+		}
+	}
 }
 
 func TestSettingsDirectoryOwnership(t *testing.T) {
@@ -263,7 +381,7 @@ func TestConfigurationDraftValidation(t *testing.T) {
 		{"file lock", `[{"path":"app.subtitle","action":"reset"}]`, "app.subtitle", "locked"},
 		{"storage", `[{"path":"app.directory","action":"set","value":"private-input"}]`, "app.directory", "read_only"},
 		{"secret", `[{"path":"app.access_token","action":"replace","value":"private-input"}]`, "app.access_token", "read_only"},
-		{"secret clear", `[{"path":"semantic_search.api_key","action":"clear"}]`, "semantic_search.api_key", "read_only"},
+		{"secret clear", `[{"path":"semantic_search.api_key","action":"clear"}]`, "semantic_search.api_key", "locked"},
 		{"extractor option", `[{"path":"extractors.ytdlp.options.binary","action":"set","value":"private-input"}]`, "extractors.ytdlp.options.binary", "unknown_field"},
 		{"duplicate operation", `[{"path":"app.title","action":"set","value":"One"},{"path":"app.title","action":"reset"}]`, "app.title", "duplicate"},
 		{"wrong type", `[{"path":"app.snippet_length","action":"set","value":"private-input"}]`, "app.snippet_length", "invalid_value"},
@@ -574,21 +692,24 @@ func TestConfigurationStaleSources(t *testing.T) {
 }
 
 func TestConfigurationSecretsAndExtractorStates(t *testing.T) {
-	const extra = "semantic_search:\n  api_key: private-api-key\n  embedding_endpoint: https://user:private-url@example.com/private-path\ncrawler:\n  headers:\n    X-Key: private-header\n  cookies:\n    - name: session\n      value: private-cookie\nextractors:\n  ytdlp:\n    options:\n      binary: private-binary\n      extra_args: [private-argument]\n"
+	const extra = "semantic_search:\n  api_key: private-api-key\n  embedding_endpoint: https://embeddings.example/v1/embeddings\ncrawler:\n  headers:\n    X-Key: private-header\n  cookies:\n    - name: session\n      value: private-cookie\nextractors:\n  ytdlp:\n    options:\n      binary: private-binary\n      extra_args: [private-argument]\n"
 	t.Setenv("HISTER__EXTRACTORS__YTDLP__OPTIONS__COOKIES_FILE", "private-cookie-file")
 	cfg, handler := newConfigurationTestServer(t, "token", extra)
 	headers := map[string]string{"Authorization": "Bearer private-token"}
 	_, values := readConfigurationState(t, handler, headers)
-	for _, path := range []string{"app.access_token", "semantic_search.api_key", "semantic_search.embedding_endpoint", "crawler.headers", "crawler.cookies", "extractors", "extractors.ytdlp.options.binary", "extractors.ytdlp.options.extra_args", "extractors.ytdlp.options.cookies_file"} {
+	for _, path := range []string{"app.access_token", "semantic_search.api_key", "crawler.headers", "crawler.cookies", "extractors", "extractors.ytdlp.options.binary", "extractors.ytdlp.options.extra_args", "extractors.ytdlp.options.cookies_file"} {
 		field, exists := values[path]
 		if !exists || field.Value != nil || !field.SecretPresent || field.Editable {
 			t.Errorf("unsafe or missing field %s: %+v", path, field)
 		}
 	}
-	if field := values["extractors.ytdlp.enable"]; field.Value != false || field.Editable || field.Source.Kind != "default" {
+	if field := values["semantic_search.embedding_endpoint"]; field.Value != "https://embeddings.example/v1/embeddings" || field.SecretPresent || field.Editable || !field.Source.Locked {
+		t.Fatalf("file managed endpoint should be visible and locked: %+v", field)
+	}
+	if field := values["extractors.ytdlp.enable"]; field.Value != false || !field.Editable || field.Source.Kind != "default" {
 		t.Errorf("extractor default: %+v", field)
 	}
-	if field := values["extractors.basic.enable"]; field.Value != true || field.Editable {
+	if field := values["extractors.basic.enable"]; field.Value != true || !field.Editable {
 		t.Errorf("basic default: %+v", field)
 	}
 	for path, source := range map[string]string{"extractors.ytdlp.options.extra_args": "file", "extractors.ytdlp.options.cookies_file": "environment"} {
@@ -610,7 +731,7 @@ func TestConfigurationSecretsAndExtractorStates(t *testing.T) {
 	}
 	for _, path := range []string{"extractors.ytdlp.options.extra_args", "extractors.ytdlp.options.cookies_file"} {
 		field, exists := metadata[path]
-		if !exists || field.Default != nil || field.Schema.Type != "unknown" || field.Schema.Sensitivity != "unknown" || field.ReadOnlyReason == "" {
+		if !exists || field.Default != nil || field.Schema.Sensitivity == "none" {
 			t.Errorf("unsafe or missing optional extractor metadata for %s: %+v", path, field)
 		}
 	}
@@ -751,9 +872,9 @@ func TestConfigurationCatalogKeepsUnsupportedCategoriesReadOnly(t *testing.T) {
 		case "app.title":
 			app = field.ReadOnlyReason == "" && field.Default == "Hister"
 		case "extractors.ytdlp.enable":
-			enable = field.ReadOnlyReason != "" && field.Default == false
+			enable = field.ReadOnlyReason == "" && field.Default == false
 		case "extractors.ytdlp.options.binary":
-			option = field.ReadOnlyReason != "" && field.Schema.Type == "unknown" && field.Default == nil
+			option = field.ReadOnlyReason != "" && field.Schema.Sensitivity == "secret" && field.Default == nil
 		}
 	}
 	if !app || !enable || !option {

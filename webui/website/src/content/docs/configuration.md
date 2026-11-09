@@ -781,7 +781,7 @@ value. A locked setting can retain a web selection that takes effect when its ov
 
 Web selections persist in `config.web.yml` inside the data directory, including when there is
 no main config file. Saving does not rewrite your main configuration. Categories other than
-App, Indexer, and Crawler, and connection or authentication settings, are currently read only. Stored credentials stay hidden.
+App, Indexer, Crawler, Extractors, and Semantic search, and connection or authentication settings, are currently read only. Stored credentials stay hidden.
 
 The **Indexer** tab offers language detection, a language multiselect, detection accuracy,
 stopword handling, and the maximum file size in MiB. Select at least two languages, or clear
@@ -800,6 +800,23 @@ Delete those documents separately if their previous visibility is no longer appr
 or renamed. It never deletes files from disk. **Clear** on a collection selects an empty list;
 **Reset** removes the web selection. An authoritative directory or language list locks the
 whole collection. PDF parser controls remain managed in the main configuration.
+
+The **Extractors** tab enables or disables individual extractors. yt-dlp also offers timeout,
+concurrency, subtitle, additional domain, and cookie source controls. Enter one additional host
+name per line, without a scheme or path. Editing an option does not enable the extractor.
+Executable paths, arbitrary arguments, and options without supported controls remain file managed.
+Changes apply to future extraction; fetch documents again to update previously extracted content.
+
+The **Semantic search** tab controls the embedding service, model, dimensions, document chunks,
+prefixes, request limits, and result ranking. The endpoint URL is visible and directly editable.
+API keys, headers, and extractor cookie sources stay hidden. **Keep** preserves a stored value; **Replace** supplies a new value; **Clear**
+selects an empty value where allowed. **Reset** removes the web selection.
+
+After enabling semantic search or changing its endpoint, model, dimensions, document prefix,
+context length, or overlap, run `hister reindex` to rebuild embeddings for existing documents.
+Ranking, query, credential, and request limit changes do not need reindexing. Saving does not
+contact the embedding service to test it or start reindexing. Dimensions must match the model;
+PostgreSQL supports at most 2000. Chunk overlap must be less than the context length.
 
 The **Crawler** tab controls request timeout and delay in seconds, robots checks, backend,
 proxy, user agent, headers, and cookies. Browser options include fractional capture delay and

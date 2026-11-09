@@ -16,6 +16,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -31,6 +32,70 @@ import (
 	"github.com/asciimoo/hister/server/testutil"
 	"github.com/asciimoo/hister/server/types"
 )
+
+func TestSettingsExtractionAndSemanticApply(t *testing.T) {
+	var requests atomic.Int32
+	embeddings := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"data":[{"embedding":[1,0,0],"index":0}]}`)
+	}))
+	defer embeddings.Close()
+	cfg, handler, _ := newReloadTestServer(t, false)
+	mainBefore, err := os.ReadFile(cfg.Filename())
+	if err != nil {
+		t.Fatal(err)
+	}
+	headers := map[string]string{"Origin": "hister://", "X-Access-Token": "secret", "Content-Type": "application/json"}
+	added := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/add", strings.NewReader(`{"url":"https://example.com/existing","text":"Existing document without embeddings"}`), headers)
+	if added.Code != http.StatusCreated {
+		t.Fatalf("add existing document: %d %s", added.Code, added.Body)
+	}
+	revision, _ := readConfigurationState(t, handler, headers)
+	edits := fmt.Sprintf(`[
+		{"path":"extractors.markdown.enable","action":"set","value":false},
+		{"path":"extractors.ytdlp.options.timeout","action":"set","value":10},
+		{"path":"extractors.ytdlp.options.cookies_file","action":"set","value":{"action":"replace","value":"private-cookie-file"}},
+		{"path":"semantic_search.enable","action":"set","value":true},
+		{"path":"semantic_search.embedding_endpoint","action":"set","value":%q},
+		{"path":"semantic_search.dimensions","action":"set","value":3},
+		{"path":"semantic_search.api_key","action":"set","value":{"action":"replace","value":"private-api-key"}},
+		{"path":"semantic_search.headers","action":"set","value":{"x-key":{"action":"replace","value":"private-header"}}}
+	]`, embeddings.URL)
+	for _, operation := range []string{"validate", "apply"} {
+		response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/"+operation, strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":%s}`, revision, edits)), headers)
+		if response.Code != http.StatusOK || strings.Contains(response.Body.String(), "private-") {
+			t.Fatalf("%s: %d %s", operation, response.Code, response.Body)
+		}
+		if requests.Load() != 0 {
+			t.Fatalf("%s probed the endpoint or rebuilt existing embeddings", operation)
+		}
+	}
+	_, values := readConfigurationState(t, handler, headers)
+	if values["extractors.markdown.enable"].Value != false || values["extractors.ytdlp.enable"].Value != false || values["extractors.ytdlp.options.timeout"].Value != float64(10) || values["semantic_search.enable"].Value != true {
+		t.Fatal("mixed settings draft was not activated")
+	}
+	for _, path := range []string{"/api/settings", "/api/config", "/api/extractors"} {
+		response := testutil.ServeHTTP(t, handler, http.MethodGet, "/hister"+path, nil, headers)
+		if response.Code != http.StatusOK || strings.Contains(response.Body.String(), "private-") {
+			t.Fatalf("stored credential exposed by %s: %d %s", path, response.Code, response.Body)
+		}
+	}
+	loaded, _, err := config.LoadForInspection(cfg.Filename(), true)
+	if err != nil || !loaded.SemanticSearch.Enable || loaded.SemanticSearch.APIKey != "private-api-key" || loaded.SemanticSearch.Headers["x-key"] != "private-header" || loaded.Extractors["ytdlp"].Options["timeout"] != 10 {
+		t.Fatalf("saved configuration cannot be loaded: %v", err)
+	}
+	if status := reloadRequest(t, handler, "secret"); status != http.StatusOK {
+		t.Fatalf("reload saved settings: %d", status)
+	}
+	if requests.Load() != 0 {
+		t.Fatal("reloading saved settings started embedding existing documents")
+	}
+	mainAfter, err := os.ReadFile(cfg.Filename())
+	if err != nil || string(mainAfter) != string(mainBefore) {
+		t.Fatal("saving rewrote the main configuration")
+	}
+}
 
 func TestSettingsDirectoryOwnerRemovedWhileDraining(t *testing.T) {
 	entered, release := make(chan struct{}), make(chan struct{})

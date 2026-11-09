@@ -171,6 +171,9 @@
     </div>
     <p id={`${id}-description`} class="text-text-brand-muted text-sm leading-relaxed">
       {field.description}
+      {#if field.effect === 'reembed'}
+        <span class="mt-1 block">Reindex existing documents after changing this setting.</span>
+      {/if}
     </p>
   </div>
   <div class="min-w-0 space-y-2 break-words {directories ? 'lg:col-span-2' : ''}">

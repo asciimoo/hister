@@ -304,6 +304,25 @@ func validateManagedYAML(raw []byte) error {
 // Untyped extension options stay file managed until their owners supply metadata.
 func validateManagedNode(node *yaml.Node, typ reflect.Type, path string) error {
 	invalid := func() error { return fmt.Errorf("unsupported setting or value at %s", path) }
+	if strings.HasPrefix(path, "extractors.") && typ.Kind() == reflect.Interface {
+		field, ok := extractorSettings[path]
+		if !ok {
+			return invalid()
+		}
+		// Validate the YAML tree before decoding, so aliases, duplicate keys,
+		// nulls and weakly coerced values cannot bypass the owner's schema.
+		if err := validateExtractorSettingNode(node); err != nil {
+			return invalid()
+		}
+		var value any
+		if err := node.Decode(&value); err != nil {
+			return invalid()
+		}
+		if _, message := field.Schema.ValidateValue(value); message != "" {
+			return invalid()
+		}
+		return nil
+	}
 	switch path {
 	case "app.directory", "app.log_file", "server.database", "server.proxy_auth_header", "indexer.pdf_parser.command", "indexer.pdf_parser.args":
 		return fmt.Errorf("%s is file managed", path)
@@ -409,6 +428,28 @@ func validateManagedNode(node *yaml.Node, typ reflect.Type, path string) error {
 		// numeric values, even when an authoritative selection shadows them.
 		if err := node.Decode(reflect.New(typ).Interface()); err != nil {
 			return invalid()
+		}
+	}
+	return nil
+}
+
+func validateExtractorSettingNode(node *yaml.Node) error {
+	if node.Kind == yaml.AliasNode || node.Tag == "!!null" {
+		return errors.New("unsupported YAML value")
+	}
+	if node.Kind == yaml.MappingNode {
+		seen := make(map[string]bool)
+		for i := 0; i < len(node.Content); i += 2 {
+			key := node.Content[i]
+			if key.Tag != "!!str" || seen[key.Value] {
+				return errors.New("unsupported YAML key")
+			}
+			seen[key.Value] = true
+		}
+	}
+	for _, child := range node.Content {
+		if err := validateExtractorSettingNode(child); err != nil {
+			return err
 		}
 	}
 	return nil

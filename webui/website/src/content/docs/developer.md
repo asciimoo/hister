@@ -111,8 +111,12 @@ permission or replace field validation.
 Field metadata includes a top level `category` and an optional display `group`.
 The backend catalog defines groups and field order; clients preserve that order
 when grouping fields within each category.
+Extractor options implement `sdk.OptionDescriber`; their schemas and defaults stay with the extractor.
+The built in registry registers editable field schemas with `config.RegisterExtractorSettings` during
+initialization so managed file loading uses the same types as draft validation without importing
+the extractor runtime into `config`. Undescribed options and executable controls remain file managed.
 `POST /api/settings/validate` checks a draft without side effects.
-`POST /api/settings/apply` saves and applies ordinary App edits. Both POST
+`POST /api/settings/apply` saves and applies supported App, Indexer, Crawler, Extractor, and Semantic search edits. Both POST
 operations accept `revision` and an `edits` array with explicit `path`, `action`
 (`set` or `reset`), and a typed `value` for `set`. Authentication settings and
 other unsupported fields remain read only. These routes use administrative

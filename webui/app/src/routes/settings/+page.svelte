@@ -470,8 +470,8 @@
           >{/if}
       </div>
       <p class="text-text-brand-muted my-2 text-sm">
-        Configure appearance, search behavior, logging, indexing and crawling. Other settings are
-        shown for reference.
+        Configure appearance, search behavior, logging, indexing, crawling and extraction. Other
+        settings are shown for reference.
       </p>
       {#if problem}<div role="alert" class="text-hister-rose my-2 text-sm">
           <p>{problem}{needsReload && dirty ? ' Your draft is still here.' : ''}</p>
@@ -604,6 +604,19 @@
                   {error.path}: {error.message}
                 </p>{/each}
               <div class="space-y-6">
+                {#if category === 'semantic_search'}
+                  <p class="text-text-brand-muted text-sm">
+                    Saving does not start reindexing or test the embedding endpoint. Run <code
+                      >hister reindex</code
+                    > to rebuild existing embeddings when needed. Ranking and query settings apply without
+                    reindexing.
+                  </p>
+                {:else if category === 'extractors'}
+                  <p class="text-text-brand-muted text-sm">
+                    Changes apply to future extraction. Fetch documents again to update previously
+                    extracted content.
+                  </p>
+                {/if}
                 {#each groups as group, index (group.label)}
                   <section
                     aria-labelledby={group.label ? `${category}-group-${index}` : undefined}

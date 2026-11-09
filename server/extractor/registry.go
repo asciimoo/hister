@@ -97,6 +97,10 @@ func NewDefaultRegistry() *Registry {
 
 var defaultRegistry = NewDefaultRegistry()
 
+func init() {
+	config.RegisterExtractorSettings(defaultRegistry.ConfigurationFields(nil))
+}
+
 // DefaultRegistry returns the registry used by package level operations.
 func DefaultRegistry() *Registry {
 	return defaultRegistry
@@ -214,13 +218,14 @@ func isNilExtractor(candidate Extractor) bool {
 // extractor. Register all extractors before calling Init.
 func (r *Registry) Init(cfgs map[string]*config.Extractor) error {
 	for _, candidate := range r.Extractors() {
+		name := strings.ToLower(candidate.Name())
 		defaults := candidate.GetConfig().Clone()
 		merged := &config.Extractor{
 			Enable:  defaults.Enable,
 			Options: make(map[string]any, len(defaults.Options)),
 		}
 		maps.Copy(merged.Options, defaults.Options)
-		if user, ok := cfgs[strings.ToLower(candidate.Name())]; ok && user != nil {
+		if user, ok := cfgs[name]; ok && user != nil {
 			merged.Enable = user.Enabled(defaults.Enable)
 			maps.Copy(merged.Options, user.Clone().Options)
 		}
@@ -229,7 +234,7 @@ func (r *Registry) Init(cfgs map[string]*config.Extractor) error {
 				if value, present := merged.Options[option.Key]; present {
 					normalized, message := option.Schema.ValidateValue(value)
 					if message != "" {
-						return fmt.Errorf("extractor %s option %s: %s", candidate.Name(), option.Key, message)
+						return config.FieldError{Path: "extractors." + name + ".options." + option.Key, Code: "invalid_value", Message: message}
 					}
 					merged.Options[option.Key] = normalized
 				}
@@ -242,9 +247,8 @@ func (r *Registry) Init(cfgs map[string]*config.Extractor) error {
 	return nil
 }
 
-// ConfigurationFields describes defaults and configured option keys. Extractor
-// editing remains disabled until its category has controls and the secret
-// preservation protocol. Undescribed options are explicitly unknown; supplied
+// ConfigurationFields describes defaults and configured option keys.
+// Undescribed options are explicitly unknown; supplied
 // values never become defaults and no extractor is initialized here.
 func (r *Registry) ConfigurationFields(cfgs map[string]*config.Extractor) []config.FieldMetadata {
 	r.mu.RLock()
@@ -252,15 +256,12 @@ func (r *Registry) ConfigurationFields(cfgs map[string]*config.Extractor) []conf
 	var fields []config.FieldMetadata
 	for _, candidate := range r.extractors {
 		prefix := "extractors." + strings.ToLower(candidate.Name())
-		fields = append(fields, config.FieldMetadata{Path: prefix + ".enable", Category: "extractors", Label: candidate.Name(), Description: candidate.Description(), Default: r.enabledDefaults[strings.ToLower(candidate.Name())], Schema: config.SettingSchema{Type: "boolean", Control: "switch", Collection: "none", Sensitivity: "none"}, Effect: "runtime", ReadOnlyReason: "Extractor editing is not available yet."})
+		fields = append(fields, config.FieldMetadata{Path: prefix + ".enable", Category: "extractors", Group: candidate.Name(), Label: "Enable " + candidate.Name(), Description: candidate.Description(), Default: r.enabledDefaults[strings.ToLower(candidate.Name())], Schema: config.SettingSchema{Type: "boolean", Control: "switch", Collection: "none", Sensitivity: "none"}, Effect: "runtime"})
 		described := make(map[string]bool)
 		if describer, ok := candidate.(sdk.OptionDescriber); ok {
 			for _, option := range describer.OptionMetadata() {
 				described[option.Key] = true
-				field := config.FieldMetadata{Path: prefix + ".options." + option.Key, Category: "extractors", Label: option.Label, Description: option.Description, Schema: option.Schema, Effect: option.Effect, ReadOnlyReason: option.ReadOnlyReason}
-				if field.ReadOnlyReason == "" {
-					field.ReadOnlyReason = "Extractor editing is not available yet."
-				}
+				field := config.FieldMetadata{Path: prefix + ".options." + option.Key, Category: "extractors", Group: candidate.Name(), Label: option.Label, Description: option.Description, Schema: option.Schema, Effect: option.Effect, ReadOnlyReason: option.ReadOnlyReason}
 				if option.Schema.Sensitivity == "none" {
 					field.Default = option.Default
 				}
@@ -289,7 +290,7 @@ func (r *Registry) ConfigurationFields(cfgs map[string]*config.Extractor) []conf
 // ConfigurationStates combines extractor defaults with explicit selections
 // without configuring an extractor or modifying the supplied configuration.
 // The config owner handles source locks and metadata based redaction.
-func (r *Registry) ConfigurationStates(current *config.Config) []config.FieldState {
+func (r *Registry) ConfigurationStates(current *config.Config, revision ...string) []config.FieldState {
 	snapshot := *current
 	snapshot.Extractors = make(map[string]*config.Extractor)
 	for _, candidate := range r.Extractors() {
@@ -304,7 +305,11 @@ func (r *Registry) ConfigurationStates(current *config.Config) []config.FieldSta
 		}
 		snapshot.Extractors[name] = merged
 	}
-	return snapshot.FieldStates(r.ConfigurationFields(current.Extractors)...)
+	version := ""
+	if len(revision) > 0 {
+		version = revision[0]
+	}
+	return snapshot.FieldStatesForRevision(version, r.ConfigurationFields(current.Extractors)...)
 }
 
 // ValidateConfiguration uses fresh built in instances and reports only safe
@@ -325,7 +330,12 @@ func ValidateConfiguration(cfgs map[string]*config.Extractor) []config.FieldErro
 			// This registry owns fresh instances. Initializing one at a time
 			// collects independent failures instead of stopping at the first.
 			single := mustNewRegistry(candidate)
-			invalid = single.Init(map[string]*config.Extractor{name: entry}) != nil
+			err := single.Init(map[string]*config.Extractor{name: entry})
+			if field, ok := errors.AsType[config.FieldError](err); ok {
+				fields = append(fields, field)
+				continue
+			}
+			invalid = err != nil
 		}
 		if invalid {
 			fields = append(fields, config.FieldError{Path: "extractors." + name, Code: "invalid_extractor", Message: "Check this extractor's option names, types, and values."})

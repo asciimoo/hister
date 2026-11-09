@@ -8,6 +8,7 @@ import (
 	"maps"
 	"net/http"
 	"os"
+	"slices"
 	"sync"
 
 	"github.com/asciimoo/hister/config"
@@ -16,12 +17,12 @@ import (
 )
 
 func configurationCatalog(current *config.Config) []config.FieldMetadata {
-	fields := config.FieldCatalog()
+	fields := slices.DeleteFunc(config.FieldCatalog(), func(field config.FieldMetadata) bool { return field.Path == "extractors" })
 	return append(fields, extractor.NewDefaultRegistry().ConfigurationFields(current.Extractors)...)
 }
 
 func configurationStates(current *config.Config, revision string) []config.FieldState {
-	return append(current.FieldStatesForRevision(revision), extractor.NewDefaultRegistry().ConfigurationStates(current)...)
+	return append(current.FieldStatesForRevision(revision), extractor.NewDefaultRegistry().ConfigurationStates(current, revision)...)
 }
 
 // prepareConfigurationDraft keeps extractor validation in the server layer.

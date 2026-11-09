@@ -103,6 +103,262 @@ async function settingsAPI(page: Page, config: Record<string, unknown> = {}) {
   return { state, publicConfig };
 }
 
+async function extractionSettingsAPI(page: Page) {
+  const { state } = await settingsAPI(page);
+  const ordinary = { collection: 'none', sensitivity: 'none' };
+  const secret = { type: 'string', control: 'secret', collection: 'none', sensitivity: 'secret' };
+  const definitions = [
+    {
+      path: 'extractors.ytdlp.enable',
+      label: 'Enable Ytdlp',
+      schema: { ...ordinary, type: 'boolean', control: 'switch' },
+      value: false,
+    },
+    {
+      path: 'extractors.ytdlp.options.timeout',
+      label: 'Timeout (seconds)',
+      schema: { ...ordinary, type: 'integer', control: 'number', min: 1 },
+      value: 15,
+    },
+    {
+      path: 'extractors.ytdlp.options.cookies_file',
+      label: 'Cookies file',
+      schema: secret,
+      value: { action: 'clear' },
+    },
+    {
+      path: 'extractors.ytdlp.options.binary',
+      label: 'Executable',
+      schema: secret,
+      value: undefined,
+      readOnly: 'Executable selections are file managed.',
+    },
+    {
+      path: 'semantic_search.enable',
+      label: 'Semantic search',
+      schema: { ...ordinary, type: 'boolean', control: 'switch' },
+      value: false,
+      effect: 'reembed',
+    },
+    {
+      path: 'semantic_search.embedding_endpoint',
+      label: 'Embedding endpoint',
+      schema: { ...ordinary, type: 'string', control: 'url', min_length: 1 },
+      value: 'http://localhost:11434/v1/embeddings',
+      effect: 'reembed',
+    },
+    {
+      path: 'semantic_search.embedding_model',
+      label: 'Embedding model',
+      schema: { ...ordinary, type: 'string', control: 'text' },
+      value: 'default-model',
+      effect: 'reembed',
+    },
+    {
+      path: 'semantic_search.dimensions',
+      label: 'Embedding dimensions',
+      schema: { ...ordinary, type: 'integer', control: 'number', min: 1 },
+      value: 2000,
+      effect: 'reembed',
+    },
+    {
+      path: 'semantic_search.semantic_weight',
+      label: 'Semantic weight',
+      schema: { ...ordinary, type: 'number', control: 'number', min: 0, max: 1 },
+      value: 0.4,
+    },
+    {
+      path: 'semantic_search.api_key',
+      label: 'Embedding API key',
+      schema: secret,
+      value: { action: 'keep', ref: 'api-key-ref' },
+    },
+    {
+      path: 'semantic_search.headers',
+      label: 'Embedding headers',
+      schema: {
+        type: 'dictionary',
+        control: 'dictionary',
+        sensitivity: 'mixed',
+        collection: 'replace',
+        items: secret,
+      },
+      value: { 'x-token': { action: 'keep', ref: 'header-ref' } },
+    },
+  ];
+  for (const entry of definitions) {
+    state.fields.push({
+      path: entry.path,
+      label: entry.label,
+      category: entry.path.split('.')[0],
+      description: `${entry.label} description.`,
+      default: entry.schema.sensitivity === 'none' ? entry.value : undefined,
+      schema: entry.schema,
+      effect: entry.effect ?? 'runtime',
+      requires_confirmation: false,
+      read_only_reason: entry.readOnly,
+    });
+    state.values.push({
+      path: entry.path,
+      value: entry.value,
+      editable: !entry.readOnly,
+      reason: entry.readOnly,
+      source: { kind: 'default', locked: false, web_selected: false },
+      secret_present:
+        !!entry.readOnly ||
+        entry.path === 'semantic_search.api_key' ||
+        entry.path === 'semantic_search.headers',
+    });
+  }
+  return state;
+}
+
+test('embedding endpoint is visible and saves and resets as an ordinary URL', async ({ page }) => {
+  const state = await extractionSettingsAPI(page);
+  const value = state.values.find((entry) => entry.path === 'semantic_search.embedding_endpoint')!;
+  value.value = 'https://embeddings.example/v1/embeddings';
+  value.source = { kind: 'web', locked: false, web_selected: true };
+  const drafts: any[] = [];
+  await page.route('**/api/settings/apply', async (route) => {
+    const draft = route.request().postDataJSON();
+    drafts.push(draft);
+    const edit = draft.edits.find((entry: any) => entry.path === value.path);
+    value.value = edit.action === 'reset' ? 'http://localhost:11434/v1/embeddings' : edit.value;
+    value.source.web_selected = edit.action !== 'reset';
+    state.revision += '-saved';
+    await route.fulfill({ json: { saved: true } });
+  });
+  await page.goto('/settings?tab=semantic_search');
+  const field = page.getByRole('region', { name: 'Embedding endpoint', exact: true });
+  const input = field.locator('input[type="url"]');
+  await expect(input).toHaveValue('https://embeddings.example/v1/embeddings');
+  await expect(field.getByRole('combobox')).toHaveCount(0);
+  await expect(field.locator('input[type="password"]')).toHaveCount(0);
+  await input.fill('https://new.example/embeddings');
+  await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
+  await expect(page.getByRole('status')).toHaveText('Settings saved and applied.');
+  expect(drafts[0].edits).toEqual([
+    { path: value.path, action: 'set', value: 'https://new.example/embeddings' },
+  ]);
+  await expect(input).toHaveValue('https://new.example/embeddings');
+  await page.getByRole('button', { name: 'Reset Embedding endpoint', exact: true }).click();
+  await expect(input).toHaveValue('http://localhost:11434/v1/embeddings');
+  await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
+  await expect(page.getByRole('status')).toHaveText('Settings saved and applied.');
+  expect(drafts[1].edits).toEqual([{ path: value.path, action: 'reset' }]);
+});
+
+test('extractor and semantic controls share one draft with secrets and reindex guidance', async ({
+  page,
+}) => {
+  await extractionSettingsAPI(page);
+  let draft: any;
+  await page.route('**/api/settings/apply', async (route) => {
+    draft = route.request().postDataJSON();
+    await route.fulfill({ json: { saved: true } });
+  });
+  await page.goto('/settings?tab=extractors');
+  await expect(page.getByRole('switch', { name: 'Enable Ytdlp', exact: true })).not.toBeChecked();
+  await expect(
+    page.getByRole('spinbutton', { name: 'Timeout (seconds)', exact: true }),
+  ).toHaveValue('15');
+  await expect(
+    page
+      .getByRole('region', { name: 'Executable', exact: true })
+      .getByText('Read only', { exact: true }),
+  ).toBeVisible();
+  await page.getByRole('spinbutton', { name: 'Timeout (seconds)', exact: true }).fill('10');
+  await page
+    .getByRole('region', { name: 'Cookies file', exact: true })
+    .locator('input')
+    .fill('private-cookies-path');
+  await page.getByRole('tab', { name: 'Semantic search', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Embedding model', exact: true })).toContainText(
+    'Reindex existing documents after changing this setting.',
+  );
+  await expect(
+    page.getByText('Saving does not start reindexing or test the embedding endpoint.'),
+  ).toBeVisible();
+  await page.getByRole('textbox', { name: 'Embedding model', exact: true }).fill('small-model');
+  await page.getByRole('spinbutton', { name: 'Embedding dimensions', exact: true }).fill('128');
+  await page.getByRole('spinbutton', { name: 'Semantic weight', exact: true }).fill('0.65');
+  await page
+    .getByRole('combobox', { name: 'Embedding API key action', exact: true })
+    .selectOption('replace');
+  await page.getByLabel('Embedding API key replacement', { exact: true }).fill('private-api-key');
+  await page.getByRole('button', { name: 'Add header', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Name', exact: true }).fill('x-extra');
+  await page.getByLabel('Value', { exact: true }).fill('private-header');
+  await page.getByRole('button', { name: 'Add header', exact: true }).click();
+  await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
+  await expect(page.getByRole('status')).toHaveText('Settings saved and applied.');
+  expect(draft.edits).toEqual(
+    expect.arrayContaining([
+      { path: 'extractors.ytdlp.options.timeout', action: 'set', value: 10 },
+      {
+        path: 'extractors.ytdlp.options.cookies_file',
+        action: 'set',
+        value: { action: 'replace', value: 'private-cookies-path' },
+      },
+      { path: 'semantic_search.embedding_model', action: 'set', value: 'small-model' },
+      { path: 'semantic_search.dimensions', action: 'set', value: 128 },
+      { path: 'semantic_search.semantic_weight', action: 'set', value: 0.65 },
+      {
+        path: 'semantic_search.headers',
+        action: 'set',
+        value: {
+          'x-token': { action: 'keep', ref: 'header-ref' },
+          'x-extra': { action: 'replace', value: 'private-header' },
+        },
+      },
+    ]),
+  );
+  expect(draft.edits).toHaveLength(7);
+  expect(
+    await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage })),
+  ).not.toContain('private-');
+});
+
+test('semantic validation retains drafts and respects locked extractor options', async ({
+  page,
+}) => {
+  const state = await extractionSettingsAPI(page);
+  const timeout = state.values.find((field) => field.path === 'extractors.ytdlp.options.timeout')!;
+  timeout.editable = false;
+  timeout.source = {
+    kind: 'environment',
+    name: 'HISTER__EXTRACTORS__YTDLP__OPTIONS__TIMEOUT',
+    locked: true,
+    web_selected: true,
+  };
+  await page.route('**/api/settings/validate', (route) =>
+    route.fulfill({
+      status: 422,
+      json: {
+        errors: [
+          {
+            path: 'semantic_search.dimensions',
+            code: 'invalid_value',
+            message: 'Use positive embedding dimensions.',
+          },
+        ],
+      },
+    }),
+  );
+  await page.goto('/settings?tab=extractors');
+  await expect(
+    page.getByRole('spinbutton', { name: 'Timeout (seconds)', exact: true }),
+  ).toHaveCount(0);
+  await expect(page.getByRole('switch', { name: 'Enable Ytdlp', exact: true })).toBeEnabled();
+  await page.getByRole('tab', { name: 'Semantic search', exact: true }).click();
+  await page.getByRole('spinbutton', { name: 'Embedding dimensions', exact: true }).fill('0');
+  await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
+  await expect(page.getByText('Use positive embedding dimensions.')).toBeVisible();
+  await expect(
+    page.getByRole('spinbutton', { name: 'Embedding dimensions', exact: true }),
+  ).toHaveValue('0');
+});
+
 test('category badges count unsaved fields and clear after restoring, discarding or saving', async ({
   page,
   isMobile,

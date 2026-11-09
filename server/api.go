@@ -138,7 +138,7 @@ func init() {
 			NoStore:      true,
 			CSRFRequired: true,
 			Handler:      serveValidateSettings,
-			Description:  "Validate a complete configuration candidate without saving or applying it. Accepts ordinary App edits only. Returns redacted candidate values on success, field errors with status 422, or status 409 when the revision or configuration sources have changed.",
+			Description:  "Validate a complete configuration candidate without saving or applying it. Accepts supported App, Indexer, Crawler, Extractor, and Semantic search edits. Returns redacted candidate values on success, field errors with status 422, or status 409 when the revision or configuration sources have changed.",
 			JSONSchema: []*JSONSchemaField{
 				{Name: "revision", Type: "string", Required: true, Description: "Revision returned by GET /api/settings."},
 				{Name: "edits", Type: "array", Required: true, Description: "Explicit setting operations; an empty array validates the inherited configuration.", Fields: []*JSONSchemaField{
@@ -156,7 +156,7 @@ func init() {
 			NoStore:      true,
 			CSRFRequired: true,
 			Handler:      serveApplySettings,
-			Description:  "Save and apply ordinary App settings. Uses the revision and explicit edits format of POST /api/settings/validate. Changed selections briefly interrupt service; unchanged selections preserve the active revision without interruption. Returns 409 for changed sources or an outdated revision and 422 for invalid settings. Failure codes distinguish sources_changed, admin_required, persistence_failed, and recovery_failed. Read GET /api/settings after success or a lost response to obtain the active revision. Sensitive access settings remain read only.",
+			Description:  "Save and apply supported ordinary configuration settings. Uses the revision and explicit edits format of POST /api/settings/validate. Changed selections briefly interrupt service; unchanged selections preserve the active revision without interruption. Returns 409 for changed sources or an outdated revision and 422 for invalid settings. Failure codes distinguish sources_changed, admin_required, persistence_failed, and recovery_failed. Read GET /api/settings after success or a lost response to obtain the active revision. Sensitive access settings remain read only.",
 			JSONSchema: []*JSONSchemaField{
 				{Name: "revision", Type: "string", Required: true, Description: "Revision returned by GET /api/settings."},
 				{Name: "edits", Type: "array", Required: true, Description: "Explicit setting operations using path, action (set or reset), and value for set."},

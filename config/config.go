@@ -341,7 +341,7 @@ func (c *CrawlerConfig) ValidateFields() []FieldError {
 			reject("proxy", "Use an HTTP or SOCKS5 proxy URL with a host, without credentials, a path, query, or fragment.")
 		}
 	}
-	if message := validateCrawlerHeaders(c.Headers); message != "" {
+	if message := validateHTTPHeaders(c.Headers); message != "" {
 		reject("headers", message)
 	}
 	seenCookies := make(map[string]bool)
@@ -358,7 +358,7 @@ func (c *CrawlerConfig) ValidateFields() []FieldError {
 	return fields
 }
 
-func validateCrawlerHeaders(headers map[string]string) string {
+func validateHTTPHeaders(headers map[string]string) string {
 	seen := make(map[string]bool)
 	for name, value := range headers {
 		lower := strings.ToLower(name)
@@ -1504,39 +1504,48 @@ func (r *Rules) ResolveAliases(s string) string {
 	return strings.Join(sp, " ")
 }
 
-func (s SemanticSearch) Validate() error {
+// ValidateFields reports safe, stable paths without contacting the embedding service.
+func (s SemanticSearch) ValidateFields() []FieldError {
 	if !s.Enable {
 		return nil
 	}
-	if s.EmbeddingEndpoint == "" {
-		return errors.New("semantic_search.embedding_endpoint must not be empty when semantic search is enabled")
+	var fields []FieldError
+	for _, field := range FieldCatalog() {
+		if field.Category != "semantic_search" {
+			continue
+		}
+		if _, message := field.Schema.ValidateValue(settingValue(&Config{SemanticSearch: s}, field.Path)); message != "" {
+			fields = append(fields, FieldError{Path: field.Path, Code: "invalid_value", Message: message})
+		}
 	}
-	if s.EmbeddingModel == "" {
-		return errors.New("semantic_search.embedding_model must not be empty when semantic search is enabled")
+	if s.ChunkOverlap >= s.MaxContextLength && s.MaxContextLength > 0 {
+		fields = append(fields, FieldError{Path: "semantic_search.chunk_overlap", Code: "invalid_value", Message: "Chunk overlap must be less than the maximum context length."})
 	}
-	if s.Dimensions <= 0 {
-		return fmt.Errorf("semantic_search.dimensions must be a positive integer, got %d", s.Dimensions)
+	if message := validateHTTPHeaders(s.Headers); message != "" {
+		fields = append(fields, FieldError{Path: "semantic_search.headers", Code: "invalid_value", Message: message})
 	}
-	if s.MaxContextLength <= 0 {
-		return fmt.Errorf("semantic_search.max_context_length must be a positive integer, got %d", s.MaxContextLength)
+	return fields
+}
+
+func (s SemanticSearch) Validate() error {
+	if fields := s.ValidateFields(); len(fields) > 0 {
+		return fields[0]
 	}
 	return nil
 }
 
-func (c *Config) validateSemanticSearch() error {
-	if err := c.SemanticSearch.Validate(); err != nil {
-		return err
-	}
-	if !c.SemanticSearch.Enable {
-		return nil
-	}
+func (c *Config) semanticSearchErrors() []FieldError {
+	fields := c.SemanticSearch.ValidateFields()
 	dbType, _ := c.DatabaseConnection()
-	if dbType == Psql && c.SemanticSearch.Dimensions > postgresHNSWMaxDimensions {
-		return fmt.Errorf(
-			"semantic_search.dimensions must not exceed %d when using PostgreSQL, got %d",
-			postgresHNSWMaxDimensions,
-			c.SemanticSearch.Dimensions,
-		)
+	if c.SemanticSearch.Enable && dbType == Psql && c.SemanticSearch.Dimensions > postgresHNSWMaxDimensions {
+		fields = append(fields, FieldError{Path: "semantic_search.dimensions", Code: "invalid_value", Message: fmt.Sprintf("Embedding dimensions must not exceed %d when using PostgreSQL.", postgresHNSWMaxDimensions)})
+	}
+	return fields
+}
+
+func (c *Config) validateSemanticSearch() error {
+	if fields := c.semanticSearchErrors(); len(fields) > 0 {
+		return fields[0]
 	}
 	return nil
 }

@@ -72,6 +72,34 @@ type FieldState struct {
 	SecretPresent bool        `json:"secret_present"`
 }
 
+// RegisterExtractorSettings supplies extension schemas during package
+// initialization, before loading configuration. Owners retain their catalog and
+// defaults; config uses these descriptors only to validate web selections.
+// Undescribed and file managed options are deliberately excluded.
+func RegisterExtractorSettings(fields []FieldMetadata) {
+	for _, field := range fields {
+		if field.ReadOnlyReason != "" {
+			continue
+		}
+		parts := strings.Split(field.Path, ".")
+		isEnable := len(parts) == 3 && parts[2] == "enable"
+		isOption := len(parts) == 4 && parts[2] == "options" && parts[3] != ""
+		if len(parts) < 3 || parts[0] != "extractors" || parts[1] == "" ||
+			(!isEnable && !isOption) {
+			panic("invalid extractor setting path")
+		}
+		if _, exists := extractorSettings[field.Path]; exists {
+			panic("duplicate extractor setting")
+		}
+		if err := field.Schema.ValidateDefinition(); err != nil {
+			panic(err)
+		}
+		extractorSettings[field.Path] = cloneInputValue(reflect.ValueOf(field)).Interface().(FieldMetadata)
+	}
+}
+
+var extractorSettings = make(map[string]FieldMetadata)
+
 // FieldStates contains only described values and safe displays of secrets.
 // It does not expose the main configuration or managed selections wholesale.
 func (c *Config) FieldStates(fields ...FieldMetadata) []FieldState {
@@ -181,6 +209,7 @@ func (c *Config) PrepareDraftForRevision(revision string, edits []SettingEdit, v
 	for _, field := range FieldCatalog() {
 		fields[field.Path] = field
 	}
+	maps.Copy(fields, extractorSettings)
 	selections := maps.Clone(c.composition.managed)
 	if selections == nil {
 		selections = make(map[string]any)
@@ -241,12 +270,12 @@ func (c *Config) PrepareDraftForRevision(revision string, edits []SettingEdit, v
 				reject("invalid_value", message)
 				continue
 			}
-			if edit.Path == "crawler.headers" {
+			if edit.Path == "crawler.headers" || edit.Path == "semantic_search.headers" {
 				headers := make(map[string]string)
 				for name, value := range normalized.(map[string]any) {
 					headers[name] = value.(string)
 				}
-				if message := validateCrawlerHeaders(headers); message != "" {
+				if message := validateHTTPHeaders(headers); message != "" {
 					reject("invalid_value", message)
 					continue
 				}
@@ -541,24 +570,24 @@ func FieldCatalog() []FieldMetadata {
 		{Path: "crawler.user_agent", Group: groupRequests, Label: "Crawler user agent", Description: "User agent for HTTP and Chrome crawls. BiDi uses its browser settings. Empty uses the crawler default.", Schema: SettingSchema{Sensitivity: "none", MaxLength: 4096}},
 		{Path: "crawler.headers", Group: groupRequests, Label: "Crawler headers", Description: "Headers for HTTP and Chrome crawls. BiDi uses its browser settings. Values remain hidden. Removing a row removes that header; Clear removes all headers.", Schema: SettingSchema{Type: "dictionary", Control: "dictionary", Collection: "replace", Sensitivity: "mixed", MaxItems: 128, Items: &SettingSchema{Type: "string", Control: "secret", Collection: "none", Sensitivity: "secret", MaxLength: 16384}}},
 		{Path: "crawler.cookies", Group: groupRequests, Label: "Crawler cookies", Description: "Cookies for HTTP and Chrome crawls, scoped to domains and paths. BiDi uses its browser cookies. Keep preserves a stored value. Changing its name, domain, or path requires Replace or Clear.", Schema: crawlerCookieSchema()},
-		fileManagedField("semantic_search.enable", groupSearchBehavior, "Semantic search", "Enable search by meaning using document embeddings."),
-		fileManagedField("semantic_search.similarity_threshold", groupSearchBehavior, "Similarity threshold", "Minimum similarity required for a semantic result."),
-		fileManagedField("semantic_search.result_limit", groupSearchBehavior, "Semantic result limit", "Maximum number of semantic results to consider."),
-		fileManagedField("semantic_search.semantic_weight", groupSearchBehavior, "Semantic weight", "Weight of semantic scores when combining search results."),
-		fileManagedField("semantic_search.query_prefix", groupSearchBehavior, "Query prefix", "Text prepended to queries before generating embeddings."),
-		fileManagedField("semantic_search.query_embedding_timeout", groupSearchBehavior, "Query embedding timeout", "Maximum time in seconds for a query embedding request."),
-		fileManagedField("semantic_search.max_query_embedding_concurrency", groupSearchBehavior, "Query embedding concurrency", "Maximum number of concurrent query embedding requests."),
-		fileManagedField("semantic_search.embedding_endpoint", groupEmbeddingService, "Embedding endpoint", "URL of the service that generates embeddings."),
-		fileManagedField("semantic_search.embedding_model", groupEmbeddingService, "Embedding model", "Model used to generate embeddings."),
-		fileManagedField("semantic_search.api_key", groupEmbeddingService, "Embedding API key", "Credential used to access the embedding service."),
-		fileManagedField("semantic_search.headers", groupEmbeddingService, "Embedding headers", "Additional HTTP headers sent to the embedding service."),
-		fileManagedField("semantic_search.dimensions", groupEmbeddingService, "Embedding dimensions", "Number of dimensions in each embedding."),
-		fileManagedField("semantic_search.max_context_length", groupDocumentChunks, "Maximum context length", "Maximum number of tokens in a document chunk."),
-		fileManagedField("semantic_search.chunk_overlap", groupDocumentChunks, "Chunk overlap", "Number of tokens shared by adjacent document chunks."),
-		fileManagedField("semantic_search.document_prefix", groupDocumentChunks, "Document prefix", "Text prepended to document chunks before generating embeddings."),
-		fileManagedField("semantic_search.embedding_timeout", groupDocumentProcessing, "Embedding timeout", "Maximum time in seconds for document embedding requests."),
-		fileManagedField("semantic_search.max_embedding_batch_size", groupDocumentProcessing, "Embedding batch size", "Maximum number of chunks per embedding request."),
-		fileManagedField("semantic_search.max_embedding_concurrency", groupDocumentProcessing, "Embedding concurrency", "Maximum number of concurrent document embedding requests."),
+		{Path: "semantic_search.enable", Group: groupSearchBehavior, Label: "Semantic search", Description: "Enable search by meaning. Reindex existing documents to generate embeddings.", Schema: SettingSchema{Sensitivity: "none"}, Effect: "reembed"},
+		{Path: "semantic_search.similarity_threshold", Group: groupSearchBehavior, Label: "Similarity threshold", Description: "Minimum similarity required for a semantic result.", Schema: SettingSchema{Sensitivity: "none", Min: new(0), Max: new(1)}, Effect: "runtime"},
+		{Path: "semantic_search.result_limit", Group: groupSearchBehavior, Label: "Semantic result limit", Description: "Maximum number of semantic results to consider.", Schema: SettingSchema{Sensitivity: "none", Min: new(1)}, Effect: "runtime"},
+		{Path: "semantic_search.semantic_weight", Group: groupSearchBehavior, Label: "Semantic weight", Description: "Weight of semantic scores when combining results, from zero to one.", Schema: SettingSchema{Sensitivity: "none", Min: new(0), Max: new(1)}, Effect: "runtime"},
+		{Path: "semantic_search.query_prefix", Group: groupSearchBehavior, Label: "Query prefix", Description: "Text prepended to queries before generating embeddings.", Schema: SettingSchema{Sensitivity: "none", MaxLength: 4096}, Effect: "runtime"},
+		{Path: "semantic_search.query_embedding_timeout", Group: groupSearchBehavior, Label: "Query embedding timeout", Description: "Maximum seconds for a query embedding request. Zero uses two seconds.", Schema: SettingSchema{Sensitivity: "none", Min: new(0), Max: new(86400)}, Effect: "runtime"},
+		{Path: "semantic_search.max_query_embedding_concurrency", Group: groupSearchBehavior, Label: "Query embedding concurrency", Description: "Concurrent query embedding requests. Zero uses one request.", Schema: SettingSchema{Sensitivity: "none", Min: new(0), Max: new(1024)}, Effect: "runtime"},
+		{Path: "semantic_search.embedding_endpoint", Group: groupEmbeddingService, Label: "Embedding endpoint", Description: "HTTP or HTTPS URL of the embedding service.", Schema: SettingSchema{Control: "url", Sensitivity: "none", MinLength: 1, MaxLength: 4096}, Effect: "reembed"},
+		{Path: "semantic_search.embedding_model", Group: groupEmbeddingService, Label: "Embedding model", Description: "Model used to generate embeddings.", Schema: SettingSchema{Sensitivity: "none", MinLength: 1, MaxLength: 1024}, Effect: "reembed"},
+		{Path: "semantic_search.api_key", Group: groupEmbeddingService, Label: "Embedding API key", Description: "Credential used to access the embedding service.", Schema: SettingSchema{Sensitivity: "secret", MaxLength: 16384}, Effect: "runtime"},
+		{Path: "semantic_search.headers", Group: groupEmbeddingService, Label: "Embedding headers", Description: "Additional HTTP headers. Values stay hidden; removing a header removes its value.", Schema: SettingSchema{Type: "dictionary", Control: "dictionary", Collection: "replace", Sensitivity: "mixed", MaxItems: 128, Items: &SettingSchema{Type: "string", Control: "secret", Collection: "none", Sensitivity: "secret", MaxLength: 16384}}, Effect: "runtime"},
+		{Path: "semantic_search.dimensions", Group: groupEmbeddingService, Label: "Embedding dimensions", Description: "Dimensions returned by the model. PostgreSQL supports at most 2000.", Schema: SettingSchema{Sensitivity: "none", Min: new(1)}, Effect: "reembed"},
+		{Path: "semantic_search.max_context_length", Group: groupDocumentChunks, Label: "Maximum context length", Description: "Maximum tokens in a document chunk.", Schema: SettingSchema{Sensitivity: "none", Min: new(1)}, Effect: "reembed"},
+		{Path: "semantic_search.chunk_overlap", Group: groupDocumentChunks, Label: "Chunk overlap", Description: "Tokens shared by adjacent chunks. Must be less than the maximum context length.", Schema: SettingSchema{Sensitivity: "none", Min: new(0)}, Effect: "reembed"},
+		{Path: "semantic_search.document_prefix", Group: groupDocumentChunks, Label: "Document prefix", Description: "Text prepended to document chunks before generating embeddings.", Schema: SettingSchema{Sensitivity: "none", MaxLength: 4096}, Effect: "reembed"},
+		{Path: "semantic_search.embedding_timeout", Group: groupDocumentProcessing, Label: "Embedding timeout", Description: "Maximum seconds for document embedding requests. Zero uses five minutes.", Schema: SettingSchema{Sensitivity: "none", Min: new(0), Max: new(86400)}, Effect: "runtime"},
+		{Path: "semantic_search.max_embedding_batch_size", Group: groupDocumentProcessing, Label: "Embedding batch size", Description: "Maximum chunks per embedding request. Zero uses eight chunks.", Schema: SettingSchema{Sensitivity: "none", Min: new(0), Max: new(4096)}, Effect: "runtime"},
+		{Path: "semantic_search.max_embedding_concurrency", Group: groupDocumentProcessing, Label: "Embedding concurrency", Description: "Concurrent document embedding requests. Zero uses the default worker count.", Schema: SettingSchema{Sensitivity: "none", Min: new(0), Max: new(1024)}, Effect: "runtime"},
 		fileManagedField("hotkeys.web", "", "Web keyboard shortcuts", "Keyboard shortcuts for the web interface."),
 		fileManagedField("sensitive_content_patterns", "", "Sensitive content patterns", "Patterns used to detect sensitive content before indexing."),
 		fileManagedField("extractors", "", "Extractors", "Extractor enable switches and options described by the extractor registry."),
@@ -585,9 +614,14 @@ func FieldCatalog() []FieldMetadata {
 		}
 		switch value.(type) {
 		case string:
-			field.Schema.Type, field.Schema.Control = "string", "text"
+			field.Schema.Type = "string"
+			if field.Schema.Control == "" {
+				field.Schema.Control = "text"
+			}
 		case bool:
 			field.Schema.Type, field.Schema.Control = "boolean", "switch"
+		case float64:
+			field.Schema.Type, field.Schema.Control = "number", "number"
 		case int, int64:
 			field.Schema.Type, field.Schema.Control = "integer", "number"
 		}
@@ -876,7 +910,7 @@ func (s SettingSchema) ValidateDefinition() error {
 		if len(s.Choices) > 0 && s.Control != "select" {
 			return invalid()
 		}
-		if (s.Control == "secret" && s.Sensitivity != "secret") || (s.Control == "url" && s.Sensitivity != "url") {
+		if (s.Control == "secret" && s.Sensitivity != "secret") || (s.Control == "url" && s.Sensitivity != "url" && s.Sensitivity != "none") {
 			return invalid()
 		}
 		if s.Sensitivity == "secret" && s.Control != "secret" {

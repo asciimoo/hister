@@ -1167,7 +1167,7 @@ func TestSemanticSearchPostgresDimensions(t *testing.T) {
 			database:   "host=localhost dbname=hister",
 			enable:     true,
 			dimensions: 2001,
-			wantError:  "semantic_search.dimensions must not exceed 2000 when using PostgreSQL, got 2001",
+			wantError:  "semantic_search.dimensions: Embedding dimensions must not exceed 2000 when using PostgreSQL.",
 		},
 		{
 			name:       "SQLite above PostgreSQL maximum",

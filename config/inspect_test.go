@@ -69,13 +69,13 @@ func TestFieldCatalogPreservesEditorContract(t *testing.T) {
 			t.Fatalf("incomplete description for %s", field.Path)
 		}
 		ordinaryIndexer := field.Category == "indexer" && !strings.HasPrefix(field.Path, "indexer.pdf_parser.")
-		if field.Category != "app" && field.Path != "server.address" && !ordinaryIndexer && field.Category != "crawler" {
+		if field.Category != "app" && field.Path != "server.address" && !ordinaryIndexer && field.Category != "crawler" && field.Category != "semantic_search" {
 			if field.Schema.Type != "unknown" || field.Schema.Sensitivity != "unknown" || field.Default != nil || field.ReadOnlyReason == "" {
 				t.Fatalf("unsupported setting %s gained editing support or exposed defaults", field.Path)
 			}
 			continue
 		}
-		if field.Effect != "runtime" && (!ordinaryIndexer || field.Effect != "reindex") {
+		if field.Effect != "runtime" && field.Effect != "reindex" && field.Effect != "reembed" {
 			t.Fatalf("incorrect effect for %s", field.Path)
 		}
 		if err := field.Schema.ValidateDefinition(); err != nil {
@@ -86,6 +86,10 @@ func TestFieldCatalogPreservesEditorContract(t *testing.T) {
 				t.Fatalf("default for %s fails its own constraints: %s", field.Path, message)
 			}
 		}
+	}
+	endpoint := fields["semantic_search.embedding_endpoint"]
+	if endpoint.Schema.Sensitivity != "none" || endpoint.Schema.Control != "url" || endpoint.Default != "http://localhost:11434/v1/embeddings" {
+		t.Fatal("embedding endpoint must expose its default as an ordinary URL field")
 	}
 	title := fields["app.title"]
 	if title.Label != "Title" || title.Default != "Hister" || title.Schema.MaxLength != 256 {
@@ -179,6 +183,68 @@ func TestSelectDraftsRequireChoicesAndResetToConcreteDefaults(t *testing.T) {
 			}
 			t.Fatal("reset setting is missing")
 		})
+	}
+}
+
+func TestSemanticSearchDraftControls(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HISTER_DATA_DIR", dir)
+	filename := filepath.Join(dir, "config.yml")
+	if err := os.WriteFile(filename, []byte("# defaults\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c, _, err := LoadForInspection(filename, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	edits := []SettingEdit{
+		{Path: "semantic_search.enable", Action: "set", Value: json.RawMessage(`true`)},
+		{Path: "semantic_search.embedding_endpoint", Action: "set", Value: json.RawMessage(`"https://embeddings.example/v1/embeddings"`)},
+		{Path: "semantic_search.embedding_model", Action: "set", Value: json.RawMessage(`"small-model"`)},
+		{Path: "semantic_search.api_key", Action: "set", Value: json.RawMessage(`{"action":"replace","value":"private-api-key"}`)},
+		{Path: "semantic_search.headers", Action: "set", Value: json.RawMessage(`{"x-key":{"action":"replace","value":"private-header"}}`)},
+		{Path: "semantic_search.dimensions", Action: "set", Value: json.RawMessage(`128`)},
+		{Path: "semantic_search.semantic_weight", Action: "set", Value: json.RawMessage(`0.75`)},
+	}
+	next, fields := c.PrepareDraft(edits)
+	if len(fields) != 0 || next == nil {
+		t.Fatalf("semantic settings rejected: %v", fields)
+	}
+	if !next.SemanticSearch.Enable || next.SemanticSearch.Dimensions != 128 || next.SemanticSearch.SemanticWeight != 0.75 || next.SemanticSearch.Headers["x-key"] != "private-header" {
+		t.Fatalf("semantic draft lost typed selections: %+v", next.SemanticSearch)
+	}
+	for _, state := range next.FieldStatesForRevision("revision") {
+		if state.Path == "semantic_search.embedding_endpoint" && (state.Value != "https://embeddings.example/v1/embeddings" || state.SecretPresent || !state.Editable) {
+			t.Fatalf("embedding endpoint is not visible and editable: %+v", state)
+		}
+	}
+	raw, err := json.Marshal(next.FieldStatesForRevision("revision"))
+	if err != nil || strings.Contains(string(raw), "private-") {
+		t.Fatal("semantic settings exposed secret values")
+	}
+	for _, tc := range []struct{ path, value string }{
+		{"embedding_endpoint", `"file:///embeddings"`},
+		{"embedding_endpoint", `"not-a-url"`},
+		{"embedding_endpoint", `""`},
+		{"embedding_model", `""`},
+		{"dimensions", `0`},
+		{"semantic_weight", `1.1`},
+		{"similarity_threshold", `-0.1`},
+		{"result_limit", `0`},
+		{"max_context_length", `0`},
+		{"chunk_overlap", `512`},
+		{"query_embedding_timeout", `-1`},
+		{"max_query_embedding_concurrency", `-1`},
+		{"headers", `{"invalid header":{"action":"replace","value":"private-header"}}`},
+	} {
+		path := "semantic_search." + tc.path
+		candidate, errors := next.PrepareDraft([]SettingEdit{{Path: path, Action: "set", Value: json.RawMessage(tc.value)}})
+		if candidate != nil || len(errors) == 0 || errors[0].Path != path {
+			t.Errorf("accepted invalid %s or returned the wrong field: %v", path, errors)
+		}
+	}
+	if c.SemanticSearch.Enable || c.SemanticSearch.APIKey != "" {
+		t.Fatal("validation mutated active semantic settings")
 	}
 }
 
@@ -336,13 +402,13 @@ func TestFieldStatesRedactDeferredSettings(t *testing.T) {
 		for _, state := range c.FieldStates() {
 			states[state.Path] = state
 		}
-		for _, path := range []string{"server.database", "server.oauth", "semantic_search.api_key", "semantic_search.headers", "extractors"} {
+		for _, path := range []string{"server.database", "server.oauth", "extractors"} {
 			state, exists := states[path]
 			if !exists || state.Editable || state.Reason == "" || state.Value != nil || state.SecretPresent != populated {
 				t.Errorf("incorrect redaction for %s with populated=%v: %+v", path, populated, state)
 			}
 		}
-		for _, path := range []string{"crawler.headers", "crawler.cookies"} {
+		for _, path := range []string{"crawler.headers", "crawler.cookies", "semantic_search.api_key", "semantic_search.headers"} {
 			if state := states[path]; !state.Editable || state.SecretPresent != populated {
 				t.Fatalf("incorrect editable secret collection: %s", path)
 			}
@@ -1055,7 +1121,7 @@ semantic_search:
 	for _, field := range fields {
 		paths[field.Path] = true
 	}
-	for _, path := range []string{"app.color_scheme", "app.snippet_length", "server.max_batch_body_size", "hotkeys.web", "sensitive_content_patterns", "semantic_search"} {
+	for _, path := range []string{"app.color_scheme", "app.snippet_length", "server.max_batch_body_size", "hotkeys.web", "sensitive_content_patterns", "semantic_search.dimensions"} {
 		if !paths[path] {
 			t.Errorf("missing independent error for %s: %v", path, fields)
 		}

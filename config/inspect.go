@@ -214,7 +214,7 @@ func (c *Config) ValidateFields() []FieldError {
 	}
 	check("app.public", "Public access requires a token or user handling.", candidate.ValidatePublicMode())
 	check("hotkeys.web", "Use supported key combinations and actions.", candidate.Hotkeys.Validate())
-	check("semantic_search", "Check the embedding endpoint, model, dimensions, and context length.", candidate.validateSemanticSearch())
+	fields = append(fields, candidate.semanticSearchErrors()...)
 	check("indexer", "Check the indexer settings.", candidate.Indexer.Validate())
 	check("server.oauth", "Check provider names, required credentials, and provider settings.", candidate.validateOAuth())
 	fields = append(fields, candidate.Crawler.ValidateFields()...)
@@ -241,6 +241,22 @@ func (c *Config) Redacted() (map[string]any, error) {
 		return nil, err
 	}
 	redactMap(result)
+	// Owner metadata also covers credentials whose keys do not look secret,
+	// including cookie sources and explicitly sensitive URLs.
+	for _, field := range append(FieldCatalog(), slices.Collect(maps.Values(extractorSettings))...) {
+		if field.Schema.Sensitivity != "secret" && field.Schema.Sensitivity != "url" {
+			continue
+		}
+		parts := strings.Split(field.Path, ".")
+		parent := result
+		for _, part := range parts[:len(parts)-1] {
+			parent, _ = parent[part].(map[string]any)
+		}
+		key := parts[len(parts)-1]
+		if settingHasValue(parent[key]) {
+			parent[key] = redactedValue
+		}
+	}
 	// The crawler socket can contain credentials in its path as well as its
 	// query or userinfo. Its explicit editor metadata treats the whole URL as secret.
 	if crawler, ok := result["crawler"].(map[string]any); ok {

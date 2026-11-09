@@ -47,6 +47,7 @@
       {
         'crawler.cookies': 'cookie',
         'crawler.headers': 'header',
+        'semantic_search.headers': 'header',
         'indexer.directories': 'directory',
       } as Record<string, string>
     )[field.path] ?? 'item',

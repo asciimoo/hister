@@ -55,8 +55,8 @@ func TestRegistryOptionMetadataControlsValidationAndExposure(t *testing.T) {
 	}
 	var foundLegacy bool
 	for _, field := range fields {
-		if field.ReadOnlyReason == "" {
-			t.Fatal("extractor fields became editable before their category is supported")
+		if field.Path != "extractors.custom.options.legacy" && field.ReadOnlyReason != "" {
+			t.Fatal("described extractor fields remain read only")
 		}
 		if field.Path == "extractors.custom.options.legacy" {
 			foundLegacy = true

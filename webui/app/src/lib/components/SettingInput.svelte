@@ -61,7 +61,7 @@
   }
 </script>
 
-{#if schema.control === 'secret' || schema.control === 'url'}
+{#if schema.control === 'secret' || (schema.control === 'url' && schema.sensitivity === 'url')}
   <div class="w-full min-w-0 space-y-2">
     {#if hasStoredSecret}
       <select
@@ -139,10 +139,11 @@
     aria-describedby={description}
     aria-invalid={invalid}
   />
-{:else if schema.control === 'text'}
+{:else if schema.control === 'text' || schema.control === 'url'}
   <Input
     {id}
     class={`${controlClass} cursor-text`}
+    type={schema.control === 'url' ? 'url' : 'text'}
     value={String(value ?? '')}
     maxlength={schema.max_length}
     minlength={schema.min_length}
