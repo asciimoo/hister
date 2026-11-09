@@ -10,17 +10,17 @@
     "preview": "vite preview"
   },
   "devDependencies": {
-    "@lucide/svelte": "^1.65.0",
-    "@playwright/test": "^1.64.1",
+    "@lucide/svelte": "^1.70.0",
+    "@playwright/test": "^1.65.0",
     "@sveltejs/adapter-static": "^4.0.1",
     "@sveltejs/kit": "^3.1.0",
     "@sveltejs/vite-plugin-svelte": "^7.3.1",
-    "@tailwindcss/vite": "^4.3.3",
+    "@tailwindcss/vite": "^4.3.4",
     "mdsvex": "^0.12.8",
-    "shiki": "^4.5.0",
+    "shiki": "^4.6.0",
     "svelte": "^5.57.3",
     "tailwindcss": "^4.2.1",
-    "vite": "^8.3.5",
+    "vite": "^8.3.6",
     "typescript": "^6.0.3"
   },
   "dependencies": {
