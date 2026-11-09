@@ -69,7 +69,7 @@ jobs:
           rm dist/metadata.json dist/artifacts.json dist/config.yaml
 
       - name: Update Latest Release
-        uses: softprops/action-gh-release@v3.0.3
+        uses: softprops/action-gh-release@v3.0.4
         with:
           tag_name: rolling
           name: 'Hister (Dev Build)'
