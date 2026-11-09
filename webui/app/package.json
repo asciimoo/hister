@@ -12,15 +12,15 @@
     "serve": "sh ../dev-serve.sh"
   },
   "devDependencies": {
-    "@playwright/test": "^1.64.1",
+    "@playwright/test": "^1.65.0",
     "@sveltejs/adapter-static": "^4.0.1",
     "@sveltejs/kit": "^3.1.0",
     "@sveltejs/vite-plugin-svelte": "^7.3.1",
-    "@tailwindcss/vite": "^4.3.3",
+    "@tailwindcss/vite": "^4.3.4",
     "svelte": "^5.57.3",
     "tailwindcss": "^4.2.1",
     "typescript": "^6.0.3",
-    "vite": "^8.3.5"
+    "vite": "^8.3.6"
   },
   "dependencies": {
     "@fontsource/fira-code": "^5.3.0",
@@ -28,11 +28,11 @@
     "@fontsource/outfit": "^5.3.0",
     "@fontsource/space-grotesk": "^5.3.0",
     "@hister/components": "^1.0.0",
-    "@lucide/svelte": "^1.65.0",
+    "@lucide/svelte": "^1.70.0",
     "@tailwindcss/typography": "^0.5.20",
     "animejs": "^4.5.0",
     "mode-watcher": "^1.1.0",
-    "shiki": "^4.5.0"
+    "shiki": "^4.6.0"
   },
   "imports": {
     "#lib/*": "./src/lib/*"
