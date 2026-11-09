@@ -6,23 +6,30 @@ package cmd
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
+	"unicode"
 
 	"github.com/asciimoo/hister/client"
+	"github.com/asciimoo/hister/server/crawler"
 	"github.com/asciimoo/hister/server/document"
+	"github.com/asciimoo/hister/server/model"
 
 	"charm.land/lipgloss/v2"
 	"github.com/bodgit/sevenzip"
+	"github.com/mmcdole/gofeed"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 )
@@ -181,8 +188,8 @@ func exportOutputPath(path string) string {
 
 var importCmd = &cobra.Command{
 	Use:   "import",
-	Short: "Import documents from files, sitemaps, browsers, or services",
-	Long: `Import documents from files, sitemaps, browser history, browser bookmarks, or external services.
+	Short: "Import documents from files, feeds, sitemaps, browsers, or services",
+	Long: `Import documents from files, feeds, sitemaps, browser history, browser bookmarks, or external services.
 
 Use one of the available subcommands to select the import source.
 
@@ -197,6 +204,128 @@ resumable crawl state locally, fetch page contents, and submit the prepared
 documents to the server. Use import browser history for visit history or
 import browser bookmarks for bookmarks from Firefox based browsers, Chromium
 based browsers, and Ladybird. Both subcommands accept --browser and --db.`,
+}
+
+var importRSSCmd = &cobra.Command{
+	Use:   "rss FEED_URL",
+	Short: "Import articles linked from an RSS or Atom feed",
+	Long: `Fetch an RSS or Atom feed from an HTTP or HTTPS URL and index its linked
+articles. Only articles listed in the feed are fetched; links on those pages
+are not followed. Duplicate URLs are visited once. Existing documents are
+skipped unless --force is specified. The default label is rss.
+
+Crawler settings and robots rules apply. The feed is always fetched over HTTP;
+--backend selects how articles are fetched. This command imports once and exits.
+
+Articles are queued in a persistent crawl job in the local Hister database
+and submitted to the configured server. Resume an interrupted article import
+with hister index --job-id ID, using the job ID printed when indexing starts.
+
+Examples:
+  hister import rss https://example.com/feed.xml
+  hister import rss https://example.com/atom.xml --label news`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) (resultErr error) {
+		cmd.SilenceUsage = true
+		applyIndexCrawlerFlags(cmd)
+		robots, err := indexRobotsCache(cmd)
+		if err != nil {
+			return err
+		}
+		urls, err := fetchRSSURLs(cmd.Context(), args[0], robots)
+		if err != nil {
+			return fmt.Errorf("import RSS feed: %w", err)
+		}
+		reportPath, _ := cmd.Flags().GetString("failed-urls")
+		report, err := newFailedURLReport(reportPath)
+		if err != nil {
+			return err
+		}
+		defer func() {
+			if err := report.Close(); err != nil {
+				resultErr = err
+			}
+		}()
+		if err := model.Init(cfg); err != nil {
+			return err
+		}
+		initExtractor()
+		feedURL, _ := url.Parse(args[0])
+		return runURLInputJob(cmd, "rss-"+feedURL.Hostname(), urls, &crawler.ValidatorRules{NoDepth: true}, robots, report)
+	},
+}
+
+func fetchRSSURLs(ctx context.Context, source string, robots *crawler.RobotsCache) ([]string, error) {
+	const maxFeedBytes = 16 << 20
+	feedURL, err := url.Parse(source)
+	if err != nil || (feedURL.Scheme != "http" && feedURL.Scheme != "https") || feedURL.Hostname() == "" || strings.ContainsFunc(source, unicode.IsSpace) {
+		return nil, errors.New("feed requires an absolute HTTP or HTTPS URL")
+	}
+	if feedURL.User != nil {
+		return nil, errors.New("feed URL must not contain embedded credentials; use crawler headers or cookies")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if robots != nil && !robots.Allowed(ctx, source) {
+		return nil, errors.New("feed disallowed by robots.txt")
+	}
+	httpClient, err := crawler.NewHTTPClient(&cfg.Crawler)
+	if err != nil {
+		return nil, err
+	}
+	defer httpClient.CloseIdleConnections()
+	resp, err := httpClient.Get(ctx, source)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected HTTP status %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxFeedBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("read feed: %w", err)
+	}
+	if len(body) > maxFeedBytes {
+		return nil, errors.New("feed exceeds the 16 MiB size limit")
+	}
+	feed, err := gofeed.NewParser().Parse(bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("parse feed: %w", err)
+	}
+	var urls []string
+	seen := make(map[string]bool)
+	for i, item := range feed.Items {
+		link := strings.TrimSpace(item.Link)
+		if link == "" {
+			continue
+		}
+		articleURL, err := url.Parse(link)
+		if err != nil || strings.ContainsFunc(link, unicode.IsSpace) {
+			log.Warn().Int("item", i+1).Msg("Skipping invalid feed article URL")
+			continue
+		}
+		articleURL = resp.Request.URL.ResolveReference(articleURL)
+		if (articleURL.Scheme != "http" && articleURL.Scheme != "https") || articleURL.Hostname() == "" || articleURL.User != nil {
+			log.Warn().Int("item", i+1).Msg("Skipping feed article URL without HTTP or HTTPS or with embedded credentials")
+			continue
+		}
+		articleURL.Fragment = ""
+		articleURL.RawFragment = ""
+		link = articleURL.String()
+		if !seen[link] {
+			seen[link] = true
+			urls = append(urls, link)
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if len(urls) == 0 {
+		return nil, errors.New("feed contains no article URLs")
+	}
+	return urls, nil
 }
 
 var importFileCmd = &cobra.Command{

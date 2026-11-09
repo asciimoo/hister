@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -24,9 +25,213 @@ import (
 	"github.com/asciimoo/hister/client"
 	"github.com/asciimoo/hister/config"
 	"github.com/asciimoo/hister/server/document"
+	"github.com/asciimoo/hister/server/model"
+	"github.com/asciimoo/hister/server/testutil"
 )
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func TestImportRSS(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		feed  string
+		flags []string
+		label string
+		count int
+	}{
+		{
+			name:  "RSS",
+			feed:  `<rss version="2.0"><channel><title>News</title><item><link>%[1]s/article</link></item><item><link>%[1]s/article</link></item><item><link>%[1]s/existing</link></item><item><link>%[1]s/blocked</link></item></channel></rss>`,
+			label: "rss", count: 1,
+		},
+		{
+			name: "Atom with relative links and force",
+			feed: `<feed xmlns="http://www.w3.org/2005/Atom"><title>News</title>
+<entry><link rel="self" href="%[1]s/metadata"/><link rel="alternate" href="../article"/></entry>
+<entry><link href="%[1]s/article#section"/></entry>
+<entry><link href="%[1]s/existing"/></entry>
+<entry><link href="%[1]s/blocked"/></entry>
+<entry><title>No link</title></entry>
+<entry><link href="file:///nonexistent-hister-feed-entry"/></entry>
+<entry><link href="javascript:alert(1)"/></entry>
+<entry><link href="http://user:secret@127.0.0.1:1/private"/></entry></feed>`,
+			flags: []string{"--force", "--label=news", "--ignore-rules"}, label: "news", count: 2,
+		},
+		{
+			name: "Atom with explicit base URL",
+			feed: `<feed xmlns="http://www.w3.org/2005/Atom" xml:base="%[1]s/posts/">
+<entry xml:base="../"><link href="article"/></entry>
+<entry><link href="%[1]s/existing"/></entry>
+<entry><link href="%[1]s/blocked"/></entry></feed>`,
+			label: "rss", count: 1,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			registered, _, err := rootCmd.Find([]string{"import", "rss"})
+			if err != nil || registered.Name() != "rss" {
+				t.Fatalf("RSS import command unavailable: command=%s, error=%v", registered.Name(), err)
+			}
+			oldCfg, oldDB := cfg, model.DB
+			t.Cleanup(func() { cfg, model.DB = oldCfg, oldDB })
+			cfg = testutil.Config(t)
+			cfg.Crawler.Backend = "http"
+			cfg.Crawler.Delay = 0
+			cfg.Crawler.Timeout = 2
+			cfg.Crawler.Headers = map[string]string{"X-Feed-Test": "configured"}
+			cfg.App.AccessToken = "hister-only"
+			var submitted []document.Document
+			var server *httptest.Server
+			server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if !strings.HasPrefix(r.URL.Path, "/api/") && r.Header.Get("Authorization") != "" {
+					t.Error("Hister token sent to feed or article")
+				}
+				switch r.URL.Path {
+				case "/feed.xml":
+					if r.URL.Query().Get("format") != "xml" {
+						t.Error("feed URL query was lost")
+					}
+					http.Redirect(w, r, "/feeds/latest.xml", http.StatusFound)
+				case "/feeds/latest.xml":
+					if r.Header.Get("X-Feed-Test") != "configured" {
+						t.Error("configured header missing from feed request")
+					}
+					_, _ = fmt.Fprintf(w, tc.feed, server.URL)
+				case "/robots.txt":
+					_, _ = io.WriteString(w, "User-agent: *\nDisallow: /blocked\n")
+				case "/favicon.ico":
+					w.WriteHeader(http.StatusNotFound)
+				case "/api/document":
+					if !strings.HasSuffix(r.URL.Query().Get("url"), "/existing") {
+						w.WriteHeader(http.StatusNotFound)
+					}
+				case "/article", "/existing":
+					if r.URL.Path == "/existing" && tc.count == 1 {
+						t.Error("existing article fetched without --force")
+					}
+					w.Header().Set("Content-Type", "text/html")
+					_, _ = fmt.Fprint(w, `<html><head><title>Feed article</title></head><body><p>Full article content.</p><a href="/unlisted">Do not follow</a></body></html>`)
+				case "/api/add":
+					var doc document.Document
+					if err := json.NewDecoder(r.Body).Decode(&doc); err != nil {
+						t.Error(err)
+					}
+					submitted = append(submitted, doc)
+				default:
+					t.Errorf("unexpected request: %s", r.URL)
+					w.WriteHeader(http.StatusNotFound)
+				}
+			}))
+			defer server.Close()
+			if err := cfg.UpdateBaseURL(server.URL); err != nil {
+				t.Fatal(err)
+			}
+			command := &cobra.Command{Use: registered.Use, Args: registered.Args, RunE: registered.RunE}
+			addURLInputFlags(command)
+			command.Flags().String("label", registered.Flags().Lookup("label").DefValue, "")
+			command.Flags().Bool("ignore-rules", false, "")
+			command.SetArgs(append([]string{server.URL + "/feed.xml?format=xml"}, tc.flags...))
+			var output bytes.Buffer
+			command.SetOut(&output)
+			command.SetErr(&output)
+			if err := command.ExecuteContext(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+			db, err := model.DB.DB()
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = db.Close() })
+			if len(submitted) != tc.count {
+				t.Fatalf("submitted %d documents, want %d", len(submitted), tc.count)
+			}
+			doc := submitted[0]
+			if doc.URL != server.URL+"/article" || doc.Title != "Feed article" || doc.Label != tc.label || !strings.Contains(doc.Text, "Full article content.") || doc.IgnoreSkipRules() != (len(tc.flags) > 0) {
+				t.Errorf("unexpected imported document: %+v", doc)
+			}
+			if !strings.Contains(output.String(), "Starting crawl job:") || (tc.count == 1 && !strings.Contains(output.String(), "2 skipped")) {
+				t.Errorf("missing job or skip summary: %s", &output)
+			}
+		})
+	}
+}
+
+func TestImportRSSRejectsInvalidFeeds(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		source string
+		body   string
+		status int
+		cancel bool
+		robots bool
+		want   string
+	}{
+		{name: "relative source", source: "feed.xml", want: "absolute HTTP or HTTPS URL"},
+		{name: "file source", source: "file:///feed.xml", want: "absolute HTTP or HTTPS URL"},
+		{name: "missing host", source: "https:///feed.xml", want: "absolute HTTP or HTTPS URL"},
+		{name: "credentials", source: "https://user:secret@127.0.0.1:1/feed", want: "embedded credentials"},
+		{name: "HTTP failure", status: http.StatusNotFound, want: "HTTP status 404"},
+		{name: "invalid content", body: `<html><body>Not a feed</body></html>`, want: "parse feed"},
+		{name: "malformed XML", body: `<rss version="2.0"><channel><item><link>`, want: "parse feed"},
+		{name: "empty feed", body: `<rss version="2.0"><channel><title>Empty</title></channel></rss>`, want: "no article URLs"},
+		{name: "oversized feed", body: `<rss version="2.0"><channel/></rss>` + strings.Repeat(" ", 16<<20), want: "16 MiB"},
+		{name: "canceled", cancel: true, want: "context canceled"},
+		{name: "robots disallow feed", robots: true, want: "disallowed by robots.txt"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			oldCfg, oldDB := cfg, model.DB
+			t.Cleanup(func() { cfg, model.DB = oldCfg, oldDB })
+			cfg = testutil.Config(t)
+			cfg.Crawler.NoRobots = !tc.robots
+			model.DB = nil
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if tc.robots {
+					if r.URL.Path != "/robots.txt" {
+						t.Errorf("robots disallowed feed fetched: %s", r.URL)
+					}
+					_, _ = io.WriteString(w, "User-agent: *\nDisallow: /feed\n")
+					return
+				}
+				if r.URL.Path != "/feed" {
+					t.Errorf("unexpected request: %s", r.URL)
+				}
+				if tc.status != 0 {
+					w.WriteHeader(tc.status)
+				}
+				_, _ = io.WriteString(w, tc.body)
+			}))
+			defer server.Close()
+			source := tc.source
+			if source == "" {
+				source = server.URL + "/feed"
+			}
+			command := &cobra.Command{Use: importRSSCmd.Use, Args: importRSSCmd.Args, RunE: importRSSCmd.RunE}
+			addURLInputFlags(command)
+			command.SetOut(io.Discard)
+			command.SetErr(io.Discard)
+			command.SetArgs([]string{source})
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			if tc.cancel {
+				cancel()
+			}
+			err := command.ExecuteContext(ctx)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("error = %v, want %q", err, tc.want)
+			}
+			if tc.cancel && !errors.Is(err, context.Canceled) {
+				t.Errorf("cancellation not preserved: %v", err)
+			}
+			if model.DB != nil {
+				t.Error("invalid feed opened the Hister database")
+				db, dbErr := model.DB.DB()
+				if dbErr != nil {
+					t.Fatal(dbErr)
+				}
+				_ = db.Close()
+			}
+		})
+	}
+}
 
 func TestImportZIMCommandRegistered(t *testing.T) {
 	command, _, err := rootCmd.Find([]string{"import", "zim"})
@@ -893,6 +1098,7 @@ func TestImportCommandHierarchy(t *testing.T) {
 	tests := map[string]*cobra.Command{
 		"file":       importFileCmd,
 		"sitemap":    importSitemapCmd,
+		"rss":        importRSSCmd,
 		"browser":    importBrowserCmd,
 		"linkding":   importLinkdingCmd,
 		"linkwarden": importLinkwardenCmd,

@@ -71,6 +71,7 @@ func configureCommandScopes() {
 	setCommandScope(importFileCmd, executionScopeHybrid)
 	setCommandScope(importZIMCmd, executionScopeHybrid)
 	setCommandScope(importSitemapCmd, executionScopeHybrid, "client-timeout")
+	setCommandScope(importRSSCmd, executionScopeHybrid, "client-timeout")
 	setCommandScope(importRaindropCmd, executionScopeHybrid)
 	setCommandScope(importBrowserCmd, executionScopeHybrid, "client-timeout")
 	setCommandScope(importBrowserHistoryCmd, executionScopeHybrid, "client-timeout")

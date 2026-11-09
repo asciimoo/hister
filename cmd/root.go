@@ -284,6 +284,7 @@ func init() {
 	importCmd.AddCommand(importFileCmd)
 	importCmd.AddCommand(importZIMCmd)
 	importCmd.AddCommand(importSitemapCmd)
+	importCmd.AddCommand(importRSSCmd)
 	importCmd.AddCommand(importBrowserCmd)
 	importBrowserCmd.AddCommand(importBrowserHistoryCmd)
 	importBrowserCmd.AddCommand(importBookmarksCmd)
@@ -326,6 +327,8 @@ func init() {
 	}
 
 	addDocumentImportFlags(importFileCmd)
+	addURLInputFlags(importRSSCmd)
+	importRSSCmd.Flags().String("label", "rss", "Label to attach to imported articles")
 	importFileCmd.Flags().Bool("watch", false, "Keep importing created and changed file snapshots until interrupted")
 	addCommonImportFlags(importRaindropCmd)
 	addCrawlerBackendFlags(importRaindropCmd)

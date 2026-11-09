@@ -27,6 +27,7 @@ require (
 	github.com/jackc/pgx/v5 v5.12.0
 	github.com/mattn/go-sqlite3 v1.14.53
 	github.com/microcosm-cc/bluemonday v1.0.27
+	github.com/mmcdole/gofeed v1.5.0
 	github.com/mmonterroca/docxgo/v2 v2.16.0
 	github.com/niklasfasching/go-org v1.9.1
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
@@ -103,6 +104,7 @@ require (
 	github.com/mattn/go-colorable v0.1.16 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/mattn/go-runewidth v0.0.31 // indirect
+	github.com/mmcdole/goxpp/v2 v2.0.0 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/mschoch/smat v0.2.0 // indirect

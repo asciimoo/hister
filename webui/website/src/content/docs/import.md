@@ -19,6 +19,7 @@ The `hister import` command collects related import tools under one command. Eve
 | `hister import file [INPUT...]`             | Exports, saved pages, and file snapshots    | `import` or watched label |
 | `hister import zim ARCHIVE`                 | Kiwix ZIM archives                          | `kiwix`                   |
 | `hister import sitemap FILE_OR_URL`         | Pages listed in XML sitemaps                | `sitemap`                 |
+| `hister import rss FEED_URL`                | Articles linked from RSS or Atom feeds      | `rss`                     |
 | `hister import browser [BROWSER] [DB_PATH]` | Browser history databases                   | `browser`                 |
 | `hister import browser history`             | Browser history with `--browser` and `--db` | `browser`                 |
 | `hister import browser bookmarks`           | Firefox, Chromium, and Ladybird bookmarks   | `bookmarks`               |
@@ -209,6 +210,22 @@ hister index --job-id JOB_ID
 ```
 
 The stored job retains its page queue, label, and restriction to listed URLs. When resuming, supply any command line overrides for crawler settings, destination ownership, `--force`, `--ignore-rules`, or `--allow-sensitive` again. Interrupted sitemap discovery must be started again; only the page crawl is resumable.
+
+## Importing RSS and Atom Feeds
+
+Provide the feed's HTTP or HTTPS URL to import its linked articles:
+
+```bash
+hister import rss https://example.com/feed.xml
+hister import rss https://example.com/atom.xml --label news
+hister import rss https://example.com/feed.xml --force
+```
+
+The command fetches each article's full page and imports once, then exits. It does not subscribe to future updates or import the text embedded in the feed. Duplicate article URLs are processed once, and existing documents are skipped unless you pass `--force`. Entries without a usable HTTP or HTTPS article link are skipped. Relative links are resolved against the feed URL after redirects, or an explicit base URL in the feed.
+
+The default label is `rss`. The [sitemap import options](#importing-sitemaps) also apply, including crawler settings, robots checks, ownership, and failed URL reports. Feeds are always downloaded over HTTP; `--backend` selects how articles are fetched. Feed downloads are limited to 16 MiB. Invalid, empty, or failed feeds stop the import before articles are queued.
+
+The command prints a crawl job ID. Resume an interrupted article import with `hister index --job-id JOB_ID`, supplying any crawler, ownership, or rule overrides again. Run the RSS import command again to discover new articles.
 
 ## Importing Browser History
 

@@ -177,6 +177,10 @@ github.com/mattn/go-sqlite3 v1.14.53 h1:mnTM0owzUMrKuLo+0w51NUiB0ir2Fo7kFXlPt/l3
 github.com/mattn/go-sqlite3 v1.14.53/go.mod h1:6JTjA44L93a0QCyJef5YvlPoKXntQPjzWv5gtm9sB6w=
 github.com/microcosm-cc/bluemonday v1.0.27 h1:MpEUotklkwCSLeH+Qdx1VJgNqLlpY2KXwXFM08ygZfk=
 github.com/microcosm-cc/bluemonday v1.0.27/go.mod h1:jFi9vgW+H7c3V0lb6nR74Ib/DIB5OBs92Dimizgw2cA=
+github.com/mmcdole/gofeed v1.5.0 h1:g5uott2G5jDZmB38VHJzlIuvDIBQMurteRgGLpBd3SY=
+github.com/mmcdole/gofeed v1.5.0/go.mod h1:4TUghKpTQu+4onv8FU6e0tf6JW3jRy/5VkLGwF75yfg=
+github.com/mmcdole/goxpp/v2 v2.0.0 h1:HrSCflxerUEqZQNq3u7ldtmE/XkwnTx4Zpq2DW4i5rQ=
+github.com/mmcdole/goxpp/v2 v2.0.0/go.mod h1:CUduYMnO9JB6Z/uqDn9Ormk/r8E9BsLQxHPWDZ961Os=
 github.com/mmonterroca/docxgo/v2 v2.16.0 h1:IqiSGU3CuiELIC6SaKwcceSIqWV19myHMtDGhZP1pZw=
 github.com/mmonterroca/docxgo/v2 v2.16.0/go.mod h1:Yc3h7M+sssxGMz51qQ8EHbfDb2NyleLbS+lZLH9Y0us=
 github.com/modern-go/concurrent v0.0.0-20180228061459-e0a39a4cb421/go.mod h1:6dJC0mAP4ikYIbvyc7fijjWJddQyLn8Ig3JB5CqoB9Q=
