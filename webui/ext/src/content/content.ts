@@ -13,7 +13,7 @@ const previewCheckInterval = 5 * 60 * 1000;
 const navigationDebounce = 1000;
 const supportedContentTypes = new Set(['text/html', 'application/xhtml+xml', 'text/plain']);
 
-type PageSnapshot = { state: PageState; data: PageData };
+type PageSnapshot = { state: PageState; data: PageData; sourceURL: string };
 type SubmissionResponse = { status?: string; status_code?: number; error?: string };
 
 let previous: PageSnapshot | null = null;
@@ -74,18 +74,19 @@ function stateChanged(state: PageState): boolean {
 function capture(checkPreview = false): PageSnapshot | null {
   if (!isSupportedPage()) return null;
   const url = getPageURL();
-  if (url === skippedUrl) return null;
+  const sourceURL = window.location.href;
+  if (url === skippedUrl && sourceURL === previous?.sourceURL) return null;
   skippedUrl = null;
 
   lastCaptureAt = Date.now();
   const state = extractPageState();
-  const changed = stateChanged(state);
+  const changed = stateChanged(state) || sourceURL !== previous?.sourceURL;
   if (!changed && !checkPreview && Date.now() - lastPreviewCheckAt < previewCheckInterval) {
     return null;
   }
   const data = extractPageData(state);
   lastPreviewCheckAt = Date.now();
-  return changed || data.html !== previous?.data.html ? { state, data } : null;
+  return changed || data.html !== previous?.data.html ? { state, data, sourceURL } : null;
 }
 
 function submit(
@@ -98,8 +99,8 @@ function submit(
   pollInterval = minimumUpdateInterval;
   const number = ++submissionNumber;
   const message = manual
-    ? { pageData: snapshot.data, action: 'reindex' }
-    : { pageData: snapshot.data };
+    ? { pageData: snapshot.data, sourceURL: snapshot.sourceURL, action: 'reindex' }
+    : { pageData: snapshot.data, sourceURL: snapshot.sourceURL };
   chrome.runtime.sendMessage(message, (response: SubmissionResponse | undefined) => {
     // A delayed reply must not mark a newer page or manual submission as skipped.
     if (number === submissionNumber) {
@@ -194,7 +195,13 @@ document.addEventListener('visibilitychange', () => {
     updateTimer = null;
     const snapshot = pendingHiddenSnapshot;
     pendingHiddenSnapshot = null;
-    if (snapshot && snapshot.state.url !== skippedUrl && isContextValid()) submit(snapshot);
+    if (
+      snapshot &&
+      (snapshot.state.url !== skippedUrl || snapshot.sourceURL !== previous?.sourceURL) &&
+      isContextValid()
+    ) {
+      submit(snapshot);
+    }
   };
   if (cooldown() === 0) flush();
   else updateTimer = setTimeout(flush, cooldown());
@@ -215,7 +222,12 @@ window.addEventListener('pagehide', () => {
   }
   // Hand the snapshot to the background process before this context disappears.
   // Closing or navigating away is an exception to the automatic update interval.
-  if (snapshot && snapshot.state.url !== skippedUrl) submit(snapshot);
+  if (
+    snapshot &&
+    (snapshot.state.url !== skippedUrl || snapshot.sourceURL !== previous?.sourceURL)
+  ) {
+    submit(snapshot);
+  }
 });
 
 window.addEventListener('pageshow', (event) => {
@@ -251,7 +263,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     const state = extractPageState();
     const data = extractPageData(state);
     lastPreviewCheckAt = Date.now();
-    submit({ state, data }, true, sendResponse);
+    submit({ state, data, sourceURL: window.location.href }, true, sendResponse);
     enableMonitoring();
     scheduleUpdate(minimumUpdateInterval);
   } catch (error) {
