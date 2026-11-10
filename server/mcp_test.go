@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -38,9 +39,7 @@ func mcpTestHeaders(extra map[string]string) map[string]string {
 		"Content-Type": "application/json",
 		"Accept":       "application/json, text/event-stream",
 	}
-	for key, value := range extra {
-		headers[key] = value
-	}
+	maps.Copy(headers, extra)
 	return headers
 }
 
