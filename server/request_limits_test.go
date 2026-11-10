@@ -72,6 +72,7 @@ func TestRequestBodyLimits(t *testing.T) {
 			t.Run(fmt.Sprintf("%s/chunked=%t", tc.path, chunked), func(t *testing.T) {
 				req := httptest.NewRequest(http.MethodPost, tc.path, strings.NewReader(tc.body))
 				req.Header.Set("Content-Type", tc.contentType)
+				req.Header.Set("Accept", "application/json, text/event-stream")
 				req.Header.Set("Origin", "hister://")
 				req.Header.Set("X-Access-Token", tc.token)
 				if chunked {
@@ -193,6 +194,7 @@ func TestMCPBodyLimitBoundary(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(body))
 			req.ContentLength = -1
 			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Accept", "application/json, text/event-stream")
 			rec := httptest.NewRecorder()
 			handler.ServeHTTP(rec, req)
 			want := http.StatusOK

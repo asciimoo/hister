@@ -877,8 +877,20 @@ the Hister configuration.
 ```bash
 curl -s -X POST http://127.0.0.1:4433/mcp \
   -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
   -H "Authorization: Bearer <your-access-token>" \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"curl","version":"0"}}}'
+```
+
+After a successful response, send the `initialized` notification. The server
+acknowledges it with `202 Accepted` and no body:
+
+```bash
+curl -s -X POST http://127.0.0.1:4433/mcp \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -H "Authorization: Bearer <your-access-token>" \
+  -d '{"jsonrpc":"2.0","method":"notifications/initialized"}'
 ```
 
 ### List Tools
@@ -886,6 +898,7 @@ curl -s -X POST http://127.0.0.1:4433/mcp \
 ```bash
 curl -s -X POST http://127.0.0.1:4433/mcp \
   -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
   -H "Authorization: Bearer <your-access-token>" \
   -d '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'
 ```
@@ -895,6 +908,7 @@ curl -s -X POST http://127.0.0.1:4433/mcp \
 ```bash
 curl -s -X POST http://127.0.0.1:4433/mcp \
   -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
   -H "Authorization: Bearer <your-access-token>" \
   -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"search","arguments":{"query":"python async","limit":5}}}'
 ```
@@ -912,6 +926,7 @@ Include full text and language fields when testing optional result data:
 ```bash
 curl -s -X POST http://127.0.0.1:4433/mcp \
   -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
   -H "Authorization: Bearer <your-access-token>" \
   -d '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"search","arguments":{"query":"python async","limit":5,"fields":["text","language"]}}}'
 ```
@@ -921,6 +936,7 @@ curl -s -X POST http://127.0.0.1:4433/mcp \
 ```bash
 curl -s -X POST http://127.0.0.1:4433/mcp \
   -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
   -H "Authorization: Bearer <your-access-token>" \
   -d '{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"get_preview","arguments":{"url":"https://example.com/article"}}}'
 ```
@@ -944,6 +960,7 @@ portions may split tags or entities and must be reassembled before rendering.
 ```bash
 curl -s -X POST http://127.0.0.1:4433/mcp \
   -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
   -H "Authorization: Bearer <your-access-token>" \
   -d '{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"get_history","arguments":{"mode":"indexed","limit":10}}}'
 ```
@@ -953,6 +970,7 @@ curl -s -X POST http://127.0.0.1:4433/mcp \
 ```bash
 curl -s -X POST http://127.0.0.1:4433/mcp \
   -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
   -H "Authorization: Bearer <your-access-token>" \
   -d '{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"get_facets","arguments":{"query":"python","limit":5}}}'
 ```

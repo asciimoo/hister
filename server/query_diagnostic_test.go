@@ -16,7 +16,7 @@ import (
 
 func TestInvalidQueryHTTPResponses(t *testing.T) {
 	_, handler := newPublicTokenTestServer(t)
-	headers := map[string]string{"Content-Type": "application/json", "X-Access-Token": "secret", "Origin": "hister://"}
+	headers := map[string]string{"Content-Type": "application/json", "Accept": "application/json, text/event-stream", "X-Access-Token": "secret", "Origin": "hister://"}
 	for _, input := range []string{"needle OR", `"needle`, "title:", "url_re:["} {
 		t.Run(input, func(t *testing.T) {
 			rec := testutil.ServeHTTP(t, handler, http.MethodGet, "/search?q="+url.QueryEscape(input), nil, headers)
