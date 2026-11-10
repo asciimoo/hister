@@ -225,7 +225,11 @@ func TestPublicModeAllowsDocumentedPublicRoutes(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rec := testutil.ServeHTTP(t, handler, tt.method, tt.target, strings.NewReader(tt.body), nil)
+			var headers map[string]string
+			if tt.target == "/mcp" {
+				headers = mcpTestHeaders(nil)
+			}
+			rec := testutil.ServeHTTP(t, handler, tt.method, tt.target, strings.NewReader(tt.body), headers)
 
 			if rec.Code != tt.want {
 				t.Fatalf("%s %s status = %d, want %d; body=%s", tt.method, tt.target, rec.Code, tt.want, rec.Body.String())
@@ -433,9 +437,9 @@ func TestMCPGetHistoryOpenedMode(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rec := testutil.ServeHTTP(t, handler, http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_history","arguments":{"mode":"opened","limit":10}}}`), map[string]string{
+	rec := testutil.ServeHTTP(t, handler, http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_history","arguments":{"mode":"opened","limit":10}}}`), mcpTestHeaders(map[string]string{
 		"X-Access-Token": "secret",
-	})
+	}))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("POST /mcp get_history status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
@@ -485,9 +489,9 @@ func TestMCPGetHistoryOpenedMode(t *testing.T) {
 
 func TestMCPGetHistoryDefaultsToIndexedMode(t *testing.T) {
 	_, handler := newTokenTestServer(t, false)
-	rec := testutil.ServeHTTP(t, handler, http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_history","arguments":{"limit":10}}}`), map[string]string{
+	rec := testutil.ServeHTTP(t, handler, http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_history","arguments":{"limit":10}}}`), mcpTestHeaders(map[string]string{
 		"X-Access-Token": "secret",
-	})
+	}))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("POST /mcp get_history status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())

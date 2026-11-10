@@ -108,13 +108,6 @@ func serveMCP(c *webContext) {
 	}
 	c.Request.Body = io.NopCloser(bytes.NewReader(body))
 	c.Request.ContentLength = int64(len(body))
-	// Hister has always ignored Content-Type and Accept on this endpoint. The
-	// SDK rejects requests without application/json and text/event-stream, so
-	// set both to keep existing clients working. The Origin check above has
-	// already run, so this does not open the endpoint to cross-site requests.
-	// The JSON-RPC body is still parsed strictly.
-	c.Request.Header.Set("Content-Type", "application/json")
-	c.Request.Header.Set("Accept", "application/json, text/event-stream")
 
 	server := newMCPServer(c)
 	mcpRegisterUnknownMethod(server, body)

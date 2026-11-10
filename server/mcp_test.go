@@ -44,6 +44,13 @@ func mcpTestHeaders(extra map[string]string) map[string]string {
 	return headers
 }
 
+func newMCPTestRequest(method, target, body string) *http.Request {
+	req := httptest.NewRequest(method, target, strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	return req
+}
+
 func TestMCPGetFacets(t *testing.T) {
 	cfg := testutil.InitModel(t)
 	cfg.App.UserHandling = true
@@ -77,7 +84,7 @@ func TestMCPGetFacets(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	listed := testutil.ServeHTTP(t, handler, http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`), nil)
+	listed := testutil.ServeHTTP(t, handler, http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`), mcpTestHeaders(nil))
 	var inventory struct {
 		Result struct {
 			Tools []struct{ Name string } `json:"tools"`
@@ -122,7 +129,7 @@ func TestMCPGetFacets(t *testing.T) {
 			if tt.token != "" {
 				headers = map[string]string{"Authorization": "Bearer " + tt.token}
 			}
-			rec := testutil.ServeHTTP(t, handler, http.MethodPost, "/mcp", strings.NewReader(string(body)), headers)
+			rec := testutil.ServeHTTP(t, handler, http.MethodPost, "/mcp", strings.NewReader(string(body)), mcpTestHeaders(headers))
 			var response struct {
 				Result struct {
 					Content           []mcpTextContent    `json:"content"`
@@ -186,7 +193,7 @@ func TestMCPGetFacetsInvalidArguments(t *testing.T) {
 	_, handler := newPublicTokenTestServer(t)
 	for _, args := range []string{`{"query":42}`, `{"query":"needle OR"}`, `{"date_from":"yesterday"}`, `{"date_to":"2026-02-30"}`} {
 		body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_facets","arguments":` + args + `}}`
-		rec := testutil.ServeHTTP(t, handler, http.MethodPost, "/mcp", strings.NewReader(body), nil)
+		rec := testutil.ServeHTTP(t, handler, http.MethodPost, "/mcp", strings.NewReader(body), mcpTestHeaders(nil))
 		var response struct {
 			Error *mcpRPCError `json:"error"`
 		}
@@ -240,7 +247,7 @@ func TestMCPSearchRespectsLimit(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			request := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"search","arguments":{"query":"limit regression"` + tt.argument + `}}}`
-			rec := testutil.ServeHTTP(t, handler, http.MethodPost, "/mcp", strings.NewReader(request), map[string]string{"Authorization": "Bearer secret"})
+			rec := testutil.ServeHTTP(t, handler, http.MethodPost, "/mcp", strings.NewReader(request), mcpTestHeaders(map[string]string{"Authorization": "Bearer secret"}))
 			if rec.Code != http.StatusOK {
 				t.Fatalf("status = %d; body=%s", rec.Code, rec.Body.String())
 			}
@@ -326,7 +333,7 @@ func TestMCPSearchPagination(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				rec := testutil.ServeHTTP(t, handler, http.MethodPost, "/mcp", strings.NewReader(string(body)), headers)
+				rec := testutil.ServeHTTP(t, handler, http.MethodPost, "/mcp", strings.NewReader(string(body)), mcpTestHeaders(headers))
 				var response struct {
 					Result struct {
 						Content           []mcpTextContent    `json:"content"`
@@ -394,7 +401,7 @@ func TestMCPSearchRejectsInvalidPageKey(t *testing.T) {
 	_, handler := newPublicTokenTestServer(t)
 	for _, key := range []string{"invalid", `[]`, `{"offset":-1}`} {
 		body := fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"search","arguments":{"query":"pagination","page_key":%q}}}`, key)
-		rec := testutil.ServeHTTP(t, handler, http.MethodPost, "/mcp", strings.NewReader(body), nil)
+		rec := testutil.ServeHTTP(t, handler, http.MethodPost, "/mcp", strings.NewReader(body), mcpTestHeaders(nil))
 		var response struct {
 			Error *mcpRPCError `json:"error"`
 		}
@@ -634,7 +641,7 @@ func TestMCPPreviewContentControls(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		rec := testutil.ServeHTTP(t, handler, http.MethodPost, "/mcp", strings.NewReader(string(body)), map[string]string{"Authorization": "Bearer secret"})
+		rec := testutil.ServeHTTP(t, handler, http.MethodPost, "/mcp", strings.NewReader(string(body)), mcpTestHeaders(map[string]string{"Authorization": "Bearer secret"}))
 		var response struct {
 			Result struct {
 				Content           []mcpTextContent    `json:"content"`
@@ -906,7 +913,7 @@ func TestMCPGetHistoryFilters(t *testing.T) {
 		if token != "" {
 			headers = map[string]string{"Authorization": "Bearer " + token}
 		}
-		rec := testutil.ServeHTTP(t, handler, http.MethodPost, "/mcp", strings.NewReader(string(body)), headers)
+		rec := testutil.ServeHTTP(t, handler, http.MethodPost, "/mcp", strings.NewReader(string(body)), mcpTestHeaders(headers))
 		var response struct {
 			Result struct {
 				StructuredContent mcpStructuredResult `json:"structuredContent"`
@@ -998,7 +1005,7 @@ func TestMCPGetHistoryInvalidFilters(t *testing.T) {
 			`"date_from":"2026-02-01","date_to":"2026-01-31"`,
 		} {
 			body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_history","arguments":{"mode":"` + mode + `",` + args + `}}}`
-			rec := testutil.ServeHTTP(t, handler, http.MethodPost, "/mcp", strings.NewReader(body), map[string]string{"Authorization": "Bearer secret"})
+			rec := testutil.ServeHTTP(t, handler, http.MethodPost, "/mcp", strings.NewReader(body), mcpTestHeaders(map[string]string{"Authorization": "Bearer secret"}))
 			var response struct {
 				Error *mcpRPCError `json:"error"`
 			}
@@ -1133,9 +1140,9 @@ func TestMCPUnknownNotificationIsRejected(t *testing.T) {
 
 func TestMCPInitializeAdvertisesStructuredContentProtocol(t *testing.T) {
 	_, handler := newTokenTestServer(t, false)
-	rec := testutil.ServeHTTP(t, handler, http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}`), map[string]string{
+	rec := testutil.ServeHTTP(t, handler, http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}`), mcpTestHeaders(map[string]string{
 		"X-Access-Token": "secret",
-	})
+	}))
 	var body struct {
 		Result struct {
 			ProtocolVersion string `json:"protocolVersion"`
@@ -1158,9 +1165,9 @@ func TestMCPInitializeAdvertisesStructuredContentProtocol(t *testing.T) {
 
 func TestMCPInitializeAdvertisesOnlyTools(t *testing.T) {
 	_, handler := newTokenTestServer(t, false)
-	rec := testutil.ServeHTTP(t, handler, http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}`), map[string]string{
+	rec := testutil.ServeHTTP(t, handler, http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}`), mcpTestHeaders(map[string]string{
 		"X-Access-Token": "secret",
-	})
+	}))
 	var body struct {
 		Result struct {
 			Capabilities json.RawMessage `json:"capabilities"`
@@ -1212,13 +1219,12 @@ func TestMCPOriginValidation(t *testing.T) {
 		for _, method := range []string{http.MethodGet, http.MethodPost} {
 			for _, tt := range tests {
 				t.Run(auth+"/"+method+"/"+tt.name, func(t *testing.T) {
-					req := httptest.NewRequest(method, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"ping"}`))
+					req := newMCPTestRequest(method, "/mcp", `{"jsonrpc":"2.0","id":1,"method":"ping"}`)
 					// Supplied host headers must not establish a trusted origin.
 					req.Host = "untrusted.example"
 					req.Header.Set("X-Forwarded-Host", "untrusted.example")
 					req.Header.Set("X-Forwarded-Proto", "https")
 					req.Header.Set("Forwarded", `host=untrusted.example;proto=https`)
-					req.Header.Set("Content-Type", "text/plain")
 					for _, origin := range tt.origins {
 						req.Header.Add("Origin", origin)
 					}
@@ -1248,9 +1254,8 @@ func TestMCPOriginValidation(t *testing.T) {
 
 func TestMCPAllowsProxiedHostOnLoopback(t *testing.T) {
 	_, handler := newPublicTokenTestServer(t)
-	req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"ping"}`))
+	req := newMCPTestRequest(http.MethodPost, "/mcp", `{"jsonrpc":"2.0","id":1,"method":"ping"}`)
 	req.Host = "hister.example"
-	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer secret")
 	loopback := &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 4433}
 	req = req.WithContext(context.WithValue(req.Context(), http.LocalAddrContextKey, loopback))
@@ -1285,7 +1290,7 @@ func TestMCPOriginUsesConfiguredBaseURL(t *testing.T) {
 			}
 			// Ping needs no indexer. Register again to apply the base path.
 			handler := registerEndpoints(cfg, nil)
-			rec := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"ping"}`), map[string]string{"Origin": tt.origin})
+			rec := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"ping"}`), mcpTestHeaders(map[string]string{"Origin": tt.origin}))
 			want := http.StatusForbidden
 			if tt.allowed {
 				want = http.StatusOK
@@ -1303,7 +1308,7 @@ func TestMCPOriginPreservesAuthentication(t *testing.T) {
 	for _, auth := range []string{"missing", "bearer", "invalid bearer", "session"} {
 		for _, origin := range []string{"", cfg.Server.BaseURL, "https://untrusted.example"} {
 			t.Run(auth+"/"+origin, func(t *testing.T) {
-				req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"ping"}`))
+				req := newMCPTestRequest(http.MethodPost, "/mcp", `{"jsonrpc":"2.0","id":1,"method":"ping"}`)
 				if origin != "" {
 					req.Header.Set("Origin", origin)
 				}
@@ -1339,7 +1344,7 @@ func TestMCPOriginWithoutAuthentication(t *testing.T) {
 			if origin != "" {
 				headers["Origin"] = origin
 			}
-			rec := testutil.ServeHTTP(t, handler, http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"ping"}`), headers)
+			rec := testutil.ServeHTTP(t, handler, http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"ping"}`), mcpTestHeaders(headers))
 			want := http.StatusOK
 			if origin == "https://untrusted.example" {
 				want = http.StatusForbidden
