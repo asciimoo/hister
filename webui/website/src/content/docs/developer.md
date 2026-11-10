@@ -881,6 +881,16 @@ curl -s -X POST http://127.0.0.1:4433/mcp \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"curl","version":"0"}}}'
 ```
 
+After a successful response, send the `initialized` notification. The server
+acknowledges it with `202 Accepted` and no body:
+
+```bash
+curl -s -X POST http://127.0.0.1:4433/mcp \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <your-access-token>" \
+  -d '{"jsonrpc":"2.0","method":"notifications/initialized"}'
+```
+
 ### List Tools
 
 ```bash

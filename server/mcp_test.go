@@ -1,8 +1,10 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -17,6 +19,18 @@ import (
 	"github.com/asciimoo/hister/server/model"
 	"github.com/asciimoo/hister/server/testutil"
 )
+
+// mcpRPCError is a JSON-RPC error object decoded from an MCP response.
+type mcpRPCError struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+}
+
+// mcpTextContent is an MCP text content block returned inside a tools/call result.
+type mcpTextContent struct {
+	Type string `json:"type"`
+	Text string `json:"text"`
+}
 
 func TestMCPGetFacets(t *testing.T) {
 	cfg := testutil.InitModel(t)
@@ -1016,7 +1030,10 @@ func TestMCPHistoryMarksSourceFieldsUntrusted(t *testing.T) {
 }
 
 func TestMCPToolDescriptionsWarnAboutUntrustedContent(t *testing.T) {
-	tools := mcpToolList(false)
+	var tools []map[string]any
+	for _, tool := range mcpToolList(false) {
+		tools = append(tools, tool.def)
+	}
 	for _, tool := range tools {
 		name, _ := tool["name"].(string)
 		schema, ok := tool["outputSchema"].(map[string]any)
@@ -1079,6 +1096,28 @@ func TestMCPInitializeAdvertisesStructuredContentProtocol(t *testing.T) {
 	}
 	if body.Result.ProtocolVersion != "2025-06-18" {
 		t.Fatalf("structured content protocol version = %q", body.Result.ProtocolVersion)
+	}
+}
+
+func TestMCPInitializeAdvertisesOnlyTools(t *testing.T) {
+	_, handler := newTokenTestServer(t, false)
+	rec := testutil.ServeHTTP(t, handler, http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}`), map[string]string{
+		"X-Access-Token": "secret",
+	})
+	var body struct {
+		Result struct {
+			Capabilities json.RawMessage `json:"capabilities"`
+		} `json:"result"`
+		Error *mcpRPCError `json:"error"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Error != nil {
+		t.Fatalf("MCP error = %+v", body.Error)
+	}
+	if got := string(body.Result.Capabilities); got != `{"tools":{}}` {
+		t.Fatalf("capabilities = %s, want {\"tools\":{}}", got)
 	}
 }
 
@@ -1147,6 +1186,21 @@ func TestMCPOriginValidation(t *testing.T) {
 				})
 			}
 		}
+	}
+}
+
+func TestMCPAllowsProxiedHostOnLoopback(t *testing.T) {
+	_, handler := newPublicTokenTestServer(t)
+	req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"ping"}`))
+	req.Host = "hister.example"
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer secret")
+	loopback := &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 4433}
+	req = req.WithContext(context.WithValue(req.Context(), http.LocalAddrContextKey, loopback))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
 	}
 }
 
