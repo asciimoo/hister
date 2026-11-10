@@ -32,6 +32,18 @@ type mcpTextContent struct {
 	Text string `json:"text"`
 }
 
+// mcpTestHeaders returns the transport headers required by the MCP SDK.
+func mcpTestHeaders(extra map[string]string) map[string]string {
+	headers := map[string]string{
+		"Content-Type": "application/json",
+		"Accept":       "application/json, text/event-stream",
+	}
+	for key, value := range extra {
+		headers[key] = value
+	}
+	return headers
+}
+
 func TestMCPGetFacets(t *testing.T) {
 	cfg := testutil.InitModel(t)
 	cfg.App.UserHandling = true
@@ -1071,6 +1083,51 @@ func TestMCPGetReturnsMethodNotAllowedWithoutAuthentication(t *testing.T) {
 	}
 	if got := rec.Header().Get("Content-Type"); got == "text/html" || strings.HasPrefix(got, "text/html;") {
 		t.Fatalf("GET /mcp Content-Type = %q, must not be HTML", got)
+	}
+}
+
+func TestMCPUnknownMethodReturnsJSONRPCError(t *testing.T) {
+	_, handler := newTokenTestServer(t, false)
+	rec := testutil.ServeHTTP(t, handler, http.MethodPost, "/mcp", strings.NewReader(
+		`{"jsonrpc":"2.0","id":"request-1","method":"tools/unknown"}`,
+	), mcpTestHeaders(map[string]string{"Authorization": "Bearer secret"}))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	var response struct {
+		ID    json.RawMessage `json:"id"`
+		Error *mcpRPCError    `json:"error"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if string(response.ID) != `"request-1"` {
+		t.Fatalf("response ID = %s, want %q", response.ID, "request-1")
+	}
+	if response.Error == nil || response.Error.Code != mcpErrNotFound {
+		t.Fatalf("error = %+v, want method not found", response.Error)
+	}
+}
+
+func TestMCPUnknownMethodValidatesProtocolVersion(t *testing.T) {
+	_, handler := newTokenTestServer(t, false)
+	headers := mcpTestHeaders(map[string]string{"Authorization": "Bearer secret"})
+	headers["MCP-Protocol-Version"] = "2024-11-05"
+	rec := testutil.ServeHTTP(t, handler, http.MethodPost, "/mcp", strings.NewReader(
+		`{"jsonrpc":"2.0","id":1,"method":"tools/unknown"}`,
+	), headers)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusBadRequest, rec.Body.String())
+	}
+}
+
+func TestMCPUnknownNotificationIsRejected(t *testing.T) {
+	_, handler := newTokenTestServer(t, false)
+	rec := testutil.ServeHTTP(t, handler, http.MethodPost, "/mcp", strings.NewReader(
+		`{"jsonrpc":"2.0","method":"notifications/unknown"}`,
+	), mcpTestHeaders(map[string]string{"Authorization": "Bearer secret"}))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusBadRequest, rec.Body.String())
 	}
 }
 

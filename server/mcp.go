@@ -117,6 +117,7 @@ func serveMCP(c *webContext) {
 	c.Request.Header.Set("Accept", "application/json, text/event-stream")
 
 	server := newMCPServer(c)
+	mcpRegisterUnknownMethod(server, body)
 	mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server {
 		return server
 	}, &mcp.StreamableHTTPOptions{
@@ -171,6 +172,28 @@ func newMCPServer(c *webContext) *mcp.Server {
 		}, mcpToolCallHandler(c, tool.run))
 	}
 	return server
+}
+
+type mcpUnknownMethodParams struct{ mcp.ParamsBase }
+
+type mcpUnknownMethodResult struct{ mcp.ResultBase }
+
+// mcpRegisterUnknownMethod makes the SDK dispatch the method so it can return a
+// structured -32601 response instead of its plain-text preflight 400.
+// AddReceivingCustomMethod rejects standard method names, which also identifies
+// methods the SDK already handles.
+func mcpRegisterUnknownMethod(server *mcp.Server, body []byte) {
+	msg, err := jsonrpc.DecodeMessage(body)
+	if err != nil {
+		return
+	}
+	req, ok := msg.(*jsonrpc.Request)
+	if !ok || !req.IsCall() {
+		return
+	}
+	_ = mcp.AddReceivingCustomMethod(server, req.Method, func(context.Context, *mcp.ServerSession, *mcpUnknownMethodParams) (*mcpUnknownMethodResult, error) {
+		return nil, &jsonrpc.Error{Code: mcpErrNotFound, Message: "unknown method: " + req.Method}
+	})
 }
 
 func mcpToolCallHandler(c *webContext, run mcpToolFunc) mcp.ToolHandler {
