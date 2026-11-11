@@ -216,6 +216,36 @@ func readConfigurationState(t *testing.T, handler http.Handler, headers map[stri
 	return state.Revision, values
 }
 
+func TestSettingsWebHotkeySourceLocks(t *testing.T) {
+	for _, source := range []string{"file", "environment"} {
+		t.Run(source, func(t *testing.T) {
+			extra := "hotkeys:\n  web:\n    alt+x: focus_search_input\n"
+			if source == "environment" {
+				extra = ""
+				t.Setenv("HISTER__HOTKEYS__WEB__ALT+X", "focus_search_input")
+			}
+			_, handler := newConfigurationTestServer(t, "token", extra)
+			headers := map[string]string{"Origin": "hister://", "X-Access-Token": "private-token"}
+			revision, values := readConfigurationState(t, handler, headers)
+			if state := values["hotkeys.web"]; state.Editable || !state.Source.Locked || state.Value == nil {
+				t.Fatalf("authoritative member must lock the whole visible collection: %+v", state)
+			}
+			for _, edit := range []string{
+				`{"path":"hotkeys.web","action":"set","value":{}}`,
+				`{"path":"hotkeys.web","action":"reset"}`,
+				`{"path":"hotkeys","action":"set","value":{"web":{}}}`,
+				`{"path":"hotkeys.web.alt+x","action":"set","value":"show_hotkeys"}`,
+				`{"path":"hotkeys.tui","action":"set","value":{}}`,
+			} {
+				response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/validate", strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":[%s]}`, revision, edit)), headers)
+				if response.Code != http.StatusUnprocessableEntity {
+					t.Fatalf("locked or unsupported edit accepted: %d %s", response.Code, response.Body)
+				}
+			}
+		})
+	}
+}
+
 func TestSettingsExtractorDrafts(t *testing.T) {
 	cfg, handler := newConfigurationTestServer(t, "token", "")
 	headers := map[string]string{"Authorization": "Bearer private-token", "Origin": "hister://", "Content-Type": "application/json"}

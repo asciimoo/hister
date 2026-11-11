@@ -1550,6 +1550,29 @@ func (c *Config) validateSemanticSearch() error {
 	return nil
 }
 
+func webHotkeySchema() SettingSchema {
+	return SettingSchema{
+		Type: "dictionary", Control: "dictionary", Collection: "replace", Sensitivity: "none", MaxItems: 256,
+		KeyLabel: "Key combination", ValueLabel: "Action",
+		Items: &SettingSchema{
+			Type: "string", Control: "select", Collection: "none", Sensitivity: "none",
+			Choices: slices.Clone(hotkeyActions),
+			ChoiceLabels: map[string]string{
+				"select_previous_result":      "Select previous result",
+				"select_next_result":          "Select next result",
+				"focus_search_input":          "Focus search input",
+				"open_result":                 "Open result",
+				"open_result_in_new_tab":      "Open result in a new tab",
+				"open_query_in_search_engine": "Open query in search engine",
+				"view_result_popup":           "Preview result",
+				"autocomplete":                "Autocomplete query",
+				"show_hotkeys":                "Show keyboard shortcuts",
+				"delete_result":               "Delete selected result",
+			},
+		},
+	}
+}
+
 func (h Hotkeys) Validate() error {
 	for k, v := range h.Web {
 		if !slices.Contains(hotkeyActions, v) {

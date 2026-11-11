@@ -470,8 +470,8 @@
           >{/if}
       </div>
       <p class="text-text-brand-muted my-2 text-sm">
-        Configure appearance, search behavior, logging, indexing, crawling and extraction. Other
-        settings are shown for reference.
+        Configure appearance, search behavior, logging, indexing, crawling, extraction and web
+        shortcuts. Other settings are shown for reference.
       </p>
       {#if problem}<div role="alert" class="text-hister-rose my-2 text-sm">
           <p>{problem}{needsReload && dirty ? ' Your draft is still here.' : ''}</p>

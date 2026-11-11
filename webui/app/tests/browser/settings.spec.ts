@@ -103,6 +103,173 @@ async function settingsAPI(page: Page, config: Record<string, unknown> = {}) {
   return { state, publicConfig };
 }
 
+async function hotkeySettingsAPI(page: Page) {
+  const { state, publicConfig } = await settingsAPI(page);
+  state.fields.push({
+    path: 'hotkeys.web',
+    category: 'hotkeys',
+    label: 'Web keyboard shortcuts',
+    description: 'Shortcuts apply on the search page after saving. Use lowercase keys.',
+    schema: {
+      type: 'dictionary',
+      control: 'dictionary',
+      collection: 'replace',
+      sensitivity: 'none',
+      key_label: 'Key combination',
+      value_label: 'Action',
+      max_items: 256,
+      items: {
+        type: 'string',
+        control: 'select',
+        collection: 'none',
+        sensitivity: 'none',
+        choices: ['focus_search_input', 'show_hotkeys'],
+        choice_labels: {
+          focus_search_input: 'Focus search input',
+          show_hotkeys: 'Show keyboard shortcuts',
+        },
+      },
+    },
+    default: { '/': 'focus_search_input', '?': 'show_hotkeys' },
+    effect: 'runtime',
+    requires_confirmation: false,
+  });
+  state.values.push({
+    path: 'hotkeys.web',
+    value: { 'alt+x': 'focus_search_input' },
+    editable: true,
+    source: { kind: 'web', locked: false, web_selected: true },
+    secret_present: false,
+  });
+  return { state, publicConfig };
+}
+
+test('web hotkeys use named actions and save a shared draft with working shortcuts', async ({
+  page,
+}) => {
+  const { state, publicConfig } = await hotkeySettingsAPI(page);
+  let saved: any;
+  await page.route('**/api/settings/apply', async (route) => {
+    saved = route.request().postDataJSON();
+    const hotkeys = saved.edits.find((edit: any) => edit.path === 'hotkeys.web').value;
+    state.values.find((value) => value.path === 'hotkeys.web')!.value = hotkeys;
+    Object.assign(publicConfig, { hotkeys });
+    state.revision = 'revision-2';
+    await route.fulfill({ json: {} });
+  });
+  await page.goto('/settings');
+  await page.getByRole('textbox', { name: 'Title', exact: true }).fill('Shortcuts instance');
+  await page.getByRole('tab', { name: 'Hotkeys', exact: true }).click();
+  const shortcuts = page.getByRole('region', { name: 'Web keyboard shortcuts', exact: true });
+  await expect(shortcuts.getByText('Focus search input', { exact: true })).toBeVisible();
+  await shortcuts.getByRole('button', { name: 'Add shortcut', exact: true }).click();
+  const editor = shortcuts.getByRole('group', { name: 'Web keyboard shortcuts 2', exact: true });
+  await expect(editor.getByRole('textbox', { name: 'Key combination', exact: true })).toBeFocused();
+  await editor.getByRole('textbox', { name: 'Key combination', exact: true }).fill('alt+h');
+  await editor.getByRole('combobox', { name: 'Action', exact: true }).selectOption('show_hotkeys');
+  await editor.getByRole('button', { name: 'Add shortcut', exact: true }).click();
+  await expect(shortcuts.getByText('Show keyboard shortcuts', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Settings saved and applied');
+  expect(saved.edits).toEqual(
+    expect.arrayContaining([
+      { path: 'app.title', action: 'set', value: 'Shortcuts instance' },
+      {
+        path: 'hotkeys.web',
+        action: 'set',
+        value: { 'alt+x': 'focus_search_input', 'alt+h': 'show_hotkeys' },
+      },
+    ]),
+  );
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  );
+  await page.goto('/');
+  await expect(page.getByRole('searchbox', { name: 'Search your history' })).toBeFocused();
+  await page.getByRole('heading', { name: 'Hister', exact: true }).click();
+  await page.keyboard.press('Alt+h');
+  await expect(page.getByRole('dialog')).toContainText('Keyboard');
+});
+
+test('web hotkeys retain invalid rows and distinguish clear, reset and source locks', async ({
+  page,
+}) => {
+  const { state } = await hotkeySettingsAPI(page);
+  let draft: any;
+  await page.route('**/api/settings/apply', (route) =>
+    route.fulfill({
+      status: 422,
+      json: { code: 'invalid_draft', message: 'Save failed; draft retained.' },
+    }),
+  );
+  await page.route('**/api/settings/validate', async (route) => {
+    draft = route.request().postDataJSON();
+    const edit = draft.edits.find((edit: any) => edit.path === 'hotkeys.web');
+    if (edit?.value?.['shift+x']) {
+      await route.fulfill({
+        status: 422,
+        json: {
+          code: 'invalid_draft',
+          error: 'Invalid draft',
+          errors: [
+            {
+              path: 'hotkeys.web',
+              code: 'invalid_value',
+              message: 'Use supported lowercase keys.',
+            },
+          ],
+        },
+      });
+    } else await route.fulfill({ json: { revision: state.revision, values: state.values } });
+  });
+  await page.goto('/settings?tab=hotkeys');
+  const shortcuts = page.getByRole('region', { name: 'Web keyboard shortcuts', exact: true });
+  await shortcuts.getByRole('button', { name: 'Add shortcut', exact: true }).click();
+  const editor = shortcuts.getByRole('group', { name: 'Web keyboard shortcuts 2', exact: true });
+  const key = editor.getByRole('textbox', { name: 'Key combination', exact: true });
+  await key.fill('shift+x');
+  await editor.getByRole('combobox', { name: 'Action', exact: true }).selectOption('show_hotkeys');
+  await editor.getByRole('button', { name: 'Add shortcut', exact: true }).click();
+  await expect(shortcuts.getByText('Use supported lowercase keys.')).toBeVisible();
+  await expect(key).toHaveValue('shift+x');
+  await key.fill('alt+x');
+  await editor.getByRole('button', { name: 'Add shortcut', exact: true }).click();
+  await expect(editor.getByRole('alert')).toContainText('Names must be unique');
+  await editor.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await shortcuts
+    .getByRole('button', { name: 'Clear Web keyboard shortcuts', exact: true })
+    .click();
+  await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
+  await expect.poll(() => draft.edits).toEqual([{ path: 'hotkeys.web', action: 'set', value: {} }]);
+  await shortcuts
+    .getByRole('button', { name: 'Reset Web keyboard shortcuts', exact: true })
+    .click();
+  await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
+  await expect.poll(() => draft.edits).toEqual([{ path: 'hotkeys.web', action: 'reset' }]);
+  await page.getByRole('button', { name: 'Discard changes', exact: true }).click();
+  Object.assign(
+    state.values.find((value) => value.path === 'hotkeys.web')!,
+    {
+      editable: false,
+      reason: 'Controlled by the main configuration.',
+      source: { kind: 'file', name: '/config.yml', locked: true, web_selected: true },
+    },
+  );
+  state.revision = 'revision-locked';
+  await page.getByRole('button', { name: 'Refresh settings', exact: true }).click();
+  await expect(shortcuts.getByRole('button', { name: 'Add shortcut', exact: true })).toHaveCount(0);
+  await expect(
+    shortcuts.getByRole('button', { name: 'Clear Web keyboard shortcuts', exact: true }),
+  ).toHaveCount(0);
+  await shortcuts
+    .getByRole('button', {
+      name: 'Locked: Source information for Web keyboard shortcuts',
+      exact: true,
+    })
+    .click();
+  await expect(page.getByRole('tooltip')).toContainText('main configuration');
+});
+
 async function extractionSettingsAPI(page: Page) {
   const { state } = await settingsAPI(page);
   const ordinary = { collection: 'none', sensitivity: 'none' };

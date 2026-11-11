@@ -34,6 +34,8 @@ type SettingSchema struct {
 	MaxItems     int               `json:"max_items,omitempty"`
 	Choices      []string          `json:"choices,omitempty"`
 	ChoiceLabels map[string]string `json:"choice_labels,omitempty"`
+	KeyLabel     string            `json:"key_label,omitempty"`
+	ValueLabel   string            `json:"value_label,omitempty"`
 	Items        *SettingSchema    `json:"items,omitempty"`
 	Properties   []SettingProperty `json:"properties,omitempty"`
 	SecretScope  []string          `json:"secret_scope,omitempty"`
@@ -115,6 +117,9 @@ func (c *Config) FieldStatesForRevision(revision string, fields ...FieldMetadata
 	for _, field := range fields {
 		source := c.fieldSource(field.Path)
 		state := FieldState{Path: field.Path, Value: settingValue(c, field.Path), Source: source, Editable: !source.Locked && field.ReadOnlyReason == "", Reason: field.ReadOnlyReason}
+		if field.Schema.Type == "dictionary" && !settingHasValue(state.Value) {
+			state.Value = map[string]any{}
+		}
 		if source.Locked {
 			state.Reason = source.Reason
 		}
@@ -270,12 +275,23 @@ func (c *Config) PrepareDraftForRevision(revision string, edits []SettingEdit, v
 				reject("invalid_value", message)
 				continue
 			}
-			if edit.Path == "crawler.headers" || edit.Path == "semantic_search.headers" {
-				headers := make(map[string]string)
+			switch edit.Path {
+			case "crawler.headers", "semantic_search.headers", "hotkeys.web":
+				entries := make(map[string]string)
 				for name, value := range normalized.(map[string]any) {
-					headers[name] = value.(string)
+					entries[name] = value.(string)
 				}
-				if message := validateHTTPHeaders(headers); message != "" {
+				var message string
+				if edit.Path == "hotkeys.web" {
+					// Composition normalizes map keys. Reject invalid shortcuts
+					// before that can rename or merge user selections.
+					if err := (Hotkeys{Web: entries}).Validate(); err != nil {
+						message = "Use supported lowercase keys with at most one ctrl+, alt+, or meta+ prefix."
+					}
+				} else {
+					message = validateHTTPHeaders(entries)
+				}
+				if message != "" {
 					reject("invalid_value", message)
 					continue
 				}
@@ -588,7 +604,7 @@ func FieldCatalog() []FieldMetadata {
 		{Path: "semantic_search.embedding_timeout", Group: groupDocumentProcessing, Label: "Embedding timeout", Description: "Maximum seconds for document embedding requests. Zero uses five minutes.", Schema: SettingSchema{Sensitivity: "none", Min: new(0), Max: new(86400)}, Effect: "runtime"},
 		{Path: "semantic_search.max_embedding_batch_size", Group: groupDocumentProcessing, Label: "Embedding batch size", Description: "Maximum chunks per embedding request. Zero uses eight chunks.", Schema: SettingSchema{Sensitivity: "none", Min: new(0), Max: new(4096)}, Effect: "runtime"},
 		{Path: "semantic_search.max_embedding_concurrency", Group: groupDocumentProcessing, Label: "Embedding concurrency", Description: "Concurrent document embedding requests. Zero uses the default worker count.", Schema: SettingSchema{Sensitivity: "none", Min: new(0), Max: new(1024)}, Effect: "runtime"},
-		fileManagedField("hotkeys.web", "", "Web keyboard shortcuts", "Keyboard shortcuts for the web interface."),
+		{Path: "hotkeys.web", Label: "Web keyboard shortcuts", Description: "Shortcuts apply on the search page after saving. Use lowercase letters, digits, /, ?, enter, tab, arrowup, arrowdown, arrowleft, arrowright, or f1 through f12, optionally prefixed with ctrl+, alt+, or meta+. Some combinations are reserved by your browser or system. Clear removes configured shortcuts; built in navigation remains. Reset restores inherited shortcuts. Terminal shortcuts are configured separately.", Schema: webHotkeySchema()},
 		fileManagedField("sensitive_content_patterns", "", "Sensitive content patterns", "Patterns used to detect sensitive content before indexing."),
 		fileManagedField("extractors", "", "Extractors", "Extractor enable switches and options described by the extractor registry."),
 	}

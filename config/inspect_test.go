@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -69,7 +70,7 @@ func TestFieldCatalogPreservesEditorContract(t *testing.T) {
 			t.Fatalf("incomplete description for %s", field.Path)
 		}
 		ordinaryIndexer := field.Category == "indexer" && !strings.HasPrefix(field.Path, "indexer.pdf_parser.")
-		if field.Category != "app" && field.Path != "server.address" && !ordinaryIndexer && field.Category != "crawler" && field.Category != "semantic_search" {
+		if field.Category != "app" && field.Path != "server.address" && !ordinaryIndexer && field.Category != "crawler" && field.Category != "semantic_search" && field.Path != "hotkeys.web" {
 			if field.Schema.Type != "unknown" || field.Schema.Sensitivity != "unknown" || field.Default != nil || field.ReadOnlyReason == "" {
 				t.Fatalf("unsupported setting %s gained editing support or exposed defaults", field.Path)
 			}
@@ -182,6 +183,50 @@ func TestSelectDraftsRequireChoicesAndResetToConcreteDefaults(t *testing.T) {
 				}
 			}
 			t.Fatal("reset setting is missing")
+		})
+	}
+}
+
+func TestWebHotkeyDraftControls(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HISTER_DATA_DIR", dir)
+	filename := filepath.Join(dir, "config.yml")
+	if err := os.WriteFile(filename, []byte("# defaults\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c, _, err := LoadForInspection(filename, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	next, fields := c.PrepareDraft([]SettingEdit{{Path: "hotkeys.web", Action: "set", Value: json.RawMessage(`{"alt+x":"focus_search_input","?":"show_hotkeys"}`)}})
+	if next == nil || len(fields) != 0 {
+		t.Fatalf("web shortcuts rejected: %v", fields)
+	}
+	if !maps.Equal(next.Hotkeys.Web, map[string]string{"alt+x": "focus_search_input", "?": "show_hotkeys"}) {
+		t.Fatalf("shortcuts must replace the whole collection: %v", next.Hotkeys.Web)
+	}
+	if !maps.Equal(c.Hotkeys.Web, CreateDefaultConfig().Hotkeys.Web) {
+		t.Fatal("draft changed active shortcuts")
+	}
+	cleared, fields := next.PrepareDraft([]SettingEdit{{Path: "hotkeys.web", Action: "set", Value: json.RawMessage(`{}`)}})
+	if cleared == nil || len(fields) != 0 || len(cleared.Hotkeys.Web) != 0 || !cleared.Source("hotkeys.web").WebSelected {
+		t.Fatalf("clear must disable shortcuts with an explicit empty collection: %v", fields)
+	}
+	reset, fields := cleared.PrepareDraft([]SettingEdit{{Path: "hotkeys.web", Action: "reset"}})
+	if reset == nil || len(fields) != 0 || !maps.Equal(reset.Hotkeys.Web, c.Hotkeys.Web) || reset.Source("hotkeys.web").WebSelected {
+		t.Fatalf("reset must restore inherited shortcuts: %v", fields)
+	}
+	for _, value := range []string{
+		`null`, `[]`, `{"alt+x":false}`, `{"alt+x":"unknown"}`, `{"alt+x":""}`,
+		`{"":"show_hotkeys"}`, `{"shift+x":"show_hotkeys"}`, `{"ctrl+alt+x":"show_hotkeys"}`,
+		`{"ALT+X":"show_hotkeys"}`, `{"escape":"show_hotkeys"}`, `{"f13":"show_hotkeys"}`,
+		`{"alt+x":"show_hotkeys","alt+x":"open_result"}`,
+	} {
+		t.Run(value, func(t *testing.T) {
+			candidate, fields := c.PrepareDraft([]SettingEdit{{Path: "hotkeys.web", Action: "set", Value: json.RawMessage(value)}})
+			if candidate != nil || len(fields) != 1 || fields[0].Path != "hotkeys.web" || fields[0].Code == "read_only" {
+				t.Fatalf("invalid shortcut must return a field error: %v", fields)
+			}
 		})
 	}
 }

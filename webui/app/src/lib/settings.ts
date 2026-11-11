@@ -13,6 +13,8 @@ export interface SettingSchema {
   max_items?: number;
   choices?: string[];
   choice_labels?: Record<string, string>;
+  key_label?: string;
+  value_label?: string;
   secret_scope?: string[];
   items?: SettingSchema;
   properties?: {

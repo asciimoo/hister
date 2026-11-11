@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -32,6 +33,69 @@ import (
 	"github.com/asciimoo/hister/server/testutil"
 	"github.com/asciimoo/hister/server/types"
 )
+
+func TestSettingsWebHotkeyApply(t *testing.T) {
+	cfg, handler, _ := newReloadTestServer(t, false)
+	headers := map[string]string{"Origin": "hister://", "X-Access-Token": "secret"}
+	mainBefore, err := os.ReadFile(cfg.Filename())
+	if err != nil {
+		t.Fatal(err)
+	}
+	revision, _ := readConfigurationState(t, handler, headers)
+	invalid := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":[{"path":"hotkeys.web","action":"set","value":{"ALT+X":"show_hotkeys"}}]}`, revision)), headers)
+	if invalid.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("invalid shortcut saved: %d %s", invalid.Code, invalid.Body)
+	}
+	if _, err := os.Stat(cfg.FullPath("config.web.yml")); !os.IsNotExist(err) {
+		t.Fatal("rejected shortcut wrote managed settings")
+	}
+	if current, _ := readConfigurationState(t, handler, headers); current != revision {
+		t.Fatal("rejected shortcut changed the runtime")
+	}
+	for _, tc := range []struct {
+		name, edit string
+		want       map[string]string
+		web        bool
+	}{
+		{"replace", `"action":"set","value":{"alt+x":"focus_search_input","?":"show_hotkeys"}`, map[string]string{"alt+x": "focus_search_input", "?": "show_hotkeys"}, true},
+		{"clear", `"action":"set","value":{}`, map[string]string{}, true},
+		{"reset", `"action":"reset"`, config.CreateDefaultConfig().Hotkeys.Web, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			revision, _ := readConfigurationState(t, handler, headers)
+			body := fmt.Sprintf(`{"revision":%q,"edits":[{"path":"hotkeys.web",%s}]}`, revision, tc.edit)
+			response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(body), headers)
+			if response.Code != http.StatusOK {
+				t.Fatalf("apply shortcuts: %d %s", response.Code, response.Body)
+			}
+			// The public response drives keyboard handling, including anonymous search.
+			public := testutil.ServeHTTP(t, handler, http.MethodGet, "/hister/api/config", nil, nil)
+			var active struct {
+				Hotkeys map[string]string `json:"hotkeys"`
+			}
+			if err := json.Unmarshal(public.Body.Bytes(), &active); err != nil || !maps.Equal(active.Hotkeys, tc.want) {
+				t.Fatalf("active shortcuts: %s, error: %v", public.Body, err)
+			}
+			loaded, _, err := config.LoadForInspection(cfg.Filename(), true)
+			if err != nil || !maps.Equal(loaded.Hotkeys.Web, tc.want) || loaded.Source("hotkeys.web").WebSelected != tc.web {
+				t.Fatalf("saved shortcuts did not survive loading: %v", err)
+			}
+			if status := reloadRequest(t, handler, "secret"); status != http.StatusOK {
+				t.Fatalf("reload shortcuts: %d", status)
+			}
+			_, values := readConfigurationState(t, handler, headers)
+			got, err := json.Marshal(values["hotkeys.web"].Value)
+			want, marshalErr := json.Marshal(tc.want)
+			if err != nil || marshalErr != nil || string(got) != string(want) {
+				t.Fatalf("reloaded shortcuts: %s, want %s", got, want)
+			}
+		})
+	}
+	mainAfter, err := os.ReadFile(cfg.Filename())
+	if err != nil || string(mainAfter) != string(mainBefore) {
+		t.Fatal("saving shortcuts rewrote the main configuration")
+	}
+}
 
 func TestSettingsExtractionAndSemanticApply(t *testing.T) {
 	var requests atomic.Int32

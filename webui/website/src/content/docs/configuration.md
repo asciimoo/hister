@@ -755,7 +755,7 @@ hister listen --config /path/to/my/config.yml
 ## Settings in the Web Interface
 
 Open **Settings** from the navigation menu to change appearance, snippet length, search
-behavior, log level or format, indexing, and crawler defaults. Administrators can configure multi user instances.
+behavior, log level or format, indexing, crawler defaults, and web keyboard shortcuts. Administrators can configure multi user instances.
 Token protected instances require signing in; instances without authentication need no login.
 
 Keep one draft across category tabs, then choose **Save and apply**. Saving briefly interrupts
@@ -781,7 +781,7 @@ value. A locked setting can retain a web selection that takes effect when its ov
 
 Web selections persist in `config.web.yml` inside the data directory, including when there is
 no main config file. Saving does not rewrite your main configuration. Categories other than
-App, Indexer, Crawler, Extractors, and Semantic search, and connection or authentication settings, are currently read only. Stored credentials stay hidden.
+App, Indexer, Crawler, Extractors, Semantic search, and Hotkeys, and connection or authentication settings, are currently read only. Stored credentials stay hidden.
 
 The **Indexer** tab offers language detection, a language multiselect, detection accuracy,
 stopword handling, and the maximum file size in MiB. Select at least two languages, or clear
@@ -1397,9 +1397,17 @@ See [Language Settings and Detection](/docs/language-detection) for supported co
 
 ## `hotkeys.web` Section
 
-Defines keyboard shortcuts for the web interface. Each entry maps a key combination to an action.
+Defines keyboard shortcuts for the search page. In **Settings → Hotkeys**, choose **Add shortcut**,
+enter a key combination, select an action, and choose **Save and apply**. Changes take effect when
+you return to search. Reload other open search tabs to pick them up. Some combinations are reserved
+by your browser or operating system.
 
-**Key format**: `[modifier+]key` where modifier is `ctrl`, `alt`, or `meta`. Key can be a letter, digit, or special key (`enter`, `tab`, `arrowup`, `arrowdown`, etc.).
+Use **Clear** to remove configured shortcuts or **Reset** to restore inherited shortcuts. Built in
+Tab and arrow key navigation remains available. Saving replaces the complete shortcut collection.
+Any shortcut supplied by the main configuration or environment locks the entire collection.
+Terminal shortcuts remain in `tui.yaml`.
+
+**Key format**: Use lowercase `[modifier+]key`, with at most one `ctrl`, `alt`, or `meta` modifier. Keys can be letters `a` to `z`, digits, `/`, `?`, `enter`, `tab`, `arrowup`, `arrowdown`, `arrowleft`, `arrowright`, or `f1` through `f12`. For example, `alt+x` can focus the search input.
 
 | Action                        | Description                                                     |
 | ----------------------------- | --------------------------------------------------------------- |

@@ -3,6 +3,7 @@
   import { Input } from '@hister/components/ui/input';
   import { Badge } from '@hister/components/ui/badge';
   import {
+    choiceLabel,
     emptySettingValue,
     type SettingField,
     type SettingItemEditor,
@@ -49,10 +50,13 @@
         'crawler.headers': 'header',
         'semantic_search.headers': 'header',
         'indexer.directories': 'directory',
+        'hotkeys.web': 'shortcut',
       } as Record<string, string>
     )[field.path] ?? 'item',
   );
   const directory = $derived(field.path === 'indexer.directories');
+  const keyLabel = $derived(field.schema.key_label ?? 'Name');
+  const valueLabel = $derived(field.schema.value_label ?? 'Value');
   const primarySchema = $derived({
     ...schema,
     properties: schema.properties?.filter((property) =>
@@ -113,7 +117,14 @@
 
   function summary(name: string, value: unknown) {
     const item = value as Record<string, unknown>;
-    if (dictionary) return { title: name, detail: secretSummary(value) };
+    if (dictionary)
+      return {
+        title: name,
+        detail:
+          schema.sensitivity === 'none'
+            ? choiceLabel(schema, String(value ?? ''))
+            : secretSummary(value),
+      };
     if (directory)
       return {
         title: String(item.path || 'Directory'),
@@ -156,7 +167,7 @@
         >{current.index === null ? 'New' : 'Edit'} {noun}</legend
       >
       {#if dictionary}
-        <label class="block text-sm" for={`${id}-${index}-name`}>Name</label>
+        <label class="block text-sm" for={`${id}-${index}-name`}>{keyLabel}</label>
         <Input
           id={`${id}-${index}-name`}
           value={current.name}
@@ -168,11 +179,11 @@
             onEditor({ ...current!, name: event.currentTarget.value });
           }}
         />
-        <label class="block text-sm" for={`${id}-${index}-value`}>Value</label>
+        <label class="block text-sm" for={`${id}-${index}-value`}>{valueLabel}</label>
       {/if}
       <SettingInput
         id={`${id}-${index}${dictionary ? '-value' : ''}`}
-        label={dictionary ? 'Value' : `${field.label} ${index + 1}`}
+        label={dictionary ? valueLabel : `${field.label} ${index + 1}`}
         schema={directory ? primarySchema : schema}
         value={current.value}
         {disabled}
