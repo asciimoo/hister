@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -12,11 +13,13 @@ import (
 	"github.com/asciimoo/hister/server/testutil"
 
 	"github.com/gorilla/websocket"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 func TestInvalidQueryHTTPResponses(t *testing.T) {
-	_, handler := newPublicTokenTestServer(t)
-	headers := map[string]string{"Content-Type": "application/json", "Accept": "application/json, text/event-stream", "X-Access-Token": "secret", "Origin": "hister://"}
+	cfg, handler := newPublicTokenTestServer(t)
+	session := newMCPTestSession(t, cfg, handler, "secret")
+	headers := map[string]string{"Content-Type": "application/json", "X-Access-Token": "secret", "Origin": "hister://"}
 	for _, input := range []string{"needle OR", `"needle`, "title:", "url_re:["} {
 		t.Run(input, func(t *testing.T) {
 			rec := testutil.ServeHTTP(t, handler, http.MethodGet, "/search?q="+url.QueryEscape(input), nil, headers)
@@ -39,22 +42,13 @@ func TestInvalidQueryHTTPResponses(t *testing.T) {
 					}
 				}
 			}
-			body, err := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": map[string]any{"name": "search", "arguments": map[string]string{"query": input}}})
-			if err != nil {
-				t.Fatal(err)
-			}
-			rec = testutil.ServeHTTP(t, handler, http.MethodPost, "/mcp", strings.NewReader(string(body)), headers)
-			var response struct {
-				Error struct {
-					Code    int
-					Message string
-				}
-			}
-			if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
-				t.Fatal(err)
-			}
-			if response.Error.Code != mcpErrInvalidParam || !strings.Contains(response.Error.Message, "at character") {
-				t.Errorf("MCP diagnostic: %s", rec.Body)
+			_, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+				Name:      "search",
+				Arguments: map[string]string{"query": input},
+			})
+			wireErr := mcpTestWireError(t, err)
+			if wireErr.Code != mcpErrInvalidParam || !strings.Contains(wireErr.Message, "at character") {
+				t.Errorf("MCP diagnostic: %v", err)
 			}
 		})
 	}

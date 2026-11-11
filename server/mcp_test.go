@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"net"
@@ -19,18 +20,17 @@ import (
 	"github.com/asciimoo/hister/server/indexer"
 	"github.com/asciimoo/hister/server/model"
 	"github.com/asciimoo/hister/server/testutil"
+
+	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// mcpRPCError is a JSON-RPC error object decoded from an MCP response.
+// Raw JSON-RPC helpers for transport-level tests; tool tests use newMCPTestSession.
+
+// mcpRPCError is a JSON-RPC error object decoded from a raw MCP response.
 type mcpRPCError struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
-}
-
-// mcpTextContent is an MCP text content block returned inside a tools/call result.
-type mcpTextContent struct {
-	Type string `json:"type"`
-	Text string `json:"text"`
 }
 
 // mcpTestHeaders returns the transport headers required by the MCP SDK.
@@ -48,6 +48,97 @@ func newMCPTestRequest(method, target, body string) *http.Request {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 	return req
+}
+
+type mcpTestTransport func(*http.Request) (*http.Response, error)
+
+func (f mcpTestTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	return f(r)
+}
+
+// newMCPTestSession starts an HTTP test server around handler and connects an
+// SDK MCP client to the endpoint. Requests carry token as a bearer token when
+// it is not empty.
+func newMCPTestSession(t *testing.T, cfg *config.Config, handler http.Handler, token string) *mcp.ClientSession {
+	t.Helper()
+	return newMCPTestSessionVersion(t, cfg, handler, token, mcpProtocolVersion)
+}
+
+func newMCPTestSessionVersion(t *testing.T, cfg *config.Config, handler http.Handler, token, protocolVersion string) *mcp.ClientSession {
+	t.Helper()
+	server := httptest.NewServer(handler)
+	t.Cleanup(server.Close)
+
+	httpClient := server.Client()
+	if token != "" {
+		transport := httpClient.Transport
+		httpClient.Transport = mcpTestTransport(func(r *http.Request) (*http.Response, error) {
+			r = r.Clone(r.Context())
+			r.Header.Set("Authorization", "Bearer "+token)
+			return transport.RoundTrip(r)
+		})
+	}
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "hister-test", Version: "1"}, nil)
+	ctx := context.Background()
+	session, err := client.Connect(ctx, &mcp.StreamableClientTransport{
+		Endpoint:             server.URL + cfg.BasePathPrefix() + "/mcp",
+		HTTPClient:           httpClient,
+		DisableStandaloneSSE: true,
+	}, &mcp.ClientSessionOptions{ProtocolVersion: protocolVersion})
+	if err != nil {
+		t.Fatalf("connect MCP client: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := session.Close(); err != nil {
+			t.Errorf("close MCP session: %v", err)
+		}
+	})
+	return session
+}
+
+func mcpTestStructured(t *testing.T, result *mcp.CallToolResult) mcpStructuredResult {
+	t.Helper()
+	raw, err := json.Marshal(result.StructuredContent)
+	if err != nil {
+		t.Fatalf("marshal structured content: %v", err)
+	}
+	var structured mcpStructuredResult
+	if err := json.Unmarshal(raw, &structured); err != nil {
+		t.Fatalf("unmarshal structured content: %v", err)
+	}
+	return structured
+}
+
+func mcpTestTextResult(t *testing.T, result *mcp.CallToolResult) mcpStructuredResult {
+	t.Helper()
+	if len(result.Content) != 1 {
+		t.Fatalf("content block count = %d, want 1", len(result.Content))
+	}
+	text, ok := result.Content[0].(*mcp.TextContent)
+	if !ok {
+		t.Fatalf("content block type = %T, want *mcp.TextContent", result.Content[0])
+	}
+	start := strings.IndexByte(text.Text, '{')
+	var structured mcpStructuredResult
+	if start < 0 || json.Unmarshal([]byte(text.Text[start:]), &structured) != nil {
+		t.Fatalf("invalid text fallback: %q", text.Text)
+	}
+	return structured
+}
+
+func mcpTestWireError(t *testing.T, err error) *jsonrpc.Error {
+	t.Helper()
+	var wireErr *jsonrpc.Error
+	if !errors.As(err, &wireErr) {
+		t.Fatalf("error = %v, want *jsonrpc.Error", err)
+	}
+	return wireErr
+}
+
+func mcpTestCall(t *testing.T, session *mcp.ClientSession, name string, args map[string]any) (*mcp.CallToolResult, error) {
+	t.Helper()
+	return session.CallTool(context.Background(), &mcp.CallToolParams{Name: name, Arguments: args})
 }
 
 func TestMCPGetFacets(t *testing.T) {
@@ -83,17 +174,13 @@ func TestMCPGetFacets(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	listed := testutil.ServeHTTP(t, handler, http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`), mcpTestHeaders(nil))
-	var inventory struct {
-		Result struct {
-			Tools []struct{ Name string } `json:"tools"`
-		} `json:"result"`
-	}
-	if err := json.Unmarshal(listed.Body.Bytes(), &inventory); err != nil {
-		t.Fatal(err)
+	session := newMCPTestSession(t, cfg, handler, "")
+	inventory, err := session.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("list tools: %v", err)
 	}
 	found := false
-	for _, tool := range inventory.Result.Tools {
+	for _, tool := range inventory.Tools {
 		found = found || tool.Name == "get_facets"
 	}
 	if !found {
@@ -120,26 +207,12 @@ func TestMCPGetFacets(t *testing.T) {
 		{name: "owner filter cannot bypass scope", token: alice.Token, args: map[string]any{"query": fmt.Sprintf("user_id:%d", bob.ID)}, domains: map[string]int{}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			body, err := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": map[string]any{"name": "get_facets", "arguments": tt.args}})
+			session := newMCPTestSession(t, cfg, handler, tt.token)
+			response, err := mcpTestCall(t, session, "get_facets", tt.args)
 			if err != nil {
-				t.Fatal(err)
+				t.Fatalf("get_facets: %v", err)
 			}
-			var headers map[string]string
-			if tt.token != "" {
-				headers = map[string]string{"Authorization": "Bearer " + tt.token}
-			}
-			rec := testutil.ServeHTTP(t, handler, http.MethodPost, "/mcp", strings.NewReader(string(body)), mcpTestHeaders(headers))
-			var response struct {
-				Result struct {
-					Content           []mcpTextContent    `json:"content"`
-					StructuredContent mcpStructuredResult `json:"structuredContent"`
-				} `json:"result"`
-				Error *mcpRPCError `json:"error"`
-			}
-			if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &response) != nil || response.Error != nil {
-				t.Fatalf("get_facets status %d: %s", rec.Code, rec.Body)
-			}
-			result := response.Result.StructuredContent
+			result := mcpTestStructured(t, response)
 			if result.Tool != "get_facets" || result.Trusted["reported_total"] != float64(tt.total) || len(result.UntrustedContent) != 1 {
 				t.Fatalf("unexpected facet result: %+v", result)
 			}
@@ -175,13 +248,7 @@ func TestMCPGetFacets(t *testing.T) {
 			if tt.total > 0 && len(facets.DateHistogram) == 0 {
 				t.Error("missing update date buckets")
 			}
-			if len(response.Result.Content) != 1 {
-				t.Fatal("missing text fallback")
-			}
-			fallback := response.Result.Content[0].Text
-			start := strings.IndexByte(fallback, '{')
-			var textResult mcpStructuredResult
-			if start < 0 || json.Unmarshal([]byte(fallback[start:]), &textResult) != nil || !reflect.DeepEqual(textResult, result) {
+			if textResult := mcpTestTextResult(t, response); !reflect.DeepEqual(textResult, result) {
 				t.Fatal("text fallback differs from structured facets")
 			}
 		})
@@ -189,18 +256,12 @@ func TestMCPGetFacets(t *testing.T) {
 }
 
 func TestMCPGetFacetsInvalidArguments(t *testing.T) {
-	_, handler := newPublicTokenTestServer(t)
+	cfg, handler := newPublicTokenTestServer(t)
+	session := newMCPTestSession(t, cfg, handler, "")
 	for _, args := range []string{`{"query":42}`, `{"query":"needle OR"}`, `{"date_from":"yesterday"}`, `{"date_to":"2026-02-30"}`} {
-		body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_facets","arguments":` + args + `}}`
-		rec := testutil.ServeHTTP(t, handler, http.MethodPost, "/mcp", strings.NewReader(body), mcpTestHeaders(nil))
-		var response struct {
-			Error *mcpRPCError `json:"error"`
-		}
-		if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
-			t.Fatal(err)
-		}
-		if response.Error == nil || response.Error.Code != mcpErrInvalidParam {
-			t.Errorf("arguments %s: error = %+v, want invalid argument", args, response.Error)
+		_, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "get_facets", Arguments: json.RawMessage(args)})
+		if code := mcpTestWireError(t, err).Code; code != mcpErrInvalidParam {
+			t.Errorf("arguments %s: code = %d, want invalid argument", args, code)
 		}
 	}
 }
@@ -224,12 +285,13 @@ func TestMCPFacetValuesAreNormalized(t *testing.T) {
 }
 
 func TestMCPSearchRespectsLimit(t *testing.T) {
-	_, handler := newTokenTestServer(t, false)
+	cfg, handler := newTokenTestServer(t, false)
 	for i := range 12 {
 		if err := model.UpdateHistory(0, "limit regression", fmt.Sprintf("https://example.com/%d", i), "History result"); err != nil {
 			t.Fatal(err)
 		}
 	}
+	session := newMCPTestSession(t, cfg, handler, "secret")
 	for _, tt := range []struct {
 		name     string
 		argument string
@@ -245,43 +307,22 @@ func TestMCPSearchRespectsLimit(t *testing.T) {
 		{name: "above maximum", argument: `,"limit":51`, want: 10},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			request := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"search","arguments":{"query":"limit regression"` + tt.argument + `}}}`
-			rec := testutil.ServeHTTP(t, handler, http.MethodPost, "/mcp", strings.NewReader(request), mcpTestHeaders(map[string]string{"Authorization": "Bearer secret"}))
-			if rec.Code != http.StatusOK {
-				t.Fatalf("status = %d; body=%s", rec.Code, rec.Body.String())
-			}
-			var response struct {
-				Result struct {
-					Content           []mcpTextContent    `json:"content"`
-					StructuredContent mcpStructuredResult `json:"structuredContent"`
-				} `json:"result"`
-				Error *mcpRPCError `json:"error"`
-			}
-			if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+			var args map[string]any
+			if err := json.Unmarshal([]byte(`{"query":"limit regression"`+tt.argument+`}`), &args); err != nil {
 				t.Fatal(err)
 			}
-			if response.Error != nil {
-				t.Fatalf("MCP error = %+v", response.Error)
+			response, err := mcpTestCall(t, session, "search", args)
+			if err != nil {
+				t.Fatalf("MCP error = %v", err)
 			}
-			result := response.Result.StructuredContent
+			result := mcpTestStructured(t, response)
 			if got := len(result.UntrustedContent); got != tt.want {
 				t.Fatalf("result count = %d, want %d", got, tt.want)
 			}
 			if result.Trusted["result_count"] != float64(tt.want) || result.Trusted["reported_total"] != float64(12) {
 				t.Fatalf("unexpected result totals: %+v", result.Trusted)
 			}
-			if len(response.Result.Content) != 1 {
-				t.Fatalf("content block count = %d, want 1", len(response.Result.Content))
-			}
-			fallback := response.Result.Content[0].Text
-			start := strings.IndexByte(fallback, '{')
-			if start < 0 {
-				t.Fatal("text fallback has no structured result")
-			}
-			var textResult mcpStructuredResult
-			if err := json.Unmarshal([]byte(fallback[start:]), &textResult); err != nil {
-				t.Fatal(err)
-			}
+			textResult := mcpTestTextResult(t, response)
 			if len(textResult.UntrustedContent) != tt.want || textResult.Trusted["result_count"] != float64(tt.want) {
 				t.Fatalf("text fallback did not honor the limit: %+v", textResult.Trusted)
 			}
@@ -318,35 +359,22 @@ func TestMCPSearchPagination(t *testing.T) {
 
 	for _, authenticated := range []bool{true, false} {
 		t.Run(fmt.Sprintf("authenticated=%v", authenticated), func(t *testing.T) {
-			var headers map[string]string
+			token := ""
 			if authenticated {
-				headers = map[string]string{"Authorization": "Bearer secret"}
+				token = "secret"
 			}
+			session := newMCPTestSession(t, cfg, handler, token)
 			seen := make(map[string]bool)
 			pageKey := ""
 			for page := range 100 {
 				// Changing the page size must not lose the remaining batch results.
 				limit := []int{1, 2, 7, 50}[page%4]
 				args := map[string]any{"query": query, "limit": limit, "page_key": pageKey, "fields": []string{"text"}}
-				body, err := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": map[string]any{"name": "search", "arguments": args}})
+				response, err := mcpTestCall(t, session, "search", args)
 				if err != nil {
-					t.Fatal(err)
+					t.Fatalf("page %d: %v", page, err)
 				}
-				rec := testutil.ServeHTTP(t, handler, http.MethodPost, "/mcp", strings.NewReader(string(body)), mcpTestHeaders(headers))
-				var response struct {
-					Result struct {
-						Content           []mcpTextContent    `json:"content"`
-						StructuredContent mcpStructuredResult `json:"structuredContent"`
-					} `json:"result"`
-					Error *mcpRPCError `json:"error"`
-				}
-				if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
-					t.Fatal(err)
-				}
-				if rec.Code != http.StatusOK || response.Error != nil {
-					t.Fatalf("page %d: status %d, error %+v", page, rec.Code, response.Error)
-				}
-				result := response.Result.StructuredContent
+				result := mcpTestStructured(t, response)
 				if len(result.UntrustedContent) > limit || result.Trusted["result_count"] != float64(len(result.UntrustedContent)) {
 					t.Fatalf("page %d: invalid page size: %+v", page, result.Trusted)
 				}
@@ -364,16 +392,7 @@ func TestMCPSearchPagination(t *testing.T) {
 					seen[u] = true
 				}
 				next, _ := result.Trusted["next_page_key"].(string)
-				if len(response.Result.Content) != 1 {
-					t.Fatal("missing text fallback")
-				}
-				fallback := response.Result.Content[0].Text
-				start := strings.IndexByte(fallback, '{')
-				var textResult mcpStructuredResult
-				if start < 0 || json.Unmarshal([]byte(fallback[start:]), &textResult) != nil {
-					t.Fatal("invalid text fallback")
-				}
-				if textResult.Trusted["next_page_key"] != result.Trusted["next_page_key"] || len(textResult.UntrustedContent) != len(result.UntrustedContent) {
+				if textResult := mcpTestTextResult(t, response); textResult.Trusted["next_page_key"] != result.Trusted["next_page_key"] || len(textResult.UntrustedContent) != len(result.UntrustedContent) {
 					t.Fatal("text fallback differs from the structured page")
 				}
 				if next == "" {
@@ -397,18 +416,16 @@ func TestMCPSearchPagination(t *testing.T) {
 }
 
 func TestMCPSearchRejectsInvalidPageKey(t *testing.T) {
-	_, handler := newPublicTokenTestServer(t)
+	cfg, handler := newPublicTokenTestServer(t)
+	session := newMCPTestSession(t, cfg, handler, "")
 	for _, key := range []string{"invalid", `[]`, `{"offset":-1}`} {
-		body := fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"search","arguments":{"query":"pagination","page_key":%q}}}`, key)
-		rec := testutil.ServeHTTP(t, handler, http.MethodPost, "/mcp", strings.NewReader(body), mcpTestHeaders(nil))
-		var response struct {
-			Error *mcpRPCError `json:"error"`
-		}
-		if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		args, err := json.Marshal(map[string]any{"query": "pagination", "page_key": key})
+		if err != nil {
 			t.Fatal(err)
 		}
-		if response.Error == nil || response.Error.Code != mcpErrInvalidParam {
-			t.Errorf("page key %q returned %s, want invalid argument", key, rec.Body)
+		_, err = session.CallTool(context.Background(), &mcp.CallToolParams{Name: "search", Arguments: json.RawMessage(args)})
+		if code := mcpTestWireError(t, err).Code; code != mcpErrInvalidParam {
+			t.Errorf("page key %q: code = %d, want invalid argument", key, code)
 		}
 	}
 }
@@ -630,43 +647,25 @@ func TestMCPPreviewContentControls(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	call := func(args map[string]any) (mcpStructuredResult, *mcpRPCError) {
+	session := newMCPTestSession(t, cfg, handler, "secret")
+	call := func(args map[string]any) (mcpStructuredResult, error) {
 		t.Helper()
 		if _, ok := args["url"]; !ok {
 			args["url"] = url
 		}
 		args["extractor"] = "Basic"
-		body, err := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": map[string]any{"name": "get_preview", "arguments": args}})
+		response, err := mcpTestCall(t, session, "get_preview", args)
 		if err != nil {
-			t.Fatal(err)
+			return mcpStructuredResult{}, err
 		}
-		rec := testutil.ServeHTTP(t, handler, http.MethodPost, "/mcp", strings.NewReader(string(body)), mcpTestHeaders(map[string]string{"Authorization": "Bearer secret"}))
-		var response struct {
-			Result struct {
-				Content           []mcpTextContent    `json:"content"`
-				StructuredContent mcpStructuredResult `json:"structuredContent"`
-			} `json:"result"`
-			Error *mcpRPCError `json:"error"`
+		result := mcpTestStructured(t, response)
+		if len(result.UntrustedContent) != 1 || result.UntrustedContent[0].Trust != "untrusted" {
+			t.Fatalf("invalid content boundary: %+v", result)
 		}
-		if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &response) != nil {
-			t.Fatalf("invalid preview response: status %d, %s", rec.Code, rec.Body)
+		if textResult := mcpTestTextResult(t, response); !reflect.DeepEqual(textResult, result) {
+			t.Fatal("text fallback differs from structured content")
 		}
-		result := response.Result.StructuredContent
-		if response.Error == nil {
-			if len(result.UntrustedContent) != 1 || result.UntrustedContent[0].Trust != "untrusted" {
-				t.Fatalf("invalid content boundary: %+v", result)
-			}
-			if len(response.Result.Content) != 1 {
-				t.Fatal("missing text fallback")
-			}
-			fallback := response.Result.Content[0].Text
-			start := strings.IndexByte(fallback, '{')
-			var textResult mcpStructuredResult
-			if start < 0 || json.Unmarshal([]byte(fallback[start:]), &textResult) != nil || !reflect.DeepEqual(textResult, result) {
-				t.Fatal("text fallback differs from structured content")
-			}
-		}
-		return result, response.Error
+		return result, nil
 	}
 
 	for _, tt := range []struct {
@@ -784,12 +783,16 @@ func TestMCPPreviewContentControls(t *testing.T) {
 	for _, args := range []map[string]any{
 		{"fields": []string{"unknown"}}, {"max_chars": -1}, {"text_offset": -1}, {"html_offset": -1},
 	} {
-		if _, rpcErr := call(args); rpcErr == nil || rpcErr.Code != mcpErrInvalidParam {
-			t.Errorf("arguments %+v: error = %+v, want invalid argument", args, rpcErr)
+		if _, err := call(args); err == nil {
+			t.Errorf("arguments %+v: error = nil, want invalid argument", args)
+		} else if code := mcpTestWireError(t, err).Code; code != mcpErrInvalidParam {
+			t.Errorf("arguments %+v: code = %d, want invalid argument", args, code)
 		}
 	}
-	if _, rpcErr := call(map[string]any{"url": url + "/private", "fields": []string{"text"}, "max_chars": 3}); rpcErr == nil || rpcErr.Code != mcpErrNotFound {
-		t.Errorf("private document lookup: error = %+v, want not found", rpcErr)
+	if _, err := call(map[string]any{"url": url + "/private", "fields": []string{"text"}, "max_chars": 3}); err == nil {
+		t.Errorf("private document lookup: error = nil, want not found")
+	} else if code := mcpTestWireError(t, err).Code; code != mcpErrNotFound {
+		t.Errorf("private document lookup: code = %d, want not found", code)
 	}
 }
 
@@ -902,27 +905,15 @@ func TestMCPGetHistoryFilters(t *testing.T) {
 		}
 	}
 
-	call := func(t *testing.T, args map[string]any, token string) (mcpStructuredResult, *mcpRPCError) {
+	aliceSession := newMCPTestSession(t, cfg, handler, alice.Token)
+	anonSession := newMCPTestSession(t, cfg, handler, "")
+	call := func(t *testing.T, session *mcp.ClientSession, args map[string]any) (mcpStructuredResult, error) {
 		t.Helper()
-		body, err := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": map[string]any{"name": "get_history", "arguments": args}})
+		response, err := mcpTestCall(t, session, "get_history", args)
 		if err != nil {
-			t.Fatal(err)
+			return mcpStructuredResult{}, err
 		}
-		var headers map[string]string
-		if token != "" {
-			headers = map[string]string{"Authorization": "Bearer " + token}
-		}
-		rec := testutil.ServeHTTP(t, handler, http.MethodPost, "/mcp", strings.NewReader(string(body)), mcpTestHeaders(headers))
-		var response struct {
-			Result struct {
-				StructuredContent mcpStructuredResult `json:"structuredContent"`
-			} `json:"result"`
-			Error *mcpRPCError `json:"error"`
-		}
-		if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &response) != nil {
-			t.Fatalf("get_history status %d: %s", rec.Code, rec.Body)
-		}
-		return response.Result.StructuredContent, response.Error
+		return mcpTestStructured(t, response), nil
 	}
 
 	for _, mode := range []string{"opened", "indexed"} {
@@ -944,7 +935,7 @@ func TestMCPGetHistoryFilters(t *testing.T) {
 		} {
 			t.Run(mode+"/"+tt.name, func(t *testing.T) {
 				tt.args["mode"] = mode
-				result, rpcErr := call(t, tt.args, alice.Token)
+				result, rpcErr := call(t, aliceSession, tt.args)
 				if rpcErr != nil {
 					t.Fatal(rpcErr)
 				}
@@ -970,7 +961,7 @@ func TestMCPGetHistoryFilters(t *testing.T) {
 				tt.args["limit"] = 1
 				var paged []mcpUntrustedRecord
 				for range len(want) + 1 {
-					page, rpcErr := call(t, tt.args, alice.Token)
+					page, rpcErr := call(t, aliceSession, tt.args)
 					if rpcErr != nil || len(page.UntrustedContent) > 1 {
 						t.Fatalf("unexpected history page: %+v, error: %+v", page, rpcErr)
 					}
@@ -990,29 +981,26 @@ func TestMCPGetHistoryFilters(t *testing.T) {
 				}
 			})
 		}
-		if _, rpcErr := call(t, map[string]any{"mode": mode, "filter": "alpha", "date_from": "2026-01-31"}, ""); rpcErr == nil || rpcErr.Code != mcpErrNotFound {
-			t.Errorf("anonymous %s history: error = %+v, want unavailable", mode, rpcErr)
+		if _, err := call(t, anonSession, map[string]any{"mode": mode, "filter": "alpha", "date_from": "2026-01-31"}); err == nil {
+			t.Errorf("anonymous %s history: error = nil, want unavailable", mode)
+		} else if code := mcpTestWireError(t, err).Code; code != mcpErrNotFound {
+			t.Errorf("anonymous %s history: code = %d, want unavailable", mode, code)
 		}
 	}
 }
 
 func TestMCPGetHistoryInvalidFilters(t *testing.T) {
-	_, handler := newTokenTestServer(t, false)
+	cfg, handler := newTokenTestServer(t, false)
+	session := newMCPTestSession(t, cfg, handler, "secret")
 	for _, mode := range []string{"opened", "indexed"} {
 		for _, args := range []string{
 			`"filter":42`, `"date_from":"yesterday"`, `"date_to":"2026-02-30"`,
 			`"date_from":"2026-02-01","date_to":"2026-01-31"`,
 		} {
-			body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_history","arguments":{"mode":"` + mode + `",` + args + `}}}`
-			rec := testutil.ServeHTTP(t, handler, http.MethodPost, "/mcp", strings.NewReader(body), mcpTestHeaders(map[string]string{"Authorization": "Bearer secret"}))
-			var response struct {
-				Error *mcpRPCError `json:"error"`
-			}
-			if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
-				t.Fatal(err)
-			}
-			if response.Error == nil || response.Error.Code != mcpErrInvalidParam {
-				t.Errorf("%s arguments %s: error = %+v, want invalid argument", mode, args, response.Error)
+			arguments := json.RawMessage(`{"mode":"` + mode + `",` + args + `}`)
+			_, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "get_history", Arguments: arguments})
+			if code := mcpTestWireError(t, err).Code; code != mcpErrInvalidParam {
+				t.Errorf("%s arguments %s: code = %d, want invalid argument", mode, args, code)
 			}
 		}
 	}
@@ -1138,27 +1126,14 @@ func TestMCPUnknownNotificationIsRejected(t *testing.T) {
 }
 
 func TestMCPInitializeAdvertisesStructuredContentProtocol(t *testing.T) {
-	_, handler := newTokenTestServer(t, false)
-	rec := testutil.ServeHTTP(t, handler, http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}`), mcpTestHeaders(map[string]string{
-		"X-Access-Token": "secret",
-	}))
-	var body struct {
-		Result struct {
-			ProtocolVersion string `json:"protocolVersion"`
-		} `json:"result"`
-		Error *mcpRPCError `json:"error"`
+	cfg, handler := newTokenTestServer(t, false)
+	session := newMCPTestSessionVersion(t, cfg, handler, "secret", "2024-11-05")
+	initResult := session.InitializeResult()
+	if initResult.ProtocolVersion != mcpProtocolVersion {
+		t.Fatalf("protocol version = %q, want %q", initResult.ProtocolVersion, mcpProtocolVersion)
 	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
-		t.Fatal(err)
-	}
-	if body.Error != nil {
-		t.Fatalf("MCP error = %+v", body.Error)
-	}
-	if body.Result.ProtocolVersion != mcpProtocolVersion {
-		t.Fatalf("protocol version = %q, want %q", body.Result.ProtocolVersion, mcpProtocolVersion)
-	}
-	if body.Result.ProtocolVersion != "2025-06-18" {
-		t.Fatalf("structured content protocol version = %q", body.Result.ProtocolVersion)
+	if initResult.ProtocolVersion != "2025-06-18" {
+		t.Fatalf("structured content protocol version = %q", initResult.ProtocolVersion)
 	}
 }
 
@@ -1181,6 +1156,33 @@ func TestMCPInitializeAdvertisesOnlyTools(t *testing.T) {
 	}
 	if got := string(body.Result.Capabilities); got != `{"tools":{}}` {
 		t.Fatalf("capabilities = %s, want {\"tools\":{}}", got)
+	}
+}
+
+// TestMCPToolCallReturnsPlainJSON pins the tools/call wire format. The SDK
+// client accepts both JSON and SSE responses, so session-based tests would not
+// notice if the server switched to streaming.
+func TestMCPToolCallReturnsPlainJSON(t *testing.T) {
+	_, handler := newTokenTestServer(t, false)
+	rec := testutil.ServeHTTP(t, handler, http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_facets","arguments":{}}}`), mcpTestHeaders(map[string]string{
+		"Authorization": "Bearer secret",
+	}))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	if got := rec.Header().Get("Content-Type"); !strings.HasPrefix(got, "application/json") {
+		t.Fatalf("Content-Type = %q, want application/json", got)
+	}
+	var body struct {
+		ID     int             `json:"id"`
+		Result json.RawMessage `json:"result"`
+		Error  *mcpRPCError    `json:"error"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode body: %v; body=%s", err, rec.Body.String())
+	}
+	if body.Error != nil || body.ID != 1 || len(body.Result) == 0 {
+		t.Fatalf("response = %s, want result for id 1", rec.Body.String())
 	}
 }
 

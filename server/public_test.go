@@ -18,6 +18,8 @@ import (
 	"github.com/asciimoo/hister/server/model"
 	"github.com/asciimoo/hister/server/testutil"
 	"github.com/asciimoo/hister/server/timeline"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 func newPublicTokenTestServer(t *testing.T) (*config.Config, http.Handler) {
@@ -429,7 +431,7 @@ func TestPublicModeEnablesHistoryForAuthenticatedCallers(t *testing.T) {
 }
 
 func TestMCPGetHistoryOpenedMode(t *testing.T) {
-	_, handler := newTokenTestServer(t, false)
+	cfg, handler := newTokenTestServer(t, false)
 	if err := model.UpdateHistory(0, "hister mcp", "https://example.com/mcp", "MCP result"); err != nil {
 		t.Fatal(err)
 	}
@@ -437,43 +439,30 @@ func TestMCPGetHistoryOpenedMode(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rec := testutil.ServeHTTP(t, handler, http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_history","arguments":{"mode":"opened","limit":10}}}`), mcpTestHeaders(map[string]string{
-		"X-Access-Token": "secret",
-	}))
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("POST /mcp get_history status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	session := newMCPTestSession(t, cfg, handler, "secret")
+	response, err := mcpTestCall(t, session, "get_history", map[string]any{"mode": "opened", "limit": 10})
+	if err != nil {
+		t.Fatalf("get_history: %v", err)
 	}
-	var body struct {
-		Result struct {
-			Content           []mcpTextContent    `json:"content"`
-			StructuredContent mcpStructuredResult `json:"structuredContent"`
-		} `json:"result"`
-		Error *mcpRPCError `json:"error"`
+	if len(response.Content) != 1 {
+		t.Fatalf("content length = %d, want 1", len(response.Content))
 	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
-		t.Fatal(err)
+	text, ok := response.Content[0].(*mcp.TextContent)
+	if !ok || !strings.HasPrefix(text.Text, "SECURITY NOTICE:") {
+		t.Fatalf("text fallback lacks security notice: %#v", response.Content[0])
 	}
-	if body.Error != nil {
-		t.Fatalf("MCP error = %+v", body.Error)
+	structured := mcpTestStructured(t, response)
+	if structured.Trusted["mode"] != "opened" {
+		t.Fatalf("history mode = %#v, want opened", structured.Trusted["mode"])
 	}
-	if len(body.Result.Content) != 1 {
-		t.Fatalf("content length = %d, want 1", len(body.Result.Content))
+	if len(structured.UntrustedContent) != 2 {
+		t.Fatalf("untrusted history length = %d, want 2", len(structured.UntrustedContent))
 	}
-	if !strings.HasPrefix(body.Result.Content[0].Text, "SECURITY NOTICE:") {
-		t.Fatalf("text fallback lacks security notice: %s", body.Result.Content[0].Text)
-	}
-	if body.Result.StructuredContent.Trusted["mode"] != "opened" {
-		t.Fatalf("history mode = %#v, want opened", body.Result.StructuredContent.Trusted["mode"])
-	}
-	if len(body.Result.StructuredContent.UntrustedContent) != 2 {
-		t.Fatalf("untrusted history length = %d, want 2", len(body.Result.StructuredContent.UntrustedContent))
-	}
-	encodedContent, err := json.Marshal(body.Result.StructuredContent.UntrustedContent)
+	encodedContent, err := json.Marshal(structured.UntrustedContent)
 	if err != nil {
 		t.Fatal(err)
 	}
-	text := string(encodedContent)
+	textContent := string(encodedContent)
 	for _, want := range []string{
 		`"trust":"untrusted"`,
 		`"query":"hister mcp"`,
@@ -481,39 +470,24 @@ func TestMCPGetHistoryOpenedMode(t *testing.T) {
 		`"query":"history view"`,
 		`"url":"https://example.com/history"`,
 	} {
-		if !strings.Contains(text, want) {
-			t.Fatalf("history response missing %q in:\n%s", want, text)
+		if !strings.Contains(textContent, want) {
+			t.Fatalf("history response missing %q in:\n%s", want, textContent)
 		}
 	}
 }
 
 func TestMCPGetHistoryDefaultsToIndexedMode(t *testing.T) {
-	_, handler := newTokenTestServer(t, false)
-	rec := testutil.ServeHTTP(t, handler, http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_history","arguments":{"limit":10}}}`), mcpTestHeaders(map[string]string{
-		"X-Access-Token": "secret",
-	}))
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("POST /mcp get_history status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	cfg, handler := newTokenTestServer(t, false)
+	session := newMCPTestSession(t, cfg, handler, "secret")
+	response, err := mcpTestCall(t, session, "get_history", map[string]any{"limit": 10})
+	if err != nil {
+		t.Fatalf("get_history: %v", err)
 	}
-	var body struct {
-		Result struct {
-			Content           []mcpTextContent    `json:"content"`
-			StructuredContent mcpStructuredResult `json:"structuredContent"`
-		} `json:"result"`
-		Error *mcpRPCError `json:"error"`
+	if len(response.Content) != 1 {
+		t.Fatalf("content length = %d, want 1", len(response.Content))
 	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
-		t.Fatal(err)
-	}
-	if body.Error != nil {
-		t.Fatalf("MCP error = %+v", body.Error)
-	}
-	if len(body.Result.Content) != 1 {
-		t.Fatalf("content length = %d, want 1", len(body.Result.Content))
-	}
-	if body.Result.StructuredContent.Trusted["mode"] != "indexed" {
-		t.Fatalf("default history mode = %#v, want indexed", body.Result.StructuredContent.Trusted["mode"])
+	if structured := mcpTestStructured(t, response); structured.Trusted["mode"] != "indexed" {
+		t.Fatalf("default history mode = %#v, want indexed", structured.Trusted["mode"])
 	}
 }
 
