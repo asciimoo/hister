@@ -209,6 +209,26 @@ func TestDocumentEmbeddingInputsSupportMetadataOnlyDocument(t *testing.T) {
 	}
 }
 
+func TestDocumentEmbeddingInputsBoundsLongMetadata(t *testing.T) {
+	embedder := newTestEmbedder("")
+	for name, d := range map[string]DocumentContext{
+		"single field":    {Title: strings.Repeat("1234567890", 2000)},
+		"combined fields": {Title: strings.Repeat("1234", 150), Description: strings.Repeat("é", 300)},
+	} {
+		t.Run(name, func(t *testing.T) {
+			inputs := embedder.documentEmbeddingInputs(strings.Repeat("9876543210", 1000), d)
+			if len(inputs) < 2 {
+				t.Fatalf("expected metadata and body inputs, got %d", len(inputs))
+			}
+			for i, input := range inputs {
+				if len(input.embeddingText) > 1024 {
+					t.Errorf("input %d has %d bytes, want at most 1024", i, len(input.embeddingText))
+				}
+			}
+		})
+	}
+}
+
 func TestDocumentEmbeddingInputsEmptyDocument(t *testing.T) {
 	embedder := newTestEmbedder("")
 	if inputs := embedder.documentEmbeddingInputs("", DocumentContext{}); inputs != nil {
@@ -319,12 +339,20 @@ func TestChunkAndEmbedRechunksAfterEndpointContextOverflow(t *testing.T) {
 		"physical batch size": writePhysicalBatchSizeError,
 	} {
 		t.Run(name, func(t *testing.T) {
-			testChunkAndEmbedRechunks(t, writeError)
+			for name, input := range map[string]struct{ text, title string }{
+				"words":       {strings.Repeat("longtoken ", 20), "Adaptive chunking"},
+				"long number": {strings.Repeat("1234567890", 2000), "Adaptive chunking"},
+				"long title":  {strings.Repeat("longtoken ", 20), strings.Repeat("1234567890", 2000)},
+			} {
+				t.Run(name, func(t *testing.T) {
+					testChunkAndEmbedRechunks(t, writeError, input.text, input.title)
+				})
+			}
 		})
 	}
 }
 
-func testChunkAndEmbedRechunks(t *testing.T, writeError func(http.ResponseWriter, int, int)) {
+func testChunkAndEmbedRechunks(t *testing.T, writeError func(http.ResponseWriter, int, int), text, title string) {
 	t.Helper()
 	const endpointContextLength = 64
 	var rejected atomic.Int32
@@ -351,8 +379,8 @@ func testChunkAndEmbedRechunks(t *testing.T, writeError func(http.ResponseWriter
 	embedder.maxContextLength = endpointContextLength
 	chunks, err := embedder.ChunkAndEmbed(
 		context.Background(),
-		strings.Repeat("longtoken ", 20),
-		DocumentContext{Title: "Adaptive chunking"},
+		text,
+		DocumentContext{Title: title},
 	)
 	if err != nil {
 		t.Fatalf("ChunkAndEmbed returned error: %v", err)

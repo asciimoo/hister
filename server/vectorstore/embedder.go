@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/asciimoo/hister/config"
 )
@@ -422,6 +423,13 @@ func cleanEmbeddingField(value string) string {
 	return strings.Join(strings.Fields(value), " ")
 }
 
+func estimateEmbeddingTokens(text string) int {
+	if text == "" {
+		return 0
+	}
+	return max(len(tokenize(text)), (len(text)-1)/maxBytesPerToken+1)
+}
+
 // formatEmbeddingFields formats as many complete metadata fields as fit in
 // tokenBudget. The last field may be shortened when part of it still fits.
 func formatEmbeddingFields(fields []embeddingField, tokenBudget int) string {
@@ -436,9 +444,9 @@ func formatEmbeddingFields(fields []embeddingField, tokenBudget int) string {
 			continue
 		}
 		line := field.name + ": " + value
-		lineTokens := len(tokenize(line))
+		lineTokens := estimateEmbeddingTokens(line)
 		if lineTokens > remaining {
-			labelTokens := len(tokenize(field.name + ":"))
+			labelTokens := estimateEmbeddingTokens(field.name + ":")
 			valueBudget := remaining - labelTokens
 			if valueBudget <= 0 {
 				break
@@ -448,7 +456,17 @@ func formatEmbeddingFields(fields []embeddingField, tokenBudget int) string {
 				valueTokens = valueTokens[:valueBudget]
 			}
 			line = field.name + ": " + strings.Join(valueTokens, " ")
-			lineTokens = len(tokenize(line))
+			lineTokens = estimateEmbeddingTokens(line)
+		}
+		// Metadata can contain the same long numbers or identifiers as body
+		// text. Apply the byte safeguard before sending the first request.
+		if (len(line)-1)/maxBytesPerToken >= remaining {
+			end := remaining * maxBytesPerToken
+			for end < len(line) && !utf8.RuneStart(line[end]) {
+				end--
+			}
+			line = line[:end]
+			lineTokens = remaining
 		}
 		lines = append(lines, line)
 		remaining -= lineTokens
@@ -481,7 +499,7 @@ func bodyDocumentFields(d DocumentContext) []embeddingField {
 func (e *Embedder) documentEmbeddingInputsWithLimit(text string, d DocumentContext, contextLength int) []documentEmbeddingInput {
 	var inputs []documentEmbeddingInput
 	metadataLabel := e.documentPrefix + "document:\n"
-	metadataBudget := contextLength - len(tokenize(metadataLabel))
+	metadataBudget := contextLength - estimateEmbeddingTokens(metadataLabel)
 	metadata := formatEmbeddingFields(fullDocumentFields(d), metadataBudget)
 	if metadata != "" {
 		inputs = append(inputs, documentEmbeddingInput{
@@ -497,7 +515,7 @@ func (e *Embedder) documentEmbeddingInputsWithLimit(text string, d DocumentConte
 		bodyHeader += bodyContext + "\n"
 	}
 	bodyHeader += "content:\n"
-	contentLimit := max(1, contextLength-len(tokenize(bodyHeader)))
+	contentLimit := max(1, contextLength-estimateEmbeddingTokens(bodyHeader))
 	textChunks := ChunkText(text, contentLimit, e.chunkOverlap)
 	for _, chunk := range textChunks {
 		inputs = append(inputs, documentEmbeddingInput{
@@ -522,7 +540,7 @@ func reducedEmbeddingContextLength(err error, inputs []documentEmbeddingInput, c
 	if promptTokens > 0 && endpointContextLength > 0 {
 		estimatedTokens := 0
 		for _, input := range inputs {
-			estimatedTokens = max(estimatedTokens, len(tokenize(input.embeddingText)))
+			estimatedTokens = max(estimatedTokens, estimateEmbeddingTokens(input.embeddingText))
 		}
 		if estimatedTokens > 0 {
 			// Keep ten percent free because the endpoint and local tokenizer may

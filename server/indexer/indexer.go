@@ -355,6 +355,7 @@ type MultiBatch struct {
 	embeddingIDs        map[string]struct{}
 	deletedIDs          map[string]struct{}
 	incrementAddCount   bool
+	allowMissingVectors bool
 	stagedMetrics       []indexingMetric
 }
 
@@ -862,6 +863,7 @@ func (idx *Indexer) reindex(ctx context.Context, basePath string, rules *config.
 			}
 			n := len(res.Hits)
 			b = newMultiBatch(tmpIdx)
+			b.allowMissingVectors = true
 			for _, h := range res.Hits {
 				d := idx.resFromHit(h, resultIncludeAll)
 				if d.Type == document.Local {
@@ -1079,17 +1081,26 @@ func documentEmbeddingContext(d *document.Document) vectorstore.DocumentContext 
 }
 
 // embedDocumentChunks creates metadata and body chunk embeddings and stores the
-// resulting vectors. Errors are returned so durable queue workers can retry
-// them and synchronous reindexing cannot report an incomplete rebuild as done.
-func embedDocumentChunks(ctx context.Context, idx *Indexer, d *document.Document) error {
+// resulting vectors. Reindex may keep keyword entries when generation fails;
+// durable queue workers need the errors so they can retry. Cancellation,
+// dimension mismatches, and storage failures are always returned.
+func embedDocumentChunks(ctx context.Context, idx *Indexer, d *document.Document, allowMissingVectors bool) error {
 	start := time.Now()
 	chunks, err := idx.embedder.ChunkAndEmbed(ctx, d.Text, documentEmbeddingContext(d))
 	if err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		if errors.Is(err, context.Canceled) {
 			log.Debug().Str("url", d.URL).Msg("chunk embedding canceled")
 			return err
 		}
-		log.Warn().Err(err).Str("url", d.URL).Msg("chunk embedding failed, skipping vectors")
+		var dimensionErr *vectorstore.DimensionMismatchError
+		if allowMissingVectors && !errors.As(err, &dimensionErr) {
+			log.Warn().Err(err).Str("url", d.URL).Msg("chunk embedding failed, keeping keyword entry and skipping vectors")
+			return nil
+		}
+		log.Warn().Err(err).Str("url", d.URL).Msg("chunk embedding failed")
 		return err
 	}
 	if len(chunks) == 0 {
@@ -1769,7 +1780,7 @@ func (b *MultiBatch) applyDocumentWrite(d *document.Document, plan documentWrite
 		if b.indexer.embeddingWorkers > 0 {
 			b.embeddingIDs[d.ID()] = struct{}{}
 		} else {
-			if err := embedDocumentChunks(b.indexer.embedCtx, b.indexer, d); err != nil {
+			if err := embedDocumentChunks(b.indexer.embedCtx, b.indexer, d, b.allowMissingVectors); err != nil {
 				return err
 			}
 		}

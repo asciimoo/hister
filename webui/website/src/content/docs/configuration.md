@@ -585,7 +585,7 @@ description: 'Explore every configuration section, option, default value, enviro
       name: 'max_context_length',
       type: 'int',
       defaultValue: '512',
-      description: 'Hard context ceiling for each text chunk. Hister reserves five percent as tokenizer headroom, giving the default an approximate budget of 486 tokens. Endpoint rejections trigger another retry with smaller chunks.',
+      description: 'Approximate token budget for each embedding input. Hister reserves five percent as headroom, giving the default a budget of 486 tokens, and also splits unusually long unbroken text. Models count tokens differently; endpoint rejections trigger another retry with smaller chunks.',
     },
     {
       name: 'chunk_overlap',

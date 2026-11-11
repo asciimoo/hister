@@ -5,6 +5,7 @@ package vectorstore
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	_ "github.com/mattn/go-sqlite3" // provides sqlite3 symbols needed by sqlitevec
 )
@@ -97,6 +98,50 @@ func TestChunkText_FitsInOneChunk(t *testing.T) {
 	}
 	if chunks[0].Text != text {
 		t.Errorf("expected verbatim text, got %q", chunks[0].Text)
+	}
+}
+
+func TestChunkTextBoundsUnderestimatedText(t *testing.T) {
+	for name, text := range map[string]string{
+		"number":     strings.Repeat("1234567890", 2000),
+		"unicode":    strings.Repeat("éअ𝒜", 2000),
+		"whitespace": "start" + strings.Repeat(" ", 2000) + "end",
+	} {
+		t.Run(name, func(t *testing.T) {
+			chunks := ChunkText(text, 16, 0)
+			var joined strings.Builder
+			for _, chunk := range chunks {
+				if len(chunk.Text) > 128 {
+					t.Fatalf("chunk has %d bytes, want at most 128", len(chunk.Text))
+				}
+				if !utf8.ValidString(chunk.Text) {
+					t.Fatal("chunk split a UTF-8 character")
+				}
+				joined.WriteString(chunk.Text)
+			}
+			if joined.String() != text {
+				t.Fatal("chunking lost or duplicated text without overlap")
+			}
+		})
+	}
+}
+
+func TestChunkTextOverlapsUnderestimatedText(t *testing.T) {
+	text := strings.Repeat("1234567890", 40)
+	chunks := ChunkText(text, 16, 4)
+	if len(chunks) < 2 {
+		t.Fatal("expected multiple chunks")
+	}
+	joined := chunks[0].Text
+	for i := 1; i < len(chunks); i++ {
+		previous := chunks[i-1].Text
+		if len(chunks[i].Text) <= 32 || chunks[i].Text[:32] != previous[len(previous)-32:] {
+			t.Fatalf("chunk %d does not overlap the previous chunk", i)
+		}
+		joined += chunks[i].Text[32:]
+	}
+	if joined != text {
+		t.Fatal("overlapping chunks lost or duplicated content")
 	}
 }
 

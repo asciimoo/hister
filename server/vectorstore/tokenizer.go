@@ -5,7 +5,13 @@ package vectorstore
 import (
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
+
+// The word-based token estimate can undercount numbers, identifiers, and
+// whitespace. Bound their size as well; endpoint feedback still handles
+// differences between this estimate and the model's tokenizer.
+const maxBytesPerToken = 8
 
 // TextChunk represents a chunk of text produced by the tokenizer.
 type TextChunk struct {
@@ -378,6 +384,7 @@ func chunkByStructure(units []chunkUnit, maxTokens, overlap int) []TextChunk {
 // paragraphs, headings, list items, code blocks, and sentence boundaries.
 // Complete trailing units are reused to provide overlap without cutting those
 // structures. Oversized indivisible units use the token window fallback.
+// A separate byte limit bounds text that the token estimate undercounts.
 func ChunkText(text string, maxTokens, overlap int) []TextChunk {
 	if maxTokens <= 0 {
 		maxTokens = 2048
@@ -393,10 +400,41 @@ func ChunkText(text string, maxTokens, overlap int) []TextChunk {
 	if len(tokens) == 0 {
 		return nil
 	}
-	// Short enough to fit in a single chunk, return verbatim.
+	var chunks []TextChunk
 	if len(tokens) <= maxTokens {
-		return []TextChunk{{Text: text, TokenCount: len(tokens)}}
+		chunks = []TextChunk{{Text: text, TokenCount: len(tokens)}}
+	} else {
+		chunks = chunkByStructure(chunkUnits(text, maxTokens), maxTokens, overlap)
 	}
 
-	return chunkByStructure(chunkUnits(text, maxTokens), maxTokens, overlap)
+	return boundChunkBytes(chunks, maxTokens, overlap)
+}
+
+func boundChunkBytes(chunks []TextChunk, maxTokens, overlap int) []TextChunk {
+	var bounded []TextChunk
+	for _, chunk := range chunks {
+		// Divide first so even a very large configured limit cannot overflow.
+		if (len(chunk.Text)-1)/maxBytesPerToken < maxTokens {
+			bounded = append(bounded, chunk)
+			continue
+		}
+		maxBytes := maxTokens * maxBytesPerToken
+		overlapBytes := overlap * maxBytesPerToken
+		for start := 0; start < len(chunk.Text); {
+			end := start + min(maxBytes, len(chunk.Text)-start)
+			for end < len(chunk.Text) && !utf8.RuneStart(chunk.Text[end]) {
+				end--
+			}
+			text := chunk.Text[start:end]
+			bounded = append(bounded, TextChunk{Text: text, TokenCount: len(tokenize(text))})
+			if end == len(chunk.Text) {
+				break
+			}
+			start = end - overlapBytes
+			for !utf8.RuneStart(chunk.Text[start]) {
+				start++
+			}
+		}
+	}
+	return bounded
 }

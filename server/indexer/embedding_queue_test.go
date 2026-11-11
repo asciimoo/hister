@@ -10,6 +10,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -348,19 +349,31 @@ func TestReindexRejectsEmbeddingDimensionMismatchBeforeClearingVectors(t *testin
 	}
 }
 
-func TestReindexFailsWhenDocumentEmbeddingFails(t *testing.T) {
+func TestReindexContinuesWhenDocumentEmbeddingFails(t *testing.T) {
+	docs := []*document.Document{
+		{URL: "https://example.com/first", Text: "Stored content first", Processed: true},
+		{URL: "https://example.com/second", Text: "Stored content second", Processed: true},
+	}
+	// Reindex visits documents in ID order. Fail the first and ensure the next
+	// still receives vectors, as well as retaining both keyword entries.
+	slices.SortFunc(docs, func(a, b *document.Document) int { return strings.Compare(a.ID(), b.ID()) })
 	var requests atomic.Int64
+	var rejected atomic.Int64
 	endpoint := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if requests.Add(1) > 1 {
-			http.Error(w, "embedding service unavailable", http.StatusUnauthorized)
-			return
-		}
+		requests.Add(1)
 		var request struct {
 			Input []string `json:"input"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
+		}
+		for _, input := range request.Input {
+			if strings.Contains(input, docs[0].Text) {
+				rejected.Add(1)
+				http.Error(w, "cannot embed this document", http.StatusInternalServerError)
+				return
+			}
 		}
 		data := make([]map[string]any, len(request.Input))
 		for n := range data {
@@ -372,28 +385,45 @@ func TestReindexFailsWhenDocumentEmbeddingFails(t *testing.T) {
 	cfg := testutil.Config(t)
 	cfg.SemanticSearch.EmbeddingEndpoint = endpoint.URL
 	cfg.SemanticSearch.Dimensions = 2
+	testutil.InitModelWithConfig(t, cfg)
 	idx := newTestIndexer(t, cfg)
 	defer idx.Close()
-	for _, path := range []string{"first", "second"} {
-		if err := idx.Add(&document.Document{URL: "https://example.com/" + path, Text: "Stored content", Processed: true}); err != nil {
+	for _, doc := range docs {
+		if err := idx.Add(doc); err != nil {
 			t.Fatal(err)
 		}
 	}
-	before, err := idx.GetEmbeddingFingerprint()
+	store, err := vectorstore.New(cfg)
 	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Init(); err != nil {
 		t.Fatal(err)
 	}
 	cfg.SemanticSearch.Enable = true
 	idx.semanticConfig = cfg.SemanticSearch
 	idx.embedder = vectorstore.NewEmbedder(&cfg.SemanticSearch)
-	idx.vectorStore = &metadataVectorStore{}
+	idx.vectorStore = store
 	err = idx.Reindex(&config.Rules{}, false, false, false, nil)
-	if err == nil || !strings.Contains(err.Error(), "401") {
-		t.Errorf("reindex error = %v, want document embedding failure", err)
+	if err != nil {
+		t.Fatalf("reindex should retain keyword entries after an embedding failure: %v", err)
 	}
-	after, err := idx.GetEmbeddingFingerprint()
-	if err != nil || after != before {
-		t.Errorf("failed reindex changed embedding metadata: before=%q after=%q error=%v", before, after, err)
+	for _, doc := range docs {
+		if got := idx.GetByURLAndUser(doc.URL, 0); got == nil || got.Text != doc.Text {
+			t.Errorf("reindex lost document %s", doc.URL)
+		}
+	}
+	results, err := store.Search([]float32{0.25, 0.75}, 10, 0.9, 0)
+	if err != nil || len(results) == 0 {
+		t.Fatalf("next document has no vectors: results=%v error=%v", results, err)
+	}
+	for _, result := range results {
+		if result.DocID != docs[1].ID() {
+			t.Errorf("unexpected vector for document %s", result.DocID)
+		}
+	}
+	if rejected.Load() == 0 || requests.Load() <= rejected.Load()+1 {
+		t.Fatal("reindex did not continue embedding after the rejected document")
 	}
 }
 
@@ -447,6 +477,65 @@ func TestReindexCancelsActiveDocumentEmbedding(t *testing.T) {
 	}
 	if got := idx.GetByURLAndUser(doc.URL, 0); got == nil || got.Text != doc.Text {
 		t.Fatal("canceled reindex changed the stored document")
+	}
+}
+
+type failingEmbeddingWriteStore struct {
+	metadataVectorStore
+	err error
+}
+
+func (s *failingEmbeddingWriteStore) PutChunks(string, uint, []vectorstore.Chunk) error {
+	return s.err
+}
+
+func TestReindexDoesNotIgnoreEmbeddingIntegrityFailures(t *testing.T) {
+	writeErr := errors.New("vector storage failed")
+	for _, name := range []string{"dimensions", "storage"} {
+		t.Run(name, func(t *testing.T) {
+			var requests atomic.Int64
+			endpoint := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var request struct {
+					Input []string `json:"input"`
+				}
+				if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+					http.Error(w, err.Error(), http.StatusBadRequest)
+					return
+				}
+				vector := []float64{0.25, 0.75}
+				if requests.Add(1) > 1 && name == "dimensions" {
+					vector = []float64{1}
+				}
+				data := make([]map[string]any, len(request.Input))
+				for n := range data {
+					data[n] = map[string]any{"embedding": vector}
+				}
+				_ = json.NewEncoder(w).Encode(map[string]any{"data": data})
+			}))
+			defer endpoint.Close()
+			cfg := testutil.Config(t)
+			cfg.SemanticSearch.EmbeddingEndpoint = endpoint.URL
+			cfg.SemanticSearch.Dimensions = 2
+			idx := newTestIndexer(t, cfg)
+			defer idx.Close()
+			doc := &document.Document{URL: "https://example.com/retained", Text: "Stored content", Processed: true}
+			if err := idx.Add(doc); err != nil {
+				t.Fatal(err)
+			}
+			idx.embedder = vectorstore.NewEmbedder(&cfg.SemanticSearch)
+			idx.vectorStore = &failingEmbeddingWriteStore{err: writeErr}
+			err := idx.Reindex(&config.Rules{}, false, false, false, nil)
+			if name == "dimensions" {
+				if _, ok := errors.AsType[*vectorstore.DimensionMismatchError](err); !ok {
+					t.Fatalf("reindex error = %v, want dimension mismatch", err)
+				}
+			} else if !errors.Is(err, writeErr) {
+				t.Fatalf("reindex error = %v, want vector storage failure", err)
+			}
+			if got := idx.GetByURLAndUser(doc.URL, 0); got == nil || got.Text != doc.Text {
+				t.Fatal("failed reindex lost the original keyword entry")
+			}
+		})
 	}
 }
 

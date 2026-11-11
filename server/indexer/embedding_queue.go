@@ -207,7 +207,7 @@ func (q *embeddingQueue) process(job *model.EmbeddingJob) {
 		return
 	}
 
-	err = embedDocumentChunks(ctx, q.idx, d)
+	err = embedDocumentChunks(ctx, q.idx, d, false)
 	if err == nil {
 		retry, completeErr := model.CompleteEmbeddingJob(job.DocID)
 		if completeErr != nil {
