@@ -237,7 +237,12 @@ let indexingRulesCache: IndexingRulesCache | null = null;
 function compilePatterns(patterns: string[]): (RegExp | null)[] {
   return patterns.map((pattern) => {
     try {
-      return new RegExp(pattern, 'u');
+      let flags = 'u';
+      if (pattern.startsWith('(?i)')) {
+        pattern = pattern.replace('(?i)', '');
+        flags = 'ui';
+      }
+      return new RegExp(pattern, flags);
     } catch (_) {
       // Go patterns unsupported by JavaScript are evaluated by the server.
       return null;

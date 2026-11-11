@@ -301,6 +301,30 @@ test('popup rule checks include both the visited and canonical URLs', async () =
   }
 });
 
+test('Go regexp syntax to JS', async () => {
+  const b = browser({
+    rules: {
+      skip: [
+        '(?i)^https?://(?:[^/?#@]*@)?(?:[^./:?#@]+\\.)*example\\.com\\.?(?::[0-9]+)?(?:[/?#]|$)',
+      ],
+    },
+  });
+  const cases = [
+    { url: 'http://example.com/visited', isSkipped: true },
+    { url: 'https://pancakes:maple@www.EXAMPLE.COM:433/visited', isSkipped: true },
+    { url: 'ftp://example.com/visited', isSkipped: false },
+    { url: 'https://anexample.com/visited', isSkipped: false },
+  ];
+  for (const { url, isSkipped } of cases) {
+    const response = await b.message({
+      action: 'checkSkipRule',
+      url: url,
+      sourceURL: 'https://example2.com/clean',
+    });
+    assert.equal(response.isSkipped, isSkipped, url);
+  }
+});
+
 test('each PDF download in a tab retains its own indexing deadline', async () => {
   const b = browser();
   const first = 'https://example.com/download/first';
