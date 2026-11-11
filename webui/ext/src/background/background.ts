@@ -256,6 +256,21 @@ function isPageSkipped(url: string, sourceURL: string, rules: IndexingRules): bo
   return isURLSkipped(url, rules) || isURLSkipped(sourceURL.split('#', 1)[0], rules);
 }
 
+let indexingRulesFetch: Promise<IndexingRules> | null = null;
+
+async function fetchIndexingRules(
+  rulesURL: string,
+  customHeaders: CustomHeader[],
+): Promise<IndexingRules> {
+  const r = await fetchAPI(rulesURL, { customHeaders });
+  if (!r.ok) throw new Error(`Failed to fetch rules: ${r.status}`);
+  const data = await r.json();
+  return {
+    allow: compilePatterns(data.allow ?? []),
+    skip: compilePatterns(data.skip ?? []),
+  };
+}
+
 async function getIndexingRules(
   serverURL: string,
   customHeaders: CustomHeader[],
@@ -266,13 +281,10 @@ async function getIndexingRules(
   }
   try {
     const u = serverURL.endsWith('/') ? serverURL : serverURL + '/';
-    const r = await fetchAPI(u + 'api/rules', { customHeaders });
-    if (!r.ok) return indexingRulesCache?.rules ?? { allow: [], skip: [] };
-    const data = await r.json();
-    const rules = {
-      allow: compilePatterns(data.allow ?? []),
-      skip: compilePatterns(data.skip ?? []),
-    };
+    indexingRulesFetch ??= fetchIndexingRules(u + 'api/rules', customHeaders).finally(() => {
+      indexingRulesFetch = null;
+    });
+    const rules = await indexingRulesFetch;
     indexingRulesCache = { rules, timestamp: now };
     return rules;
   } catch (_) {
@@ -628,7 +640,10 @@ chrome.storage.onChanged.addListener(async (changes, area) => {
     'histerCookies' in changes ||
     'histerCustomHeaders' in changes;
   if (!(connectionChanged || 'indexingEnabled' in changes || 'showIndexedBadge' in changes)) return;
-  if (connectionChanged) indexingRulesCache = null;
+  if (connectionChanged) {
+    indexingRulesCache = null;
+    indexingRulesFetch = null;
+  }
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (tab?.id && tab.url) await updateTabIcon(tab.id, tab.url);
