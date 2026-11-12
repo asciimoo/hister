@@ -24,11 +24,12 @@ start the server. OAuth and proxy authentication can create ordinary accounts
 automatically. Setting `server.proxy_auth_header` also enables user handling
 automatically.
 
-Starting or reloading with user handling enabled requires an existing administrator
-with a usable password, personal access token, or trusted proxy login. If none exists,
-Hister rejects the change and directs you to the offline recovery command above.
-When OAuth is the only login method, keep the administrator's personal access token
-for command line recovery.
+Starting or reloading without a usable administrator logs a warning and continues.
+Ordinary users can still sign in, but administrative actions remain unavailable.
+When OIDC administrator groups are configured, signing in with a matching group
+can restore administrator access. Otherwise, use the offline recovery command above.
+When OAuth is the only login method, keep a recovery administrator's personal access
+token for command line recovery.
 
 ## Authentication
 

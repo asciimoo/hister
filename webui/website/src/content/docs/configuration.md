@@ -1302,7 +1302,7 @@ Configure your provider to include group memberships in its UserInfo response as
 
 Each successful OIDC login synchronizes the user's role. Missing, null, or empty groups remove administrator access. Invalid group values prevent login. Manual role changes are replaced at the next OIDC login.
 
-Before enabling administrator groups, create an independent [local recovery administrator](/docs/user-handling#user-create) with the server stopped. Hister requires this account when starting or reloading and prevents removing or demoting the last usable local recovery administrator. Keep its personal access token for command line recovery when `oauth_only` disables password login. Provider role revocations still take effect.
+Hister starts and reloads without a local recovery administrator, but logs a warning. If OIDC login becomes unavailable or all administrator roles are revoked, recovery may require creating an account while the server is stopped. For independent recovery, create a [local recovery administrator](/docs/user-handling#user-create) and keep its personal access token, which works when `oauth_only` disables password login. Hister prevents removing or demoting the last usable local recovery administrator. Provider role revocations still take effect.
 
 Group changes take effect at the next OIDC login, then apply to the user's existing sessions and API token. Hister does not check group membership between logins. Omitting `admin_groups` or leaving it empty preserves manually managed roles. Local accounts and other OAuth providers are unaffected.
 

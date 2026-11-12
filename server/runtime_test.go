@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -22,6 +23,8 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"gopkg.in/yaml.v3"
 
 	"github.com/asciimoo/hister/config"
@@ -594,14 +597,21 @@ func TestSettingsConcurrentSavesAndReloads(t *testing.T) {
 	}
 }
 
-func TestFullReloadRequiresAdministrator(t *testing.T) {
-	for _, account := range []string{"empty", "ordinary", "administrator", "proxy"} {
+func TestFullReloadAllowsMissingRecoveryAdministrator(t *testing.T) {
+	for _, account := range []string{"empty", "ordinary", "administrator", "proxy", "oidc administrator"} {
 		t.Run(account, func(t *testing.T) {
 			cfg, handler, _ := newReloadTestServer(t, false)
 			var admin *model.User
-			if account == "ordinary" || account == "administrator" {
+			if account == "ordinary" || account == "administrator" || account == "oidc administrator" {
 				var err error
-				admin, err = model.CreateUser("owner", "password123", account == "administrator")
+				if account == "oidc administrator" {
+					admin, err = model.CreateOAuthUser("owner", "oidc-owner@example.com")
+					if err == nil {
+						admin, err = model.SyncOAuthAdmin(admin.OAuthID, true)
+					}
+				} else {
+					admin, err = model.CreateUser("owner", "password123", account == "administrator")
+				}
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -615,21 +625,34 @@ func TestFullReloadRequiresAdministrator(t *testing.T) {
 			} else {
 				raw = []byte(strings.Replace(string(raw), "user_handling: false", "user_handling: true", 1))
 			}
+			if account == "oidc administrator" {
+				raw = []byte(strings.Replace(string(raw), "server:\n", "server:\n  oauth_only: true\n  oauth:\n    oidc:\n      client_id: hister\n      client_secret: secret\n      auth_url: https://provider.example/auth\n      admin_groups: [owners]\n", 1))
+			}
 			if err := os.WriteFile(cfg.Filename(), raw, 0o600); err != nil {
 				t.Fatal(err)
 			}
 			response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/reload", nil, map[string]string{"Origin": "hister://", "X-Access-Token": "secret"})
-			if account != "administrator" {
-				if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "administrator") {
-					t.Fatalf("unusable administration accepted: %d %s", response.Code, response.Body)
+			if response.Code != http.StatusOK {
+				t.Fatalf("missing recovery access must not prevent reload: %d %s", response.Code, response.Body)
+			}
+			for _, token := range []string{"", "secret"} {
+				denied := testutil.ServeHTTP(t, handler, http.MethodGet, "/hister/api/users", nil, map[string]string{"X-Access-Token": token})
+				if denied.Code != http.StatusForbidden {
+					t.Fatalf("reload exposed administration to an anonymous or instance token caller: %d", denied.Code)
+				}
+			}
+			if admin == nil {
+				return
+			}
+			headers := map[string]string{"Origin": "hister://", "X-Access-Token": admin.Token}
+			if !admin.IsAdmin {
+				denied := testutil.ServeHTTP(t, handler, http.MethodGet, "/hister/api/users", nil, headers)
+				if denied.Code != http.StatusForbidden {
+					t.Fatalf("reload granted administrator access to an ordinary user: %d", denied.Code)
 				}
 				return
 			}
-			if response.Code != http.StatusOK {
-				t.Fatalf("valid administrator rejected: %d %s", response.Code, response.Body)
-			}
-			// Recheck availability even when user handling stays enabled.
-			headers := map[string]string{"Origin": "hister://", "X-Access-Token": admin.Token}
+			// Existing OIDC deployments can also apply unrelated web settings.
 			revision, _ := readConfigurationState(t, handler, headers)
 			response = testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":[{"path":"app.subtitle","action":"set","value":"Still multiuser"}]}`, revision)), headers)
 			if response.Code != http.StatusOK {
@@ -639,20 +662,62 @@ func TestFullReloadRequiresAdministrator(t *testing.T) {
 	}
 }
 
-func TestRuntimeRequiresAdministratorBeforeServing(t *testing.T) {
-	for _, account := range []string{"empty", "ordinary", "administrator", "database error"} {
-		t.Run(account, func(t *testing.T) {
+func TestRuntimeWarnsAboutUnavailableAdministration(t *testing.T) {
+	for _, tc := range []struct {
+		account string
+		oidc    bool
+		groups  bool
+		warning string
+	}{
+		{account: "empty", warning: "No usable administrator"},
+		{account: "ordinary", warning: "No usable administrator"},
+		{account: "administrator"},
+		{account: "database error"},
+		{account: "empty", oidc: true, groups: true, warning: "No usable administrator"},
+		{account: "ordinary", oidc: true, groups: true, warning: "No usable administrator"},
+		{account: "administrator", oidc: true, groups: true, warning: "No independent local recovery administrator"},
+		{account: "administrator", oidc: true},
+		{account: "recovery", oidc: true, groups: true},
+	} {
+		t.Run(fmt.Sprintf("%s/oidc=%t/groups=%t", tc.account, tc.oidc, tc.groups), func(t *testing.T) {
+			var logs bytes.Buffer
+			previous, level := log.Logger, zerolog.GlobalLevel()
+			log.Logger = zerolog.New(zerolog.SyncWriter(&logs))
+			zerolog.SetGlobalLevel(zerolog.InfoLevel)
+			t.Cleanup(func() {
+				log.Logger = previous
+				zerolog.SetGlobalLevel(level)
+			})
 			cfg := testutil.Config(t)
 			cfg.App.UserHandling = true
 			cfg.Server.Address = "127.0.0.1:0"
-			testutil.InitModelWithConfig(t, cfg)
-			if account == "ordinary" || account == "administrator" {
-				if _, err := model.CreateUser("owner", "password123", account == "administrator"); err != nil {
-					t.Fatal(err)
+			if tc.oidc {
+				cfg.Server.OAuthOnly = true
+				cfg.Server.OAuth = map[string]*config.OAuthEntry{"oidc": {}}
+				if tc.groups {
+					cfg.Server.OAuth["oidc"].AdminGroups = []string{"owners"}
 				}
 			}
+			testutil.InitModelWithConfig(t, cfg)
+			var token string
+			if tc.account == "ordinary" || tc.account == "administrator" || tc.account == "recovery" {
+				var user *model.User
+				var err error
+				if tc.oidc && tc.account != "recovery" {
+					user, err = model.CreateOAuthUser("owner", "oidc-owner@example.com")
+					if err == nil && tc.account == "administrator" {
+						user, err = model.SyncOAuthAdmin(user.OAuthID, true)
+					}
+				} else {
+					user, err = model.CreateUser("owner", "password123", tc.account != "ordinary")
+				}
+				if err != nil {
+					t.Fatal(err)
+				}
+				token = user.Token
+			}
 			idx := newServerTestIndexer(t, cfg)
-			if account == "database error" {
+			if tc.account == "database error" {
 				db, err := model.DB.DB()
 				if err != nil {
 					t.Fatal(err)
@@ -664,12 +729,29 @@ func TestRuntimeRequiresAdministratorBeforeServing(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			cancel()
 			err := Listen(ctx, cfg, idx)
-			if account == "administrator" {
-				if err != nil {
-					t.Fatal(err)
+			if tc.account == "database error" {
+				if err == nil || !strings.Contains(err.Error(), "database query failed") {
+					t.Fatalf("database failure must stop startup: %v", err)
 				}
-			} else if err == nil || !strings.Contains(err.Error(), "administrator") {
-				t.Fatalf("runtime accepted unavailable administration: %v", err)
+				return
+			}
+			if err != nil {
+				t.Fatalf("missing administration must not prevent startup: %v", err)
+			}
+			if tc.warning != "" {
+				for _, want := range []string{`"level":"warn"`, tc.warning, "hister user create --offline --admin USERNAME", "API token"} {
+					if !strings.Contains(logs.String(), want) {
+						t.Errorf("startup log missing %q: %s", want, &logs)
+					}
+				}
+				if tc.groups && !strings.Contains(logs.String(), "OIDC login") {
+					t.Errorf("warning must explain OIDC recovery: %s", &logs)
+				}
+			} else if strings.Contains(logs.String(), `"level":"warn"`) {
+				t.Errorf("usable administration should not warn: %s", &logs)
+			}
+			if strings.Contains(logs.String(), "password123") || (token != "" && strings.Contains(logs.String(), token)) {
+				t.Fatal("startup log exposed credentials")
 			}
 		})
 	}

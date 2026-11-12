@@ -128,8 +128,12 @@ func (r *serverRuntime) startListener(listener net.Listener) *runtimeListener {
 }
 
 func (r *serverRuntime) generation(cfg *config.Config, idx *indexer.Indexer) (*runtimeGeneration, error) {
-	if err := model.CheckAdministratorAvailability(cfg); err != nil {
+	warning, err := model.CheckAdministratorAvailability(cfg)
+	if err != nil {
 		return nil, err
+	}
+	if warning != "" {
+		log.Warn().Msg(warning)
 	}
 	db, err := model.DB.DB()
 	if err != nil {
@@ -373,7 +377,7 @@ func (r *serverRuntime) apply(ctx context.Context, lease *runtimeRequest, next *
 		}
 	}
 	if next.App.Directory == old.cfg.App.Directory && next.Server.Database == old.cfg.Server.Database {
-		if err := model.CheckAdministratorAvailability(next); err != nil {
+		if _, err := model.CheckAdministratorAvailability(next); err != nil {
 			r.resume(old)
 			return http.StatusBadRequest, err
 		}

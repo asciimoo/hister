@@ -11,7 +11,7 @@ import (
 	"github.com/asciimoo/hister/server/testutil"
 )
 
-func TestOIDCRequiresIndependentRecoveryAdministrator(t *testing.T) {
+func TestOIDCWarnsAboutMissingRecoveryAdministrator(t *testing.T) {
 	cfg := testutil.Config(t)
 	cfg.App.UserHandling = true
 	cfg.Server.OAuthOnly = true
@@ -24,16 +24,16 @@ func TestOIDCRequiresIndependentRecoveryAdministrator(t *testing.T) {
 	if _, err := model.SyncOAuthAdmin(providerUser.OAuthID, true); err != nil {
 		t.Fatal(err)
 	}
-	if err := model.CheckAdministratorAvailability(cfg); err == nil {
-		t.Fatal("OIDC administrator alone cannot guarantee recovery after role revocation")
+	if warning, err := model.CheckAdministratorAvailability(cfg); err != nil || warning == "" {
+		t.Fatalf("OIDC administrator without local recovery must warn: %q, %v", warning, err)
 	}
 	local, err := model.CreateUser("recovery", "password123", true)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Password login is disabled, but the offline recovery token remains usable.
-	if err := model.CheckAdministratorAvailability(cfg); err != nil {
-		t.Fatal(err)
+	if warning, err := model.CheckAdministratorAvailability(cfg); err != nil || warning != "" {
+		t.Fatalf("usable recovery account must not warn: %q, %v", warning, err)
 	}
 	no := false
 	for _, remove := range []func() error{
@@ -97,8 +97,8 @@ func TestConcurrentRecoveryAdministratorRemoval(t *testing.T) {
 	if _, err := model.SyncOAuthAdmin(provider.OAuthID, false); err != nil {
 		t.Fatal(err)
 	}
-	if err := model.CheckAdministratorAvailability(cfg); err != nil {
-		t.Fatalf("concurrent mutations lost recovery access: %v", err)
+	if warning, err := model.CheckAdministratorAvailability(cfg); err != nil || warning != "" {
+		t.Fatalf("concurrent mutations lost recovery access: %q, %v", warning, err)
 	}
 }
 
@@ -113,12 +113,12 @@ func TestAdministratorAvailabilityRequiresUsableCredential(t *testing.T) {
 	if err := model.DB.Model(admin).Update("token", "").Error; err != nil {
 		t.Fatal(err)
 	}
-	if err := model.CheckAdministratorAvailability(cfg); err != nil {
-		t.Fatal(err)
+	if warning, err := model.CheckAdministratorAvailability(cfg); err != nil || warning != "" {
+		t.Fatalf("usable password must not warn: %q, %v", warning, err)
 	}
 	cfg.Server.OAuthOnly = true
-	if err := model.CheckAdministratorAvailability(cfg); err == nil {
-		t.Fatal("a role flag alone allowed disabling the administrator's only credential")
+	if warning, err := model.CheckAdministratorAvailability(cfg); err != nil || warning == "" {
+		t.Fatalf("disabling the only credential must warn: %q, %v", warning, err)
 	}
 }
 

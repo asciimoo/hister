@@ -149,10 +149,11 @@ inspect `config.web.yml` and the private `.config.web-recovery-*` copies before
 restarting.
 
 Administrator availability is checked against the selected database before
-startup and activation, outside pure configuration loading. OIDC role management
-also requires an independent local recovery administrator. Account mutations
-protect that account under the existing database write lock, while provider
-revocations remain authoritative.
+startup and activation, outside pure configuration loading. Missing administrators
+or independent local recovery accounts produce warnings; database inspection
+failures remain fatal. This allows OIDC login to restore administrator access.
+Account mutations still protect recovery accounts under the existing database
+write lock, while provider revocations remain authoritative.
 
 ## Development Commands
 

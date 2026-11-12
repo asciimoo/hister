@@ -27,7 +27,7 @@ type accountPolicy struct {
 }
 
 // The database owner installs this immutable policy with each connection.
-// Inspection and offline account creation do not enforce startup prerequisites.
+// Account mutations enforce it; startup only warns about missing recovery access.
 var activeAccountPolicy accountPolicy
 
 func accountPolicyFor(c *config.Config) accountPolicy {
@@ -39,32 +39,38 @@ func accountPolicyFor(c *config.Config) accountPolicy {
 	}
 }
 
-// CheckAdministratorAvailability is a runtime prerequisite, not a loading or
-// migration prerequisite, so offline administrator recovery remains possible.
-func CheckAdministratorAvailability(c *config.Config) error {
+// CheckAdministratorAvailability reports missing recovery access as a warning.
+// Only failures to inspect the database are errors. Existing deployments must
+// remain able to serve logins, including OIDC administrator role synchronization.
+func CheckAdministratorAvailability(c *config.Config) (string, error) {
 	if !c.App.UserHandling {
-		return nil
+		return "", nil
 	}
 	if DB == nil {
-		return errors.New("cannot verify administrator availability: database unavailable")
+		return "", errors.New("cannot verify administrator availability: database unavailable")
 	}
 	var count int64
 	policy := accountPolicyFor(c)
 	if err := usableAdministrators(DB, policy, false).Count(&count).Error; err != nil {
-		return errors.New("cannot verify administrator availability: database query failed")
+		return "", errors.New("cannot verify administrator availability: database query failed")
 	}
+	const recovery = "To create a recovery account, stop the server and run hister user create --offline --admin USERNAME with this instance's configuration and data directory. Keep its API token for recovery when password login is disabled."
 	if count == 0 {
-		return errors.New("user handling requires an administrator with a usable credential; stop the server and run hister user create --offline --admin USERNAME")
+		warning := "No usable administrator is available. Hister will continue running, but administrative actions are unavailable. "
+		if policy.localRecovery {
+			warning += "An OIDC login with a configured administrator group can restore administrator access. "
+		}
+		return warning + recovery, nil
 	}
 	if policy.localRecovery {
 		if err := usableAdministrators(DB, policy, true).Count(&count).Error; err != nil {
-			return errors.New("cannot verify recovery administrator availability: database query failed")
+			return "", errors.New("cannot verify recovery administrator availability: database query failed")
 		}
 		if count == 0 {
-			return errors.New("OIDC role synchronization requires an independent local administrator with a usable password or API token; stop the server and run hister user create --offline --admin USERNAME")
+			return "No independent local recovery administrator is available. Hister will continue using OIDC login. If OIDC login is unavailable or all administrator roles are revoked, recovering administrator access may require offline account creation. " + recovery, nil
 		}
 	}
-	return nil
+	return "", nil
 }
 
 func usableAdministrators(db *gorm.DB, policy accountPolicy, local bool) *gorm.DB {
@@ -489,9 +495,9 @@ func CreateOAuthUser(username, oauthID string) (*User, error) {
 }
 
 // SyncOAuthAdmin applies the role from an authenticated provider identity.
-// Provider revocations remain authoritative. Runtime startup and local account
-// mutations require and protect an independent recovery administrator when OIDC
-// manages roles, rather than preserving a revoked provider privilege.
+// Provider revocations remain authoritative. Runtime startup warns about missing
+// recovery access, and local account mutations protect an existing independent
+// recovery administrator when OIDC manages roles.
 func SyncOAuthAdmin(oauthID string, isAdmin bool) (*User, error) {
 	if oauthID == "" {
 		return nil, ErrUserNotFound
