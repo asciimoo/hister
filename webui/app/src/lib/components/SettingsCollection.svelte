@@ -51,6 +51,7 @@
         'semantic_search.headers': 'header',
         'indexer.directories': 'directory',
         'hotkeys.web': 'shortcut',
+        sensitive_content_patterns: 'pattern',
       } as Record<string, string>
     )[field.path] ?? 'item',
   );

@@ -103,6 +103,174 @@ async function settingsAPI(page: Page, config: Record<string, unknown> = {}) {
   return { state, publicConfig };
 }
 
+async function patternSettingsAPI(page: Page) {
+  const { state } = await settingsAPI(page);
+  state.fields.push({
+    path: 'sensitive_content_patterns',
+    category: 'sensitive_content_patterns',
+    label: 'Sensitive content patterns',
+    description:
+      'Named regular expressions that block matching documents during subsequent indexing. Clear disables these checks; Reset restores inherited patterns.',
+    schema: {
+      type: 'dictionary',
+      control: 'dictionary',
+      collection: 'replace',
+      sensitivity: 'none',
+      key_label: 'Pattern name',
+      value_label: 'Regular expression',
+      max_items: 256,
+      items: {
+        type: 'string',
+        control: 'text',
+        collection: 'none',
+        sensitivity: 'none',
+        min_length: 1,
+        max_length: 4096,
+      },
+    },
+    default: { private_key: '-----BEGIN OPENSSH PRIVATE KEY-----' },
+    effect: 'runtime',
+    requires_confirmation: false,
+  });
+  state.values.push({
+    path: 'sensitive_content_patterns',
+    value: { private: 'private-[0-9]+' },
+    editable: true,
+    source: { kind: 'web', locked: false, web_selected: true },
+    secret_present: false,
+  });
+  return state;
+}
+
+test('sensitive patterns use named expression rows and save with ordinary App edits', async ({
+  page,
+}) => {
+  const state = await patternSettingsAPI(page);
+  let saved: any;
+  await page.route('**/api/settings/apply', async (route) => {
+    saved = route.request().postDataJSON();
+    for (const edit of saved.edits)
+      state.values.find((value) => value.path === edit.path)!.value = edit.value;
+    state.revision = 'revision-2';
+    await route.fulfill({ json: {} });
+  });
+  await page.goto('/settings');
+  await page.getByRole('textbox', { name: 'Subtitle', exact: true }).fill('Pattern settings');
+  await page.getByRole('tab', { name: 'Sensitive content patterns', exact: true }).click();
+  const patterns = page.getByRole('region', { name: 'Sensitive content patterns', exact: true });
+  await patterns.getByRole('button', { name: 'Add pattern', exact: true }).click();
+  const editor = patterns.getByRole('group', { name: 'Sensitive content patterns 2', exact: true });
+  await expect(editor.getByRole('textbox', { name: 'Pattern name', exact: true })).toBeFocused();
+  await editor.getByRole('textbox', { name: 'Pattern name', exact: true }).fill('account');
+  await editor
+    .getByRole('textbox', { name: 'Regular expression', exact: true })
+    .fill('account-[0-9]+');
+  await editor.getByRole('button', { name: 'Add pattern', exact: true }).click();
+  await expect(patterns.getByText('account-[0-9]+', { exact: true })).toBeVisible();
+  await expect(page.locator('body')).toHaveJSProperty(
+    'scrollWidth',
+    await page.locator('body').evaluate((node) => node.clientWidth),
+  );
+  await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
+  await expect(page.getByText('Settings saved and applied.')).toBeVisible();
+  expect(saved.edits).toEqual(
+    expect.arrayContaining([
+      { path: 'app.subtitle', action: 'set', value: 'Pattern settings' },
+      {
+        path: 'sensitive_content_patterns',
+        action: 'set',
+        value: { private: 'private-[0-9]+', account: 'account-[0-9]+' },
+      },
+    ]),
+  );
+});
+
+test('sensitive patterns retain invalid drafts and distinguish clear, reset and source locks', async ({
+  page,
+}) => {
+  const state = await patternSettingsAPI(page);
+  let draft: any;
+  await page.route('**/api/settings/apply', (route) =>
+    route.fulfill({
+      status: 422,
+      json: { code: 'invalid_draft', error: 'Save failed; draft retained.' },
+    }),
+  );
+  await page.route('**/api/settings/validate', async (route) => {
+    draft = route.request().postDataJSON();
+    const edit = draft.edits.find((edit: any) => edit.path === 'sensitive_content_patterns');
+    if (edit?.value?.broken)
+      await route.fulfill({
+        status: 422,
+        json: {
+          code: 'invalid_draft',
+          errors: [
+            {
+              path: 'sensitive_content_patterns',
+              code: 'invalid_value',
+              message: 'Use valid regular expressions that can be combined.',
+            },
+          ],
+        },
+      });
+    else await route.fulfill({ json: { revision: state.revision, values: state.values } });
+  });
+  await page.goto('/settings?tab=sensitive_content_patterns');
+  const patterns = page.getByRole('region', { name: 'Sensitive content patterns', exact: true });
+  await patterns.getByRole('button', { name: 'Add pattern', exact: true }).click();
+  const editor = patterns.getByRole('group', { name: 'Sensitive content patterns 2', exact: true });
+  const name = editor.getByRole('textbox', { name: 'Pattern name', exact: true });
+  const expression = editor.getByRole('textbox', { name: 'Regular expression', exact: true });
+  await name.fill('broken');
+  await expression.fill('[');
+  await editor.getByRole('button', { name: 'Add pattern', exact: true }).click();
+  await expect(
+    patterns.getByText('Use valid regular expressions that can be combined.'),
+  ).toBeVisible();
+  await expect(expression).toHaveValue('[');
+  await name.fill('private');
+  await editor.getByRole('button', { name: 'Add pattern', exact: true }).click();
+  await expect(editor.getByRole('alert')).toContainText('Names must be unique');
+  await editor.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await patterns
+    .getByRole('button', { name: 'Clear Sensitive content patterns', exact: true })
+    .click();
+  await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
+  await expect
+    .poll(() => draft.edits)
+    .toEqual([{ path: 'sensitive_content_patterns', action: 'set', value: {} }]);
+  await expect(page.getByText('Save failed; draft retained.', { exact: true })).toBeVisible();
+  await patterns
+    .getByRole('button', { name: 'Reset Sensitive content patterns', exact: true })
+    .click();
+  await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
+  await expect
+    .poll(() => draft.edits)
+    .toEqual([{ path: 'sensitive_content_patterns', action: 'reset' }]);
+  await page.getByRole('button', { name: 'Discard changes', exact: true }).click();
+  Object.assign(
+    state.values.find((value) => value.path === 'sensitive_content_patterns')!,
+    {
+      editable: false,
+      reason: 'Controlled by the main configuration.',
+      source: { kind: 'file', name: '/config.yml', locked: true, web_selected: true },
+    },
+  );
+  state.revision = 'revision-locked';
+  await page.getByRole('button', { name: 'Refresh settings', exact: true }).click();
+  await expect(patterns.getByRole('button', { name: 'Add pattern', exact: true })).toHaveCount(0);
+  await expect(
+    patterns.getByRole('button', { name: 'Clear Sensitive content patterns', exact: true }),
+  ).toHaveCount(0);
+  await patterns
+    .getByRole('button', {
+      name: 'Locked: Source information for Sensitive content patterns',
+      exact: true,
+    })
+    .click();
+  await expect(page.getByRole('tooltip')).toContainText('Main configuration');
+});
+
 async function hotkeySettingsAPI(page: Page) {
   const { state, publicConfig } = await settingsAPI(page);
   state.fields.push({

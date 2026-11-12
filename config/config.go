@@ -1036,6 +1036,9 @@ func (c *Config) validateOAuth() error {
 // CompileSensitiveContentPatterns validates each expression and combines them
 // with independent flag scopes in a stable order.
 func (c *Config) CompileSensitiveContentPatterns() (*regexp.Regexp, error) {
+	if len(c.SensitiveContentPatterns) == 0 {
+		return nil, nil
+	}
 	patterns := make([]string, 0, len(c.SensitiveContentPatterns))
 	for _, name := range slices.Sorted(maps.Keys(c.SensitiveContentPatterns)) {
 		pattern := c.SensitiveContentPatterns[name]

@@ -37,6 +37,79 @@ import (
 	"github.com/asciimoo/hister/server/types"
 )
 
+func TestSettingsSensitivePatternApply(t *testing.T) {
+	cfg, handler, _ := newReloadTestServer(t, false)
+	headers := map[string]string{"Origin": "hister://", "X-Access-Token": "secret", "Content-Type": "application/json"}
+	mainBefore, err := os.ReadFile(cfg.Filename())
+	if err != nil {
+		t.Fatal(err)
+	}
+	revision, _ := readConfigurationState(t, handler, headers)
+	invalid := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":[{"path":"sensitive_content_patterns","action":"set","value":{"private":"[private-credential"}}]}`, revision)), headers)
+	if invalid.Code != http.StatusUnprocessableEntity || strings.Contains(invalid.Body.String(), "private-credential") {
+		t.Fatalf("invalid pattern was saved or exposed: %d %s", invalid.Code, invalid.Body)
+	}
+	if _, err := os.Stat(cfg.FullPath("config.web.yml")); !os.IsNotExist(err) {
+		t.Fatal("rejected pattern wrote managed settings")
+	}
+	if current, _ := readConfigurationState(t, handler, headers); current != revision {
+		t.Fatal("rejected pattern changed the runtime")
+	}
+	for _, tc := range []struct {
+		name, edit string
+		want       map[string]string
+		web        bool
+		blocked    string
+	}{
+		{"replace", `"action":"set","value":{"private":"private-[0-9]+"}`, map[string]string{"private": "private-[0-9]+"}, true, "private-123"},
+		{"clear", `"action":"set","value":{}`, map[string]string{}, true, ""},
+		{"reset", `"action":"reset"`, config.CreateDefaultConfig().SensitiveContentPatterns, false, "-----BEGIN OPENSSH PRIVATE KEY-----"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			revision, _ := readConfigurationState(t, handler, headers)
+			body := fmt.Sprintf(`{"revision":%q,"edits":[{"path":"sensitive_content_patterns",%s},{"path":"app.subtitle","action":"set","value":"Pattern draft"}]}`, revision, tc.edit)
+			response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(body), headers)
+			if response.Code != http.StatusOK {
+				t.Fatalf("apply patterns: %d %s", response.Code, response.Body)
+			}
+			loaded, _, err := config.LoadForInspection(cfg.Filename(), true)
+			if err != nil || !maps.Equal(loaded.SensitiveContentPatterns, tc.want) || loaded.Source("sensitive_content_patterns").WebSelected != tc.web {
+				t.Fatalf("saved patterns did not survive loading: %v", err)
+			}
+			for _, reload := range []bool{false, true} {
+				if reload && reloadRequest(t, handler, "secret") != http.StatusOK {
+					t.Fatal("reload failed")
+				}
+				for i, content := range []string{"ordinary text", "private-123", "-----BEGIN OPENSSH PRIVATE KEY-----"} {
+					body := fmt.Sprintf(`{"url":"https://example.com/%s/%t/%d","html":%q,"title":"Test document"}`, tc.name, reload, i, "<html><body><p>"+content+"</p></body></html>")
+					added := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/add", strings.NewReader(body), headers)
+					if content == tc.blocked {
+						if added.Code != http.StatusUnprocessableEntity || !strings.Contains(added.Body.String(), "sensitive") {
+							t.Fatalf("pattern did not block matching document: %d %s", added.Code, added.Body)
+						}
+					} else if added.Code != http.StatusCreated {
+						t.Fatalf("pattern rejected allowed document: %d %s", added.Code, added.Body)
+					}
+				}
+			}
+			_, values := readConfigurationState(t, handler, headers)
+			got, err := json.Marshal(values["sensitive_content_patterns"].Value)
+			want, marshalErr := json.Marshal(tc.want)
+			if err != nil || marshalErr != nil || string(got) != string(want) {
+				t.Fatalf("reloaded patterns: %s, want %s", got, want)
+			}
+			public := testutil.ServeHTTP(t, handler, http.MethodGet, "/hister/api/config", nil, nil)
+			if strings.Contains(public.Body.String(), "private-[0-9]+") || !strings.Contains(public.Body.String(), "Pattern draft") {
+				t.Fatal("public configuration exposed patterns or lost the mixed draft")
+			}
+		})
+	}
+	mainAfter, err := os.ReadFile(cfg.Filename())
+	if err != nil || string(mainAfter) != string(mainBefore) {
+		t.Fatal("saving patterns rewrote the main configuration")
+	}
+}
+
 func TestSettingsWebHotkeyApply(t *testing.T) {
 	cfg, handler, _ := newReloadTestServer(t, false)
 	headers := map[string]string{"Origin": "hister://", "X-Access-Token": "secret"}

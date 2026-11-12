@@ -70,7 +70,7 @@ func TestFieldCatalogPreservesEditorContract(t *testing.T) {
 			t.Fatalf("incomplete description for %s", field.Path)
 		}
 		ordinaryIndexer := field.Category == "indexer" && !strings.HasPrefix(field.Path, "indexer.pdf_parser.")
-		if field.Category != "app" && field.Path != "server.address" && !ordinaryIndexer && field.Category != "crawler" && field.Category != "semantic_search" && field.Path != "hotkeys.web" {
+		if field.Category != "app" && field.Path != "server.address" && !ordinaryIndexer && field.Category != "crawler" && field.Category != "semantic_search" && field.Path != "hotkeys.web" && field.Path != "sensitive_content_patterns" {
 			if field.Schema.Type != "unknown" || field.Schema.Sensitivity != "unknown" || field.Default != nil || field.ReadOnlyReason == "" {
 				t.Fatalf("unsupported setting %s gained editing support or exposed defaults", field.Path)
 			}
@@ -183,6 +183,112 @@ func TestSelectDraftsRequireChoicesAndResetToConcreteDefaults(t *testing.T) {
 				}
 			}
 			t.Fatal("reset setting is missing")
+		})
+	}
+}
+
+func TestSensitivePatternDraftControls(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HISTER_DATA_DIR", dir)
+	filename := filepath.Join(dir, "config.yml")
+	if err := os.WriteFile(filename, []byte("# defaults\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c, _, err := LoadForInspection(filename, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	next, fields := c.PrepareDraft([]SettingEdit{{Path: "sensitive_content_patterns", Action: "set", Value: json.RawMessage(`{"private":"(?i)private-[0-9]+"}`)}})
+	if next == nil || len(fields) != 0 {
+		t.Fatalf("pattern draft rejected: %v", fields)
+	}
+	if !maps.Equal(next.SensitiveContentPatterns, map[string]string{"private": "(?i)private-[0-9]+"}) {
+		t.Fatalf("patterns must replace defaults: %v", next.SensitiveContentPatterns)
+	}
+	re, err := next.CompileSensitiveContentPatterns()
+	if err != nil || !re.MatchString("PRIVATE-123") || re.MatchString("ordinary text") {
+		t.Fatal("new patterns do not detect the selected content")
+	}
+	cleared, fields := next.PrepareDraft([]SettingEdit{{Path: "sensitive_content_patterns", Action: "set", Value: json.RawMessage(`{}`)}})
+	if cleared == nil || len(fields) != 0 || len(cleared.SensitiveContentPatterns) != 0 || !cleared.Source("sensitive_content_patterns").WebSelected {
+		t.Fatalf("clear must select an empty collection: %v", fields)
+	}
+	re, err = cleared.CompileSensitiveContentPatterns()
+	if err != nil || (re != nil && re.MatchString("ordinary text")) {
+		t.Fatal("cleared patterns must not reject every document")
+	}
+	reset, fields := cleared.PrepareDraft([]SettingEdit{{Path: "sensitive_content_patterns", Action: "reset"}})
+	if reset == nil || len(fields) != 0 || !maps.Equal(reset.SensitiveContentPatterns, c.SensitiveContentPatterns) || reset.Source("sensitive_content_patterns").WebSelected {
+		t.Fatalf("reset must restore inherited patterns: %v", fields)
+	}
+	if !maps.Equal(c.SensitiveContentPatterns, CreateDefaultConfig().SensitiveContentPatterns) {
+		t.Fatal("draft changed active patterns")
+	}
+	for _, value := range []string{
+		`null`, `[]`, `{"name":false}`, `{"name":""}`, `{"":"private"}`, `{"Private":"private"}`,
+		`{"name":"[private-credential"}`, `{"opening":"[","closing":"]"}`, `{"name":"one","name":"two"}`,
+	} {
+		candidate, fields := c.PrepareDraft([]SettingEdit{{Path: "sensitive_content_patterns", Action: "set", Value: json.RawMessage(value)}})
+		if candidate != nil || len(fields) != 1 || fields[0].Path != "sensitive_content_patterns" || fields[0].Code == "read_only" || strings.Contains(fields[0].Message, "private-credential") {
+			t.Fatalf("invalid pattern must return a safe field error for %s: %v", value, fields)
+		}
+	}
+}
+
+func TestSensitivePatternDraftLocksAndLimits(t *testing.T) {
+	for _, source := range []string{"file", "environment", "default"} {
+		t.Run(source, func(t *testing.T) {
+			dir := t.TempDir()
+			t.Setenv("HISTER_DATA_DIR", dir)
+			filename := filepath.Join(dir, "config.yml")
+			main := "# defaults\n"
+			switch source {
+			case "file":
+				main = "sensitive_content_patterns:\n  locked: authoritative\n"
+			case "environment":
+				t.Setenv("HISTER__SENSITIVE_CONTENT_PATTERNS__LOCKED", "authoritative")
+			}
+			if err := os.WriteFile(filename, []byte(main), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(dir, "config.web.yml"), []byte("sensitive_content_patterns: {saved: private}\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			c, _, err := LoadForInspection(filename, true)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if source != "default" {
+				if c.SensitiveContentPatterns["saved"] != "" || c.SensitiveContentPatterns["locked"] != "authoritative" || !c.Source("sensitive_content_patterns").WebSelected {
+					t.Fatal("authoritative member did not shadow the whole saved collection")
+				}
+				for _, edit := range []SettingEdit{
+					{Path: "sensitive_content_patterns", Action: "set", Value: json.RawMessage(`{}`)},
+					{Path: "sensitive_content_patterns", Action: "reset"},
+				} {
+					candidate, fields := c.PrepareDraft([]SettingEdit{edit})
+					if candidate != nil || len(fields) != 1 || fields[0].Code != "locked" {
+						t.Fatalf("authoritative pattern allowed collection edits: %v", fields)
+					}
+				}
+				return
+			}
+			tooMany := make(map[string]string)
+			for i := range 257 {
+				tooMany[fmt.Sprintf("pattern%d", i)] = "private"
+			}
+			for _, value := range []map[string]string{
+				tooMany, {"pattern": strings.Repeat("a", 4097)}, {strings.Repeat("a", 129): "private"}, {"name\n": "private"},
+			} {
+				raw, err := json.Marshal(value)
+				if err != nil {
+					t.Fatal(err)
+				}
+				candidate, fields := c.PrepareDraft([]SettingEdit{{Path: "sensitive_content_patterns", Action: "set", Value: raw}})
+				if candidate != nil || len(fields) != 1 || fields[0].Path != "sensitive_content_patterns" {
+					t.Fatalf("invalid pattern collection accepted: %v", fields)
+				}
+			}
 		})
 	}
 }

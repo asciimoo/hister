@@ -15,6 +15,7 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/asciimoo/hister/server/languages"
@@ -276,6 +277,13 @@ func (c *Config) PrepareDraftForRevision(revision string, edits []SettingEdit, v
 				continue
 			}
 			switch edit.Path {
+			case "sensitive_content_patterns":
+				for name := range normalized.(map[string]any) {
+					if strings.TrimSpace(name) == "" || name != strings.ToLower(name) || utf8.RuneCountInString(name) > 128 || strings.ContainsFunc(name, unicode.IsControl) {
+						reject("invalid_value", "Use nonblank lowercase names of at most 128 characters without control characters.")
+						break
+					}
+				}
 			case "crawler.headers", "semantic_search.headers", "hotkeys.web":
 				entries := make(map[string]string)
 				for name, value := range normalized.(map[string]any) {
@@ -605,7 +613,7 @@ func FieldCatalog() []FieldMetadata {
 		{Path: "semantic_search.max_embedding_batch_size", Group: groupDocumentProcessing, Label: "Embedding batch size", Description: "Maximum chunks per embedding request. Zero uses eight chunks.", Schema: SettingSchema{Sensitivity: "none", Min: new(0), Max: new(4096)}, Effect: "runtime"},
 		{Path: "semantic_search.max_embedding_concurrency", Group: groupDocumentProcessing, Label: "Embedding concurrency", Description: "Concurrent document embedding requests. Zero uses the default worker count.", Schema: SettingSchema{Sensitivity: "none", Min: new(0), Max: new(1024)}, Effect: "runtime"},
 		{Path: "hotkeys.web", Label: "Web keyboard shortcuts", Description: "Shortcuts apply on the search page after saving. Use lowercase letters, digits, /, ?, enter, tab, arrowup, arrowdown, arrowleft, arrowright, or f1 through f12, optionally prefixed with ctrl+, alt+, or meta+. Some combinations are reserved by your browser or system. Clear removes configured shortcuts; built in navigation remains. Reset restores inherited shortcuts. Terminal shortcuts are configured separately.", Schema: webHotkeySchema()},
-		fileManagedField("sensitive_content_patterns", "", "Sensitive content patterns", "Patterns used to detect sensitive content before indexing."),
+		{Path: "sensitive_content_patterns", Label: "Sensitive content patterns", Description: "Named regular expressions that block matching documents during subsequent indexing. Use lowercase names. Replacing this collection removes omitted patterns, including defaults. Clear disables these checks; Reset restores inherited patterns. Existing documents are unchanged.", Schema: SettingSchema{Type: "dictionary", Control: "dictionary", Collection: "replace", Sensitivity: "none", KeyLabel: "Pattern name", ValueLabel: "Regular expression", MaxItems: 256, Items: &SettingSchema{Type: "string", Control: "text", Collection: "none", Sensitivity: "none", MinLength: 1, MaxLength: 4096}}},
 		fileManagedField("extractors", "", "Extractors", "Extractor enable switches and options described by the extractor registry."),
 	}
 	defaults := CreateDefaultConfig()

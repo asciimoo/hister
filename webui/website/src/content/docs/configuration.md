@@ -755,7 +755,8 @@ hister listen --config /path/to/my/config.yml
 ## Settings in the Web Interface
 
 Open **Settings** from the navigation menu to change appearance, snippet length, search
-behavior, log level or format, indexing, crawler defaults, and web keyboard shortcuts. Administrators can configure multi user instances.
+behavior, log level or format, indexing, crawler defaults, web keyboard shortcuts, and sensitive
+content patterns. Administrators can configure multi user instances.
 Token protected instances require signing in; instances without authentication need no login.
 
 Keep one draft across category tabs, then choose **Save and apply**. Saving briefly interrupts
@@ -781,7 +782,7 @@ value. A locked setting can retain a web selection that takes effect when its ov
 
 Web selections persist in `config.web.yml` inside the data directory, including when there is
 no main config file. Saving does not rewrite your main configuration. Categories other than
-App, Indexer, Crawler, Extractors, Semantic search, and Hotkeys, and connection or authentication settings, are currently read only. Stored credentials stay hidden.
+App, Indexer, Crawler, Extractors, Semantic search, Hotkeys, and Sensitive content patterns, and connection or authentication settings, are currently read only. Stored credentials stay hidden.
 
 The **Indexer** tab offers language detection, a language multiselect, detection accuracy,
 stopword handling, and the maximum file size in MiB. Select at least two languages, or clear
@@ -837,6 +838,15 @@ preserves rows marked **Keep** and removes omitted rows. Changing a cookie's nam
 or path requires replacing or clearing its value. An authoritative member locks the whole
 collection. After a revision conflict, use the current values and reapply secret edits.
 Replacement values remain only in the open page and are discarded after saving or leaving it.
+
+In **Sensitive content patterns**, choose **Add pattern**, give it a unique lowercase name,
+and enter a regular expression. Invalid expressions keep the row open for correction.
+Choose **Save and apply** to activate the draft. Matching documents are blocked during future
+indexing; existing documents are unchanged. These checks cannot detect every kind of sensitive content.
+
+The pattern collection replaces the inherited patterns, including built in defaults. Removing a
+row removes that check. **Clear** disables all pattern checks; **Reset** restores the inherited
+patterns. A pattern supplied by the main configuration or environment locks the whole collection.
 
 ## Reloading a Running Server
 
