@@ -121,6 +121,23 @@ func TestMCPSchemaContract(t *testing.T) {
 		"get_preview": {"url"},
 		"get_history": nil,
 	}
+	inputTypes := map[string]map[string]string{
+		"search": {
+			"query": "string", "fields": "array", "limit": "integer", "page_key": "string",
+			"date_from": "string", "date_to": "string", "semantic": "boolean",
+		},
+		"get_facets": {
+			"query": "string", "limit": "integer", "date_from": "string", "date_to": "string",
+		},
+		"get_preview": {
+			"url": "string", "extractor": "string", "fields": "array",
+			"max_chars": "integer", "text_offset": "integer", "html_offset": "integer",
+		},
+		"get_history": {
+			"mode": "string", "filter": "string", "limit": "integer", "page_key": "string",
+			"last_id": "integer", "last_updated_at": "string", "date_from": "string", "date_to": "string",
+		},
+	}
 	outputRequired := []string{"schema_version", "tool", "security", "trusted", "untrusted_content"}
 
 	for _, name := range names {
@@ -135,6 +152,23 @@ func TestMCPSchemaContract(t *testing.T) {
 		}
 		if !slices.Equal(gotRequired, required[name]) {
 			t.Fatalf("%s required = %v, want %v", name, gotRequired, required[name])
+		}
+		if input["type"] != "object" {
+			t.Fatalf("%s input schema type = %#v, want object", name, input["type"])
+		}
+		properties := mcpSchemaObject(t, input["properties"])
+		gotTypes := make(map[string]string, len(properties))
+		for property := range properties {
+			propertyType, _ := mcpSchemaProperty(t, tool.InputSchema, property)["type"].(string)
+			gotTypes[property] = propertyType
+		}
+		if !reflect.DeepEqual(gotTypes, inputTypes[name]) {
+			t.Fatalf("%s input property types = %v, want %v", name, gotTypes, inputTypes[name])
+		}
+		if field, ok := properties["fields"]; ok {
+			if got := mcpSchemaObject(t, mcpSchemaObject(t, field)["items"])["type"]; got != "string" {
+				t.Fatalf("%s fields items type = %#v, want string", name, got)
+			}
 		}
 
 		output := mcpSchemaObject(t, tool.OutputSchema)
@@ -210,7 +244,16 @@ func TestMCPInvalidArgumentsReturnRPCError(t *testing.T) {
 		{"history invalid mode", "get_history", `{"mode":"invalid"}`},
 		{"history invalid date", "get_history", `{"date_from":"yesterday"}`},
 		{"history reversed range", "get_history", `{"mode":"opened","date_from":"2026-02-01","date_to":"2026-01-31"}`},
+		{"search invalid query type", "search", `{"query":42}`},
+		{"search invalid limit type", "search", `{"query":"x","limit":"10"}`},
+		{"search invalid semantic type", "search", `{"query":"x","semantic":"true"}`},
+		{"search invalid fields type", "search", `{"query":"x","fields":"text"}`},
+		{"preview invalid url type", "get_preview", `{"url":42}`},
+		{"preview invalid max chars type", "get_preview", `{"url":"https://example.com/missing","max_chars":"10"}`},
+		{"history invalid mode type", "get_history", `{"mode":1}`},
+		{"history invalid last id type", "get_history", `{"mode":"opened","last_id":"1"}`},
 		{"facets invalid query type", "get_facets", `{"query":42}`},
+		{"facets invalid limit type", "get_facets", `{"limit":"10"}`},
 		{"facets invalid date", "get_facets", `{"date_from":"yesterday"}`},
 	}
 	for _, tc := range cases {
