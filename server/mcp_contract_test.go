@@ -1,11 +1,17 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"flag"
+	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"reflect"
 	"slices"
+	"sort"
 	"strings"
 	"testing"
 
@@ -13,6 +19,7 @@ import (
 	"github.com/asciimoo/hister/server/model"
 	"github.com/asciimoo/hister/server/testutil"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -20,6 +27,10 @@ import (
 // schemas, invalid-argument handling, the result envelope and trust boundary,
 // and the initialize response. Change these expectations only for deliberate
 // contract changes.
+
+var updateMCPContract = flag.Bool("update-mcp-contract", false, "rewrite testdata/mcp_tools.json from the advertised tool list")
+
+const mcpToolsGoldenPath = "testdata/mcp_tools.json"
 
 func mcpSchemaObject(t *testing.T, value any) map[string]any {
 	t.Helper()
@@ -87,6 +98,81 @@ func mcpTextFallbackJSON(t *testing.T, text string) any {
 	return out
 }
 
+// mcpJSONDiff lists the JSON paths where got differs from want.
+func mcpJSONDiff(path string, want, got any) []string {
+	switch want := want.(type) {
+	case map[string]any:
+		got, ok := got.(map[string]any)
+		if !ok {
+			return []string{fmt.Sprintf("%s: got %s, want %s", path, mcpCompactJSON(got), mcpCompactJSON(want))}
+		}
+		keys := make([]string, 0, len(want)+len(got))
+		for key := range want {
+			keys = append(keys, key)
+		}
+		for key := range got {
+			if _, ok := want[key]; !ok {
+				keys = append(keys, key)
+			}
+		}
+		sort.Strings(keys)
+		var diffs []string
+		for _, key := range keys {
+			wantValue, inWant := want[key]
+			gotValue, inGot := got[key]
+			switch {
+			case !inGot:
+				diffs = append(diffs, fmt.Sprintf("%s.%s: missing, want %s", path, key, mcpCompactJSON(wantValue)))
+			case !inWant:
+				diffs = append(diffs, fmt.Sprintf("%s.%s: unexpected %s", path, key, mcpCompactJSON(gotValue)))
+			default:
+				diffs = append(diffs, mcpJSONDiff(path+"."+key, wantValue, gotValue)...)
+			}
+		}
+		return diffs
+	case []any:
+		got, ok := got.([]any)
+		if !ok || len(got) != len(want) {
+			return []string{fmt.Sprintf("%s: got %s, want %s", path, mcpCompactJSON(got), mcpCompactJSON(want))}
+		}
+		var diffs []string
+		for i := range want {
+			diffs = append(diffs, mcpJSONDiff(fmt.Sprintf("%s[%d]", path, i), want[i], got[i])...)
+		}
+		return diffs
+	default:
+		if !reflect.DeepEqual(want, got) {
+			return []string{fmt.Sprintf("%s: got %s, want %s", path, mcpCompactJSON(got), mcpCompactJSON(want))}
+		}
+		return nil
+	}
+}
+
+func mcpCompactJSON(value any) string {
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Sprintf("%#v", value)
+	}
+	return string(raw)
+}
+
+func mcpResolvedSchema(t *testing.T, schema any) *jsonschema.Resolved {
+	t.Helper()
+	raw, err := json.Marshal(schema)
+	if err != nil {
+		t.Fatalf("marshal schema: %v", err)
+	}
+	var parsed jsonschema.Schema
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		t.Fatalf("parse schema: %v", err)
+	}
+	resolved, err := parsed.Resolve(nil)
+	if err != nil {
+		t.Fatalf("resolve schema: %v", err)
+	}
+	return resolved
+}
+
 func mcpToolByName(t *testing.T, tools []*mcp.Tool, name string) *mcp.Tool {
 	t.Helper()
 	for _, tool := range tools {
@@ -96,6 +182,51 @@ func mcpToolByName(t *testing.T, tools []*mcp.Tool, name string) *mcp.Tool {
 	}
 	t.Fatalf("tool %q not advertised", name)
 	return nil
+}
+
+// TestMCPToolsGolden pins the complete advertised tool list, including
+// descriptions and every nested schema keyword. Regenerate with
+// go test ./server -run TestMCPToolsGolden -update-mcp-contract
+// and review the diff of testdata/mcp_tools.json.
+func TestMCPToolsGolden(t *testing.T) {
+	cfg, handler := newTokenTestServer(t, false)
+	session := newMCPTestSession(t, cfg, handler, "secret")
+	res, err := session.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tools := slices.Clone(res.Tools)
+	slices.SortFunc(tools, func(a, b *mcp.Tool) int { return strings.Compare(a.Name, b.Name) })
+	got := mcpUntypedJSON(t, tools)
+
+	if *updateMCPContract {
+		var buf bytes.Buffer
+		encoder := json.NewEncoder(&buf)
+		encoder.SetEscapeHTML(false)
+		encoder.SetIndent("", "  ")
+		if err := encoder.Encode(got); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(filepath.Dir(mcpToolsGoldenPath), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(mcpToolsGoldenPath, buf.Bytes(), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+
+	raw, err := os.ReadFile(mcpToolsGoldenPath)
+	if err != nil {
+		t.Fatalf("read %s: %v (run with -update-mcp-contract to create it)", mcpToolsGoldenPath, err)
+	}
+	var want any
+	if err := json.Unmarshal(raw, &want); err != nil {
+		t.Fatalf("parse %s: %v", mcpToolsGoldenPath, err)
+	}
+	if diffs := mcpJSONDiff("tools", want, got); len(diffs) > 0 {
+		t.Fatalf("advertised tools differ from %s (rerun with -update-mcp-contract only for deliberate contract changes):\n%s", mcpToolsGoldenPath, strings.Join(diffs, "\n"))
+	}
 }
 
 func TestMCPSchemaContract(t *testing.T) {
@@ -288,16 +419,29 @@ func TestMCPToolResultContract(t *testing.T) {
 		t.Fatal(err)
 	}
 	session := newMCPTestSession(t, cfg, handler, "secret")
+	listed, err := session.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	outputSchemas := map[string]*jsonschema.Resolved{}
+	for _, tool := range listed.Tools {
+		outputSchemas[tool.Name] = mcpResolvedSchema(t, tool.OutputSchema)
+	}
 
 	cases := []struct {
-		name string
-		tool string
-		args map[string]any
+		name  string
+		tool  string
+		args  map[string]any
+		empty bool
 	}{
-		{"search", "search", map[string]any{"query": "contract needle"}},
-		{"facets", "get_facets", map[string]any{}},
-		{"preview", "get_preview", map[string]any{"url": doc.URL, "extractor": "Basic"}},
-		{"history", "get_history", map[string]any{"mode": "opened"}},
+		{"search", "search", map[string]any{"query": "contract needle"}, false},
+		{"facets", "get_facets", map[string]any{}, false},
+		{"preview", "get_preview", map[string]any{"url": doc.URL, "extractor": "Basic"}, false},
+		{"history", "get_history", map[string]any{"mode": "opened"}, false},
+		{"indexed history", "get_history", map[string]any{"mode": "indexed"}, false},
+		{"empty search", "search", map[string]any{"query": "nomatchanywhere"}, true},
+		{"empty opened history", "get_history", map[string]any{"mode": "opened", "date_to": "2000-01-01"}, true},
+		{"empty indexed history", "get_history", map[string]any{"mode": "indexed", "date_to": "2000-01-01"}, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -325,15 +469,24 @@ func TestMCPToolResultContract(t *testing.T) {
 			if textJSON, structuredJSON := mcpTextFallbackJSON(t, text.Text), mcpUntypedJSON(t, res.StructuredContent); !reflect.DeepEqual(textJSON, structuredJSON) {
 				t.Fatalf("text fallback = %#v, want structured content %#v", textJSON, structuredJSON)
 			}
+			if err := outputSchemas[tc.tool].Validate(mcpUntypedJSON(t, res.StructuredContent)); err != nil {
+				t.Fatalf("structured content violates advertised output schema: %v", err)
+			}
 			structured := mcpTestStructured(t, res)
+			if structured.Tool != tc.tool {
+				t.Fatalf("tool = %q, want %q", structured.Tool, tc.tool)
+			}
 			if structured.Security.UntrustedPath != "untrusted_content[*].fields" {
 				t.Fatalf("untrusted path = %q", structured.Security.UntrustedPath)
 			}
 			if structured.Security.Instruction != mcpUntrustedContentInstruction {
 				t.Fatalf("instruction = %q", structured.Security.Instruction)
 			}
-			if len(structured.UntrustedContent) == 0 {
-				t.Fatal("no untrusted content")
+			if got := mcpUntypedJSON(t, res.StructuredContent).(map[string]any)["untrusted_content"]; got == nil {
+				t.Fatal("untrusted_content = null, want array")
+			}
+			if tc.empty != (len(structured.UntrustedContent) == 0) {
+				t.Fatalf("untrusted records = %d, want empty=%v", len(structured.UntrustedContent), tc.empty)
 			}
 			for _, record := range structured.UntrustedContent {
 				if record.Trust != "untrusted" || record.TrustScope == "" || record.SourceType == "" || record.Fields == nil {
