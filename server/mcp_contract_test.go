@@ -57,6 +57,36 @@ func mcpStringList(t *testing.T, value any) []string {
 	return out
 }
 
+func mcpUntypedJSON(t *testing.T, value any) any {
+	t.Helper()
+	raw, err := json.Marshal(value)
+	if err != nil {
+		t.Fatalf("marshal %#v: %v", value, err)
+	}
+	var out any
+	if err := json.Unmarshal(raw, &out); err != nil {
+		t.Fatalf("unmarshal %s: %v", raw, err)
+	}
+	return out
+}
+
+func mcpTextFallbackJSON(t *testing.T, text string) any {
+	t.Helper()
+	start := strings.IndexByte(text, '{')
+	if start < 0 {
+		t.Fatalf("text fallback has no JSON: %q", text)
+	}
+	decoder := json.NewDecoder(strings.NewReader(text[start:]))
+	var out any
+	if err := decoder.Decode(&out); err != nil {
+		t.Fatalf("text fallback JSON: %v", err)
+	}
+	if decoder.More() {
+		t.Fatalf("text fallback has trailing data after JSON: %q", text[start:])
+	}
+	return out
+}
+
 func mcpToolByName(t *testing.T, tools []*mcp.Tool, name string) *mcp.Tool {
 	t.Helper()
 	for _, tool := range tools {
@@ -248,10 +278,11 @@ func TestMCPToolResultContract(t *testing.T) {
 			if !strings.HasPrefix(text.Text, "SECURITY NOTICE: ") {
 				t.Fatalf("text fallback = %q, want security notice", text.Text)
 			}
-			structured := mcpTestStructured(t, res)
-			if textResult := mcpTestTextResult(t, res); !reflect.DeepEqual(textResult, structured) {
-				t.Fatal("text fallback differs from structured content")
+			// Compare untyped JSON so keys mcpStructuredResult doesn't model still count.
+			if textJSON, structuredJSON := mcpTextFallbackJSON(t, text.Text), mcpUntypedJSON(t, res.StructuredContent); !reflect.DeepEqual(textJSON, structuredJSON) {
+				t.Fatalf("text fallback = %#v, want structured content %#v", textJSON, structuredJSON)
 			}
+			structured := mcpTestStructured(t, res)
 			if structured.Security.UntrustedPath != "untrusted_content[*].fields" {
 				t.Fatalf("untrusted path = %q", structured.Security.UntrustedPath)
 			}
