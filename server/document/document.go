@@ -52,7 +52,12 @@ type Document struct {
 	// ExtraDocuments can be populated by extractors to create new documents during the extraction
 	ExtraDocuments []*Document `json:"-"`
 	// SkipIndexing can be set by extractors to mark the document to exclude from indexing. Useful when populating ExtraDocuments
-	SkipIndexing       bool `json:"-"`
+	SkipIndexing bool `json:"-"`
+	// SummaryOnly can be set by extractors on documents that only summarize a
+	// URL owned by another document, such as search engine result snippets. The
+	// indexer keeps already indexed content for the same URL instead of
+	// replacing it with the summary.
+	SummaryOnly        bool `json:"-"`
 	SkipSensitiveCheck bool `json:"skip_sensitive_check"`
 	Processed          bool `json:"processed"`
 	faviconURL         string
