@@ -103,6 +103,168 @@ async function settingsAPI(page: Page, config: Record<string, unknown> = {}) {
   return { state, publicConfig };
 }
 
+async function ordinarySettingsAPI(page: Page) {
+  const { state, publicConfig } = await settingsAPI(page);
+  for (const [path, label] of [
+    ['app.display_extractor_config', 'Display extractor configuration'],
+    ['app.debug_sql', 'SQL debugging'],
+    ['app.profiler', 'Profiler'],
+    ['server.metrics', 'Metrics'],
+    ['server.expose_version', 'Expose version'],
+    ['server.max_batch_body_size', 'Maximum batch size'],
+    ['app.search_url', 'Search engine URL'],
+  ]) {
+    const url = path === 'app.search_url';
+    const number = path === 'server.max_batch_body_size';
+    state.fields.push({
+      path,
+      category: path.split('.')[0],
+      label,
+      description: url
+        ? 'Public HTTP or HTTPS destination. Include {query} once. Never include credentials.'
+        : `${label} applies after saving.`,
+      schema: {
+        type: url ? 'string' : number ? 'integer' : 'boolean',
+        control: url ? 'url' : number ? 'number' : 'switch',
+        sensitivity: url ? 'url' : 'none',
+        collection: 'none',
+        ...(number ? { min: 1, max: 8796093022207 } : {}),
+      },
+      effect: 'runtime',
+      requires_confirmation: false,
+    });
+    state.values.push({
+      path,
+      value: url ? { action: 'keep', ref: 'url-reference' } : number ? 40 : false,
+      editable: true,
+      secret_present: url,
+      source: { kind: 'web', locked: false, web_selected: true },
+    });
+  }
+  return { state, publicConfig };
+}
+
+test('ordinary App and Server controls save one draft and refresh public settings', async ({
+  page,
+}) => {
+  const { state, publicConfig } = await ordinarySettingsAPI(page);
+  let saved: any;
+  await page.route('**/api/settings/apply', async (route) => {
+    saved = route.request().postDataJSON();
+    Object.assign(publicConfig, {
+      searchUrl: 'https://search.example/?q={query}',
+      maxBatchBodyBytes: 1048576,
+    });
+    for (const edit of saved.edits) {
+      state.values.find((value) => value.path === edit.path)!.value =
+        edit.path === 'app.search_url' ? { action: 'keep', ref: 'new-reference' } : edit.value;
+    }
+    state.revision = 'revision-2';
+    await route.fulfill({ json: {} });
+  });
+  await page.goto('/settings');
+  await page
+    .getByRole('combobox', { name: 'Search engine URL action', exact: true })
+    .selectOption('replace');
+  await page
+    .getByLabel('Search engine URL replacement', { exact: true })
+    .fill('https://search.example/?q={query}');
+  for (const name of ['Display extractor configuration', 'SQL debugging', 'Profiler'])
+    await page.getByRole('switch', { name, exact: true }).check();
+  await page.getByRole('tab', { name: 'Server', exact: true }).click();
+  const limit = page.getByRole('spinbutton', { name: 'Maximum batch size', exact: true });
+  await expect(limit).toHaveAttribute('min', '1');
+  await limit.fill('1');
+  for (const name of ['Metrics', 'Expose version'])
+    await page.getByRole('switch', { name, exact: true }).check();
+  await expect(page.locator('body')).toHaveJSProperty(
+    'scrollWidth',
+    await page.locator('body').evaluate((node) => node.clientWidth),
+  );
+  const refresh = page.waitForResponse('**/api/config');
+  await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
+  expect((await refresh).ok()).toBe(true);
+  await expect(page.getByText('Settings saved and applied.')).toBeVisible();
+  expect(saved.edits).toHaveLength(7);
+  expect(saved.edits).toEqual(
+    expect.arrayContaining([
+      {
+        path: 'app.search_url',
+        action: 'set',
+        value: {
+          action: 'replace',
+          ref: 'url-reference',
+          value: 'https://search.example/?q={query}',
+        },
+      },
+      { path: 'server.max_batch_body_size', action: 'set', value: 1 },
+      { path: 'server.metrics', action: 'set', value: true },
+    ]),
+  );
+  await page.getByRole('tab', { name: 'App', exact: true }).click();
+  await expect(page.getByLabel('Search engine URL replacement', { exact: true })).toHaveCount(0);
+  await expect(
+    page.getByRole('combobox', { name: 'Search engine URL action', exact: true }),
+  ).toHaveValue('keep');
+});
+
+test('ordinary App and Server controls retain invalid drafts and respect reset and source locks', async ({
+  page,
+}) => {
+  const { state } = await ordinarySettingsAPI(page);
+  const metrics = state.values.find((value) => value.path === 'server.metrics')!;
+  metrics.editable = false;
+  metrics.source = { kind: 'file', name: '/config.yml', locked: true, web_selected: true };
+  let draft: any;
+  await page.route('**/api/settings/validate', async (route) => {
+    draft = route.request().postDataJSON();
+    await route.fulfill({
+      status: 422,
+      json: {
+        code: 'invalid_settings',
+        errors: [
+          {
+            path: 'app.search_url',
+            code: 'invalid_value',
+            message: 'Include {query} exactly once in the URL path or query.',
+          },
+        ],
+      },
+    });
+  });
+  await page.goto('/settings');
+  await page
+    .getByRole('combobox', { name: 'Search engine URL action', exact: true })
+    .selectOption('replace');
+  const replacement = page.getByLabel('Search engine URL replacement', { exact: true });
+  await replacement.fill('https://search.example/');
+  await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
+  await expect(
+    page.getByText('Include {query} exactly once in the URL path or query.', { exact: true }),
+  ).toBeVisible();
+  await expect(replacement).toHaveValue('https://search.example/');
+  await page.getByRole('button', { name: 'Clear Search engine URL', exact: true }).click();
+  await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
+  expect(draft.edits).toContainEqual({
+    path: 'app.search_url',
+    action: 'set',
+    value: { action: 'clear' },
+  });
+  await page.getByRole('button', { name: 'Reset Search engine URL', exact: true }).click();
+  await page.getByRole('tab', { name: 'Server', exact: true }).click();
+  const region = page.getByRole('region', { name: 'Metrics', exact: true });
+  await expect(region.getByRole('switch')).toHaveCount(0);
+  await expect(region.getByRole('button', { name: 'Reset Metrics', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Reset Maximum batch size', exact: true }).click();
+  await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
+  expect(draft.edits).toEqual(
+    expect.arrayContaining([
+      { path: 'app.search_url', action: 'reset' },
+      { path: 'server.max_batch_body_size', action: 'reset' },
+    ]),
+  );
+});
+
 async function patternSettingsAPI(page: Page) {
   const { state } = await settingsAPI(page);
   state.fields.push({

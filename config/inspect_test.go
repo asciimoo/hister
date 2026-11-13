@@ -70,7 +70,8 @@ func TestFieldCatalogPreservesEditorContract(t *testing.T) {
 			t.Fatalf("incomplete description for %s", field.Path)
 		}
 		ordinaryIndexer := field.Category == "indexer" && !strings.HasPrefix(field.Path, "indexer.pdf_parser.")
-		if field.Category != "app" && field.Path != "server.address" && !ordinaryIndexer && field.Category != "crawler" && field.Category != "semantic_search" && field.Path != "hotkeys.web" && field.Path != "sensitive_content_patterns" {
+		ordinaryServer := slices.Contains([]string{"server.address", "server.max_batch_body_size", "server.metrics", "server.expose_version"}, field.Path)
+		if field.Category != "app" && !ordinaryServer && !ordinaryIndexer && field.Category != "crawler" && field.Category != "semantic_search" && field.Path != "hotkeys.web" && field.Path != "sensitive_content_patterns" {
 			if field.Schema.Type != "unknown" || field.Schema.Sensitivity != "unknown" || field.Default != nil || field.ReadOnlyReason == "" {
 				t.Fatalf("unsupported setting %s gained editing support or exposed defaults", field.Path)
 			}
@@ -108,7 +109,7 @@ func TestFieldCatalogPreservesEditorContract(t *testing.T) {
 	}
 	for _, path := range []string{"app.access_token", "app.search_url"} {
 		field := fields[path]
-		if field.Schema.Sensitivity == "none" || field.Default != nil || field.ReadOnlyReason == "" {
+		if field.Schema.Sensitivity == "none" || field.Default != nil {
 			t.Fatalf("lost secret handling for %s", path)
 		}
 	}
@@ -119,6 +120,147 @@ func TestFieldCatalogPreservesEditorContract(t *testing.T) {
 	}
 	if fields["app.directory"].ReadOnlyReason == "" || fields["app.log_file"].ReadOnlyReason == "" {
 		t.Fatal("storage locations became editable")
+	}
+}
+
+func TestOrdinaryAppAndServerDrafts(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HISTER_DATA_DIR", dir)
+	filename := filepath.Join(dir, "config.yml")
+	if err := os.WriteFile(filename, []byte("# defaults\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c, _, err := LoadForInspection(filename, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		path, value string
+		want        any
+	}{
+		{"app.search_url", `{"action":"replace","value":"https://search.example/search?q={query}"}`, "https://search.example/search?q={query}"},
+		{"app.display_extractor_config", `true`, true},
+		{"app.debug_sql", `true`, true},
+		{"app.profiler", `true`, true},
+		{"server.max_batch_body_size", `1`, int64(1)},
+		{"server.metrics", `true`, true},
+		{"server.expose_version", `true`, true},
+	} {
+		t.Run(tc.path, func(t *testing.T) {
+			next, fields := c.PrepareDraft([]SettingEdit{{Path: tc.path, Action: "set", Value: json.RawMessage(tc.value)}})
+			if next == nil || len(fields) != 0 {
+				t.Fatalf("ordinary setting rejected: %v", fields)
+			}
+			if got := settingValue(next, tc.path); got != tc.want || next.Source(tc.path).Kind != "web" {
+				t.Fatalf("draft did not select %s", tc.path)
+			}
+			reset, fields := next.PrepareDraft([]SettingEdit{{Path: tc.path, Action: "reset"}})
+			if reset == nil || len(fields) != 0 || settingValue(reset, tc.path) != settingValue(c, tc.path) || reset.Source(tc.path).WebSelected {
+				t.Fatalf("reset did not restore inherited value: %v", fields)
+			}
+			locked, _, err := LoadForInspection(filename, true, Override{Path: tc.path, Value: tc.want, Source: ValueSource{Kind: "flag", Name: "--test"}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, action := range []string{"set", "reset"} {
+				candidate, fields := locked.PrepareDraft([]SettingEdit{{Path: tc.path, Action: action, Value: json.RawMessage(tc.value)}})
+				if candidate != nil || len(fields) != 1 || fields[0].Code != "locked" {
+					t.Fatalf("authoritative setting was editable: %v", fields)
+				}
+			}
+		})
+	}
+}
+
+func TestOrdinaryAppAndServerValidation(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HISTER_DATA_DIR", dir)
+	filename := filepath.Join(dir, "config.yml")
+	if err := os.WriteFile(filename, []byte("# defaults\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c, _, err := LoadForInspection(filename, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct{ path, value string }{
+		{"server.max_batch_body_size", `0`},
+		{"server.max_batch_body_size", `-1`},
+		{"server.max_batch_body_size", `1.5`},
+		{"server.max_batch_body_size", `8796093022208`},
+		{"server.metrics", `"true"`},
+		{"server.expose_version", `1`},
+		{"app.profiler", `"false"`},
+		{"app.debug_sql", `null`},
+		{"app.display_extractor_config", `{}`},
+	} {
+		candidate, fields := c.PrepareDraft([]SettingEdit{{Path: tc.path, Action: "set", Value: json.RawMessage(tc.value)}})
+		if candidate != nil || len(fields) != 1 || fields[0].Path != tc.path || fields[0].Code != "invalid_value" {
+			t.Errorf("invalid %s accepted: %v", tc.path, fields)
+		}
+	}
+	for _, value := range []string{
+		"javascript:alert('private-credential')", "//private-credential.example/?q={query}",
+		"https://user:private-credential@example.com/?q={query}",
+		"https://example.com/private-credential", "https://example.com/?q={query}#{query}",
+		"https://{query}.example.com/", "https://example.com/?q={query}&again={query}",
+		"https://example.com/search {query}", "https://example.com/?q=%zz{query}",
+	} {
+		raw, err := json.Marshal(map[string]string{"action": "replace", "value": value})
+		if err != nil {
+			t.Fatal(err)
+		}
+		candidate, fields := c.PrepareDraft([]SettingEdit{{Path: "app.search_url", Action: "set", Value: raw}})
+		if candidate != nil || len(fields) != 1 || fields[0].Path != "app.search_url" || strings.Contains(fmt.Sprint(fields), "private-credential") {
+			t.Errorf("unsafe search URL accepted or exposed: %v", fields)
+		}
+	}
+	for _, path := range []string{"app.access_token", "app.user_handling", "app.public", "app.directory", "app.log_file", "server.address", "server.base_url", "server.oauth", "server.oauth_only", "server.database", "server.proxy_auth_header"} {
+		candidate, fields := c.PrepareDraft([]SettingEdit{{Path: path, Action: "reset"}})
+		if candidate != nil || len(fields) != 1 || fields[0].Code != "read_only" {
+			t.Errorf("restricted setting %s became editable: %v", path, fields)
+		}
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("validation created runtime files: %v, %v", entries, err)
+	}
+}
+
+func TestSearchURLDraftActions(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HISTER_DATA_DIR", dir)
+	filename := filepath.Join(dir, "config.yml")
+	if err := os.WriteFile(filename, []byte("# defaults\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c, _, err := LoadForInspection(filename, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	next, fields := c.PrepareDraft([]SettingEdit{{Path: "app.search_url", Action: "set", Value: json.RawMessage(`{"action":"replace","value":"https://search.example/search/{query}?lang=en"}`)}})
+	if next == nil || len(fields) != 0 {
+		t.Fatalf("path template rejected: %v", fields)
+	}
+	var kept json.RawMessage
+	for _, state := range next.FieldStatesForRevision("revision") {
+		if state.Path == "app.search_url" {
+			kept, err = json.Marshal(state.Value)
+			if err != nil || !state.SecretPresent || strings.Contains(string(kept), "search.example") {
+				t.Fatal("search template was disclosed by settings")
+			}
+		}
+	}
+	keptCandidate, fields := next.PrepareDraftForRevision("revision", []SettingEdit{{Path: "app.search_url", Action: "set", Value: kept}})
+	if keptCandidate == nil || len(fields) != 0 || keptCandidate.App.SearchURL != next.App.SearchURL {
+		t.Fatalf("keep lost stored search template: %v", fields)
+	}
+	if stale, fields := next.PrepareDraftForRevision("different", []SettingEdit{{Path: "app.search_url", Action: "set", Value: kept}}); stale != nil || len(fields) == 0 {
+		t.Fatal("stale reference accepted")
+	}
+	cleared, fields := next.PrepareDraft([]SettingEdit{{Path: "app.search_url", Action: "set", Value: json.RawMessage(`{"action":"clear"}`)}})
+	if cleared == nil || len(fields) != 0 || cleared.App.SearchURL != CreateDefaultConfig().App.SearchURL || !cleared.Source("app.search_url").WebSelected {
+		t.Fatalf("clear must select the default engine: %v", fields)
 	}
 }
 

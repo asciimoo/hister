@@ -86,6 +86,22 @@ type TUI struct {
 	ThemesDir   string `yaml:"themes_dir" mapstructure:"themes_dir"`
 }
 
+// validateSearchURL checks web selections without changing the interpretation of
+// existing file and command line templates. This URL is shared with visitors.
+func (a App) validateSearchURL() string {
+	u, err := url.Parse(a.SearchURL)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" || u.User != nil || u.Fragment != "" || strings.ContainsAny(a.SearchURL, " \t\r\n") {
+		return "Use a public HTTP or HTTPS URL without credentials, spaces, or a fragment."
+	}
+	if _, err := url.ParseQuery(u.RawQuery); err != nil {
+		return "Use a valid URL query string."
+	}
+	if strings.Count(a.SearchURL, "{query}") != 1 || (!strings.Contains(u.Path, "{query}") && !strings.Contains(u.RawQuery, "{query}")) {
+		return "Include {query} exactly once in the URL path or query."
+	}
+	return ""
+}
+
 var (
 	DefaultServerAddress = "127.0.0.1:4433"
 	DefaultServerBaseURL = ""

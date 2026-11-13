@@ -755,19 +755,16 @@ hister listen --config /path/to/my/config.yml
 ## Settings in the Web Interface
 
 Open **Settings** from the navigation menu to change appearance, snippet length, search
-behavior, log level or format, indexing, crawler defaults, web keyboard shortcuts, and sensitive
-content patterns. Administrators can configure multi user instances.
+behavior, logging, monitoring, request limits, indexing, crawler defaults, web keyboard shortcuts,
+and sensitive content patterns. Administrators can configure multi user instances.
 Token protected instances require signing in; instances without authentication need no login.
 
 Keep one draft across category tabs, then choose **Save and apply**. Saving briefly interrupts
 service and refreshes the interface. Validation errors preserve your draft. Use **Refresh settings**
 to check for external changes without losing your draft. Resolve highlighted conflicts before saving.
 
-Cookies, headers, and watched directories show compact summaries. Choose **Edit** to open an
-item, then **Done** to check it and return to its summary. New items use **Add cookie**,
-**Add header**, or **Add directory**. **Cancel** discards the open item's edits; **Undo removal**
-restores a removed item. Directory filters are under **Filters and options**. Finish or cancel
-the open item before choosing **Save and apply** to activate the complete draft.
+Cookies, headers, and watched directories show compact summaries. Directory filters are under
+**Filters and options**. Finish editing an open item before saving the complete draft.
 
 File changes appear as **Configured on disk, not applied**, alongside the active settings.
 Choose **Reload configuration** to apply them, with a brief service interruption. Unrelated draft
@@ -777,12 +774,24 @@ refresh settings and check the active values before retrying.
 
 Each setting shows its source. Explicit values in the main config, environment, or startup
 flags are locked, even when they equal a default. Commented examples do not lock settings.
-**Reset** removes a web selection and restores the inherited value. **Clear** selects an empty
-value. A locked setting can retain a web selection that takes effect when its overriding source is removed.
+A locked setting can retain a web selection that takes effect when its overriding source is removed.
 
 Web selections persist in `config.web.yml` inside the data directory, including when there is
-no main config file. Saving does not rewrite your main configuration. Categories other than
-App, Indexer, Crawler, Extractors, Semantic search, Hotkeys, and Sensitive content patterns, and connection or authentication settings, are currently read only. Stored credentials stay hidden.
+no main config file. Saving does not rewrite your main configuration. Connection, authentication,
+storage, executable, and proxy trust settings remain read only. Stored credentials stay hidden.
+
+In **App**, the search engine URL accepts an HTTP or HTTPS address with `{query}` once in its
+path or query, for example `https://www.google.com/search?q={query}`.
+This destination is shared with visitors, so never include credentials. Extractor option
+visibility shows described options while keeping credentials hidden.
+
+**SQL debugging** logs database queries, which can include private document and account data.
+**Profiler** enables runtime profiles at `/debug/pprof`, which can also contain private data.
+Disable these troubleshooting options when finished. In **Server**, **Metrics** enables monitoring
+at `/metrics`. Both profiling and metrics require an administrator or the instance token when
+authentication is enabled; without authentication anyone can access them. **Expose version** shares
+the installed version with all visitors. **Maximum batch size** sets the request limit in MiB,
+with a minimum of 1; larger limits allow greater memory use. These changes apply after saving.
 
 The **Indexer** tab offers language detection, a language multiselect, detection accuracy,
 stopword handling, and the maximum file size in MiB. Select at least two languages, or clear
@@ -798,8 +807,7 @@ indexed documents. Changing an owner does not remove documents indexed for the p
 Delete those documents separately if their previous visibility is no longer appropriate.
 
 **Delete from index when removed** removes indexed documents when watched files are deleted
-or renamed. It never deletes files from disk. **Clear** on a collection selects an empty list;
-**Reset** removes the web selection. An authoritative directory or language list locks the
+or renamed. It never deletes files from disk. An authoritative directory or language list locks the
 whole collection. PDF parser controls remain managed in the main configuration.
 
 The **Extractors** tab enables or disables individual extractors. yt-dlp also offers timeout,
@@ -810,8 +818,7 @@ Changes apply to future extraction; fetch documents again to update previously e
 
 The **Semantic search** tab controls the embedding service, model, dimensions, document chunks,
 prefixes, request limits, and result ranking. The endpoint URL is visible and directly editable.
-API keys, headers, and extractor cookie sources stay hidden. **Keep** preserves a stored value; **Replace** supplies a new value; **Clear**
-selects an empty value where allowed. **Reset** removes the web selection.
+API keys, headers, and extractor cookie sources stay hidden.
 
 After enabling semantic search or changing its endpoint, model, dimensions, document prefix,
 context length, or overlap, run `hister reindex` to rebuild embeddings for existing documents.
@@ -831,22 +838,17 @@ configuration. Saving does not start a crawl or check browser or proxy connectiv
 Headers, cookies, and user agent apply to HTTP and Chrome crawls; BiDi uses its browser's values.
 Proxy URLs support HTTP and SOCKS5 without credentials.
 
-Stored header, cookie, proxy, and socket values stay hidden. Choose **Keep** or **Replace**.
-**Clear** selects an empty header, cookie, or proxy value; remove a socket selection to use
-host and port. **Reset** separately removes the web selection. Replacing a collection
-preserves rows marked **Keep** and removes omitted rows. Changing a cookie's name, domain,
-or path requires replacing or clearing its value. An authoritative member locks the whole
+Stored header, cookie, proxy, and socket values stay hidden. Stored cookie values cannot be reused
+with a different name, domain, or path. An authoritative member locks the whole
 collection. After a revision conflict, use the current values and reapply secret edits.
 Replacement values remain only in the open page and are discarded after saving or leaving it.
 
-In **Sensitive content patterns**, choose **Add pattern**, give it a unique lowercase name,
-and enter a regular expression. Invalid expressions keep the row open for correction.
-Choose **Save and apply** to activate the draft. Matching documents are blocked during future
+In **Sensitive content patterns**, each regular expression needs a unique lowercase name.
+Invalid expressions keep the row open for correction. Matching documents are blocked during future
 indexing; existing documents are unchanged. These checks cannot detect every kind of sensitive content.
 
-The pattern collection replaces the inherited patterns, including built in defaults. Removing a
-row removes that check. **Clear** disables all pattern checks; **Reset** restores the inherited
-patterns. A pattern supplied by the main configuration or environment locks the whole collection.
+The pattern collection replaces the inherited patterns, including built in defaults.
+A pattern supplied by the main configuration or environment locks the whole collection.
 
 ## Reloading a Running Server
 
@@ -1407,13 +1409,13 @@ See [Language Settings and Detection](/docs/language-detection) for supported co
 
 ## `hotkeys.web` Section
 
-Defines keyboard shortcuts for the search page. In **Settings → Hotkeys**, choose **Add shortcut**,
-enter a key combination, select an action, and choose **Save and apply**. Changes take effect when
+Defines keyboard shortcuts for the search page. Configure key combinations and actions in
+**Settings → Hotkeys**. Changes take effect when
 you return to search. Reload other open search tabs to pick them up. Some combinations are reserved
 by your browser or operating system.
 
-Use **Clear** to remove configured shortcuts or **Reset** to restore inherited shortcuts. Built in
-Tab and arrow key navigation remains available. Saving replaces the complete shortcut collection.
+Built in Tab and arrow key navigation remains available without configured shortcuts.
+Saving replaces the complete shortcut collection.
 Any shortcut supplied by the main configuration or environment locks the entire collection.
 Terminal shortcuts remain in `tui.yaml`.
 

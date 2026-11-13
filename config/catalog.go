@@ -436,12 +436,11 @@ func FieldCatalog() []FieldMetadata {
 			Schema:      SettingSchema{Sensitivity: "none", Choices: []string{"automatic", "light", "dark"}},
 		},
 		{
-			Path:           "app.display_extractor_config",
-			Group:          groupAppearance,
-			Label:          "Display extractor configuration",
-			Description:    "Display extractor options in the web interface.",
-			Schema:         SettingSchema{Sensitivity: "none"},
-			ReadOnlyReason: "Changing option visibility is not supported here.",
+			Path:        "app.display_extractor_config",
+			Group:       groupAppearance,
+			Label:       "Display extractor configuration",
+			Description: "Display described extractor options in the web interface. Stored credentials and undescribed options stay hidden.",
+			Schema:      SettingSchema{Sensitivity: "none"},
 		},
 		{
 			Path:        "app.snippet_length",
@@ -451,12 +450,11 @@ func FieldCatalog() []FieldMetadata {
 			Schema:      SettingSchema{Sensitivity: "none", Min: &minSnippet, Max: &maxSnippet},
 		},
 		{
-			Path:           "app.search_url",
-			Group:          groupSearchBehavior,
-			Label:          "Search engine URL",
-			Description:    "Destination for searches outside the index.",
-			Schema:         SettingSchema{Sensitivity: "url"},
-			ReadOnlyReason: "Manage search engine URLs in the main configuration.",
+			Path:        "app.search_url",
+			Group:       groupSearchBehavior,
+			Label:       "Search engine URL",
+			Description: "Public HTTP or HTTPS destination for searches outside the index. Use {query} once in the path or query. Shared with every visitor; never include credentials.",
+			Schema:      SettingSchema{Sensitivity: "url", MaxLength: 4096},
 		},
 		{
 			Path:        "app.open_results_on_new_tab",
@@ -536,20 +534,18 @@ func FieldCatalog() []FieldMetadata {
 			Schema:      SettingSchema{Sensitivity: "none", Choices: []string{"text", "json"}},
 		},
 		{
-			Path:           "app.debug_sql",
-			Group:          groupLoggingAndDiagnostics,
-			Label:          "SQL debugging",
-			Description:    "Include database queries in diagnostic logs.",
-			Schema:         SettingSchema{Sensitivity: "none"},
-			ReadOnlyReason: "Manage diagnostic exposure in the main configuration.",
+			Path:        "app.debug_sql",
+			Group:       groupLoggingAndDiagnostics,
+			Label:       "SQL debugging",
+			Description: "Log database queries for troubleshooting. Logs can contain private document and account data. Disable when finished.",
+			Schema:      SettingSchema{Sensitivity: "none"},
 		},
 		{
-			Path:           "app.profiler",
-			Group:          groupLoggingAndDiagnostics,
-			Label:          "Profiler",
-			Description:    "Enable server profiling.",
-			Schema:         SettingSchema{Sensitivity: "none"},
-			ReadOnlyReason: "Manage diagnostic exposure in the main configuration.",
+			Path:        "app.profiler",
+			Group:       groupLoggingAndDiagnostics,
+			Label:       "Profiler",
+			Description: "Enable runtime profiles at /debug/pprof. Profiles may contain private data. Requires an administrator or the instance token when authentication is enabled; otherwise anyone can access them.",
+			Schema:      SettingSchema{Sensitivity: "none"},
 		},
 		{
 			Path:           "app.directory",
@@ -573,9 +569,9 @@ func FieldCatalog() []FieldMetadata {
 		fileManagedField("server.oauth", groupAuthentication, "OAuth providers", "Providers used to sign in with external accounts."),
 		fileManagedField("server.oauth_only", groupAuthentication, "Require OAuth", "Allow sign in only through an OAuth provider."),
 		fileManagedField("server.database", groupStorage, "Database", "SQLite filename or PostgreSQL connection settings."),
-		fileManagedField("server.max_batch_body_size", groupRequestLimits, "Maximum batch size", "Maximum batch request body size in MiB."),
-		fileManagedField("server.metrics", groupMonitoring, "Metrics", "Expose server metrics."),
-		fileManagedField("server.expose_version", groupMonitoring, "Expose version", "Include the server version in public configuration."),
+		{Path: "server.max_batch_body_size", Group: groupRequestLimits, Label: "Maximum batch size", Description: "Maximum batch request body size in MiB. Applies to subsequent requests. Larger limits allow greater memory use.", Schema: SettingSchema{Sensitivity: "none", Min: &minFileSize, Max: &maxFileSize}},
+		{Path: "server.metrics", Group: groupMonitoring, Label: "Metrics", Description: "Expose monitoring data at /metrics. Requires an administrator or the instance token when authentication is enabled; otherwise anyone can access it.", Schema: SettingSchema{Sensitivity: "none"}},
+		{Path: "server.expose_version", Group: groupMonitoring, Label: "Expose version", Description: "Share the installed Hister version with all visitors.", Schema: SettingSchema{Sensitivity: "none"}},
 		{Path: "indexer.detect_languages", Group: groupLanguageAndText, Label: "Detect languages", Description: "Detect languages for newly processed documents. Reindex to update existing documents.", Schema: SettingSchema{Sensitivity: "none"}, Effect: "reindex"},
 		{Path: "indexer.languages", Group: groupLanguageAndText, Label: "Languages", Description: "Select at least two languages, or clear the selection to detect all supported languages. Reindex to update existing documents.", Schema: SettingSchema{Type: "list", Control: "list", Collection: "replace", Sensitivity: "none", Items: &SettingSchema{Type: "string", Control: "select", Collection: "none", Sensitivity: "none", Choices: languages.DetectorCodes(), ChoiceLabels: languages.DetectorNames()}}, Effect: "reindex"},
 		{Path: "indexer.language_detection_accuracy", Group: groupLanguageAndText, Label: "Language detection accuracy", Description: "Low uses less memory. High improves detection accuracy. Reindex to update existing documents.", Schema: SettingSchema{Sensitivity: "none", Choices: []string{"low", "high"}}, Effect: "reindex"},
@@ -590,10 +586,10 @@ func FieldCatalog() []FieldMetadata {
 		{Path: "crawler.no_robots", Group: groupCrawlBehavior, Label: "Ignore robots rules", Description: "Disable robots.txt checks for subsequent crawls.", Schema: SettingSchema{Sensitivity: "none"}},
 		{Path: "crawler.backend", Group: groupPageFetching, Label: "Crawler backend", Description: "Backend for subsequent crawls. Browser backends require an installed or running browser.", Schema: SettingSchema{Sensitivity: "none", Choices: []string{"http", "chromedp", "bidi"}}},
 		{Path: "crawler.backend_options", Group: groupPageFetching, Label: "Crawler backend options", Description: "Options replace the entire collection. Capture delay applies to browser backends. Host and port apply only to BiDi. Executable selections remain file managed.", Schema: crawlerBackendSchema()},
-		{Path: "crawler.proxy", Group: groupRequests, Label: "Crawler proxy", Description: "HTTP or SOCKS5 proxy URL for subsequent crawls. Proxy credentials are not supported. Clear uses the default proxy behavior.", Schema: SettingSchema{Sensitivity: "secret", MaxLength: 4096}},
+		{Path: "crawler.proxy", Group: groupRequests, Label: "Crawler proxy", Description: "HTTP or SOCKS5 proxy URL for subsequent crawls. Proxy credentials are not supported.", Schema: SettingSchema{Sensitivity: "secret", MaxLength: 4096}},
 		{Path: "crawler.user_agent", Group: groupRequests, Label: "Crawler user agent", Description: "User agent for HTTP and Chrome crawls. BiDi uses its browser settings. Empty uses the crawler default.", Schema: SettingSchema{Sensitivity: "none", MaxLength: 4096}},
-		{Path: "crawler.headers", Group: groupRequests, Label: "Crawler headers", Description: "Headers for HTTP and Chrome crawls. BiDi uses its browser settings. Values remain hidden. Removing a row removes that header; Clear removes all headers.", Schema: SettingSchema{Type: "dictionary", Control: "dictionary", Collection: "replace", Sensitivity: "mixed", MaxItems: 128, Items: &SettingSchema{Type: "string", Control: "secret", Collection: "none", Sensitivity: "secret", MaxLength: 16384}}},
-		{Path: "crawler.cookies", Group: groupRequests, Label: "Crawler cookies", Description: "Cookies for HTTP and Chrome crawls, scoped to domains and paths. BiDi uses its browser cookies. Keep preserves a stored value. Changing its name, domain, or path requires Replace or Clear.", Schema: crawlerCookieSchema()},
+		{Path: "crawler.headers", Group: groupRequests, Label: "Crawler headers", Description: "Headers for HTTP and Chrome crawls. BiDi uses its browser settings. Values remain hidden.", Schema: SettingSchema{Type: "dictionary", Control: "dictionary", Collection: "replace", Sensitivity: "mixed", MaxItems: 128, Items: &SettingSchema{Type: "string", Control: "secret", Collection: "none", Sensitivity: "secret", MaxLength: 16384}}},
+		{Path: "crawler.cookies", Group: groupRequests, Label: "Crawler cookies", Description: "Cookies for HTTP and Chrome crawls, scoped to domains and paths. BiDi uses its browser cookies. Stored values cannot be reused with a different name, domain, or path.", Schema: crawlerCookieSchema()},
 		{Path: "semantic_search.enable", Group: groupSearchBehavior, Label: "Semantic search", Description: "Enable search by meaning. Reindex existing documents to generate embeddings.", Schema: SettingSchema{Sensitivity: "none"}, Effect: "reembed"},
 		{Path: "semantic_search.similarity_threshold", Group: groupSearchBehavior, Label: "Similarity threshold", Description: "Minimum similarity required for a semantic result.", Schema: SettingSchema{Sensitivity: "none", Min: new(0), Max: new(1)}, Effect: "runtime"},
 		{Path: "semantic_search.result_limit", Group: groupSearchBehavior, Label: "Semantic result limit", Description: "Maximum number of semantic results to consider.", Schema: SettingSchema{Sensitivity: "none", Min: new(1)}, Effect: "runtime"},
@@ -604,7 +600,7 @@ func FieldCatalog() []FieldMetadata {
 		{Path: "semantic_search.embedding_endpoint", Group: groupEmbeddingService, Label: "Embedding endpoint", Description: "HTTP or HTTPS URL of the embedding service.", Schema: SettingSchema{Control: "url", Sensitivity: "none", MinLength: 1, MaxLength: 4096}, Effect: "reembed"},
 		{Path: "semantic_search.embedding_model", Group: groupEmbeddingService, Label: "Embedding model", Description: "Model used to generate embeddings.", Schema: SettingSchema{Sensitivity: "none", MinLength: 1, MaxLength: 1024}, Effect: "reembed"},
 		{Path: "semantic_search.api_key", Group: groupEmbeddingService, Label: "Embedding API key", Description: "Credential used to access the embedding service.", Schema: SettingSchema{Sensitivity: "secret", MaxLength: 16384}, Effect: "runtime"},
-		{Path: "semantic_search.headers", Group: groupEmbeddingService, Label: "Embedding headers", Description: "Additional HTTP headers. Values stay hidden; removing a header removes its value.", Schema: SettingSchema{Type: "dictionary", Control: "dictionary", Collection: "replace", Sensitivity: "mixed", MaxItems: 128, Items: &SettingSchema{Type: "string", Control: "secret", Collection: "none", Sensitivity: "secret", MaxLength: 16384}}, Effect: "runtime"},
+		{Path: "semantic_search.headers", Group: groupEmbeddingService, Label: "Embedding headers", Description: "Additional HTTP headers. Values stay hidden.", Schema: SettingSchema{Type: "dictionary", Control: "dictionary", Collection: "replace", Sensitivity: "mixed", MaxItems: 128, Items: &SettingSchema{Type: "string", Control: "secret", Collection: "none", Sensitivity: "secret", MaxLength: 16384}}, Effect: "runtime"},
 		{Path: "semantic_search.dimensions", Group: groupEmbeddingService, Label: "Embedding dimensions", Description: "Dimensions returned by the model. PostgreSQL supports at most 2000.", Schema: SettingSchema{Sensitivity: "none", Min: new(1)}, Effect: "reembed"},
 		{Path: "semantic_search.max_context_length", Group: groupDocumentChunks, Label: "Maximum context length", Description: "Maximum tokens in a document chunk.", Schema: SettingSchema{Sensitivity: "none", Min: new(1)}, Effect: "reembed"},
 		{Path: "semantic_search.chunk_overlap", Group: groupDocumentChunks, Label: "Chunk overlap", Description: "Tokens shared by adjacent chunks. Must be less than the maximum context length.", Schema: SettingSchema{Sensitivity: "none", Min: new(0)}, Effect: "reembed"},
@@ -612,8 +608,8 @@ func FieldCatalog() []FieldMetadata {
 		{Path: "semantic_search.embedding_timeout", Group: groupDocumentProcessing, Label: "Embedding timeout", Description: "Maximum seconds for document embedding requests. Zero uses five minutes.", Schema: SettingSchema{Sensitivity: "none", Min: new(0), Max: new(86400)}, Effect: "runtime"},
 		{Path: "semantic_search.max_embedding_batch_size", Group: groupDocumentProcessing, Label: "Embedding batch size", Description: "Maximum chunks per embedding request. Zero uses eight chunks.", Schema: SettingSchema{Sensitivity: "none", Min: new(0), Max: new(4096)}, Effect: "runtime"},
 		{Path: "semantic_search.max_embedding_concurrency", Group: groupDocumentProcessing, Label: "Embedding concurrency", Description: "Concurrent document embedding requests. Zero uses the default worker count.", Schema: SettingSchema{Sensitivity: "none", Min: new(0), Max: new(1024)}, Effect: "runtime"},
-		{Path: "hotkeys.web", Label: "Web keyboard shortcuts", Description: "Shortcuts apply on the search page after saving. Use lowercase letters, digits, /, ?, enter, tab, arrowup, arrowdown, arrowleft, arrowright, or f1 through f12, optionally prefixed with ctrl+, alt+, or meta+. Some combinations are reserved by your browser or system. Clear removes configured shortcuts; built in navigation remains. Reset restores inherited shortcuts. Terminal shortcuts are configured separately.", Schema: webHotkeySchema()},
-		{Path: "sensitive_content_patterns", Label: "Sensitive content patterns", Description: "Named regular expressions that block matching documents during subsequent indexing. Use lowercase names. Replacing this collection removes omitted patterns, including defaults. Clear disables these checks; Reset restores inherited patterns. Existing documents are unchanged.", Schema: SettingSchema{Type: "dictionary", Control: "dictionary", Collection: "replace", Sensitivity: "none", KeyLabel: "Pattern name", ValueLabel: "Regular expression", MaxItems: 256, Items: &SettingSchema{Type: "string", Control: "text", Collection: "none", Sensitivity: "none", MinLength: 1, MaxLength: 4096}}},
+		{Path: "hotkeys.web", Label: "Web keyboard shortcuts", Description: "Shortcuts apply on the search page after saving. Use lowercase letters, digits, /, ?, enter, tab, arrowup, arrowdown, arrowleft, arrowright, or f1 through f12, optionally prefixed with ctrl+, alt+, or meta+. Some combinations are reserved by your browser or system. Built in navigation remains available without configured shortcuts. Terminal shortcuts are configured separately.", Schema: webHotkeySchema()},
+		{Path: "sensitive_content_patterns", Label: "Sensitive content patterns", Description: "Named regular expressions that block matching documents during subsequent indexing. Use lowercase names. Only listed patterns apply, including any defaults you retain. Existing documents are unchanged.", Schema: SettingSchema{Type: "dictionary", Control: "dictionary", Collection: "replace", Sensitivity: "none", KeyLabel: "Pattern name", ValueLabel: "Regular expression", MaxItems: 256, Items: &SettingSchema{Type: "string", Control: "text", Collection: "none", Sensitivity: "none", MinLength: 1, MaxLength: 4096}}},
 		fileManagedField("extractors", "", "Extractors", "Extractor enable switches and options described by the extractor registry."),
 	}
 	defaults := CreateDefaultConfig()
@@ -1043,6 +1039,15 @@ func (c *Config) validateAppFields() []FieldError {
 	for _, field := range FieldCatalog() {
 		if field.Category != "app" || field.ReadOnlyReason != "" {
 			continue
+		}
+		if field.Path == "app.search_url" {
+			if c.Source(field.Path).Kind != "web" {
+				continue
+			}
+			if message := c.App.validateSearchURL(); message != "" {
+				result = append(result, FieldError{Path: field.Path, Code: "invalid_value", Message: message})
+				continue
+			}
 		}
 		if _, message := field.Schema.ValidateValue(settingValue(c, field.Path)); message != "" {
 			result = append(result, FieldError{Path: field.Path, Code: "invalid_value", Message: message})

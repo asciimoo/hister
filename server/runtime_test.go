@@ -37,6 +37,126 @@ import (
 	"github.com/asciimoo/hister/server/types"
 )
 
+func TestSettingsOrdinaryAppAndServerApply(t *testing.T) {
+	for _, multiUser := range []bool{false, true} {
+		t.Run(fmt.Sprintf("multi_user_%t", multiUser), func(t *testing.T) {
+			cfg, handler, _ := newReloadTestServer(t, multiUser)
+			token := "secret"
+			var ordinaryToken string
+			if multiUser {
+				admin, err := model.GetUser("runtime-owner")
+				if err != nil {
+					t.Fatal(err)
+				}
+				token = admin.Token
+				ordinary, err := model.CreateUser("reader", "password123", false)
+				if err != nil {
+					t.Fatal(err)
+				}
+				ordinaryToken = ordinary.Token
+			}
+			headers := map[string]string{"Origin": "hister://", "X-Access-Token": token, "Content-Type": "application/json"}
+			mainBefore, err := os.ReadFile(cfg.Filename())
+			if err != nil {
+				t.Fatal(err)
+			}
+			paths := []string{"app.display_extractor_config", "app.debug_sql", "app.profiler", "server.metrics", "server.expose_version"}
+			for _, action := range []string{"enable", "disable", "reset"} {
+				revision, _ := readConfigurationState(t, handler, headers)
+				edits := make([]config.SettingEdit, 0)
+				for _, path := range append(slices.Clone(paths), "app.search_url", "server.max_batch_body_size") {
+					edit := config.SettingEdit{Path: path, Action: "set", Value: json.RawMessage(fmt.Sprint(action == "enable"))}
+					switch path {
+					case "app.search_url":
+						edit.Value = json.RawMessage(`{"action":"replace","value":"https://search.example/?q={query}"}`)
+						if action == "disable" {
+							edit.Value = json.RawMessage(`{"action":"clear"}`)
+						}
+					case "server.max_batch_body_size":
+						edit.Value = json.RawMessage(`1`)
+					}
+					if action == "reset" {
+						edit.Action, edit.Value = "reset", nil
+					}
+					edits = append(edits, edit)
+				}
+				body, err := json.Marshal(map[string]any{"revision": revision, "edits": edits})
+				if err != nil {
+					t.Fatal(err)
+				}
+				response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", bytes.NewReader(body), headers)
+				if response.Code != http.StatusOK {
+					t.Fatalf("%s: %d %s", action, response.Code, response.Body)
+				}
+				loaded, _, err := config.LoadForInspection(cfg.Filename(), true)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := loaded.Validate(); err != nil {
+					t.Fatal(err)
+				}
+				if status := reloadRequest(t, handler, token); status != http.StatusOK {
+					t.Fatalf("reload saved settings: %d", status)
+				}
+				_, values := readConfigurationState(t, handler, headers)
+				for _, path := range paths {
+					if values[path].Value != (action == "enable") || values[path].Source.WebSelected != (action != "reset") {
+						t.Fatalf("%s did not persist %s: %+v", action, path, values[path])
+					}
+				}
+				public := testutil.ServeHTTP(t, handler, http.MethodGet, "/hister/api/config", nil, nil)
+				var active struct {
+					SearchURL         string `json:"searchUrl"`
+					Version           string `json:"version"`
+					MaxBatchBodyBytes int64  `json:"maxBatchBodyBytes"`
+				}
+				if err := json.Unmarshal(public.Body.Bytes(), &active); err != nil {
+					t.Fatal(err)
+				}
+				wantURL := config.CreateDefaultConfig().App.SearchURL
+				if action == "enable" {
+					wantURL = "https://search.example/?q={query}"
+				}
+				if active.SearchURL != wantURL || active.SearchURL != loaded.App.SearchURL || active.MaxBatchBodyBytes != loaded.Server.MaxBatchBodyBytes() || (active.Version != "") != (action == "enable") {
+					t.Fatalf("public configuration did not refresh: %s", public.Body)
+				}
+				batch := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/batch", strings.NewReader(`{"ops":[{"op":"get","url":"https://example.com"}]}`+strings.Repeat(" ", 1<<20)), headers)
+				wantBatch := http.StatusRequestEntityTooLarge
+				if action == "reset" {
+					wantBatch = http.StatusOK
+				}
+				if batch.Code != wantBatch {
+					t.Fatalf("batch limit not applied: %d %s", batch.Code, batch.Body)
+				}
+				for _, path := range []string{"/metrics", "/debug/pprof/"} {
+					response := testutil.ServeHTTP(t, handler, http.MethodGet, "/hister"+path, nil, headers)
+					if action == "enable" {
+						if response.Code != http.StatusOK || strings.Contains(response.Body.String(), "<title>Hister") {
+							t.Fatalf("monitoring unavailable: %s %d", path, response.Code)
+						}
+						for _, denied := range []string{"", ordinaryToken} {
+							response := testutil.ServeHTTP(t, handler, http.MethodGet, "/hister"+path, nil, map[string]string{"X-Access-Token": denied})
+							if response.Code != http.StatusForbidden {
+								t.Fatalf("monitoring exposed to nonadministrative visitor: %s %d", path, response.Code)
+							}
+						}
+					} else if strings.Contains(response.Body.String(), "hister_documents") || strings.Contains(response.Body.String(), "Types of profiles available") {
+						t.Fatalf("disabled monitoring still served at %s", path)
+					}
+				}
+				extractors := testutil.ServeHTTP(t, handler, http.MethodGet, "/hister/api/extractors", nil, headers)
+				if strings.Contains(extractors.Body.String(), `"timeout"`) != (action == "enable") {
+					t.Fatal("extractor option visibility did not change")
+				}
+			}
+			mainAfter, err := os.ReadFile(cfg.Filename())
+			if err != nil || !bytes.Equal(mainBefore, mainAfter) {
+				t.Fatal("ordinary settings changed the main file")
+			}
+		})
+	}
+}
+
 func TestSettingsSensitivePatternApply(t *testing.T) {
 	cfg, handler, _ := newReloadTestServer(t, false)
 	headers := map[string]string{"Origin": "hister://", "X-Access-Token": "secret", "Content-Type": "application/json"}
