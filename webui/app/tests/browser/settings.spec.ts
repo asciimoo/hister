@@ -312,6 +312,86 @@ async function hotkeySettingsAPI(page: Page) {
   return { state, publicConfig };
 }
 
+for (const kind of ['shortcut', 'pattern'] as const) {
+  test(`${kind} rows have compact accessible icon actions with keyboard editing and undo`, async ({
+    page,
+  }, testInfo) => {
+    if (kind === 'shortcut') await hotkeySettingsAPI(page);
+    else await patternSettingsAPI(page);
+    const label = kind === 'shortcut' ? 'Web keyboard shortcuts' : 'Sensitive content patterns';
+    await page.goto(
+      `/settings?tab=${kind === 'shortcut' ? 'hotkeys' : 'sensitive_content_patterns'}`,
+    );
+    const row = page.getByRole('group', { name: `${label} 1`, exact: true });
+    const edit = row.getByRole('button', { name: 'Edit', exact: true });
+    const remove = row.getByRole('button', { name: `Remove ${label} item 1`, exact: true });
+    await expect(edit).toHaveText('');
+    await expect(remove).toHaveText('');
+    const title = row.getByText(kind === 'shortcut' ? 'alt+x' : 'private', { exact: true });
+    const titleBox = (await title.boundingBox())!;
+    const editBox = (await edit.boundingBox())!;
+    const removeBox = (await remove.boundingBox())!;
+    expect(editBox.x).toBeGreaterThan(titleBox.x + titleBox.width);
+    expect(removeBox.x).toBeGreaterThan(editBox.x);
+    expect(titleBox.y + titleBox.height / 2).toBeGreaterThanOrEqual(editBox.y);
+    expect(titleBox.y + titleBox.height / 2).toBeLessThanOrEqual(editBox.y + editBox.height);
+    expect(editBox.width).toBeGreaterThanOrEqual(36);
+    expect(editBox.height).toBeGreaterThanOrEqual(36);
+    await page.screenshot({ path: testInfo.outputPath(`${kind}-rows.png`) });
+    if (!testInfo.project.use.isMobile) {
+      await remove.hover();
+      await expect(
+        page.getByRole('tooltip', { name: `Remove ${kind} from draft`, exact: true }),
+      ).toBeVisible();
+      await page.mouse.move(0, 0);
+    }
+    await edit.focus();
+    await expect(page.getByRole('tooltip', { name: `Edit ${kind}`, exact: true })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('tooltip')).toHaveCount(0);
+    await page.keyboard.press('Enter');
+    await expect(row.getByRole('textbox').first()).toBeFocused();
+    await row.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(edit).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(remove).toBeFocused();
+    await expect(
+      page.getByRole('tooltip', { name: `Remove ${kind} from draft`, exact: true }),
+    ).toBeVisible();
+    await page.keyboard.press('Enter');
+    await expect(row).toHaveCount(0);
+    await page.getByRole('button', { name: 'Undo removal', exact: true }).click();
+    await expect(row).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Save and apply', exact: true })).toBeDisabled();
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    ).toBe(true);
+  });
+}
+
+test('pattern rows wrap long names and expressions without hiding their actions', async ({
+  page,
+}, testInfo) => {
+  const state = await patternSettingsAPI(page);
+  const name = 'private_account_identifier_'.repeat(4);
+  const expression = `(?i)${'private-credential-'.repeat(12)}[0-9]+`;
+  state.values.find((value) => value.path === 'sensitive_content_patterns')!.value = {
+    [name]: expression,
+  };
+  await page.goto('/settings?tab=sensitive_content_patterns');
+  const row = page.getByRole('group', { name: 'Sensitive content patterns 1', exact: true });
+  await expect(row.getByText(name, { exact: true })).toBeVisible();
+  await expect(row.getByText(expression, { exact: true })).toBeVisible();
+  await expect(row.getByRole('button', { name: 'Edit', exact: true })).toBeInViewport();
+  await expect(
+    row.getByRole('button', { name: 'Remove Sensitive content patterns item 1', exact: true }),
+  ).toBeInViewport();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  );
+  await page.screenshot({ path: testInfo.outputPath('long-pattern-row.png') });
+});
+
 test('web hotkeys use named actions and save a shared draft with working shortcuts', async ({
   page,
 }) => {

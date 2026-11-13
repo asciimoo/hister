@@ -2,6 +2,9 @@
   import { Button } from '@hister/components/ui/button';
   import { Input } from '@hister/components/ui/input';
   import { Badge } from '@hister/components/ui/badge';
+  import { Kbd } from '@hister/components/ui/kbd';
+  import * as Tooltip from '@hister/components/ui/tooltip';
+  import { Pencil, Plus, Trash2 } from '@lucide/svelte';
   import {
     choiceLabel,
     emptySettingValue,
@@ -56,6 +59,8 @@
     )[field.path] ?? 'item',
   );
   const directory = $derived(field.path === 'indexer.directories');
+  const shortcut = $derived(field.path === 'hotkeys.web');
+  const pattern = $derived(field.path === 'sensitive_content_patterns');
   const keyLabel = $derived(field.schema.key_label ?? 'Name');
   const valueLabel = $derived(field.schema.value_label ?? 'Value');
   const primarySchema = $derived({
@@ -221,44 +226,100 @@
   {/if}
 {/snippet}
 
-<div {id} role="group" aria-label={field.label} class="w-full min-w-0 space-y-3">
+{#snippet itemSummary(name: string, item: unknown, index: number)}
+  {@const text = summary(name, item)}
+  {@const changed = !activeEntries.some(
+    ([key, active]) => key === name && JSON.stringify(active) === JSON.stringify(item),
+  )}
+  <fieldset
+    aria-label={`${field.label} ${index + 1}`}
+    class="min-w-0 space-y-2 border px-3 py-2 transition-colors {changed
+      ? 'border-hister-indigo/40 bg-hister-indigo/5'
+      : 'border-border-brand-muted bg-background/40 hover:border-border-brand'}"
+  >
+    <div class="flex min-w-0 items-start justify-between gap-2">
+      <div class="flex min-h-10 min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1.5 sm:min-h-9">
+        {#if shortcut}
+          <Kbd class="border-border-brand-muted text-text-brand h-7 border px-2 font-mono text-xs"
+            >{text.title}</Kbd
+          >
+          <p class="text-text-brand-muted text-sm [overflow-wrap:anywhere]">{text.detail}</p>
+        {:else}
+          <p class="min-w-0 text-sm font-medium [overflow-wrap:anywhere]">{text.title}</p>
+        {/if}
+        {#if changed}
+          <Badge
+            variant="outline"
+            class="border-hister-indigo/30 text-text-brand shrink-0 text-[10px]">Unsaved</Badge
+          >
+        {/if}
+      </div>
+      <div class="flex shrink-0 items-center gap-0.5">
+        <Tooltip.Provider delayDuration={200}>
+          <Tooltip.Root>
+            <Tooltip.Trigger
+              id={`${id}-${index}-edit`}
+              disabled={disabled || !!editor || blocked}
+              onclick={() => start(index)}
+            >
+              {#snippet child({ props })}
+                <Button
+                  {...props}
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Edit"
+                  class="text-text-brand-muted hover:text-text-brand size-10 sm:size-9"
+                >
+                  <Pencil class="size-4" aria-hidden="true" />
+                </Button>
+              {/snippet}
+            </Tooltip.Trigger>
+            <Tooltip.Content role="tooltip" side="top" sideOffset={6}>Edit {noun}</Tooltip.Content>
+          </Tooltip.Root>
+          <Tooltip.Root>
+            <Tooltip.Trigger
+              disabled={disabled || !!editor}
+              onclick={() =>
+                onRemove(collection(entries.filter((_, position) => position !== index)), value)}
+            >
+              {#snippet child({ props })}
+                <Button
+                  {...props}
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={`Remove ${field.label} item ${index + 1}`}
+                  class="text-text-brand-muted hover:bg-hister-rose/10 hover:text-hister-rose size-10 sm:size-9"
+                >
+                  <Trash2 class="size-4" aria-hidden="true" />
+                </Button>
+              {/snippet}
+            </Tooltip.Trigger>
+            <Tooltip.Content role="tooltip" side="top" sideOffset={6}
+              >Remove {noun} from draft</Tooltip.Content
+            >
+          </Tooltip.Root>
+        </Tooltip.Provider>
+      </div>
+    </div>
+    {#if pattern}
+      <code
+        class="bg-muted/50 text-text-brand block min-w-0 px-2.5 py-2 font-mono text-xs leading-relaxed [overflow-wrap:anywhere] whitespace-pre-wrap"
+        >{text.detail}</code
+      >
+    {:else if !shortcut}
+      <p class="text-text-brand-muted pb-1 text-xs [overflow-wrap:anywhere]">{text.detail}</p>
+    {/if}
+  </fieldset>
+{/snippet}
+
+<div {id} role="group" aria-label={field.label} class="w-full min-w-0 space-y-2">
   {#each entries as [name, item], index}
     {#if current?.index === index}
       {@render itemEditor(index)}
     {:else}
-      {@const text = summary(name, item)}
-      <fieldset
-        aria-label={`${field.label} ${index + 1}`}
-        class="border-border-brand-muted min-w-0 space-y-2 border p-3"
-      >
-        <div class="flex min-w-0 items-start justify-between gap-2">
-          <p class="min-w-0 text-sm font-medium [overflow-wrap:anywhere]">{text.title}</p>
-          {#if !activeEntries.some(([key, active]) => key === name && JSON.stringify(active) === JSON.stringify(item))}
-            <Badge variant="outline" class="shrink-0">Unsaved</Badge>
-          {/if}
-        </div>
-        <p class="text-text-brand-muted text-xs [overflow-wrap:anywhere]">{text.detail}</p>
-        <div class="flex justify-end gap-2">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            disabled={disabled || !!editor}
-            aria-label={`Remove ${field.label} item ${index + 1}`}
-            onclick={() =>
-              onRemove(collection(entries.filter((_, position) => position !== index)), value)}
-            >Remove</Button
-          >
-          <Button
-            id={`${id}-${index}-edit`}
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={disabled || !!editor || blocked}
-            onclick={() => start(index)}>Edit</Button
-          >
-        </div>
-      </fieldset>
+      {@render itemSummary(name, item, index)}
     {/if}
   {/each}
   {#if current?.index === null}
@@ -276,7 +337,7 @@
         !!editor ||
         blocked ||
         (field.schema.max_items !== undefined && entries.length >= field.schema.max_items)}
-      onclick={() => start(null)}>Add {noun}</Button
+      onclick={() => start(null)}><Plus class="size-4" aria-hidden="true" />Add {noun}</Button
     >
   {/if}
   {#if removal?.path === field.path}
