@@ -107,11 +107,12 @@ func TestFieldCatalogPreservesEditorContract(t *testing.T) {
 	if toggle := fields["app.show_suggestions"]; toggle.Default != false || toggle.Schema.Control != "switch" {
 		t.Fatal("lost an explicit false default or boolean control")
 	}
-	for _, path := range []string{"app.access_token", "app.search_url"} {
-		field := fields[path]
-		if field.Schema.Sensitivity == "none" || field.Default != nil {
-			t.Fatalf("lost secret handling for %s", path)
-		}
+	searchURL := fields["app.search_url"]
+	if searchURL.Schema.Sensitivity != "none" || searchURL.Schema.Control != "url" || searchURL.Default != CreateDefaultConfig().App.SearchURL {
+		t.Fatal("search URL must expose its default as an ordinary URL field")
+	}
+	if token := fields["app.access_token"]; token.Schema.Sensitivity == "none" || token.Default != nil {
+		t.Fatal("lost secret handling for the access token")
 	}
 	for _, path := range []string{"app.access_token", "app.user_handling", "app.public"} {
 		if !fields[path].RequiresConfirmation {
@@ -138,7 +139,7 @@ func TestOrdinaryAppAndServerDrafts(t *testing.T) {
 		path, value string
 		want        any
 	}{
-		{"app.search_url", `{"action":"replace","value":"https://search.example/search?q={query}"}`, "https://search.example/search?q={query}"},
+		{"app.search_url", `"https://search.example/search?q={query}"`, "https://search.example/search?q={query}"},
 		{"app.display_extractor_config", `true`, true},
 		{"app.debug_sql", `true`, true},
 		{"app.profiler", `true`, true},
@@ -193,6 +194,7 @@ func TestOrdinaryAppAndServerValidation(t *testing.T) {
 		{"app.profiler", `"false"`},
 		{"app.debug_sql", `null`},
 		{"app.display_extractor_config", `{}`},
+		{"app.search_url", `{"action":"replace","value":"https://search.example/?q={query}"}`},
 	} {
 		candidate, fields := c.PrepareDraft([]SettingEdit{{Path: tc.path, Action: "set", Value: json.RawMessage(tc.value)}})
 		if candidate != nil || len(fields) != 1 || fields[0].Path != tc.path || fields[0].Code != "invalid_value" {
@@ -206,7 +208,7 @@ func TestOrdinaryAppAndServerValidation(t *testing.T) {
 		"https://{query}.example.com/", "https://example.com/?q={query}&again={query}",
 		"https://example.com/search {query}", "https://example.com/?q=%zz{query}",
 	} {
-		raw, err := json.Marshal(map[string]string{"action": "replace", "value": value})
+		raw, err := json.Marshal(value)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -238,29 +240,34 @@ func TestSearchURLDraftActions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	next, fields := c.PrepareDraft([]SettingEdit{{Path: "app.search_url", Action: "set", Value: json.RawMessage(`{"action":"replace","value":"https://search.example/search/{query}?lang=en"}`)}})
+	const template = "https://search.example/search/{query}?lang=en"
+	next, fields := c.PrepareDraft([]SettingEdit{{Path: "app.search_url", Action: "set", Value: json.RawMessage(`"https://search.example/search/{query}?lang=en"`)}})
 	if next == nil || len(fields) != 0 {
 		t.Fatalf("path template rejected: %v", fields)
 	}
-	var kept json.RawMessage
+	visible := false
 	for _, state := range next.FieldStatesForRevision("revision") {
 		if state.Path == "app.search_url" {
-			kept, err = json.Marshal(state.Value)
-			if err != nil || !state.SecretPresent || strings.Contains(string(kept), "search.example") {
-				t.Fatal("search template was disclosed by settings")
+			visible = true
+			if state.Value != template || state.SecretPresent || !state.Editable {
+				t.Fatalf("search template must be a visible editable value: %+v", state)
 			}
 		}
 	}
-	keptCandidate, fields := next.PrepareDraftForRevision("revision", []SettingEdit{{Path: "app.search_url", Action: "set", Value: kept}})
-	if keptCandidate == nil || len(fields) != 0 || keptCandidate.App.SearchURL != next.App.SearchURL {
-		t.Fatalf("keep lost stored search template: %v", fields)
+	if !visible {
+		t.Fatal("search URL is missing from settings")
 	}
-	if stale, fields := next.PrepareDraftForRevision("different", []SettingEdit{{Path: "app.search_url", Action: "set", Value: kept}}); stale != nil || len(fields) == 0 {
-		t.Fatal("stale reference accepted")
+	unrelated, fields := next.PrepareDraft([]SettingEdit{{Path: "app.title", Action: "set", Value: json.RawMessage(`"New title"`)}})
+	if unrelated == nil || len(fields) != 0 || unrelated.App.SearchURL != template {
+		t.Fatalf("unrelated edit lost the search template: %v", fields)
 	}
-	cleared, fields := next.PrepareDraft([]SettingEdit{{Path: "app.search_url", Action: "set", Value: json.RawMessage(`{"action":"clear"}`)}})
+	cleared, fields := next.PrepareDraft([]SettingEdit{{Path: "app.search_url", Action: "set", Value: json.RawMessage(`""`)}})
 	if cleared == nil || len(fields) != 0 || cleared.App.SearchURL != CreateDefaultConfig().App.SearchURL || !cleared.Source("app.search_url").WebSelected {
 		t.Fatalf("clear must select the default engine: %v", fields)
+	}
+	reset, fields := next.PrepareDraft([]SettingEdit{{Path: "app.search_url", Action: "reset"}})
+	if reset == nil || len(fields) != 0 || reset.App.SearchURL != c.App.SearchURL || reset.Source("app.search_url").WebSelected {
+		t.Fatalf("reset must remove the web selection: %v", fields)
 	}
 }
 
@@ -1271,7 +1278,7 @@ func TestFieldStatesHideCredentialsInsideURLPaths(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HISTER_DATA_DIR", dir)
 	filename := filepath.Join(dir, "config.yml")
-	if err := os.WriteFile(filename, []byte("app:\n  search_url: https://search.example/private-credential?q={query}\n"), 0o600); err != nil {
+	if err := os.WriteFile(filename, []byte("crawler:\n  proxy: https://proxy.example/private-credential\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	c, _, err := LoadForInspection(filename, true)
@@ -1314,7 +1321,7 @@ func TestDraftFieldStatesAndRestrictions(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HISTER_DATA_DIR", dir)
 	filename := filepath.Join(dir, "config.yml")
-	const main = "app:\n  title: Hister\n  access_token: private-credential\n  search_url: https://owner:private-credential@search.example/?q={query}&key=private-credential\n"
+	const main = "app:\n  title: Hister\n  access_token: private-credential\n  search_url: https://search.example/?q={query}&lang=en\n"
 	if err := os.WriteFile(filename, []byte(main), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -1334,6 +1341,9 @@ func TestDraftFieldStatesAndRestrictions(t *testing.T) {
 	}
 	if !states["app.access_token"].SecretPresent || states["app.access_token"].Value != nil || states["app.access_token"].Editable {
 		t.Fatal("stored token is not protected")
+	}
+	if searchURL := states["app.search_url"]; searchURL.Value != "https://search.example/?q={query}&lang=en" || searchURL.SecretPresent || searchURL.Editable || !searchURL.Source.Locked {
+		t.Fatalf("file managed search URL must remain visible and locked: %+v", searchURL)
 	}
 	for _, value := range []any{c.FieldStates(), FieldCatalog()} {
 		raw, err := json.Marshal(value)

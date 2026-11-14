@@ -126,18 +126,19 @@ async function ordinarySettingsAPI(page: Page) {
       schema: {
         type: url ? 'string' : number ? 'integer' : 'boolean',
         control: url ? 'url' : number ? 'number' : 'switch',
-        sensitivity: url ? 'url' : 'none',
+        sensitivity: 'none',
         collection: 'none',
         ...(number ? { min: 1, max: 8796093022207 } : {}),
       },
       effect: 'runtime',
       requires_confirmation: false,
+      ...(url ? { default: 'https://google.com/search?q={query}' } : {}),
     });
     state.values.push({
       path,
-      value: url ? { action: 'keep', ref: 'url-reference' } : number ? 40 : false,
+      value: url ? 'https://existing.example/?q={query}' : number ? 40 : false,
       editable: true,
-      secret_present: url,
+      secret_present: false,
       source: { kind: 'web', locked: false, web_selected: true },
     });
   }
@@ -492,19 +493,19 @@ test('ordinary App and Server controls save one draft and refresh public setting
       maxBatchBodyBytes: 1048576,
     });
     for (const edit of saved.edits) {
-      state.values.find((value) => value.path === edit.path)!.value =
-        edit.path === 'app.search_url' ? { action: 'keep', ref: 'new-reference' } : edit.value;
+      state.values.find((value) => value.path === edit.path)!.value = edit.value;
     }
     state.revision = 'revision-2';
     await route.fulfill({ json: {} });
   });
   await page.goto('/settings');
-  await page
-    .getByRole('combobox', { name: 'Search engine URL action', exact: true })
-    .selectOption('replace');
-  await page
-    .getByLabel('Search engine URL replacement', { exact: true })
-    .fill('https://search.example/?q={query}');
+  const searchURL = page.getByRole('textbox', { name: 'Search engine URL', exact: true });
+  await expect(searchURL).toHaveAttribute('type', 'url');
+  await expect(searchURL).toHaveValue('https://existing.example/?q={query}');
+  await expect(
+    page.getByRole('combobox', { name: 'Search engine URL action', exact: true }),
+  ).toHaveCount(0);
+  await searchURL.fill('https://search.example/?q={query}');
   for (const name of ['Display extractor configuration', 'SQL debugging', 'Profiler'])
     await page.getByRole('switch', { name, exact: true }).check();
   await page.getByRole('tab', { name: 'Server', exact: true }).click();
@@ -527,21 +528,14 @@ test('ordinary App and Server controls save one draft and refresh public setting
       {
         path: 'app.search_url',
         action: 'set',
-        value: {
-          action: 'replace',
-          ref: 'url-reference',
-          value: 'https://search.example/?q={query}',
-        },
+        value: 'https://search.example/?q={query}',
       },
       { path: 'server.max_batch_body_size', action: 'set', value: 1 },
       { path: 'server.metrics', action: 'set', value: true },
     ]),
   );
   await page.getByRole('tab', { name: 'App', exact: true }).click();
-  await expect(page.getByLabel('Search engine URL replacement', { exact: true })).toHaveCount(0);
-  await expect(
-    page.getByRole('combobox', { name: 'Search engine URL action', exact: true }),
-  ).toHaveValue('keep');
+  await expect(searchURL).toHaveValue('https://search.example/?q={query}');
 });
 
 test('ordinary App and Server controls retain invalid drafts and respect reset and source locks', async ({
@@ -569,10 +563,7 @@ test('ordinary App and Server controls retain invalid drafts and respect reset a
     });
   });
   await page.goto('/settings');
-  await page
-    .getByRole('combobox', { name: 'Search engine URL action', exact: true })
-    .selectOption('replace');
-  const replacement = page.getByLabel('Search engine URL replacement', { exact: true });
+  const replacement = page.getByRole('textbox', { name: 'Search engine URL', exact: true });
   await replacement.fill('https://search.example/');
   await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
   await expect(
@@ -584,9 +575,10 @@ test('ordinary App and Server controls retain invalid drafts and respect reset a
   expect(draft.edits).toContainEqual({
     path: 'app.search_url',
     action: 'set',
-    value: { action: 'clear' },
+    value: '',
   });
   await page.getByRole('button', { name: 'Reset Search engine URL', exact: true }).click();
+  await expect(replacement).toHaveValue('https://google.com/search?q={query}');
   await page.getByRole('tab', { name: 'Server', exact: true }).click();
   const region = page.getByRole('region', { name: 'Metrics', exact: true });
   await expect(region.getByRole('switch')).toHaveCount(0);
@@ -599,6 +591,22 @@ test('ordinary App and Server controls retain invalid drafts and respect reset a
       { path: 'server.max_batch_body_size', action: 'reset' },
     ]),
   );
+});
+
+test('a locked search engine URL stays visible without secret controls', async ({ page }) => {
+  const { state } = await ordinarySettingsAPI(page);
+  const value = state.values.find((value) => value.path === 'app.search_url')!;
+  value.editable = false;
+  value.source = { kind: 'file', name: '/config.yml', locked: true, web_selected: false };
+  await page.goto('/settings');
+  const field = page.getByRole('region', { name: 'Search engine URL', exact: true });
+  await expect(field).toContainText('https://existing.example/?q={query}');
+  await expect(field).toContainText('Locked');
+  await expect(field.getByRole('textbox')).toHaveCount(0);
+  await expect(field.getByRole('combobox')).toHaveCount(0);
+  await expect(
+    field.getByRole('button', { name: 'Reset Search engine URL', exact: true }),
+  ).toHaveCount(0);
 });
 
 async function patternSettingsAPI(page: Page) {

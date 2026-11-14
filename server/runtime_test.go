@@ -68,9 +68,9 @@ func TestSettingsOrdinaryAppAndServerApply(t *testing.T) {
 					edit := config.SettingEdit{Path: path, Action: "set", Value: json.RawMessage(fmt.Sprint(action == "enable"))}
 					switch path {
 					case "app.search_url":
-						edit.Value = json.RawMessage(`{"action":"replace","value":"https://search.example/?q={query}"}`)
+						edit.Value = json.RawMessage(`"https://search.example/?q={query}"`)
 						if action == "disable" {
-							edit.Value = json.RawMessage(`{"action":"clear"}`)
+							edit.Value = json.RawMessage(`""`)
 						}
 					case "server.max_batch_body_size":
 						edit.Value = json.RawMessage(`1`)
@@ -116,6 +116,9 @@ func TestSettingsOrdinaryAppAndServerApply(t *testing.T) {
 				wantURL := config.CreateDefaultConfig().App.SearchURL
 				if action == "enable" {
 					wantURL = "https://search.example/?q={query}"
+				}
+				if searchURL := values["app.search_url"]; searchURL.Value != wantURL || searchURL.SecretPresent || !searchURL.Editable || searchURL.Source.WebSelected != (action != "reset") {
+					t.Fatalf("search URL is not visible after %s: %+v", action, searchURL)
 				}
 				if active.SearchURL != wantURL || active.SearchURL != loaded.App.SearchURL || active.MaxBatchBodyBytes != loaded.Server.MaxBatchBodyBytes() || (active.Version != "") != (action == "enable") {
 					t.Fatalf("public configuration did not refresh: %s", public.Body)

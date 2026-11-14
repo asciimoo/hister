@@ -454,7 +454,7 @@ func FieldCatalog() []FieldMetadata {
 			Group:       groupSearchBehavior,
 			Label:       "Search engine URL",
 			Description: "Public HTTP or HTTPS destination for searches outside the index. Use {query} once in the path or query. Shared with every visitor; never include credentials.",
-			Schema:      SettingSchema{Sensitivity: "url", MaxLength: 4096},
+			Schema:      SettingSchema{Control: "url", Sensitivity: "none", MaxLength: 4096},
 		},
 		{
 			Path:        "app.open_results_on_new_tab",

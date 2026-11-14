@@ -130,6 +130,7 @@ func TestListenExplicitFalseOverridesFile(t *testing.T) {
 
 func TestListenDefaultFlagsDoNotLockSettings(t *testing.T) {
 	filename := filepath.Join(t.TempDir(), "config.yml")
+	t.Setenv("HISTER_DATA_DIR", filepath.Dir(filename))
 	if err := os.WriteFile(filename, []byte("# Defaults\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}

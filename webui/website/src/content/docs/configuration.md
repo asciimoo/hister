@@ -781,7 +781,8 @@ no main config file. Saving does not rewrite your main configuration. Connection
 storage, executable, and proxy trust settings remain read only. Stored credentials stay hidden.
 
 In **App**, the search engine URL accepts an HTTP or HTTPS address with `{query}` once in its
-path or query, for example `https://www.google.com/search?q={query}`.
+path or query, for example `https://www.google.com/search?q={query}`. Edit the displayed URL
+directly; **Clear** selects the default search engine and **Reset** removes the web selection.
 This destination is shared with visitors, so never include credentials. Extractor option
 visibility shows described options while keeping credentials hidden.
 

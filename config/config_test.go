@@ -392,6 +392,7 @@ func TestTUIConfigurationDoesNotSelectMainFile(t *testing.T) {
 
 func TestConfigurationSourcesPreserveExplicitValues(t *testing.T) {
 	dir := t.TempDir()
+	t.Setenv("HISTER_DATA_DIR", dir)
 	filename := filepath.Join(dir, "config.yml")
 	const raw = `app:
   title: Hister
