@@ -124,6 +124,27 @@ export async function reloadConfiguration(): Promise<void> {
 
 export type SettingEdit =
   { path: string; action: 'set'; value: unknown } | { path: string; action: 'reset' };
+export interface SettingsDraft {
+  revision: string;
+  edits: SettingEdit[];
+  acknowledgment?: string;
+}
+
+// Contract for sensitive validation: the server must supply redacted changes
+// and bind acknowledgments to the actor, revision and complete candidate.
+export interface SettingsReview {
+  acknowledgment: string;
+  changes: { path: string; before: string; after: string }[];
+  consequences: string[];
+  destination_url?: string;
+}
+
+interface SettingsValidation {
+  revision: string;
+  values: SettingValue[];
+  review?: SettingsReview;
+}
+
 export interface SettingError {
   path: string;
   code: string;
@@ -141,10 +162,7 @@ export class SettingsError extends Error {
   }
 }
 
-export async function settingsRequest<T>(
-  operation = '',
-  draft?: { revision: string; edits: SettingEdit[] },
-): Promise<T> {
+export async function settingsRequest<T>(operation = '', draft?: SettingsDraft): Promise<T> {
   const response = await apiFetch(`/settings${operation}`, {
     redirectOnForbidden: false,
     cache: 'no-store',
@@ -166,6 +184,43 @@ export async function settingsRequest<T>(
     );
   }
   return body as T;
+}
+
+export async function readSettingsReview(
+  draft: SettingsDraft,
+  fields: SettingField[],
+): Promise<SettingsReview | undefined> {
+  const validation = await settingsRequest<SettingsValidation>('/validate', draft);
+  if (validation.review) {
+    requireCompleteReview(validation.review, validation.revision === draft.revision);
+    return validation.review;
+  }
+  if (
+    draft.edits.some((edit) =>
+      fields.some((field) => field.path === edit.path && field.requires_confirmation),
+    )
+  )
+    throw new SettingsError(
+      422,
+      'review_required',
+      'The server did not provide a sensitive change review. No changes were applied.',
+    );
+}
+
+function requireCompleteReview(review: SettingsReview, currentRevision: boolean) {
+  if (
+    ![
+      currentRevision,
+      review.acknowledgment,
+      review.changes?.length,
+      review.consequences?.length,
+    ].every(Boolean)
+  )
+    throw new SettingsError(
+      422,
+      'invalid_review',
+      'The server did not provide a complete review. No changes were applied.',
+    );
 }
 
 export const categoryLabels: Record<string, string> = {
@@ -219,7 +274,6 @@ export function canEditSetting(field: SettingField, value: SettingValue): boolea
     value.editable &&
     !value.source.locked &&
     !field.read_only_reason &&
-    !field.requires_confirmation &&
     supportsControl(field.schema)
   );
 }

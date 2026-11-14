@@ -6,6 +6,7 @@
   import { Badge } from '@hister/components/ui/badge';
   import { Button } from '@hister/components/ui/button';
   import * as Tooltip from '@hister/components/ui/tooltip';
+  import * as Dialog from '@hister/components/ui/dialog';
   import { TriangleAlert } from '@lucide/svelte';
   import { fetchConfig, resetConfig } from '#lib/api.js';
   import { redirectToAuth } from '#lib/auth-navigation.js';
@@ -14,11 +15,14 @@
     categoryLabels,
     groupSettings,
     settingsRequest,
+    readSettingsReview,
     reloadConfiguration,
     sameSetting,
     canEditSetting,
     SettingsError,
     type SettingsState,
+    type SettingsDraft,
+    type SettingsReview,
     type SettingEdit,
     type SettingError,
     type SettingItemEditor,
@@ -36,6 +40,7 @@
   let message = $state('Loading settings…');
   let problem = $state('');
   let needsReload = $state(false);
+  let review = $state<(SettingsReview & { draft: SettingsDraft }) | null>(null);
   let destroyed = false;
   const sidebarLayout = new MediaQuery('(min-width: 64rem)');
   const categories = $derived([...new Set(state?.fields.map((field) => field.category) ?? [])]);
@@ -68,6 +73,7 @@
     edits = {};
     editor = null;
     removal = null;
+    review = null;
   });
   beforeNavigate((navigation) => {
     if (navigation.shallow && navigation.to?.url.pathname === page.url.pathname) return;
@@ -166,6 +172,7 @@
 
   async function refreshSettings() {
     if (busy || denied) return;
+    review = null;
     if (!state) {
       resetConfig();
       await load();
@@ -259,6 +266,7 @@
   }
 
   function update(path: string, edit?: SettingEdit) {
+    review = null;
     if (editor?.path === path) editor = null;
     if (removal?.path === path) removal = null;
     if (edit) edits[path] = edit;
@@ -346,6 +354,7 @@
 
   function discard() {
     if (busy || !dirty) return;
+    review = null;
     edits = {};
     editor = null;
     removal = null;
@@ -392,20 +401,42 @@
     document.getElementById(`tab-${categories[next]}`)?.focus();
   }
 
-  async function save() {
+  function cancelReview() {
+    review = null;
+    message = 'Sensitive changes were not applied. Your draft is still here.';
+  }
+
+  async function save(accepted?: SettingsReview & { draft: SettingsDraft }) {
     if (!state || busy || !dirty || editor || needsReload || state.pending || conflictCount) return;
+    const draft: SettingsDraft = {
+      revision: state.revision,
+      edits: JSON.parse(JSON.stringify(Object.values(edits))),
+    };
+    if (accepted && JSON.stringify(accepted.draft) !== JSON.stringify(draft)) {
+      review = null;
+      problem = 'The draft changed. Save and apply again to review the current changes.';
+      return;
+    }
     busy = true;
     errors = [];
     problem = '';
     message = 'Validating settings…';
-    const draft = { revision: state.revision, edits: Object.values(edits) };
     let submitted = false;
     let saved = false;
     try {
-      await settingsRequest('/validate', draft);
+      const details = accepted ? undefined : await readSettingsReview(draft, state.fields);
+      if (details) {
+        review = { ...details, draft };
+        message = 'Review the sensitive changes before applying this draft.';
+        return;
+      }
+      review = null;
       message = 'Applying settings. Service may be briefly interrupted…';
       submitted = true;
-      await settingsRequest('/apply', draft);
+      await settingsRequest(
+        '/apply',
+        accepted ? { ...accepted.draft, acknowledgment: accepted.acknowledgment } : draft,
+      );
       saved = true;
       edits = {};
       removal = null;
@@ -728,6 +759,7 @@
                   class="text-text-brand-secondary px-2 sm:px-3">Discard changes</Button
                 >
                 <Button
+                  id="save-settings"
                   type="submit"
                   disabled={busy ||
                     !dirty ||
@@ -745,3 +777,63 @@
     {/if}
   </div>
 </div>
+
+<Dialog.Root
+  open={review !== null}
+  onOpenChange={(open) => {
+    if (!open) cancelReview();
+  }}
+>
+  <Dialog.Content
+    showCloseButton={false}
+    class="border-border-brand bg-card-surface max-h-[calc(100dvh-2rem)] overflow-y-auto"
+    onOpenAutoFocus={(event) => {
+      event.preventDefault();
+      document.getElementById('cancel-sensitive-settings')?.focus();
+    }}
+    onCloseAutoFocus={(event) => {
+      event.preventDefault();
+      document.getElementById('save-settings')?.focus();
+    }}
+  >
+    <Dialog.Header>
+      <Dialog.Title>Review sensitive changes</Dialog.Title>
+      <Dialog.Description>
+        These changes affect access to Hister. Review the complete draft before applying it. You
+        will need to confirm working access separately after activation.
+      </Dialog.Description>
+    </Dialog.Header>
+    {#if review}
+      <dl class="space-y-3 text-sm">
+        {#each review.changes as change}
+          <div class="border-border-brand-muted space-y-1 border-b pb-3 [overflow-wrap:anywhere]">
+            <dt class="font-medium">
+              {state?.fields.find((field) => field.path === change.path)?.label ?? change.path}
+            </dt>
+            <dd>Before: {change.before}</dd>
+            <dd>After: {change.after}</dd>
+          </div>
+        {/each}
+      </dl>
+      <ul class="list-disc space-y-2 pl-5 text-sm [overflow-wrap:anywhere]">
+        {#each review.consequences as consequence}<li>{consequence}</li>{/each}
+      </ul>
+      {#if review.destination_url}
+        <p class="text-sm [overflow-wrap:anywhere]">Destination: {review.destination_url}</p>
+      {/if}
+    {/if}
+    <Dialog.Footer>
+      <Button id="cancel-sensitive-settings" type="button" variant="outline" onclick={cancelReview}>
+        Cancel
+      </Button>
+      <Button
+        type="button"
+        onclick={() => {
+          if (review) void save(review);
+        }}
+      >
+        Confirm sensitive changes
+      </Button>
+    </Dialog.Footer>
+  </Dialog.Content>
+</Dialog.Root>

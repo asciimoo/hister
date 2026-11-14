@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { expect, test, type Page } from '@playwright/test';
 import { mockAPI } from './fixtures';
-import type { SettingsState } from '../../src/lib/settings';
+import type { SettingsDraft, SettingsState, SettingsReview } from '../../src/lib/settings';
 
 async function settingsAPI(page: Page, config: Record<string, unknown> = {}) {
   const publicConfig = { canConfigure: true, ...config };
@@ -142,6 +142,342 @@ async function ordinarySettingsAPI(page: Page) {
     });
   }
   return { state, publicConfig };
+}
+
+// Access fields stay read only in production until the server confirmation flow
+// is available. This fixture describes its pre-apply review contract.
+async function accessSettingsAPI(page: Page) {
+  const { state } = await settingsAPI(page, { authMode: 'user', authenticated: true });
+  const address = state.fields.find((field) => field.path === 'server.address')!;
+  delete address.read_only_reason;
+  state.values.find((value) => value.path === address.path)!.editable = true;
+  state.fields.push({
+    path: 'app.user_handling',
+    category: 'app',
+    label: 'User handling',
+    description: 'Require user accounts to access Hister.',
+    schema: { type: 'boolean', control: 'switch', sensitivity: 'none', collection: 'none' },
+    default: false,
+    effect: 'runtime',
+    requires_confirmation: true,
+  });
+  state.values.push({
+    path: 'app.user_handling',
+    value: true,
+    editable: true,
+    source: { kind: 'web', locked: false, web_selected: true },
+    secret_present: false,
+  });
+  const validations: SettingsDraft[] = [];
+  const applications: SettingsDraft[] = [];
+  await page.route('**/api/settings/validate', async (route) => {
+    const draft = route.request().postDataJSON() as SettingsDraft;
+    validations.push(draft);
+    const changes = draft.edits.map((edit) => {
+      const field = state.fields.find((field) => field.path === edit.path)!;
+      const active = state.values.find((value) => value.path === edit.path)!;
+      const next = edit.action === 'reset' ? field.default : edit.value;
+      return {
+        path: edit.path,
+        before:
+          field.schema.sensitivity === 'secret' ? 'Value stored (hidden)' : String(active.value),
+        after:
+          field.schema.sensitivity === 'secret'
+            ? (next as { action: string })?.action === 'replace'
+              ? 'Replacement value (hidden)'
+              : 'No stored value'
+            : String(next),
+      };
+    });
+    const sensitive = changes.some((change) =>
+      state.fields.some((field) => field.path === change.path && field.requires_confirmation),
+    );
+    const consequences = [];
+    if (changes.some((change) => change.path === 'app.user_handling' && change.after === 'false'))
+      consequences.push(
+        'User accounts will no longer be required. Anyone who can reach this instance can use it without signing in.',
+      );
+    if (changes.some((change) => change.path === 'server.address'))
+      consequences.push('The new listener accepts connections beyond this machine.');
+    if (changes.some((change) => change.path === 'app.access_token'))
+      consequences.push(
+        'The instance token will change. Sign in again using the new access policy.',
+      );
+    await route.fulfill({
+      json: {
+        revision: state.revision,
+        values: state.values,
+        ...(sensitive
+          ? {
+              review: {
+                acknowledgment: `review-${validations.length}`,
+                changes,
+                consequences,
+                destination_url: 'http://localhost:5544/settings',
+              },
+            }
+          : {}),
+      },
+    });
+  });
+  await page.route('**/api/settings/apply', async (route) => {
+    applications.push(route.request().postDataJSON());
+    // Activation and post-activation confirmation belong to a later slice.
+    await route.fulfill({
+      status: 503,
+      json: { code: 'unavailable', error: 'Temporary activation is not available yet.' },
+    });
+  });
+  return { state, validations, applications };
+}
+
+test('sensitive review requires explicit consent for a mixed draft before any apply', async ({
+  page,
+}) => {
+  const { validations, applications } = await accessSettingsAPI(page);
+  await page.goto('/settings');
+  await page.getByRole('textbox', { name: 'Title', exact: true }).fill('Private archive');
+  await page.getByRole('switch', { name: 'User handling', exact: true }).uncheck();
+  await page.getByRole('tab', { name: 'Server', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Listen address', exact: true }).fill('0.0.0.0:5544');
+  await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Review sensitive changes' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Cancel', exact: true })).toBeFocused();
+  await expect(dialog.getByRole('heading', { name: 'Review sensitive changes' })).toBeInViewport();
+  await expect(dialog).toContainText('Private archive');
+  await expect(dialog).toContainText('User handling');
+  await expect(dialog).toContainText('127.0.0.1:4433');
+  await expect(dialog).toContainText('0.0.0.0:5544');
+  await expect(dialog).toContainText('without signing in');
+  await expect(dialog).toContainText('beyond this machine');
+  await expect(dialog).toContainText('http://localhost:5544/settings');
+  await expect(dialog).toHaveJSProperty(
+    'scrollWidth',
+    await dialog.evaluate((node) => node.clientWidth),
+  );
+  expect(applications).toEqual([]);
+  await dialog.getByRole('button', { name: 'Confirm sensitive changes', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('Temporary activation is not available yet.');
+  expect(applications).toEqual([{ ...validations[0], acknowledgment: 'review-1' }]);
+  await expect(page.getByText('Settings saved and applied.', { exact: true })).toHaveCount(0);
+});
+
+for (const dismissal of ['Cancel', 'Escape']) {
+  test(`sensitive review ${dismissal} keeps the draft and edits require a new review`, async ({
+    page,
+  }) => {
+    const { validations, applications } = await accessSettingsAPI(page);
+    await page.goto('/settings');
+    await page.getByRole('switch', { name: 'User handling', exact: true }).uncheck();
+    const save = page.getByRole('button', { name: 'Save and apply', exact: true });
+    await save.click();
+    const dialog = page.getByRole('dialog', { name: 'Review sensitive changes' });
+    await expect(dialog).toBeVisible();
+    if (dismissal === 'Cancel')
+      // Enter must activate the initially focused Cancel action, never apply.
+      await page.keyboard.press('Enter');
+    else await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+    await expect(save).toBeFocused();
+    await expect(
+      page.getByRole('switch', { name: 'User handling', exact: true }),
+    ).not.toBeChecked();
+    expect(applications).toEqual([]);
+    await page.getByRole('textbox', { name: 'Title', exact: true }).fill('Revised after review');
+    await save.click();
+    await expect(dialog).toContainText('Revised after review');
+    expect(validations).toHaveLength(2);
+    expect(applications).toEqual([]);
+    await dialog.getByRole('button', { name: 'Confirm sensitive changes', exact: true }).click();
+    await expect(page.getByRole('alert')).toContainText(
+      'Temporary activation is not available yet.',
+    );
+    expect(applications).toEqual([{ ...validations[1], acknowledgment: 'review-2' }]);
+    expect(applications[0].edits).toContainEqual({
+      path: 'app.title',
+      action: 'set',
+      value: 'Revised after review',
+    });
+  });
+}
+
+test('sensitive review includes effective Reset and Clear changes with hidden secrets', async ({
+  page,
+}) => {
+  const { state, validations, applications } = await accessSettingsAPI(page);
+  state.fields.push({
+    path: 'app.access_token',
+    category: 'app',
+    label: 'Instance token',
+    description: 'Access token.',
+    schema: { type: 'string', control: 'secret', sensitivity: 'secret', collection: 'none' },
+    effect: 'runtime',
+    requires_confirmation: true,
+  });
+  state.values.push({
+    path: 'app.access_token',
+    value: { action: 'keep', ref: 'stored-token-reference' },
+    editable: true,
+    secret_present: true,
+    source: { kind: 'web', locked: false, web_selected: true },
+  });
+  await page.goto('/settings');
+  await page.getByRole('button', { name: 'Reset User handling', exact: true }).click();
+  await page.getByRole('button', { name: 'Clear Instance token', exact: true }).click();
+  await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Review sensitive changes' });
+  await expect(dialog).toContainText('Before: true');
+  await expect(dialog).toContainText('After: false');
+  await expect(dialog).toContainText('without signing in');
+  await expect(dialog).toContainText('Value stored (hidden)');
+  await expect(dialog).toContainText('No stored value');
+  await expect(dialog).not.toContainText('stored-token-reference');
+  expect(validations[0].edits).toEqual([
+    { path: 'app.user_handling', action: 'reset' },
+    { path: 'app.access_token', action: 'set', value: { action: 'clear' } },
+  ]);
+  expect(applications).toEqual([]);
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await page
+    .getByRole('region', { name: 'Instance token', exact: true })
+    .locator('input[type="password"]')
+    .fill('replacement-private-token');
+  await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
+  await expect(dialog).toContainText('Replacement value (hidden)');
+  await expect(dialog).not.toContainText('replacement-private-token');
+  await expect(dialog).not.toContainText('stored-token-reference');
+  const stored = await page.evaluate(() => ({
+    local: { ...localStorage },
+    session: { ...sessionStorage },
+  }));
+  expect(JSON.stringify(stored)).not.toMatch(
+    /replacement-private-token|stored-token-reference|review-2/,
+  );
+  await dialog.getByRole('button', { name: 'Confirm sensitive changes', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('Temporary activation is not available yet.');
+  expect(applications).toEqual([{ ...validations[1], acknowledgment: 'review-2' }]);
+});
+
+for (const action of ['Reset', 'Clear']) {
+  test(`sensitive review shows the effective listener after ${action}`, async ({ page }) => {
+    const { state, applications } = await accessSettingsAPI(page);
+    const active = state.values.find((value) => value.path === 'server.address')!;
+    active.value = '0.0.0.0:5544';
+    active.source = { kind: 'web', locked: false, web_selected: true };
+    let validated: SettingsDraft | undefined;
+    await page.route('**/api/settings/validate', (route) => {
+      validated = route.request().postDataJSON();
+      return route.fulfill({
+        json: {
+          revision: state.revision,
+          values: state.values,
+          review: {
+            acknowledgment: 'local-listener-review',
+            changes: [{ path: 'server.address', before: '0.0.0.0:5544', after: '127.0.0.1:4433' }],
+            consequences: ['Only connections from this machine will reach the new listener.'],
+            destination_url: 'http://localhost:4433/settings',
+          },
+        },
+      });
+    });
+    await page.goto('/settings?tab=server');
+    await page.getByRole('button', { name: `${action} Listen address`, exact: true }).click();
+    await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Review sensitive changes' });
+    await expect(dialog).toContainText('Before: 0.0.0.0:5544');
+    await expect(dialog).toContainText('After: 127.0.0.1:4433');
+    await expect(dialog).toContainText('Only connections from this machine');
+    await expect(dialog).toContainText('http://localhost:4433/settings');
+    expect(validated?.edits).toEqual([
+      action === 'Reset'
+        ? { path: 'server.address', action: 'reset' }
+        : { path: 'server.address', action: 'set', value: '' },
+    ]);
+    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+    expect(applications).toEqual([]);
+  });
+}
+
+test('a rejected sensitive acknowledgment retains the draft and requires a fresh review', async ({
+  page,
+}) => {
+  const { state, validations } = await accessSettingsAPI(page);
+  const applications: SettingsDraft[] = [];
+  await page.route('**/api/settings/apply', (route) => {
+    applications.push(route.request().postDataJSON());
+    state.revision = 'revision-2';
+    return route.fulfill({
+      status: 409,
+      json: { code: 'stale_revision', error: 'Review the current settings again.' },
+    });
+  });
+  await page.goto('/settings');
+  await page.getByRole('switch', { name: 'User handling', exact: true }).uncheck();
+  const save = page.getByRole('button', { name: 'Save and apply', exact: true });
+  await save.click();
+  const dialog = page.getByRole('dialog', { name: 'Review sensitive changes' });
+  await dialog.getByRole('button', { name: 'Confirm sensitive changes', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(save).toBeDisabled();
+  await expect(page.getByRole('switch', { name: 'User handling', exact: true })).not.toBeChecked();
+  await page.getByRole('button', { name: 'Refresh settings', exact: true }).click();
+  await save.click();
+  await expect(dialog).toBeVisible();
+  expect(applications).toEqual([{ ...validations[0], acknowledgment: 'review-1' }]);
+  expect(validations).toHaveLength(2);
+  expect(validations[1].revision).toBe('revision-2');
+  await dialog.getByRole('button', { name: 'Confirm sensitive changes', exact: true }).click();
+  await expect(save).toBeDisabled();
+  expect(applications[1]).toEqual({ ...validations[1], acknowledgment: 'review-2' });
+});
+
+test('ordinary saves do not open a sensitive review or send an acknowledgment', async ({
+  page,
+}) => {
+  const { applications } = await accessSettingsAPI(page);
+  await page.goto('/settings');
+  await page.getByRole('textbox', { name: 'Title', exact: true }).fill('Ordinary edit');
+  await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('Temporary activation is not available yet.');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  expect(applications).toEqual([
+    {
+      revision: 'revision-1',
+      edits: [{ path: 'app.title', action: 'set', value: 'Ordinary edit' }],
+    },
+  ]);
+});
+
+for (const missing of ['review', 'acknowledgment', 'changes', 'consequences', 'revision']) {
+  test(`sensitive review cannot apply without a matching ${missing}`, async ({ page }) => {
+    const { state, applications } = await accessSettingsAPI(page);
+    await page.route('**/api/settings/validate', (route) => {
+      const review: Partial<SettingsReview> = {
+        acknowledgment: 'review-1',
+        changes: [{ path: 'app.user_handling', before: 'Enabled', after: 'Disabled' }],
+        consequences: ['Anyone who can reach this instance can use it without signing in.'],
+      };
+      if (missing === 'acknowledgment' || missing === 'changes' || missing === 'consequences')
+        delete review[missing];
+      return route.fulfill({
+        json: {
+          revision: missing === 'revision' ? 'stale-revision' : state.revision,
+          values: state.values,
+          ...(missing === 'review' ? {} : { review }),
+        },
+      });
+    });
+    await page.goto('/settings');
+    await page.getByRole('switch', { name: 'User handling', exact: true }).uncheck();
+    await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
+    await expect(page.getByRole('alert')).toContainText('No changes were applied.');
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(
+      page.getByRole('switch', { name: 'User handling', exact: true }),
+    ).not.toBeChecked();
+    expect(applications).toEqual([]);
+  });
 }
 
 test('ordinary App and Server controls save one draft and refresh public settings', async ({
