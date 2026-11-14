@@ -118,6 +118,9 @@ func automigrate() error {
 		&DocumentVersion{},
 		&EmbeddingJob{},
 		&WebSession{},
+		&ResearchJob{},
+		&ResearchArtifact{},
+		&ResearchSource{},
 	)
 }
 
