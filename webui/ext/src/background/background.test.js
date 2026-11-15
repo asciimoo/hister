@@ -25,13 +25,18 @@ function browser({
   sourceURL = 'https://example.com/visited?tracking=true',
   sessionData = {},
   sessionAvailable = true,
+  otherTabs = [],
+  iconsReady = Promise.resolve(),
 } = {}) {
   const canonicalURL = 'https://example.com/clean';
   const documents = [];
   const lookups = [];
   const pdfDocuments = [];
   const pageMessages = [];
-  const tab = { id: 1, url: sourceURL, title: 'Article' };
+  const icons = new Map();
+  const titles = new Map();
+  const tab = { id: 1, url: sourceURL, title: 'Article', active: true, windowId: 1 };
+  const tabs = [tab, ...otherTabs];
   const timers = new Map();
   const removedListeners = [];
   let now = 0;
@@ -40,12 +45,12 @@ function browser({
   let onActivated;
   let onUpdated;
   let onHeadersReceived;
+  let onStorageChanged;
   const storage = {
     histerURL: 'https://hister.example/',
     showIndexedBadge: true,
     indexingEnabled,
   };
-  const event = { addListener() {} };
   const action = (_, callback) => callback?.();
   const runtime = {
     onMessage: { addListener: (fn) => (onMessage = fn) },
@@ -57,6 +62,28 @@ function browser({
     URLSearchParams,
     console,
     btoa,
+    createImageBitmap: async () => ({ close() {} }),
+    OffscreenCanvas: class {
+      constructor(width, height) {
+        const data = new Uint8ClampedArray(width * height * 4);
+        for (let i = 0; i < data.length; i += 4) data.set([20, 100, 200, 255], i);
+        const strokes = [];
+        this.context = {
+          drawImage() {},
+          strokeRect(x, y, width, height) {
+            strokes.push({
+              color: this.strokeStyle,
+              width: this.lineWidth,
+              rect: [x, y, width, height],
+            });
+          },
+          getImageData: () => ({ width, height, data, strokes: structuredClone(strokes) }),
+        };
+      }
+      getContext() {
+        return this.context;
+      }
+    },
     Date: class extends Date {
       static now() {
         return now;
@@ -74,11 +101,15 @@ function browser({
         onRemoved: { addListener: (fn) => removedListeners.push(fn) },
         onUpdated: { addListener: (fn) => (onUpdated = fn) },
         onActivated: { addListener: (fn) => (onActivated = fn) },
-        get: async () => ({ ...tab }),
-        query: async () => [{ ...tab }],
+        get: async (id) => ({ ...tabs.find((tab) => tab.id === id) }),
+        query: async (query) =>
+          tabs
+            .filter((tab) => !query.active || tab.active)
+            .filter((tab) => !query.currentWindow || tab.windowId === 1)
+            .map((tab) => ({ ...tab })),
         sendMessage: async (tabId, request, options) => {
-          assert.equal(tabId, 1);
           if (request.action === 'reindex') {
+            assert.equal(tabId, 1);
             pageMessages.push(request);
             if (!contentScript) runtime.lastError = { message: 'No content script' };
             options({ status: 'ok', status_code: 201 });
@@ -88,11 +119,11 @@ function browser({
           assert.equal(request.action, 'getPageURL');
           assert.equal(options.frameId, 0);
           if (!contentScript) throw new Error('No content script');
-          return { url: canonicalURL };
+          return { url: tabId === 1 ? canonicalURL : tabs.find((tab) => tab.id === tabId).url };
         },
       },
       storage: {
-        onChanged: event,
+        onChanged: { addListener: (fn) => (onStorageChanged = fn) },
         session: sessionAvailable
           ? {
               get: async (key) => structuredClone({ [key]: sessionData[key] }),
@@ -111,7 +142,14 @@ function browser({
       action: {
         setBadgeText: action,
         setBadgeBackgroundColor: action,
-        setIcon: action,
+        setIcon: ({ tabId, imageData }, callback) => {
+          icons.set(tabId, structuredClone(imageData));
+          callback?.();
+        },
+        setTitle: ({ tabId, title }, callback) => {
+          titles.set(tabId, title);
+          callback?.();
+        },
       },
       webRequest: {
         onHeadersReceived: {
@@ -124,7 +162,10 @@ function browser({
     },
     fetch: async (url, options) => {
       const parsed = new URL(url);
-      if (parsed.protocol === 'chrome-extension:') throw new Error('No icon in test');
+      if (parsed.protocol === 'chrome-extension:') {
+        await iconsReady;
+        return new Response('icon');
+      }
       if (parsed.pathname === '/api/rules') return Response.json(rules);
       if (parsed.pathname === '/api/add') {
         documents.push(JSON.parse(options.body));
@@ -153,6 +194,9 @@ function browser({
     lookups,
     pdfDocuments,
     pageMessages,
+    icons,
+    titles,
+    flush,
     tab,
     message,
     activate: () => onActivated({ tabId: 1 }),
@@ -164,6 +208,12 @@ function browser({
         responseHeaders: [{ name: 'Content-Type', value: contentType }],
       }),
     indexCurrent: () => message({ action: 'indexCurrentPage' }),
+    async setIndexingEnabled(value) {
+      const oldValue = storage.indexingEnabled;
+      storage.indexingEnabled = value;
+      await onStorageChanged({ indexingEnabled: { oldValue, newValue: value } }, 'local');
+      await flush();
+    },
     async complete() {
       await onUpdated(tab.id, { status: 'complete' }, { ...tab });
       await flush();
@@ -194,6 +244,96 @@ function browser({
       }),
   };
 }
+
+test('disabled automatic indexing uses only a thick red border and an explicit tooltip', async () => {
+  const b = browser({ indexingEnabled: false });
+  await b.activate();
+  await b.flush();
+  for (const size of [16, 32]) {
+    const strokes = b.icons.get(1)[size].strokes;
+    assert.equal(strokes.length, 1, 'only a border is drawn over the icon');
+    const border = strokes[0];
+    assert.equal(border.color, '#dc2626');
+    assert.equal(border.width, size === 16 ? 3 : 6);
+    assert.equal(border.path, undefined, 'the disabled icon has no diagonal lines');
+    assert.deepEqual(border.rect, size === 16 ? [1.5, 1.5, 13, 13] : [3, 3, 26, 26]);
+  }
+  assert.equal(b.titles.get(1), 'Hister: automatic indexing is off');
+});
+
+test('saved automatic indexing state is restored without a tab event', async () => {
+  for (const indexingEnabled of [false, true]) {
+    const b = browser({ indexingEnabled });
+    await b.flush();
+    for (const tabId of [undefined, 1]) {
+      assert.ok(b.icons.has(tabId), 'initialize the default icon and existing tabs');
+      assert.equal(b.icons.get(tabId)[16].strokes.length > 0, !indexingEnabled);
+      assert.equal(
+        b.titles.get(tabId),
+        indexingEnabled ? 'Hister' : 'Hister: automatic indexing is off',
+      );
+    }
+  }
+});
+
+test('toggling automatic indexing refreshes all windows, inactive tabs and internal pages', async () => {
+  const b = browser({
+    rules: { skip: ['/blocked'] },
+    otherTabs: [
+      { id: 2, url: 'https://example.com/other', active: true, windowId: 2 },
+      { id: 3, url: 'https://example.com/blocked', active: false, windowId: 1 },
+      { id: 4, url: 'chrome://newtab/', active: true, windowId: 3 },
+    ],
+  });
+  await b.flush();
+  for (const enabled of [false, true, false, undefined]) {
+    await b.setIndexingEnabled(enabled);
+    for (const tabId of [undefined, 1, 2, 3, 4]) {
+      const icon = b.icons.get(tabId)[16];
+      assert.equal(icon.strokes.length > 0, enabled === false, `tab ${tabId}`);
+      assert.equal(
+        b.titles.get(tabId),
+        enabled === false ? 'Hister: automatic indexing is off' : 'Hister',
+      );
+      if (enabled !== false) {
+        if (tabId === 3) {
+          assert.equal(icon.data[0], icon.data[1], 'excluded page stays grey');
+          assert.equal(icon.data[1], icon.data[2]);
+          assert.equal(icon.data[3], 128);
+        } else {
+          assert.deepEqual([...icon.data.slice(0, 4)], [20, 100, 200, 255]);
+        }
+      }
+    }
+  }
+});
+
+test('manual HTML and PDF indexing preserve the automatic indexing off indicator', async () => {
+  for (const sourceURL of ['https://example.com/article', 'https://example.com/paper.pdf']) {
+    const b = browser({ sourceURL, indexingEnabled: false });
+    await b.flush();
+    const disabledIcon = b.icons.get(1);
+    const result = sourceURL.endsWith('.pdf') ? await b.indexCurrent() : await b.submit(true);
+    assert.equal(result.status_code, 201);
+    await b.flush();
+    assert.deepEqual(b.icons.get(1), disabledIcon);
+    assert.equal(b.titles.get(1), 'Hister: automatic indexing is off');
+  }
+});
+
+test('disabling indexing while icons load cannot restore an enabled icon', async () => {
+  let release;
+  const iconsReady = new Promise((resolve) => (release = resolve));
+  const b = browser({ iconsReady });
+  const activation = b.activate();
+  const change = b.setIndexingEnabled(false);
+  release();
+  await Promise.all([activation, change]);
+  for (const tabId of [undefined, 1]) {
+    assert.ok(b.icons.get(tabId)[16].strokes.length > 0);
+    assert.equal(b.titles.get(tabId), 'Hister: automatic indexing is off');
+  }
+});
 
 test('automatic canonical submissions respect rules for both visited and canonical URLs', async () => {
   const cases = [
@@ -232,6 +372,8 @@ test('visited URL rules continue to ignore fragments', async () => {
 test('indexed badges look up the canonical URL even with automatic indexing disabled', async () => {
   for (const indexingEnabled of [true, false]) {
     const b = browser({ indexingEnabled });
+    await b.flush();
+    b.lookups.length = 0;
     await b.activate();
     assert.deepEqual(b.lookups, [b.canonicalURL]);
   }
@@ -239,6 +381,8 @@ test('indexed badges look up the canonical URL even with automatic indexing disa
 
 test('indexed badges fall back to the visited URL when no content script is available', async () => {
   const b = browser({ contentScript: false });
+  await b.flush();
+  b.lookups.length = 0;
   await b.activate();
   assert.deepEqual(b.lookups, [b.sourceURL]);
 });

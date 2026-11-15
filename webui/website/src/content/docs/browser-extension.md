@@ -98,6 +98,8 @@ WebEngine debugging port to a network.
 
 The extension captures visible pages, including the page title, full text, HTML, and favicon, then sends them to your Hister server via its API. Pages opened in a background tab are captured when you view them.
 
+Turn off **Automatic indexing** in the extension popup to pause automatic capture. A thick red border around the toolbar icon and the tooltip "Hister: automatic indexing is off" indicate this setting. You can still index pages manually.
+
 When a page provides a `<link rel="canonical">` URL, the extension uses it for indexing if it is an HTTP or HTTPS URL with exactly the same hostname as the visited page. Relative canonical URLs are resolved against the document base URL. Other domains and subdomains, invalid URLs, and URLs containing credentials are ignored. URL fragments are removed. Automatic indexing checks allow and skip rules against both the visited URL and the canonical URL.
 
 While a page remains visible, the extension checks for changes at intervals starting at 30 seconds. The interval doubles when nothing changes, up to five minutes. Navigation within a page waits for one second of quiet before a check, and automatic checks and submissions remain at least 30 seconds apart within that page. Rapid navigation can therefore capture only the latest page state.

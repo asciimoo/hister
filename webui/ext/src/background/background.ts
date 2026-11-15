@@ -55,10 +55,10 @@ function clearBadge(tabId: number) {
 
 // --- Icon helpers ---
 
-let greyIconCache: Record<number, ImageData> | null = null;
-let normalIconCache: Record<number, ImageData> | null = null;
+type IconState = 'normal' | 'grey' | 'disabled';
+const iconCache: Partial<Record<IconState, Promise<Record<number, ImageData>>>> = {};
 
-async function buildIcons(grey: boolean): Promise<Record<number, ImageData>> {
+async function buildIcons(state: IconState): Promise<Record<number, ImageData>> {
   const response = await fetch(chrome.runtime.getURL('assets/icons/icon128.png'));
   const blob = await response.blob();
   const bitmap = await createImageBitmap(blob);
@@ -67,8 +67,14 @@ async function buildIcons(grey: boolean): Promise<Record<number, ImageData>> {
     const canvas = new OffscreenCanvas(size, size);
     const ctx = canvas.getContext('2d')!;
     ctx.drawImage(bitmap, 0, 0, size, size);
+    if (state === 'disabled') {
+      ctx.strokeStyle = '#dc2626';
+      ctx.lineWidth = (size / 16) * 3;
+      const inset = ctx.lineWidth / 2;
+      ctx.strokeRect(inset, inset, size - ctx.lineWidth, size - ctx.lineWidth);
+    }
     const imageData = ctx.getImageData(0, 0, size, size);
-    if (grey) {
+    if (state === 'grey') {
       for (let i = 0; i < imageData.data.length; i += 4) {
         const lum =
           imageData.data[i] * 0.299 + imageData.data[i + 1] * 0.587 + imageData.data[i + 2] * 0.114;
@@ -80,25 +86,47 @@ async function buildIcons(grey: boolean): Promise<Record<number, ImageData>> {
     }
     result[size] = imageData;
   }
+  bitmap.close();
   return result;
+}
+
+function getIcons(state: IconState): Promise<Record<number, ImageData>> {
+  return (iconCache[state] ??= buildIcons(state).catch((error) => {
+    delete iconCache[state];
+    throw error;
+  }));
+}
+
+async function setIcon(tabId?: number, grey = false): Promise<void> {
+  try {
+    const [icons, disabledIcons] = await Promise.all([
+      getIcons(grey ? 'grey' : 'normal'),
+      getIcons('disabled'),
+    ]);
+    // Read after rendering so an in-flight update cannot hide a newly disabled setting.
+    const data = await chrome.storage.local.get(['indexingEnabled']);
+    const disabled = data['indexingEnabled'] === false;
+    chrome.action.setTitle(
+      {
+        title: disabled ? 'Hister: automatic indexing is off' : 'Hister',
+        tabId,
+      },
+      () => void chrome.runtime.lastError,
+    );
+    chrome.action.setIcon(
+      { imageData: disabled ? disabledIcons : icons, tabId },
+      () => void chrome.runtime.lastError,
+    );
+  } catch (_) {}
 }
 
 async function setGreyIcon(tabId: number): Promise<void> {
   clearBadge(tabId);
-  try {
-    if (!greyIconCache) greyIconCache = await buildIcons(true);
-    chrome.action.setIcon({ imageData: greyIconCache, tabId }, () => void chrome.runtime.lastError);
-  } catch (_) {}
+  await setIcon(tabId, true);
 }
 
-async function setNormalIcon(tabId: number): Promise<void> {
-  try {
-    if (!normalIconCache) normalIconCache = await buildIcons(false);
-    chrome.action.setIcon(
-      { imageData: normalIconCache, tabId },
-      () => void chrome.runtime.lastError,
-    );
-  } catch (_) {}
+async function setNormalIcon(tabId?: number): Promise<void> {
+  await setIcon(tabId);
 }
 
 // --- Per-tab sensitive-content rejection state ---
@@ -363,6 +391,7 @@ async function updateTabIcon(tabId: number, url: string): Promise<void> {
     url.startsWith('moz-extension://') ||
     url.startsWith('chrome-extension://')
   ) {
+    await setNormalIcon(tabId);
     return;
   }
   const data = await chrome.storage.local.get([
@@ -611,6 +640,14 @@ async function indexPDFTab(
 
 // --- Tab listeners ---
 
+async function refreshIcons(): Promise<void> {
+  await setNormalIcon();
+  try {
+    const tabs = await chrome.tabs.query({});
+    await Promise.all(tabs.map((tab) => updateTabIcon(tab.id!, tab.url ?? '')));
+  } catch (_) {}
+}
+
 chrome.tabs.onActivated.addListener(async ({ tabId }) => {
   try {
     const tab = await chrome.tabs.get(tabId);
@@ -648,6 +685,10 @@ chrome.storage.onChanged.addListener(async (changes, area) => {
   if (connectionChanged) {
     indexingRulesCache = null;
     indexingRulesFetch = null;
+  }
+  if ('indexingEnabled' in changes) {
+    await refreshIcons();
+    return;
   }
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -909,3 +950,5 @@ function cjsMsgHandler(request, sender, sendResponse) {
 }
 
 chrome.runtime.onMessage.addListener(cjsMsgHandler);
+
+void refreshIcons();
