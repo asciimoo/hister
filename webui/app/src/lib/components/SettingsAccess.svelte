@@ -111,6 +111,8 @@
         receivedCode = false;
       }
       pending = current.pending_access;
+      needsLogin = false;
+      problem = '';
       uncertain = false;
     } catch (error) {
       if (closed) return;

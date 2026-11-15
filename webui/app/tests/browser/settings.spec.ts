@@ -539,6 +539,88 @@ test('fresh authentication failures preserve pending access and offer the requir
   await expect(page.getByText('New OAuth flow started')).toBeVisible();
 });
 
+test('access status refresh clears login errors and resumes rollback polling', async ({ page }) => {
+  await page.clock.install();
+  const { pending, state, completions, applications } = await pendingAccessAPI(page);
+  pending.authentication = 'credentials';
+  delete pending.confirmation_token;
+  let confirmations = 0;
+  await page.route('**/api/settings/confirm', (route) => {
+    confirmations++;
+    return route.fulfill({
+      status: 403,
+      json: {
+        code: 'fresh_authentication_required',
+        error: 'Sign in again using the temporary configuration before confirming access.',
+      },
+    });
+  });
+  await activateAccess(page);
+  await page.getByRole('button', { name: 'Confirm working access', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('Sign in again');
+
+  await page.getByRole('button', { name: 'Check status', exact: true }).click();
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  // Reading status does not prove fresh authentication or confirm the change.
+  await expect(page.getByRole('link', { name: 'Sign in again', exact: true })).toBeVisible();
+  await expect(page.getByRole('timer')).toBeVisible();
+  delete state.pending_access;
+  await page.clock.fastForward(3000);
+  await expect(page.getByRole('status')).toContainText(
+    'No access change is awaiting confirmation.',
+  );
+  expect(confirmations).toBe(1);
+  expect(completions).toEqual([]);
+  expect(applications).toHaveLength(1);
+});
+
+for (const denial of ['configuration', 401, 403]) {
+  test(`access polling after ${denial} denial resumes only after a complete status read`, async ({
+    page,
+  }) => {
+    await page.clock.install();
+    const { state, publicConfig, completions, applications } = await pendingAccessAPI(page);
+    await activateAccess(page);
+    const refresh = page.getByRole('button', { name: 'Check status', exact: true });
+    await expect(refresh).toBeEnabled();
+    publicConfig.canConfigure = denial !== 'configuration';
+    let status = typeof denial === 'number' ? denial : 200;
+    let reads = 0;
+    await page.route('**/api/settings', (route) => {
+      reads++;
+      return route.fulfill({
+        status,
+        json: status === 200 ? state : { error: 'Settings unavailable.' },
+      });
+    });
+    await refresh.click();
+    await expect(page.getByRole('alert')).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Sign in again', exact: true })).toBeVisible();
+
+    // Public configuration can succeed while the protected settings read still fails.
+    publicConfig.canConfigure = true;
+    status = 503;
+    await refresh.click();
+    await expect(page.getByRole('alert')).toContainText('Could not read the pending change');
+    await expect(refresh).toBeEnabled();
+    const readsBefore = reads;
+    await page.clock.fastForward(3000);
+    expect(reads).toBe(readsBefore);
+
+    status = 200;
+    await refresh.click();
+    await expect(page.getByRole('alert')).toHaveCount(0);
+    await expect(page.getByRole('link', { name: 'Sign in again', exact: true })).toHaveCount(0);
+    delete state.pending_access;
+    await page.clock.fastForward(3000);
+    await expect(page.getByRole('status')).toContainText(
+      'No access change is awaiting confirmation.',
+    );
+    expect(completions).toEqual([]);
+    expect(applications).toHaveLength(1);
+  });
+}
+
 test('sensitive review requires explicit consent for a mixed draft before any apply', async ({
   page,
 }) => {
