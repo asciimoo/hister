@@ -53,14 +53,22 @@
   const editable = $derived(!preview && canEditSetting(field, active));
   const collection = $derived(
     field.schema.type === 'dictionary' ||
-      (field.schema.type === 'list' && field.schema.items?.type === 'object'),
+      (field.schema.type === 'list' && field.schema.items?.type === 'object')
+      ? { ...field, schema: field.schema }
+      : null,
   );
   const directories = $derived(
     !editable &&
       field.path === 'indexer.directories' &&
+      field.schema.type === 'list' &&
+      field.schema.items?.type === 'object' &&
+      Array.isArray(field.schema.items.properties) &&
       field.schema.sensitivity === 'none' &&
       (Array.isArray(active.value) || active.value === null)
-      ? ((active.value ?? []) as Record<string, unknown>[])
+      ? {
+          values: (active.value ?? []) as Record<string, unknown>[],
+          properties: field.schema.items.properties,
+        }
       : undefined,
   );
   const value = $derived(
@@ -90,9 +98,14 @@
     if (value === undefined || value === null) return 'Not available';
     if (value === '') return 'Empty';
     if (typeof value === 'boolean') return value ? 'Enabled' : 'Disabled';
-    const items = field.schema.items;
-    if (Array.isArray(value) && items?.choices)
+    if (
+      Array.isArray(value) &&
+      field.schema.type === 'list' &&
+      field.schema.items?.control === 'select'
+    ) {
+      const items = field.schema.items;
       return value.map((item) => choiceLabel(items, String(item))).join(', ') || 'Empty';
+    }
     if (typeof value === 'string') return choiceLabel(field.schema, value);
     return typeof value === 'object' ? JSON.stringify(value) : String(value);
   }
@@ -184,7 +197,7 @@
         </p>
       {:else if directories}
         <div {id} class="w-full min-w-0 space-y-3" aria-describedby={description}>
-          {#each directories as directory, index}
+          {#each directories.values as directory, index}
             <div
               role="group"
               aria-label={`${field.label} ${index + 1}`}
@@ -199,7 +212,7 @@
                 </h3>
               </div>
               <dl class="grid min-w-0 gap-x-8 gap-y-4 p-4 sm:grid-cols-2">
-                {#each field.schema.items?.properties ?? [] as property (property.name)}
+                {#each directories.properties as property (property.name)}
                   {#if property.name !== 'path'}
                     {@const member = directory[property.name]}
                     <div class="min-w-0 space-y-1">
@@ -251,7 +264,7 @@
       {:else if collection}
         <SettingsCollection
           {id}
-          {field}
+          field={collection}
           {value}
           activeValue={active.value}
           {editor}
@@ -320,7 +333,7 @@
     {/if}
     {#if editable}
       <div class="flex flex-wrap gap-2 lg:justify-end">
-        {#if field.schema.collection === 'replace' || (field.schema.type === 'string' && !field.schema.min_length && (!field.schema.choices || field.schema.choices.includes('')))}
+        {#if field.schema.collection === 'replace' || (field.schema.type === 'string' && !field.schema.min_length && (field.schema.control !== 'select' || field.schema.choices.includes('')))}
           <Button
             type="button"
             variant="link"

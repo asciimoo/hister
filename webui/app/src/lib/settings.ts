@@ -1,30 +1,67 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { apiFetch } from '#lib/api.js';
 
-export interface SettingSchema {
-  type: string;
-  control: string;
-  collection: string;
-  sensitivity: string;
-  min?: number;
-  max?: number;
-  max_length?: number;
-  min_length?: number;
-  max_items?: number;
-  choices?: string[];
-  choice_labels?: Record<string, string>;
-  key_label?: string;
-  value_label?: string;
-  secret_scope?: string[];
-  items?: SettingSchema;
-  properties?: {
-    name: string;
-    label: string;
-    description?: string;
-    required?: boolean;
-    schema: SettingSchema;
-  }[];
-}
+// Keep the supported shapes aligned with config.SettingSchema.ValidateDefinition.
+// HTTP responses still need the runtime checks in supportsControl before editing.
+export type SettingSchema =
+  | ({
+      type: 'string';
+      collection: 'none';
+      max_length?: number;
+      min_length?: number;
+    } & (
+      | { control: 'text'; sensitivity: 'none' }
+      | {
+          control: 'select';
+          sensitivity: 'none';
+          choices: string[];
+          choice_labels?: Record<string, string>;
+        }
+      | { control: 'secret'; sensitivity: 'secret' }
+      | { control: 'url'; sensitivity: 'none' | 'url' }
+    ))
+  | { type: 'boolean'; control: 'switch'; collection: 'none'; sensitivity: 'none' }
+  | {
+      type: 'integer' | 'number';
+      control: 'number';
+      collection: 'none';
+      sensitivity: 'none';
+      min?: number;
+      max?: number;
+    }
+  | {
+      type: 'list';
+      control: 'list';
+      collection: 'replace';
+      sensitivity: 'none' | 'mixed' | 'secret';
+      max_items?: number;
+      items: SettingSchema;
+    }
+  | {
+      type: 'dictionary';
+      control: 'dictionary';
+      collection: 'replace';
+      sensitivity: 'none' | 'mixed' | 'secret';
+      max_items?: number;
+      key_label?: string;
+      value_label?: string;
+      items: SettingSchema;
+    }
+  | {
+      type: 'object';
+      control: 'object';
+      collection: 'none' | 'replace';
+      sensitivity: 'none' | 'mixed';
+      secret_scope?: string[];
+      properties: {
+        name: string;
+        label: string;
+        description?: string;
+        required?: boolean;
+        schema: SettingSchema;
+      }[];
+    }
+  | { type: 'unknown'; control: 'none'; collection: 'unknown'; sensitivity: 'unknown' };
 
 export interface SettingField {
   path: string;
@@ -56,10 +93,7 @@ export function emptySettingValue(schema: SettingSchema): unknown {
   if (schema.sensitivity === 'secret' || schema.sensitivity === 'url') return { action: 'clear' };
   if (schema.type === 'object')
     return Object.fromEntries(
-      (schema.properties ?? []).map((property) => [
-        property.name,
-        emptySettingValue(property.schema),
-      ]),
+      schema.properties.map((property) => [property.name, emptySettingValue(property.schema)]),
     );
   if (schema.type === 'list') return [];
   if (schema.type === 'dictionary') return {};
@@ -69,7 +103,7 @@ export function emptySettingValue(schema: SettingSchema): unknown {
 }
 
 export function choiceLabel(schema: SettingSchema, value: string): string {
-  return schema.choice_labels?.[value] ?? value;
+  return schema.control === 'select' ? (schema.choice_labels?.[value] ?? value) : value;
 }
 
 export interface SettingValue {
@@ -307,23 +341,53 @@ export function canEditSetting(field: SettingField, value: SettingValue): boolea
 }
 
 function supportsControl(schema: SettingSchema): boolean {
+  if (!schema || typeof schema !== 'object') return false;
   if (!['none', 'secret', 'url', 'mixed'].includes(schema.sensitivity)) return false;
   if (schema.type === 'list' || schema.type === 'dictionary')
     return (
       schema.control === schema.type &&
       schema.collection === 'replace' &&
+      ['none', 'mixed', 'secret'].includes(schema.sensitivity) &&
       !!schema.items &&
+      (schema.items.sensitivity === 'none' || schema.sensitivity !== 'none') &&
       supportsControl(schema.items)
     );
   if (schema.type === 'object')
     return (
       schema.control === 'object' &&
       ['none', 'replace'].includes(schema.collection) &&
-      !!schema.properties?.length &&
-      schema.properties.every((property) => supportsControl(property.schema))
+      ['none', 'mixed'].includes(schema.sensitivity) &&
+      Array.isArray(schema.properties) &&
+      !!schema.properties.length &&
+      schema.properties.every(
+        (property) =>
+          !!property &&
+          supportsControl(property.schema) &&
+          (property.schema.sensitivity === 'none' || schema.sensitivity === 'mixed'),
+      )
     );
+  if (schema.collection !== 'none') return false;
+  if (schema.type === 'string') {
+    switch (schema.control) {
+      case 'text':
+        return schema.sensitivity === 'none';
+      case 'select':
+        return (
+          schema.sensitivity === 'none' &&
+          Array.isArray(schema.choices) &&
+          schema.choices.length > 0
+        );
+      case 'secret':
+        return schema.sensitivity === 'secret';
+      case 'url':
+        return schema.sensitivity === 'none' || schema.sensitivity === 'url';
+      default:
+        return false;
+    }
+  }
   return (
-    schema.collection === 'none' &&
-    ['text', 'number', 'select', 'switch', 'secret', 'url'].includes(schema.control)
+    schema.sensitivity === 'none' &&
+    ((schema.type === 'boolean' && schema.control === 'switch') ||
+      ((schema.type === 'integer' || schema.type === 'number') && schema.control === 'number'))
   );
 }

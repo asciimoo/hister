@@ -68,7 +68,7 @@
     onUndoRemoval,
   }: {
     id: string;
-    field: SettingField;
+    field: SettingField & { schema: Extract<SettingSchema, { type: 'list' | 'dictionary' }> };
     value: unknown;
     activeValue: unknown;
     editor: SettingItemEditor | null;
@@ -81,26 +81,38 @@
     onUndoRemoval: () => void;
   } = $props();
   const dictionary = $derived(field.schema.type === 'dictionary');
-  const schema = $derived(field.schema.items!);
+  const schema = $derived(field.schema.items);
   const entries = $derived(toEntries(value));
   const activeEntries = $derived(toEntries(activeValue));
   const current = $derived(editor?.path === field.path ? editor : null);
   const presentation = $derived(presentations[field.path] ?? { noun: 'item' });
   const noun = $derived(presentation.noun);
-  const keyLabel = $derived(field.schema.key_label ?? 'Name');
-  const valueLabel = $derived(field.schema.value_label ?? 'Value');
-  const primarySchema = $derived({
-    ...schema,
-    properties: schema.properties?.filter((property) =>
-      presentation.primaryProperties?.includes(property.name),
-    ),
-  });
-  const filtersSchema = $derived({
-    ...schema,
-    properties: schema.properties?.filter(
-      (property) => !presentation.primaryProperties?.includes(property.name),
-    ),
-  });
+  const keyLabel = $derived(
+    field.schema.type === 'dictionary' ? (field.schema.key_label ?? 'Name') : 'Name',
+  );
+  const valueLabel = $derived(
+    field.schema.type === 'dictionary' ? (field.schema.value_label ?? 'Value') : 'Value',
+  );
+  const primarySchema = $derived(
+    schema.type === 'object'
+      ? {
+          ...schema,
+          properties: schema.properties.filter((property) =>
+            presentation.primaryProperties?.includes(property.name),
+          ),
+        }
+      : schema,
+  );
+  const filtersSchema = $derived(
+    schema.type === 'object'
+      ? {
+          ...schema,
+          properties: schema.properties.filter(
+            (property) => !presentation.primaryProperties?.includes(property.name),
+          ),
+        }
+      : schema,
+  );
   let nameError = $state('');
 
   function toEntries(value: unknown): [string, unknown][] {
@@ -161,18 +173,17 @@
     if (!['none', 'mixed'].includes(schema.sensitivity)) return 'Value hidden';
     if (schema.type === 'object') {
       const item = (value ?? {}) as Record<string, unknown>;
-      return (schema.properties ?? [])
+      return schema.properties
         .map(
           (property) => `${property.label}: ${valueSummary(property.schema, item[property.name])}`,
         )
         .join(' · ');
     }
-    const items = schema.items;
-    if (schema.type === 'list' && items && Array.isArray(value))
-      return value.map((item) => valueSummary(items, item)).join(', ');
-    if (schema.type === 'dictionary' && items)
+    if (schema.type === 'list' && Array.isArray(value))
+      return value.map((item) => valueSummary(schema.items, item)).join(', ');
+    if (schema.type === 'dictionary')
       return Object.entries((value ?? {}) as Record<string, unknown>)
-        .map(([name, item]) => `${name}: ${valueSummary(items, item)}`)
+        .map(([name, item]) => `${name}: ${valueSummary(schema.items, item)}`)
         .join(' · ');
     if (schema.sensitivity !== 'none') return 'Value hidden';
     if (typeof value === 'boolean') return value ? 'Enabled' : 'Disabled';

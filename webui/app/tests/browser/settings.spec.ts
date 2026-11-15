@@ -2,65 +2,131 @@
 import { expect, test, type Page } from '@playwright/test';
 import { mockAPI } from './fixtures';
 import type {
+  SettingSchema,
+  SettingField,
   SettingsDraft,
   SettingsState,
   SettingsReview,
   PendingAccess,
 } from '../../src/lib/settings';
 
+test('settings schema definitions are checked by TypeScript', async () => {
+  const scalar = { collection: 'none', sensitivity: 'none' } as const;
+  const text = { ...scalar, type: 'string', control: 'text' } satisfies SettingSchema;
+  const list = {
+    ...scalar,
+    type: 'list',
+    control: 'list',
+    collection: 'replace',
+    items: text,
+  } satisfies SettingSchema;
+  const object = {
+    ...scalar,
+    type: 'object',
+    control: 'object',
+    properties: [{ name: 'title', label: 'Title', schema: text }],
+  } satisfies SettingSchema;
+  // @ts-expect-error Lists require an item schema.
+  ({ ...scalar, type: 'list', control: 'list', collection: 'replace' }) satisfies SettingSchema;
+  // @ts-expect-error Objects require property schemas.
+  ({ ...scalar, type: 'object', control: 'object' }) satisfies SettingSchema;
+  // @ts-expect-error A switch edits booleans, not strings.
+  ({ ...text, control: 'switch' }) satisfies SettingSchema;
+  // @ts-expect-error Secret values require a secret control.
+  ({ ...text, sensitivity: 'secret' }) satisfies SettingSchema;
+  // @ts-expect-error Collections must explicitly replace their contents.
+  ({ ...list, collection: 'none' }) satisfies SettingSchema;
+  // @ts-expect-error Scalar settings cannot have item schemas.
+  ({ ...text, items: text }) satisfies SettingSchema;
+  // @ts-expect-error Select controls require choices.
+  ({ ...text, control: 'select' }) satisfies SettingSchema;
+  // @ts-expect-error Numeric bounds do not apply to strings.
+  ({ ...text, min: 1 }) satisfies SettingSchema;
+  // @ts-expect-error Object properties must include their own schema.
+  ({ ...object, properties: [{ name: 'title', label: 'Title' }] }) satisfies SettingSchema;
+
+  const ts = await import('typescript');
+  const { fileURLToPath } = await import('node:url');
+  const program = ts.createProgram(
+    [
+      fileURLToPath(import.meta.url),
+      fileURLToPath(new URL('../../.svelte-kit/non-ambient.d.ts', import.meta.url)),
+    ],
+    {
+      strict: true,
+      noEmit: true,
+      skipLibCheck: true,
+      target: ts.ScriptTarget.ESNext,
+      module: ts.ModuleKind.ESNext,
+      moduleResolution: ts.ModuleResolutionKind.Bundler,
+      types: ['svelte', '@sveltejs/kit'],
+    },
+  );
+  expect(
+    ts.formatDiagnostics(ts.getPreEmitDiagnostics(program), {
+      getCanonicalFileName: (file) => file,
+      getCurrentDirectory: () => process.cwd(),
+      getNewLine: () => '\n',
+    }),
+  ).toBe('');
+});
+
 async function settingsAPI(page: Page, config: Record<string, unknown> = {}) {
   const publicConfig: Record<string, unknown> = { canConfigure: true, ...config };
   await mockAPI(page, { config: publicConfig });
+  const scalar = { collection: 'none', sensitivity: 'none' } as const;
   const fields = [
     {
       path: 'app.title',
       group: 'Appearance',
       label: 'Title',
-      type: 'string',
-      control: 'text',
+      schema: { ...scalar, type: 'string', control: 'text' } satisfies SettingSchema,
       default: 'Hister',
     },
     {
       path: 'app.subtitle',
       group: 'Appearance',
       label: 'Subtitle',
-      type: 'string',
-      control: 'text',
+      schema: { ...scalar, type: 'string', control: 'text' } satisfies SettingSchema,
       default: '',
     },
     {
       path: 'app.snippet_length',
       group: 'Search behavior',
       label: 'Snippet length',
-      type: 'integer',
-      control: 'number',
+      schema: {
+        ...scalar,
+        type: 'integer',
+        control: 'number',
+        min: 1,
+        max: 10000,
+      } satisfies SettingSchema,
       default: 300,
-      min: 1,
-      max: 10000,
     },
     {
       path: 'app.color_scheme',
       group: 'Appearance',
       label: 'Color scheme',
-      type: 'string',
-      control: 'select',
+      schema: {
+        ...scalar,
+        type: 'string',
+        control: 'select',
+        choices: ['automatic', 'light', 'dark'],
+      } satisfies SettingSchema,
       default: 'automatic',
-      choices: ['automatic', 'light', 'dark'],
     },
     {
       path: 'app.show_suggestions',
       group: 'Search behavior',
       label: 'Show suggestions',
-      type: 'boolean',
-      control: 'switch',
+      schema: { ...scalar, type: 'boolean', control: 'switch' } satisfies SettingSchema,
       default: false,
     },
     {
       path: 'server.address',
       group: 'Connection',
       label: 'Listen address',
-      type: 'string',
-      control: 'text',
+      schema: { ...scalar, type: 'string', control: 'text' } satisfies SettingSchema,
       default: '127.0.0.1:4433',
     },
   ].map((field) => ({
@@ -70,15 +136,7 @@ async function settingsAPI(page: Page, config: Record<string, unknown> = {}) {
     label: field.label,
     description: `${field.label} description.`,
     default: field.default,
-    schema: {
-      type: field.type,
-      control: field.control,
-      collection: 'none',
-      sensitivity: 'none',
-      min: field.min,
-      max: field.max,
-      choices: field.choices,
-    },
+    schema: field.schema,
     effect: 'runtime',
     requires_confirmation: field.path === 'server.address',
     read_only_reason:
@@ -129,11 +187,13 @@ async function ordinarySettingsAPI(page: Page) {
         ? 'Public HTTP or HTTPS destination. Include {query} once. Never include credentials.'
         : `${label} applies after saving.`,
       schema: {
-        type: url ? 'string' : number ? 'integer' : 'boolean',
-        control: url ? 'url' : number ? 'number' : 'switch',
+        ...(url
+          ? { type: 'string', control: 'url' }
+          : number
+            ? { type: 'integer', control: 'number', min: 1, max: 8796093022207 }
+            : { type: 'boolean', control: 'switch' }),
         sensitivity: 'none',
         collection: 'none',
-        ...(number ? { min: 1, max: 8796093022207 } : {}),
       },
       effect: 'runtime',
       requires_confirmation: false,
@@ -1538,9 +1598,18 @@ test('web hotkeys retain invalid rows and distinguish clear, reset and source lo
 
 async function extractionSettingsAPI(page: Page) {
   const { state } = await settingsAPI(page);
-  const ordinary = { collection: 'none', sensitivity: 'none' };
-  const secret = { type: 'string', control: 'secret', collection: 'none', sensitivity: 'secret' };
-  const definitions = [
+  const ordinary = { collection: 'none', sensitivity: 'none' } as const;
+  const secret = {
+    type: 'string',
+    control: 'secret',
+    collection: 'none',
+    sensitivity: 'secret',
+  } satisfies SettingSchema;
+  const definitions: (Pick<SettingField, 'path' | 'label' | 'schema'> & {
+    value: unknown;
+    effect?: string;
+    readOnly?: string;
+  })[] = [
     {
       path: 'extractors.ytdlp.enable',
       label: 'Enable Ytdlp',
@@ -2058,6 +2127,66 @@ test('settings rows align controls on desktop and stack them on mobile', async (
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 
+for (const [name, schema] of Object.entries({
+  'unknown type': { type: 'future', control: 'text', collection: 'none', sensitivity: 'none' },
+  'mismatched control': {
+    type: 'string',
+    control: 'switch',
+    collection: 'none',
+    sensitivity: 'none',
+  },
+  'unprotected secret': {
+    type: 'string',
+    control: 'text',
+    collection: 'none',
+    sensitivity: 'secret',
+  },
+  'missing list items': {
+    type: 'list',
+    control: 'list',
+    collection: 'replace',
+    sensitivity: 'none',
+  },
+  'missing object properties': {
+    type: 'object',
+    control: 'object',
+    collection: 'none',
+    sensitivity: 'none',
+  },
+})) {
+  test(`unsupported settings metadata stays read only: ${name}`, async ({ page }) => {
+    const { state } = await settingsAPI(page);
+    const path = schema.type === 'list' ? 'indexer.directories' : state.fields[0].path;
+    // Exercise an untrusted response without claiming it satisfies SettingSchema.
+    await page.route('**/api/settings', (route) =>
+      route.fulfill({
+        json: {
+          ...state,
+          fields: [{ ...state.fields[0], path, schema }],
+          values: [
+            {
+              ...state.values[0],
+              path,
+              value: schema.type === 'list' ? [] : 'stored-value',
+              secret_present: true,
+            },
+          ],
+        },
+      }),
+    );
+    await page.goto('/settings');
+    const field = page.getByRole('region', { name: 'Title', exact: true });
+    for (const role of ['textbox', 'combobox', 'spinbutton', 'switch'] as const)
+      await expect(field.getByRole(role)).toHaveCount(0);
+    await expect(field).toContainText('Read only');
+    await expect(page.getByRole('button', { name: 'Save and apply', exact: true })).toBeDisabled();
+    if (schema.sensitivity === 'secret') {
+      await expect(field).toContainText('Value stored (hidden)');
+      await expect(field).not.toContainText('stored-value');
+    }
+  });
+}
+
 test('fixed settings show readable values without editing controls and keep secrets hidden', async ({
   page,
 }) => {
@@ -2074,7 +2203,7 @@ test('fixed settings show readable values without editing controls and keep secr
       ...state.fields[0],
       label,
       path,
-      schema: { type: 'string', control: 'text', collection: 'none', sensitivity: 'secret' },
+      schema: { type: 'string', control: 'secret', collection: 'none', sensitivity: 'secret' },
     });
     state.values.push({
       ...state.values[0],
@@ -2116,7 +2245,7 @@ test('long descriptions and reference values fit within settings rows', async ({
     path: 'app.directory',
     label: 'Document storage directory',
     description,
-    schema: { type: 'string', control: 'none', collection: 'none', sensitivity: 'none' },
+    schema: { type: 'string', control: 'text', collection: 'none', sensitivity: 'none' },
   });
   state.values.push({ ...state.values[0], path: 'app.directory', value, editable: false });
   await page.setViewportSize({ width: isMobile ? 375 : 1024, height: 800 });
@@ -3250,15 +3379,25 @@ test('leaving an unsaved draft through the home link warns only once', async ({ 
 
 async function indexerSettingsAPI(page: Page) {
   const { state } = await settingsAPI(page);
-  const text = { type: 'string', control: 'text', collection: 'none', sensitivity: 'none' };
-  const toggle = { type: 'boolean', control: 'switch', collection: 'none', sensitivity: 'none' };
+  const text = {
+    type: 'string',
+    control: 'text',
+    collection: 'none',
+    sensitivity: 'none',
+  } satisfies SettingSchema;
+  const toggle = {
+    type: 'boolean',
+    control: 'switch',
+    collection: 'none',
+    sensitivity: 'none',
+  } satisfies SettingSchema;
   const list = {
     type: 'list',
     control: 'list',
     collection: 'replace',
     sensitivity: 'none',
     items: text,
-  };
+  } satisfies SettingSchema;
   for (const field of [
     {
       path: 'indexer.languages',
@@ -3317,7 +3456,7 @@ async function indexerSettingsAPI(page: Page) {
         },
       },
     },
-  ]) {
+  ] satisfies Pick<SettingField, 'path' | 'label' | 'schema' | 'default'>[]) {
     state.fields.push({
       ...field,
       category: 'indexer',
@@ -3635,16 +3774,21 @@ test('language names describe active and locked selections', async ({ page }) =>
 
 async function crawlerSettingsAPI(page: Page) {
   const { state } = await settingsAPI(page);
-  const text = { type: 'string', control: 'text', collection: 'none', sensitivity: 'none' };
-  const secret = { ...text, control: 'secret', sensitivity: 'secret' };
+  const text = {
+    type: 'string',
+    control: 'text',
+    collection: 'none',
+    sensitivity: 'none',
+  } satisfies SettingSchema;
+  const secret = { ...text, control: 'secret', sensitivity: 'secret' } satisfies SettingSchema;
   const number = {
     type: 'integer',
     control: 'number',
     collection: 'none',
     sensitivity: 'none',
     min: 0,
-  };
-  const fields = [
+  } satisfies SettingSchema;
+  const fields: (Pick<SettingField, 'path' | 'label' | 'schema'> & { value: unknown })[] = [
     { path: 'crawler.timeout', label: 'Crawler timeout', schema: number, value: 5 },
     {
       path: 'crawler.backend',
@@ -3738,7 +3882,7 @@ async function crawlerSettingsAPI(page: Page) {
   return state;
 }
 
-for (const type of ['list', 'dictionary']) {
+for (const type of ['list', 'dictionary'] as const) {
   test(`unrecognized ${type} collections use schema summaries and keep secret drafts hidden`, async ({
     page,
   }) => {
@@ -3747,10 +3891,12 @@ for (const type of ['list', 'dictionary']) {
     const active = state.values.find((value) => value.path === field.path)!;
     field.path = active.path = 'crawler.custom_entries';
     field.label = 'Custom entries';
-    field.schema.type = field.schema.control = type;
-    field.schema.items!.properties!.find((property) => property.name === 'name')!.label =
-      'Display name';
-    field.schema.items!.properties!.find((property) => property.name === 'domain')!.label = 'Host';
+    const schema = field.schema;
+    if (schema.type !== 'list' || schema.items.type !== 'object')
+      throw new Error('Expected cookie item schema.');
+    if (type === 'dictionary') field.schema = { ...schema, type, control: type };
+    schema.items.properties.find((property) => property.name === 'name')!.label = 'Display name';
+    schema.items.properties.find((property) => property.name === 'domain')!.label = 'Host';
     if (type === 'dictionary') active.value = { primary: (active.value as unknown[])[0] };
     let saved: SettingsDraft | undefined;
     await page.route('**/api/settings/apply', async (route) => {

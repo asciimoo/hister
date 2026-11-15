@@ -50,7 +50,7 @@
     | { phase: 'review'; review: ReviewedDraft }
     | { phase: 'access'; access: AccessConfirmation };
 
-  let state = $state<SettingsState | null>(null);
+  let settings = $state<SettingsState | null>(null);
   let edits = $state<Record<string, SettingEdit>>({});
   let editor = $state<SettingItemEditor | null>(null);
   let removal = $state<SettingRemoval | null>(null);
@@ -73,7 +73,7 @@
   const access = $derived(workflow.phase === 'access' ? workflow.access : null);
   let destroyed = false;
   const sidebarLayout = new MediaQuery('(min-width: 64rem)');
-  const categories = $derived([...new Set(state?.fields.map((field) => field.category) ?? [])]);
+  const categories = $derived([...new Set(settings?.fields.map((field) => field.category) ?? [])]);
   const settingsUrl = $derived(page.shallow?.url ?? page.url);
   const requestedCategory = $derived(settingsUrl.searchParams.get('tab') ?? 'app');
   const category = $derived(
@@ -83,17 +83,17 @@
   const editCount = $derived(editedPaths.size);
   const dirty = $derived(editCount > 0);
   const conflictCount = $derived(Object.keys(conflicts).length);
-  const values = $derived(new Map(state?.values.map((value) => [value.path, value]) ?? []));
+  const values = $derived(new Map(settings?.values.map((value) => [value.path, value]) ?? []));
   const pendingValues = $derived(
-    new Map(state?.pending?.values?.map((value) => [value.path, value]) ?? []),
+    new Map(settings?.pending?.values?.map((value) => [value.path, value]) ?? []),
   );
   const localConfigFilename = $derived(
-    [...(state?.pending?.values ?? []), ...(state?.values ?? [])]
+    [...(settings?.pending?.values ?? []), ...(settings?.values ?? [])]
       .find((value) => value.source.kind === 'file' && value.source.name)
       ?.source.name?.split(/[\\/]/)
       .pop(),
   );
-  const groups = $derived(groupSettings(state?.fields ?? [], category));
+  const groups = $derived(groupSettings(settings?.fields ?? [], category));
 
   onMount(() => {
     void load();
@@ -165,7 +165,7 @@
   }
 
   function denyAccess() {
-    state = null;
+    settings = null;
     clearDraft();
     workflow = { phase: 'denied' };
     problem = 'You do not have permission to configure this instance.';
@@ -191,7 +191,7 @@
   }
 
   function reconcile(next: SettingsState) {
-    const previous = new Map(state?.values.map((value) => [value.path, value]));
+    const previous = new Map(settings?.values.map((value) => [value.path, value]));
     const current = new Map(next.values.map((value) => [value.path, value]));
     for (const path of new Set([...Object.keys(edits), ...(editor ? [editor.path] : [])])) {
       const field = next.fields.find((field) => field.path === path);
@@ -206,7 +206,7 @@
             : 'Stored secret references changed. Use the current value and reapply your edits.';
       }
     }
-    state = next;
+    settings = next;
     // A removal snapshot may contain references from the previous revision.
     removal = null;
   }
@@ -218,7 +218,7 @@
       return fetchConfig();
     });
     if (preserveDraft) reconcile(next);
-    else state = next;
+    else settings = next;
     if (next.pending_access)
       startAccess({
         destination: next.pending_access.destination_url,
@@ -268,13 +268,13 @@
         denyAccess();
         return;
       }
-      state = await retryRead(() => settingsRequest<SettingsState>());
+      settings = await retryRead(() => settingsRequest<SettingsState>());
       clearDraft();
       requireRefresh(false);
-      if (state.pending_access)
+      if (settings.pending_access)
         startAccess({
-          destination: state.pending_access.destination_url,
-          initial: state.pending_access,
+          destination: settings.pending_access.destination_url,
+          initial: settings.pending_access,
         });
       message = '';
     } catch (error) {
@@ -286,7 +286,7 @@
 
   async function refreshSettings() {
     if (busy || denied) return;
-    if (!state) {
+    if (!settings) {
       resetConfig();
       await load();
       return;
@@ -308,7 +308,7 @@
   }
 
   async function applyConfiguration() {
-    if (busy || !state || state.pending?.status !== 'changed') return;
+    if (busy || !settings || settings.pending?.status !== 'changed') return;
     const finish = beginWork('reloading');
     let reloaded = false;
     try {
@@ -403,7 +403,14 @@
   }
 
   async function finishItem(path: string, value: unknown) {
-    if (!state || busy || needsReload || state.pending || conflicts[path] || editor?.path !== path)
+    if (
+      !settings ||
+      busy ||
+      needsReload ||
+      settings.pending ||
+      conflicts[path] ||
+      editor?.path !== path
+    )
       return;
     const edit = collectionEdit(path, value);
     const draft = Object.values(edits).filter((edit) => edit.path !== path);
@@ -412,7 +419,7 @@
     let otherErrors: SettingError[] = [];
     try {
       try {
-        await settingsRequest('/validate', { revision: state.revision, edits: draft });
+        await settingsRequest('/validate', { revision: settings.revision, edits: draft });
       } catch (error) {
         // Other fields can be corrected after finishing this item.
         if (
@@ -469,7 +476,7 @@
   }
 
   function selectCategory(next: string) {
-    const url = new URL(settingsUrl);
+    const url = new URL(settingsUrl.href);
     if (next === 'app') url.searchParams.delete('tab');
     else url.searchParams.set('tab', next);
     if (url.href !== settingsUrl.href) void goto(url, { shallow: true });
@@ -506,18 +513,18 @@
 
   async function save(accepted?: ReviewedDraft) {
     if (
-      !state ||
+      !settings ||
       access ||
       busy ||
       !dirty ||
       editor ||
       needsReload ||
-      state.pending ||
+      settings.pending ||
       conflictCount
     )
       return;
     const draft: SettingsDraft = {
-      revision: state.revision,
+      revision: settings.revision,
       edits: JSON.parse(JSON.stringify(Object.values(edits))),
     };
     if (accepted && JSON.stringify(accepted.draft) !== JSON.stringify(draft)) {
@@ -528,7 +535,7 @@
     const finish = beginWork('validating');
     errors = [];
     try {
-      const details = accepted ? undefined : await readSettingsReview(draft, state.fields);
+      const details = accepted ? undefined : await readSettingsReview(draft, settings.fields);
       if (details) {
         workflow = { phase: 'review', review: { ...details, draft } };
         message = 'Review the sensitive changes before applying this draft.';
@@ -563,7 +570,7 @@
       if (error instanceof SettingsError && error.code === 'sources_changed') {
         try {
           await readActive(true);
-          if (state?.pending) problem = '';
+          if (settings?.pending) problem = '';
         } catch (readError) {
           handleError(readError);
         }
@@ -623,13 +630,13 @@
               {error.message}
             </p>{/each}
         </div>{/if}
-      {#if !state || denied}
+      {#if !settings || denied}
         <p role="status" class="text-text-brand-muted my-2 text-sm">{message}</p>
       {/if}
     </div>
     {#if access}
       <SettingsAccess {...access} onFinished={finishAccess} />
-    {:else if state && !denied}
+    {:else if settings && !denied}
       <div class="border-border-brand-muted flex min-h-0 flex-1 flex-col lg:flex-row lg:border-t">
         <div
           role="tablist"
@@ -639,7 +646,7 @@
         >
           {#each categories as item, index}
             {@const count = tabErrors(item).length}
-            {@const unsavedCount = state.fields.filter(
+            {@const unsavedCount = settings.fields.filter(
               (field) => field.category === item && editedPaths.has(field.path),
             ).length}
             {@const unsavedDescription = `Number of unsaved items: ${unsavedCount}`}
@@ -705,7 +712,7 @@
             class="bg-page-bg min-h-0 flex-1 overflow-y-auto p-4 focus:outline-none md:p-6"
           >
             <div class="w-full max-w-5xl">
-              {#if state?.pending}
+              {#if settings?.pending}
                 <div
                   role="alert"
                   aria-labelledby="configuration-warning-title"
@@ -717,11 +724,11 @@
                   />
                   <div class="min-w-0 space-y-2">
                     <h3 id="configuration-warning-title" class="text-base font-semibold">
-                      {state.pending.status === 'changed'
+                      {settings.pending.status === 'changed'
                         ? 'Configuration changes not applied'
                         : 'Configuration could not be loaded'}
                     </h3>
-                    {#if state.pending.status === 'changed'}
+                    {#if settings.pending.status === 'changed'}
                       <p>
                         The local configuration file{#if localConfigFilename}
                           {' '}(<code>{localConfigFilename}</code>){/if} has changed and needs to be reloaded.
@@ -734,7 +741,7 @@
                       >
                     {:else}
                       <p>
-                        {state.pending.status === 'unreadable'
+                        {settings.pending.status === 'unreadable'
                           ? 'The configuration file cannot be read.'
                           : 'The configuration file contains invalid settings.'} Hister is still using
                         the previously loaded settings. Fix the file, then refresh settings.
@@ -743,7 +750,7 @@
                   </div>
                 </div>
               {/if}
-              {#each tabErrors(category).filter((error) => !state?.fields.some((field) => field.path === error.path)) as error}<p
+              {#each tabErrors(category).filter((error) => !settings?.fields.some((field) => field.path === error.path)) as error}<p
                   class="text-hister-rose my-2 text-sm"
                 >
                   {error.path}: {error.message}
@@ -792,7 +799,7 @@
                             disabled={busy}
                             {editor}
                             {removal}
-                            blocked={needsReload || !!state.pending}
+                            blocked={needsReload || !!settings.pending}
                             onEditor={changeEditor}
                             onDone={(value) => finishItem(field.path, value)}
                             onRemove={(value, previous) => removeItem(field.path, value, previous)}
@@ -879,7 +886,7 @@
                     !dirty ||
                     !!editor ||
                     needsReload ||
-                    !!state.pending ||
+                    !!settings.pending ||
                     conflictCount > 0}
                   class="px-2 sm:px-4">Save and apply</Button
                 >
@@ -923,7 +930,7 @@
         {#each review.changes as change}
           <div class="border-border-brand-muted space-y-1 border-b pb-3 [overflow-wrap:anywhere]">
             <dt class="font-medium">
-              {state?.fields.find((field) => field.path === change.path)?.label ?? change.path}
+              {settings?.fields.find((field) => field.path === change.path)?.label ?? change.path}
             </dt>
             <dd>Before: {change.before}</dd>
             <dd>After: {change.after}</dd>

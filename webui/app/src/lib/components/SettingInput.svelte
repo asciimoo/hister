@@ -120,8 +120,7 @@
     aria-invalid={invalid}
     class={`${controlClass} cursor-pointer`}
   >
-    {#each schema.choices ?? [] as choice}<option value={choice}
-        >{choiceLabel(schema, choice)}</option
+    {#each schema.choices as choice}<option value={choice}>{choiceLabel(schema, choice)}</option
       >{/each}
   </select>
 {:else if schema.control === 'number'}
@@ -152,7 +151,7 @@
     aria-describedby={description}
     aria-invalid={invalid}
   />
-{:else if schema.type === 'dictionary' && schema.items}
+{:else if schema.type === 'dictionary'}
   <div
     {id}
     role="group"
@@ -208,10 +207,10 @@
         Object.hasOwn(record, '') ||
         (!!schema.max_items && Object.keys(record).length >= schema.max_items)}
       aria-label={`Add ${label} item`}
-      onclick={() => onChange({ ...record, '': empty(schema.items!) })}>Add item</Button
+      onclick={() => onChange({ ...record, '': empty(schema.items) })}>Add item</Button
     >
   </div>
-{:else if schema.type === 'list' && schema.items?.choices}
+{:else if schema.type === 'list' && schema.items.control === 'select'}
   <select
     {id}
     multiple
@@ -228,7 +227,7 @@
         >{choiceLabel(schema.items, choice)}</option
       >{/each}
   </select>
-{:else if schema.type === 'list' && schema.items?.type === 'string'}
+{:else if schema.type === 'list' && schema.items.type === 'string'}
   <textarea
     {id}
     value={items.join('\n')}
@@ -239,7 +238,7 @@
     aria-invalid={invalid}
     rows="3"
     class={`${controlClass} h-auto resize-y`}></textarea>
-{:else if schema.type === 'list' && schema.items}
+{:else if schema.type === 'list'}
   <div
     {id}
     role="group"
@@ -279,12 +278,12 @@
       size="sm"
       disabled={disabled || (!!schema.max_items && items.length >= schema.max_items)}
       aria-label={`Add ${label} item`}
-      onclick={() => onChange([...items, empty(schema.items!)])}>Add item</Button
+      onclick={() => onChange([...items, empty(schema.items)])}>Add item</Button
     >
   </div>
 {:else if schema.type === 'object'}
   <div class="w-full min-w-0 space-y-3">
-    {#each schema.properties ?? [] as property (property.name)}
+    {#each schema.properties as property (property.name)}
       {@const memberID = `${id}-${property.name}`}
       <div class="min-w-0 space-y-1">
         <div class="flex flex-wrap items-baseline gap-x-2">
