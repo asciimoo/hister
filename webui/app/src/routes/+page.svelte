@@ -13,6 +13,8 @@
     scrollTo,
     buildSearchQuery,
     parseSearchResults,
+    formatRelativeTime,
+    formatTimestamp,
     openURL,
     isIMEKeyboardEvent,
   } from '#lib/search.js';
@@ -2459,6 +2461,7 @@
                 {#each displayResults as r, i}
                   {@const state = getResultState(r.url, r.label)}
                   {@const snippetExpanded = state.snippetExpanded ?? expandSnippets}
+                  {@const updated = r.updated ?? r.added}
                   <article
                     data-result
                     class="result-card flex w-full scroll-my-[6em] gap-3 transition-colors duration-150"
@@ -2511,7 +2514,7 @@
                         class="result-meta flex max-w-full min-w-0 flex-wrap items-center gap-x-3 gap-y-1"
                       >
                         <div
-                          class="result-url-line flex max-w-full min-w-0 shrink items-center gap-3"
+                          class="result-url-line flex max-w-full min-w-0 shrink items-center gap-1.5"
                         >
                           <span
                             class="result-url-text font-inter min-w-0 overflow-hidden text-xs text-ellipsis whitespace-nowrap md:text-sm"
@@ -2522,7 +2525,26 @@
                               >{displayResultPath(r.url, r.domain)}</span
                             >
                           </span>
+                          {#if updated && updated > 0}
+                            <span
+                              aria-hidden="true"
+                              class="font-inter text-text-brand-muted/60 shrink-0 text-xs md:text-sm"
+                              >·</span
+                            >
+                            <time
+                              class="font-inter shrink-0 text-xs whitespace-nowrap md:text-sm"
+                              datetime={new Date(updated * 1000).toISOString()}
+                              title={`updated: ${formatTimestamp(updated)}`}
+                            >
+                              {formatRelativeTime(updated, true)}
+                            </time>
+                          {/if}
                           {#if !disablePreviews}
+                            <span
+                              aria-hidden="true"
+                              class="font-inter text-text-brand-muted/60 shrink-0 text-xs md:text-sm"
+                              >·</span
+                            >
                             <Button
                               data-readable
                               variant="link"

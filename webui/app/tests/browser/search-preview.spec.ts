@@ -889,10 +889,11 @@ test('connection failures remain visible and retry restores search without routi
   await expect(page.getByRole('button', { name: 'Server connected', exact: true })).toHaveCount(0);
 });
 
-test('narrow results truncate the URL while keeping Preview beside it', async ({
+test('narrow results truncate the URL while keeping the date and Preview beside it', async ({
   page,
   isMobile,
 }) => {
+  await page.clock.setFixedTime(new Date('2023-11-15T22:24:20Z'));
   const urls = [
     `${original}/${'saved-reading/'.repeat(12)}?lang=en#overview`,
     `${original}/${'reference-notes/'.repeat(12)}`,
@@ -911,6 +912,7 @@ test('narrow results truncate the URL while keeping Preview beside it', async ({
               text: 'A saved article with a long label.',
               label,
               pinned: true,
+              updated: 1700086400,
             },
           ],
           documents: [
@@ -920,6 +922,7 @@ test('narrow results truncate the URL while keeping Preview beside it', async ({
               title: 'Another article',
               domain: 'example.com',
               text: 'A saved article without a label.',
+              updated: 1700086400,
             },
           ],
           total: 2,
@@ -937,18 +940,29 @@ test('narrow results truncate the URL while keeping Preview beside it', async ({
     for (let index = 0; index < urls.length; index++) {
       const row = rows.nth(index);
       const url = row.locator('.result-url-text');
+      const date = row.locator('time');
       const previewLink = row.getByRole('link', { name: 'Preview', exact: true });
       await expect(url).toHaveAttribute('title', urls[index]);
+      await expect(date).toHaveText('11m ago');
+      await expect(date).toBeInViewport({ ratio: 1 });
       await expect(previewLink).toBeVisible();
       await expect(async () => {
         const urlBox = (await url.boundingBox())!;
+        const dateBox = (await date.boundingBox())!;
         const previewBox = (await previewLink.boundingBox())!;
         const rowBox = (await row.boundingBox())!;
         expect(
           Math.abs(urlBox.y + urlBox.height / 2 - (previewBox.y + previewBox.height / 2)),
         ).toBeLessThanOrEqual(2);
-        expect(previewBox.x).toBeGreaterThanOrEqual(urlBox.x + urlBox.width);
+        expect(
+          Math.abs(urlBox.y + urlBox.height / 2 - (dateBox.y + dateBox.height / 2)),
+        ).toBeLessThanOrEqual(2);
+        expect(dateBox.x).toBeGreaterThanOrEqual(urlBox.x + urlBox.width);
+        expect(previewBox.x).toBeGreaterThanOrEqual(dateBox.x + dateBox.width);
         expect(previewBox.x + previewBox.width).toBeLessThanOrEqual(rowBox.x + rowBox.width);
+        expect(await date.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(
+          true,
+        );
         expect(urlBox.width).toBeGreaterThan(20);
         expect(await url.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(
           true,
@@ -969,7 +983,92 @@ test('narrow results truncate the URL while keeping Preview beside it', async ({
   await expect(page.getByText('Saved article content', { exact: true })).toBeVisible();
 });
 
-test('result metadata is available in preview details instead of the result row', async ({
+test.describe('result dates', () => {
+  test.use({ timezoneId: 'UTC' });
+
+  test('relative dates keep nonzero units near month and year boundaries', async ({ page }) => {
+    await page.clock.setFixedTime(new Date('2023-11-18T22:13:20Z'));
+    await page.routeWebSocket('**/search', (socket) => {
+      socket.onMessage(() =>
+        socket.send(
+          JSON.stringify({
+            documents: ['2023-10-21T22:13:20Z', '2022-11-23T22:13:20Z'].map((date, index) => ({
+              id: `document-${index}`,
+              url: `${original}/${index}`,
+              title: `Article ${index}`,
+              domain: 'example.com',
+              updated: Date.parse(date) / 1000,
+            })),
+            total: 2,
+          }),
+        ),
+      );
+    });
+    await page.goto('/?q=article');
+    await expect(page.locator('[data-result] time')).toHaveText(['4w ago', '12mo ago']);
+  });
+
+  test('results show relative update times with exact dates on hover', async ({ page }) => {
+    await page.clock.setFixedTime(new Date('2023-11-18T22:13:20Z'));
+    await page.routeWebSocket('**/search', (socket) => {
+      socket.onMessage(() =>
+        socket.send(
+          JSON.stringify({
+            history: [
+              {
+                id: 'document-1',
+                url: original,
+                title: 'Pinned article',
+                domain: 'example.com',
+                pinned: true,
+                added: 1690000000,
+                updated: 1700086400,
+              },
+            ],
+            documents: [
+              {
+                id: 'document-2',
+                url: `${original}/legacy`,
+                title: 'Legacy article',
+                domain: 'example.com',
+                added: 1700000000,
+              },
+              {
+                id: 'document-3',
+                url: `${original}/undated`,
+                title: 'Undated article',
+                domain: 'example.com',
+              },
+            ],
+            total: 3,
+          }),
+        ),
+      );
+    });
+    await page.goto('/?q=article');
+    const rows = page.locator('[data-result]');
+    await expect(rows).toHaveCount(3);
+    await expect(rows.first().locator('.result-url-line')).toHaveText(
+      /example\.com\/article\s*·\s*3d ago\s*·\s*Preview/,
+    );
+    await expect(rows.nth(2).locator('.result-url-line')).toHaveText(
+      /example\.com\/article\/undated\s*·\s*Preview/,
+    );
+    const updated = rows.first().locator('time');
+    await expect(updated).toHaveText('3d ago');
+    await expect(updated).toHaveAttribute('datetime', '2023-11-15T22:13:20.000Z');
+    await expect(updated).toHaveAttribute('title', 'updated: 2023-11-15 22:13:20');
+    await updated.hover();
+    await expect(updated).toBeInViewport({ ratio: 1 });
+    const legacy = rows.nth(1).locator('time');
+    await expect(legacy).toHaveText('4d ago');
+    await expect(legacy).toHaveAttribute('title', 'updated: 2023-11-14 22:13:20');
+    await expect(rows.nth(2).locator('time')).toHaveCount(0);
+    await page.screenshot({ path: test.info().outputPath('result-dates.png') });
+  });
+});
+
+test('results show update dates and keep detailed metadata in preview details', async ({
   page,
   isMobile,
 }) => {
@@ -1037,7 +1136,10 @@ test('result metadata is available in preview details instead of the result row'
   await expect(rows.first().locator('.result-url-text')).toHaveAttribute('title', articleURL);
   await expect(rows.first().getByText('reading', { exact: true })).toBeVisible();
   await expect(rows.first().getByTitle('index count')).toHaveCount(0);
-  await expect(rows.first().locator('time')).toHaveCount(0);
+  await expect(rows.first().locator('time')).toHaveAttribute(
+    'datetime',
+    '2023-11-15T22:13:20.000Z',
+  );
   await expect(rows.first().getByText('0.73', { exact: true })).toHaveCount(0);
   await expect(rows.first().getByRole('button', { name: 'Copy URL' })).toHaveCount(0);
   await expect(rows.nth(1).locator('.result-url-text')).toHaveText('/home/me/notes.txt');
@@ -1048,7 +1150,7 @@ test('result metadata is available in preview details instead of the result row'
   await expect(page.getByRole('button', { name: '1 previous version', exact: true })).toHaveCount(
     0,
   );
-  await expect(page.locator('time')).toHaveCount(0);
+  await expect(page.locator('#preview-document-details time')).toHaveCount(0);
   await page.getByRole('button', { name: 'Show document details', exact: true }).click();
   const details = page.locator('#preview-document-details');
   await expect(details).toBeVisible();

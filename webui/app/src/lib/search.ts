@@ -96,7 +96,7 @@ export function formatTimestamp(unixTimestamp: number): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
-export function formatRelativeTime(unixTimestamp: number): string {
+export function formatRelativeTime(unixTimestamp: number, compact = false): string {
   if (!unixTimestamp) return '';
 
   const now = Date.now();
@@ -107,21 +107,27 @@ export function formatRelativeTime(unixTimestamp: number): string {
   if (secondsAgo < 60) return 'just now';
 
   const minutesAgo = Math.floor(secondsAgo / 60);
+  if (compact && minutesAgo < 60) return `${minutesAgo}m ago`;
   if (minutesAgo < 60) return minutesAgo === 1 ? '1 minute ago' : `${minutesAgo} minutes ago`;
 
   const hoursAgo = Math.floor(minutesAgo / 60);
+  if (compact && hoursAgo < 24) return `${hoursAgo}h ago`;
   if (hoursAgo < 24) return hoursAgo === 1 ? '1 hour ago' : `${hoursAgo} hours ago`;
 
   const daysAgo = Math.floor(hoursAgo / 24);
+  if (compact && daysAgo < 7) return daysAgo === 1 ? 'yesterday' : `${daysAgo}d ago`;
   if (daysAgo < 7) return daysAgo === 1 ? 'yesterday' : `${daysAgo} days ago`;
 
   const weeksAgo = Math.floor(daysAgo / 7);
-  if (weeksAgo < 4) return weeksAgo === 1 ? '1 week ago' : `${weeksAgo} weeks ago`;
+  if (compact && daysAgo < 30) return `${weeksAgo}w ago`;
+  if (daysAgo < 30) return weeksAgo === 1 ? '1 week ago' : `${weeksAgo} weeks ago`;
 
   const monthsAgo = Math.floor(daysAgo / 30);
-  if (monthsAgo < 12) return monthsAgo === 1 ? '1 month ago' : `${monthsAgo} months ago`;
+  if (compact && daysAgo < 365) return `${monthsAgo}mo ago`;
+  if (daysAgo < 365) return monthsAgo === 1 ? '1 month ago' : `${monthsAgo} months ago`;
 
   const yearsAgo = Math.floor(daysAgo / 365);
+  if (compact) return `${yearsAgo}y ago`;
   return yearsAgo === 1 ? '1 year ago' : `${yearsAgo} years ago`;
 }
 
