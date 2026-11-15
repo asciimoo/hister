@@ -84,15 +84,19 @@
   beforeNavigate((navigation) => {
     if (navigation.shallow && navigation.to?.url.pathname === page.url.pathname) return;
     if (
-      (dirty || busy) &&
+      (access || dirty || busy) &&
       !navigation.willUnload &&
-      !window.confirm('Leave Settings and discard unsaved changes?')
+      !window.confirm(
+        access
+          ? 'Leave Settings before confirming access? Any private confirmation code on this page will be lost. Without it, you may need to wait for automatic rollback instead of confirming or restoring settings.'
+          : 'Leave Settings and discard unsaved changes?',
+      )
     )
       navigation.cancel();
   });
 
   function beforeUnload(event: BeforeUnloadEvent) {
-    if (!dirty) return;
+    if (!dirty && !access) return;
     event.preventDefault();
     event.returnValue = '';
   }

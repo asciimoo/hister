@@ -305,6 +305,107 @@ for (const operation of ['confirm', 'cancel'] as const) {
   });
 }
 
+test('pending access navigation warns and staying preserves the private confirmation code', async ({
+  page,
+}) => {
+  const { publicConfig, completions } = await pendingAccessAPI(page);
+  publicConfig.authMode = 'none';
+  await activateAccess(page);
+  const confirm = page.getByRole('button', { name: 'Confirm working access', exact: true });
+  await expect(confirm).toBeEnabled();
+  const warnings: string[] = [];
+  page.on('dialog', async (dialog) => {
+    warnings.push(dialog.message());
+    await dialog.dismiss();
+  });
+
+  await page.getByRole('link', { name: 'Rules', exact: true }).click();
+  await expect.poll(() => warnings.length).toBe(1);
+  expect(warnings[0]).toContain('confirmation code');
+  expect(warnings[0]).toContain('rollback');
+  await expect(page).toHaveURL(/\/settings$/);
+  await confirm.click();
+  await expect(page.getByRole('status')).toHaveText('Settings confirmed and saved.');
+  expect(completions).toEqual([
+    {
+      operation: 'confirm',
+      body: { revision: 'access-revision', confirmation_token: 'private-confirmation-proof' },
+    },
+  ]);
+
+  await page.getByRole('link', { name: 'Rules', exact: true }).click();
+  await expect(page).toHaveURL(/\/rules$/);
+  expect(warnings).toHaveLength(1);
+});
+
+for (const action of ['home', 'reload']) {
+  test(`pending access ${action} warns once and staying allows immediate restoration`, async ({
+    page,
+  }) => {
+    const { publicConfig, completions } = await pendingAccessAPI(page);
+    publicConfig.authMode = 'none';
+    await activateAccess(page);
+    const restore = page.getByRole('button', { name: 'Restore previous settings', exact: true });
+    await expect(restore).toBeEnabled();
+    const warnings: string[] = [];
+    page.on('dialog', async (dialog) => {
+      warnings.push(dialog.type());
+      await dialog.dismiss();
+    });
+
+    if (action === 'home')
+      await page.getByRole('link', { name: 'Hister logo Hister', exact: true }).click();
+    else await page.evaluate(() => window.location.reload());
+    await expect.poll(() => warnings).toEqual(['beforeunload']);
+    await expect(page).toHaveURL(/\/settings$/);
+    await expect(page.getByText(/Without the code, you cannot confirm or restore/)).toBeVisible();
+    await restore.click();
+    await expect(page.getByRole('status')).toHaveText('Previous settings restored.');
+    expect(completions).toEqual([
+      {
+        operation: 'cancel',
+        body: { revision: 'access-revision', confirmation_token: 'private-confirmation-proof' },
+      },
+    ]);
+
+    await page.getByRole('link', { name: 'Hister logo Hister', exact: true }).click();
+    await expect(page).toHaveURL('http://127.0.0.1:4174/');
+    expect(warnings).toEqual(['beforeunload']);
+  });
+}
+
+test('pending access warning allows explicitly leaving without persisting the private code', async ({
+  page,
+}) => {
+  const { publicConfig, completions } = await pendingAccessAPI(page);
+  publicConfig.authMode = 'none';
+  await activateAccess(page);
+  await expect(
+    page.getByRole('button', { name: 'Confirm working access', exact: true }),
+  ).toBeEnabled();
+  const warnings: string[] = [];
+  page.on('dialog', async (dialog) => {
+    warnings.push(dialog.type());
+    await dialog.accept();
+  });
+
+  await page.getByRole('link', { name: 'Hister logo Hister', exact: true }).click();
+  await expect(page).toHaveURL('http://127.0.0.1:4174/');
+  expect(warnings).toEqual(['beforeunload']);
+  expect(completions).toEqual([]);
+  const stored = await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }));
+  expect(stored).not.toContain('private-confirmation-proof');
+
+  await page.goto('/settings');
+  await expect(page.getByLabel('Confirmation code', { exact: true })).toHaveValue('');
+  await expect(
+    page.getByRole('button', { name: 'Confirm working access', exact: true }),
+  ).toBeDisabled();
+  await expect(
+    page.getByRole('button', { name: 'Restore previous settings', exact: true }),
+  ).toBeDisabled();
+});
+
 test('reopened access confirmation requires the original private code when authentication is disabled', async ({
   page,
 }) => {
@@ -365,6 +466,9 @@ test('expired access confirmation reads rollback status without confirming', asy
     'No access change is awaiting confirmation.',
   );
   expect(completions).toEqual([]);
+  page.on('dialog', (dialog) => dialog.dismiss());
+  await page.getByRole('link', { name: 'Hister logo Hister', exact: true }).click();
+  await expect(page).toHaveURL('http://127.0.0.1:4174/');
 });
 
 test('a lost access confirmation response is checked without resubmitting', async ({ page }) => {
@@ -429,7 +533,9 @@ test('fresh authentication failures preserve pending access and offer the requir
   await page.route('**/api/oauth?*', (route) =>
     route.fulfill({ contentType: 'text/plain', body: 'New OAuth flow started' }),
   );
+  const warning = page.waitForEvent('dialog').then((dialog) => dialog.accept());
   await login.click();
+  await warning;
   await expect(page.getByText('New OAuth flow started')).toBeVisible();
 });
 

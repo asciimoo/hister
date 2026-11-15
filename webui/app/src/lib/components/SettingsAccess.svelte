@@ -162,6 +162,13 @@
   <p class="text-sm">
     These settings are temporary until you confirm that you can still administer Hister.
   </p>
+  {#if confirmationToken}
+    <p class="text-sm">
+      Keep this page open until you confirm or restore the previous settings. Leaving or reloading
+      loses its private confirmation code. Without the code, you cannot confirm or restore settings
+      immediately and must wait for automatic rollback.
+    </p>
+  {/if}
   {#if remaining !== null}
     <p role="timer" aria-label="Time remaining to confirm" class="font-mono text-lg">
       {Math.floor(remaining / 60)}:{String(remaining % 60).padStart(2, '0')} remaining
