@@ -326,6 +326,7 @@ func serveLogin(c *webContext) {
 		return
 	}
 	sessionStore.authenticateUser(session, user)
+	recordConfigurationLogin(c, session, "password")
 	if err := session.Save(c.Request, c.Response); err != nil {
 		serve500(c)
 		return
@@ -354,6 +355,7 @@ func serveTokenLogin(c *webContext) {
 		return
 	}
 	sessionStore.authenticateToken(session, c.Config.App.AccessToken)
+	recordConfigurationLogin(c, session, "token")
 	if err := session.Save(c.Request, c.Response); err != nil {
 		serve500(c)
 		return

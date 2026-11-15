@@ -111,18 +111,77 @@ permission or replace field validation.
 Field metadata includes a top level `category` and an optional display `group`.
 The backend catalog defines groups and field order; clients preserve that order
 when grouping fields within each category.
+Catalog entries declare a `ConfirmationPolicy` alongside the field schema.
+Its mode is `acknowledge` or `access`; its pure `Describe` function compares the
+current configuration with the validated candidate and returns an empty string
+when consent is unnecessary. Catalog `requires_confirmation` means the field
+can require consent. Validation returns the decision for the actual draft.
+Read only preview permission is separate from confirmation and preserves source
+locks. The server owns acknowledgment binding and administrator checks.
 Extractor options implement `sdk.OptionDescriber`; their schemas and defaults stay with the extractor.
 The built in registry registers editable field schemas with `config.RegisterExtractorSettings` during
 initialization so managed file loading uses the same types as draft validation without importing
 the extractor runtime into `config`. Undescribed options and executable controls remain file managed.
-`POST /api/settings/validate` checks a draft without side effects.
+`POST /api/settings/validate` checks a draft without changing configuration or runtime resources.
 `POST /api/settings/apply` saves and applies supported App, Indexer, Crawler, Extractor, and Semantic search edits. Both POST
 operations accept `revision` and an `edits` array with explicit `path`, `action`
-(`set` or `reset`), and a typed `value` for `set`. Authentication settings and
-other unsupported fields remain read only. These routes use administrative
+(`set` or `reset`), and a typed `value` for `set`. Access changes use the same catalog
+and draft preparation as ordinary settings, with additional review and confirmation.
+File managed restrictions still apply. These routes use administrative
 authorization, CSRF protection for writes, and `Cache-Control: no-store`.
 
-The runtime serializes saves with reloads, drains requests, stages private YAML
+Validation can preview `app.user_handling`, `app.access_token`, `app.public`, and
+`server.address`, `server.base_url`, `server.oauth_only`, and described OAuth credential
+and option fields. Its `review` contains a `mode`, redacted `changes` with `path`,
+`before`, and `after`, `consequences`, and an opaque `acknowledgment`.
+Access reviews also include `destination_url`.
+Source locks and file managed restrictions still apply. User handling requires
+a usable administrator, including an independent local recovery administrator
+when OIDC manages roles. Review sessions are established when authentication is disabled.
+
+Apply requires that acknowledgment for sensitive drafts, including mixed drafts,
+Reset, and Clear. The runtime binds it to the exact candidate, edits, revision,
+and authenticated credential or initiating session. A new review replaces the
+previous one. Submitting the issued acknowledgment consumes it, including when
+the draft changed or administrator availability was lost. Reloads, saves, and
+restarts invalidate reviews. Missing acknowledgments return `428` with
+`acknowledgment_required`; mismatches and replays return `409` with
+`invalid_acknowledgment`. Authority is rechecked after waiting for serialization.
+Saves also recheck the credential after draining requests. Administrator
+prerequisite failures for access changes return `422` with `admin_required`.
+Acknowledgment mode uses ordinary persistence and activation. It covers enabling
+SQL debugging or profiling, changing the embedding endpoint, and removing or
+replacing sensitive content patterns. Disabling diagnostics, adding filters,
+and unchanged effective values need no acknowledgment. The entire mixed draft
+uses access mode if any effective change requires access verification.
+Access activation returns `202` with a pending `revision`, `deadline`, and
+`destination_url`. `authentication` identifies required fresh proof: `credentials`,
+`password`, or `oauth`; `oauth_provider` identifies a specific provider when required.
+`GET /api/settings` exposes this state as `pending_access` without private proof tokens.
+
+`POST /api/settings/confirm` and `POST /api/settings/cancel` accept the pending
+`revision`. Confirmation must reach the candidate host, base path, and listener;
+reverse proxies must preserve the public Host header. Changed authentication policies
+require a new login or an applicable current API token. OAuth verification requires
+a login started after activation through the required provider. An existing session
+or a login started before activation is insufficient. Authority is rechecked after
+draining requests and administrator availability is checked before persistence.
+
+When the candidate disables authentication, activation also returns a private
+`confirmation_token`, required by both completion operations. It is never returned
+by reads and grants no access to other endpoints. If the activation response is lost,
+wait for rollback. Clients must not forward stored credentials to a different origin.
+
+Only one OAuth provider can change per draft. Client credentials, scopes, and PKCE
+options are supported. Provider endpoints, identity mappings, and providers that
+synchronize OIDC administrator roles remain file managed.
+
+Access changes leave the confirmed YAML untouched until confirmation. Cancellation,
+the two minute timeout, or a persistence failure restores the previous runtime when
+possible; restart loads the confirmed file. Competing saves and reloads return `409`
+while confirmation is pending. Source changes before confirmation are not overwritten.
+
+For ordinary changes, the runtime serializes saves with reloads, drains requests, stages private YAML
 beside `config.web.yml`, and commits it before publishing the replacement runtime.
 Saves with unchanged web selections preserve the file, runtime, and revision.
 Adding or removing an explicit selection is saved even when its value equals the default.

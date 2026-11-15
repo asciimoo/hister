@@ -36,8 +36,10 @@ package oauth
 import (
 	"cmp"
 	"context"
+	"maps"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 )
 
@@ -172,22 +174,36 @@ type ProviderConfig struct {
 	GroupsClaim   string
 }
 
+// ProviderNames returns the supported provider names in alphabetical order.
+func ProviderNames() []string {
+	return slices.Sorted(maps.Keys(providerFactories))
+}
+
 // NewProvider creates a fresh provider instance for the given provider name.
 // Empty endpoints use provider defaults or OIDC discovery.
 // Returns nil, false if the provider name is unknown.
 func NewProvider(name string, cfg ProviderConfig) (Provider, bool) {
-	switch name {
-	case "github":
+	create, ok := providerFactories[name]
+	if !ok {
+		return nil, false
+	}
+	return create(cfg), true
+}
+
+var providerFactories = map[string]func(ProviderConfig) Provider{
+	"github": func(cfg ProviderConfig) Provider {
 		return GitHubOAuth{
 			AuthURL:  cmp.Or(cfg.AuthURL, "https://github.com/login/oauth/authorize"),
 			TokenURL: cmp.Or(cfg.TokenURL, "https://github.com/login/oauth/access_token"),
-		}, true
-	case "google":
+		}
+	},
+	"google": func(cfg ProviderConfig) Provider {
 		return GoogleOAuth{
 			AuthURL:  cmp.Or(cfg.AuthURL, "https://accounts.google.com/o/oauth2/auth"),
 			TokenURL: cmp.Or(cfg.TokenURL, "https://accounts.google.com/o/oauth2/token"),
-		}, true
-	case "oidc":
+		}
+	},
+	"oidc": func(cfg ProviderConfig) Provider {
 		return &OIDCOAuth{
 			AuthURL:       cfg.AuthURL,
 			TokenURL:      cfg.TokenURL,
@@ -195,9 +211,8 @@ func NewProvider(name string, cfg ProviderConfig) (Provider, bool) {
 			IdentityClaim: cfg.IdentityClaim,
 			AdminGroups:   cfg.AdminGroups,
 			GroupsClaim:   cfg.GroupsClaim,
-		}, true
-	}
-	return nil, false
+		}
+	},
 }
 
 type (
@@ -212,17 +227,3 @@ type (
 		PreferredUsername string `json:"preferred_username"` // oidc
 	}
 )
-
-// Providers maps provider names to their OAuth implementation instances.
-// Supported providers: github, google, oidc.
-var Providers = map[string]Provider{
-	"github": GitHubOAuth{
-		AuthURL:  "https://github.com/login/oauth/authorize",
-		TokenURL: "https://github.com/login/oauth/access_token",
-	},
-	"google": GoogleOAuth{
-		AuthURL:  "https://accounts.google.com/o/oauth2/auth",
-		TokenURL: "https://accounts.google.com/o/oauth2/token",
-	},
-	"oidc": &OIDCOAuth{},
-}

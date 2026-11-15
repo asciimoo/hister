@@ -35,13 +35,9 @@ token for command line recovery.
 
 ### Web Interface
 
-When user handling is enabled, the web interface presents a login page to unauthenticated visitors. Enter your username and password to log in. Your session uses an HTTP only cookie containing a random opaque identifier. Sessions expire thirty days after the most recent valid request. Each valid request refreshes the session and cookie expiry to thirty days from that request.
+Web sessions use an HTTP only cookie containing a random opaque identifier. Sessions expire thirty days after the most recent valid request. Each valid request refreshes the session and cookie expiry to thirty days from that request.
 
 The cookie uses `SameSite=Lax`. Its `Secure` attribute is enabled when `server.base_url` uses HTTPS and disabled when that URL uses HTTP, so loopback HTTP instances continue to work. Plain HTTP cannot protect a session from interception on the network. Use HTTPS for every network exposed instance.
-
-If OAuth providers are configured, the login page also shows **Sign in with &lt;Provider&gt;** buttons. See [OAuth Login](#oauth-login) below.
-
-After signing in, Hister returns you to the page you were viewing, including its search query or preview link. This also applies when a session expires or you choose **Login** from the menu. Opening the login page directly takes you to the home page after signing in.
 
 ### OAuth Login
 
@@ -55,7 +51,7 @@ See the [OAuth section of the configuration docs](/docs/configuration#oauth) for
 
 ### OAuth-Only Mode
 
-Setting `server.oauth_only: true` disables password logins entirely. Only OAuth sign-in is accepted through the web interface. The login page hides the credential form and shows only the OAuth provider buttons.
+Setting `server.oauth_only: true` disables password logins entirely. Only OAuth sign-in is accepted through the web interface.
 
 This is useful when you want to enforce a single sign-on policy and prevent users from bypassing it with locally-set passwords.
 
@@ -75,14 +71,9 @@ See [Reverse Proxy Authentication](/docs/configuration#reverse-proxy-authenticat
 
 ### Browser Extension
 
-The extension can authenticate with a personal access token. Enter the token in the popup settings or options page and save the settings.
-
-Alternatively, the extension can copy the session cookies from the logged in web interface:
-
-1. Log in to the Hister web interface in the same browser.
-2. Click the **Authenticate with Browser Session** button in the extension popup or options page.
-
-The extension will copy the active session cookies from the web UI. All pages indexed through the extension are stored under your user account.
+The extension can use a personal access token or an existing web session from the same browser.
+Submissions use your account unless public document submission is enabled.
+See [Browser Extension Authentication](/docs/browser-extension#authentication).
 
 ### API / Command-Line Client
 

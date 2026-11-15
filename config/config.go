@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"html/template"
 	"maps"
+	"math"
 	"net"
 	"net/http"
 	"net/netip"
@@ -32,6 +33,7 @@ import (
 	"unicode"
 
 	"github.com/asciimoo/hister/server/languages"
+	"github.com/asciimoo/hister/server/oauth"
 
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
@@ -109,6 +111,8 @@ var (
 
 const DefaultMaxBatchBodySize int64 = 40
 
+const bytesPerMiB = 1024 * 1024
+
 type Server struct {
 	Address          string                 `yaml:"address"                  mapstructure:"address"`
 	BaseURL          string                 `yaml:"base_url"                 mapstructure:"base_url"`
@@ -122,11 +126,11 @@ type Server struct {
 }
 
 func (s Server) MaxBatchBodyBytes() int64 {
-	return s.MaxBatchBodySize << 20
+	return s.MaxBatchBodySize * bytesPerMiB
 }
 
 func (s Server) validateMaxBatchBodySize() error {
-	maxBatchBodySize := int64(^uint64(0)>>1) >> 20
+	const maxBatchBodySize int64 = math.MaxInt64 / bytesPerMiB
 	if s.MaxBatchBodySize < 1 || s.MaxBatchBodySize > maxBatchBodySize {
 		return fmt.Errorf("server.max_batch_body_size must be between 1 and %d", maxBatchBodySize)
 	}
@@ -142,7 +146,23 @@ func (s Server) ListenEndpoint() (network, address string, err error) {
 		}
 		return "unix", address, nil
 	}
+	if _, port, err := net.SplitHostPort(s.Address); err != nil {
+		return "", "", errors.New("server.address: use a TCP host:port address")
+	} else if _, err := net.LookupPort("tcp", port); err != nil {
+		return "", "", errors.New("server.address: use a TCP port between 0 and 65535 or a known service name")
+	}
 	return "tcp", s.Address, nil
+}
+
+func parseBaseURL(raw string) (*url.URL, error) {
+	u, err := url.Parse(raw)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" {
+		return nil, errors.New("server.base_url must be an HTTP or HTTPS URL with a hostname and without credentials, a query, or a fragment")
+	}
+	if _, err := net.LookupPort("tcp", u.Port()); err != nil {
+		return nil, errors.New("server.base_url must use a port between 0 and 65535")
+	}
+	return u, nil
 }
 
 // OAuthEntry holds configuration for a single OAuth 2.0 / OIDC provider.
@@ -205,7 +225,7 @@ func (p PDFParser) Validate() error {
 			return errors.New("indexer.pdf_parser.args cannot contain NUL bytes")
 		}
 	}
-	if p.Timeout < 1 || int64(p.Timeout) > int64((1<<63-1)/time.Second) {
+	if p.Timeout < 1 || int64(p.Timeout) > int64(math.MaxInt64/time.Second) {
 		return errors.New("indexer.pdf_parser.timeout must be a positive number of seconds within the supported duration range")
 	}
 	return nil
@@ -232,9 +252,27 @@ type validationError struct {
 func (e validationError) Error() string { return e.detail }
 func (e validationError) Unwrap() error { return e.field }
 
-// Validate checks detector settings using the shared language registry without
-// loading the detector's models. Errors expose a safe FieldError through errors.As.
+// Validate checks file and detector settings without loading language models.
+// Errors expose a safe FieldError through errors.As.
 func (i Indexer) Validate() error {
+	const maxFileSize int64 = math.MaxInt64 / bytesPerMiB
+	if i.MaxFileSize < 1 || i.MaxFileSize > maxFileSize {
+		return FieldError{
+			Path: "indexer.max_file_size_mb", Code: "invalid_configuration",
+			Message: fmt.Sprintf("Use a file size between 1 and %d MiB.", maxFileSize),
+		}
+	}
+	for _, directory := range i.Directories {
+		if directory == nil {
+			return FieldError{
+				Path: "indexer.directories", Code: "invalid_configuration",
+				Message: "Supply a directory row instead of null.",
+			}
+		}
+		if message := directory.validatePatterns(); message != "" {
+			return FieldError{Path: "indexer.directories", Code: "invalid_configuration", Message: message}
+		}
+	}
 	switch i.LanguageDetectionAccuracy {
 	case "", LanguageDetectionAccuracyHigh, LanguageDetectionAccuracyLow:
 	default:
@@ -348,8 +386,8 @@ func (c *CrawlerConfig) ValidateFields() []FieldError {
 			}
 		}
 	}
-	if strings.ContainsAny(c.UserAgent, "\r\n") {
-		reject("user_agent", "Use a single line for the user agent.")
+	if !validHeaderValue(c.UserAgent) {
+		reject("user_agent", "Use a user agent without control characters.")
 	}
 	if proxy := strings.TrimSpace(c.Proxy); proxy != "" {
 		u, err := url.Parse(proxy)
@@ -363,7 +401,11 @@ func (c *CrawlerConfig) ValidateFields() []FieldError {
 	seenCookies := make(map[string]bool)
 	for _, cookie := range c.Cookies {
 		domain := strings.TrimPrefix(cookie.Domain, ".")
-		key := secretScope(cookie.Name, strings.ToLower(domain), cookie.Path)
+		cookiePath := cookie.Path
+		if cookiePath == "" {
+			cookiePath = "/"
+		}
+		key := secretScope(cookie.Name, strings.ToLower(domain), cookiePath)
 		parsed := http.Cookie{Name: cookie.Name, Value: cookie.Value, Domain: cookie.Domain, Path: cookie.Path}
 		if parsed.Valid() != nil || domain == "" || strings.ContainsAny(domain, " /\\:@?#\r\n\t") || (cookie.Path != "" && !strings.HasPrefix(cookie.Path, "/")) || seenCookies[key] {
 			reject("cookies", "Use valid cookies with unique names per domain and path. A domain is required and paths must start with /.")
@@ -504,7 +546,12 @@ func (s SemanticSearch) EmbeddingFingerprint() string {
 	return hex.EncodeToString(sum[:])
 }
 
-const postgresHNSWMaxDimensions = 2000
+const (
+	postgresHNSWMaxDimensions = 2000
+	sqliteVecMaxDimensions    = 8192
+	// SQLite retrieves four candidate chunks per result within sqlite-vec's 4096 limit.
+	sqliteVecMaxResults = 1024
+)
 
 // DBTypedef represents the type of database being used.
 type DBTypedef int
@@ -791,11 +838,11 @@ func Load(filename string, overrides ...Override) (*Config, error) {
 	if strings.HasSuffix(name, ".histerrc") {
 		log.Warn().Str("oldPath", name).Msg("Configuration file found at deprecated location ~/.histerrc. Please move it to the recommended location for your OS")
 	}
-	c, err := loadSelected(name, false, overrides...)
+	c, err := loadSelected(name, true, overrides...)
 	if err != nil {
 		return nil, err
 	}
-	if err := c.validateBasic(); err != nil {
+	if err := c.Validate(); err != nil {
 		return nil, err
 	}
 	return c, c.init()
@@ -904,33 +951,28 @@ func (c *Config) validateBasic() error {
 		return err
 	}
 	if c.Server.BaseURL != "" {
-		pu, err := url.Parse(c.Server.BaseURL)
-		if err != nil || pu.Scheme == "" || pu.Host == "" {
-			return errors.New("invalid server.base_url: use 'https://domain.tld/xy/' format")
+		if _, err := parseBaseURL(c.Server.BaseURL); err != nil {
+			return err
 		}
 		c.Server.BaseURL = strings.TrimSuffix(c.Server.BaseURL, "/")
 	}
 	return nil
 }
 
-func (c *Config) environmentOverrides() ([]Override, error) {
+func (c *Config) environmentOverrides() []Override {
 	var overrides []Override
 	if dataDir := os.Getenv("HISTER_DATA_DIR"); dataDir != "" {
 		overrides = append(overrides, Override{Path: "app.directory", Value: dataDir, Source: ValueSource{Kind: "environment", Name: "HISTER_DATA_DIR"}})
 	}
 
-	network, _, err := c.Server.ListenEndpoint()
-	if err != nil {
-		return nil, err
-	}
-	if envPort := os.Getenv("HISTER_PORT"); envPort != "" && network == "tcp" {
+	if envPort := os.Getenv("HISTER_PORT"); envPort != "" && !strings.HasPrefix(c.Server.Address, "unix:") {
 		host, _, err := net.SplitHostPort(c.Server.Address)
-		if err != nil || host == "" {
+		if err != nil {
 			host = c.Server.Address
 		}
 		overrides = append(overrides, Override{Path: "server.address", Value: net.JoinHostPort(host, envPort), Source: ValueSource{Kind: "environment", Name: "HISTER_PORT"}})
 	}
-	return overrides, nil
+	return overrides
 }
 
 func (c *Config) normalize() error {
@@ -956,9 +998,6 @@ func (c *Config) normalize() error {
 }
 
 func (c *Config) init() error {
-	if err := c.UpdateBaseURL(c.Server.BaseURL); err != nil {
-		return err
-	}
 	if err := os.MkdirAll(c.App.Directory, 0o750); err != nil {
 		isPermissionErr := errors.Is(err, os.ErrPermission) ||
 			strings.Contains(strings.ToLower(err.Error()), "permission denied") ||
@@ -984,18 +1023,6 @@ func (c *Config) init() error {
 			return err
 		}
 	}
-	if err := c.Hotkeys.Validate(); err != nil {
-		return err
-	}
-	if err := c.validateSemanticSearch(); err != nil {
-		return err
-	}
-	if err := c.Indexer.Validate(); err != nil {
-		return err
-	}
-	if err := c.validateOAuth(); err != nil {
-		return err
-	}
 	sPath := c.FullPath(secretKeyFilename)
 	b, err := os.ReadFile(sPath)
 	if err != nil {
@@ -1007,15 +1034,17 @@ func (c *Config) init() error {
 		c.secretKey = b
 	}
 	c.LoadTUIConfig()
+	if err := c.Hotkeys.Validate(); err != nil {
+		return err
+	}
 	return c.LoadRules()
 }
 
-var validOAuthProviders = map[string]bool{"github": true, "google": true, "oidc": true}
-
 func (c *Config) validateOAuth() error {
+	providers := oauth.ProviderNames()
 	for name, entry := range c.Server.OAuth {
-		if !validOAuthProviders[name] {
-			return fmt.Errorf("unknown oauth provider %q: valid providers are github, google, oidc", name)
+		if !slices.Contains(providers, name) {
+			return fmt.Errorf("unknown oauth provider %q: valid providers are %s", name, strings.Join(providers, ", "))
 		}
 		if entry == nil || entry.ClientID == "" {
 			return fmt.Errorf("oauth provider %q: client_id is required", name)
@@ -1042,8 +1071,34 @@ func (c *Config) validateOAuth() error {
 				return fmt.Errorf("oauth provider %q: admin_groups must contain nonblank names without control characters", name)
 			}
 		}
-		if name == "oidc" && entry.ConfigurationURL == "" && entry.AuthURL == "" {
-			return fmt.Errorf("oauth provider oidc: configuration_url or auth_url is required")
+		for _, endpoint := range []struct{ name, value string }{
+			{"configuration_url", entry.ConfigurationURL},
+			{"auth_url", entry.AuthURL},
+			{"token_url", entry.TokenURL},
+			{"userinfo_url", entry.UserInfoURL},
+		} {
+			path := "server.oauth." + name + "." + endpoint.name
+			if endpoint.value == "" {
+				if name == "oidc" && entry.ConfigurationURL == "" && endpoint.name != "configuration_url" {
+					return FieldError{
+						Path: path, Code: "invalid_configuration",
+						Message: "Provide this endpoint when OIDC discovery is not configured.",
+					}
+				}
+				continue
+			}
+			u, err := url.Parse(endpoint.value)
+			invalid := err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" || u.User != nil || u.Fragment != "" || strings.ContainsAny(endpoint.value, " \t\r\n")
+			if !invalid && u.Port() != "" {
+				port, err := strconv.Atoi(u.Port())
+				invalid = err != nil || port < 1 || port > 65535
+			}
+			if invalid {
+				return FieldError{
+					Path: path, Code: "invalid_configuration",
+					Message: "Use an HTTP or HTTPS URL with a hostname and valid port, without credentials, spaces, or a fragment.",
+				}
+			}
 		}
 	}
 	return nil
@@ -1117,9 +1172,9 @@ func (c *Config) UpdateBaseURL(u string) error {
 		c.Server.BaseURL = strings.TrimSuffix(u, "/")
 	}
 
-	pu, err := url.Parse(c.Server.BaseURL)
+	pu, err := parseBaseURL(c.Server.BaseURL)
 	if err != nil {
-		return fmt.Errorf("failed to parse base URL: %w", err)
+		return err
 	}
 	c.parsedBaseURL = pu
 	return nil
@@ -1525,23 +1580,30 @@ func (r *Rules) ResolveAliases(s string) string {
 
 // ValidateFields reports safe, stable paths without contacting the embedding service.
 func (s SemanticSearch) ValidateFields() []FieldError {
-	if !s.Enable {
-		return nil
-	}
 	var fields []FieldError
 	for _, field := range FieldCatalog() {
 		if field.Category != "semantic_search" {
+			continue
+		}
+		// A stored endpoint remains visible in settings even while search is disabled.
+		if !s.Enable && (field.Path != "semantic_search.embedding_endpoint" || s.EmbeddingEndpoint == "") {
 			continue
 		}
 		if _, message := field.Schema.ValidateValue(settingValue(&Config{SemanticSearch: s}, field.Path)); message != "" {
 			fields = append(fields, FieldError{Path: field.Path, Code: "invalid_value", Message: message})
 		}
 	}
+	if !s.Enable {
+		return fields
+	}
 	if s.ChunkOverlap >= s.MaxContextLength && s.MaxContextLength > 0 {
 		fields = append(fields, FieldError{Path: "semantic_search.chunk_overlap", Code: "invalid_value", Message: "Chunk overlap must be less than the maximum context length."})
 	}
 	if message := validateHTTPHeaders(s.Headers); message != "" {
 		fields = append(fields, FieldError{Path: "semantic_search.headers", Code: "invalid_value", Message: message})
+	}
+	if !validHeaderValue(s.APIKey) {
+		fields = append(fields, FieldError{Path: "semantic_search.api_key", Code: "invalid_value", Message: "Use an API key without control characters."})
 	}
 	return fields
 }
@@ -1555,9 +1617,20 @@ func (s SemanticSearch) Validate() error {
 
 func (c *Config) semanticSearchErrors() []FieldError {
 	fields := c.SemanticSearch.ValidateFields()
+	if !c.SemanticSearch.Enable {
+		return fields
+	}
 	dbType, _ := c.DatabaseConnection()
-	if c.SemanticSearch.Enable && dbType == Psql && c.SemanticSearch.Dimensions > postgresHNSWMaxDimensions {
+	if dbType == Psql && c.SemanticSearch.Dimensions > postgresHNSWMaxDimensions {
 		fields = append(fields, FieldError{Path: "semantic_search.dimensions", Code: "invalid_value", Message: fmt.Sprintf("Embedding dimensions must not exceed %d when using PostgreSQL.", postgresHNSWMaxDimensions)})
+	}
+	if dbType == Sqlite {
+		if c.SemanticSearch.Dimensions > sqliteVecMaxDimensions {
+			fields = append(fields, FieldError{Path: "semantic_search.dimensions", Code: "invalid_value", Message: fmt.Sprintf("Embedding dimensions must not exceed %d when using SQLite.", sqliteVecMaxDimensions)})
+		}
+		if c.SemanticSearch.ResultLimit > sqliteVecMaxResults {
+			fields = append(fields, FieldError{Path: "semantic_search.result_limit", Code: "invalid_value", Message: fmt.Sprintf("Semantic result limit must not exceed %d when using SQLite.", sqliteVecMaxResults)})
+		}
 	}
 	return fields
 }
@@ -1619,6 +1692,17 @@ func (h Hotkeys) ToJSON() template.JS {
 		return template.JS("")
 	}
 	return template.JS(b)
+}
+
+func (d *Directory) validatePatterns() string {
+	for _, patterns := range [][]string{d.Patterns, d.Excludes} {
+		for _, pattern := range patterns {
+			if _, err := filepath.Match(pattern, ""); err != nil || pattern == "" {
+				return "Use valid nonempty file name glob patterns."
+			}
+		}
+	}
+	return ""
 }
 
 func (d *Directory) IsMatching(name string) bool {

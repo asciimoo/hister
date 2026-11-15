@@ -37,6 +37,477 @@ import (
 	"github.com/asciimoo/hister/server/types"
 )
 
+func TestSettingsPendingActivationKeepsConfirmedConfiguration(t *testing.T) {
+	cfg, handler, headers := newAccessSettingsTestServer(t, "token")
+	r := handler.(*serverRuntime)
+	before, err := os.ReadFile(cfg.FullPath("config.web.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	revision, _ := readConfigurationState(t, handler, headers)
+	next, fields := prepareConfigurationDraft(cfg, []config.SettingEdit{
+		{Path: "app.subtitle", Action: "set", Value: json.RawMessage(`"Temporary settings"`)},
+	}, revision)
+	if len(fields) != 0 {
+		t.Fatal(fields)
+	}
+	lease := &runtimeRequest{runtime: r, generation: r.current, finish: func() {}, actor: configurationTokenActor(nil, "secret")}
+	started := time.Now()
+	status, pending, err := r.activatePending(lease, next)
+	if err != nil || status != http.StatusAccepted {
+		t.Fatalf("temporary activation: %d %v", status, err)
+	}
+	if pending.Revision == "" || pending.Deadline.Before(started.Add(2*time.Minute)) || pending.DestinationURL != cfg.BaseURL("/settings") {
+		t.Fatalf("missing confirmation information: %+v", pending)
+	}
+	_, values := readConfigurationState(t, handler, headers)
+	if values["app.subtitle"].Value != "Temporary settings" {
+		t.Fatal("candidate was not activated")
+	}
+	after, err := os.ReadFile(cfg.FullPath("config.web.yml"))
+	if err != nil || !bytes.Equal(before, after) {
+		t.Fatal("temporary activation replaced the confirmed file")
+	}
+	loaded, _, err := config.LoadForInspection(cfg.Filename(), true)
+	if err != nil || loaded.App.Subtitle == "Temporary settings" {
+		t.Fatal("an unconfirmed configuration would survive restart")
+	}
+}
+
+func TestSettingsPendingConfirmation(t *testing.T) {
+	cfg, handler, headers := newAccessSettingsTestServer(t, "token")
+	r := handler.(*serverRuntime)
+	pending := activateTestPendingSettings(t, r, headers)
+	lease := pendingTestLease(r, headers)
+	if status, _ := r.confirmPending(lease, "another-operation"); status != http.StatusConflict {
+		t.Fatalf("accepted unrelated confirmation: %d", status)
+	}
+	if status, err := r.confirmPending(lease, pending.Revision); status != http.StatusOK || err != nil {
+		t.Fatalf("confirmation failed: %d %v", status, err)
+	}
+	loaded, _, err := config.LoadForInspection(cfg.Filename(), true)
+	if err != nil || loaded.App.Subtitle != "Temporary settings" {
+		t.Fatalf("confirmed configuration did not persist: %v", err)
+	}
+	if status, _ := r.confirmPending(lease, pending.Revision); status != http.StatusConflict {
+		t.Fatalf("replayed confirmation was accepted: %d", status)
+	}
+	if staged, err := filepath.Glob(cfg.FullPath(".config.web-*")); err != nil || len(staged) != 0 {
+		t.Fatalf("confirmation left staging files: %v %v", staged, err)
+	}
+}
+
+func pendingTestLease(r *serverRuntime, headers map[string]string) *runtimeRequest {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return &runtimeRequest{runtime: r, generation: r.current, finish: func() {}, actor: configurationTokenActor(nil, headers["X-Access-Token"]), request: httptest.NewRequest(http.MethodPost, r.current.cfg.BaseURL("/api/settings/confirm"), nil)}
+}
+
+func TestSettingsPendingCancellationPreservesRules(t *testing.T) {
+	cfg, handler, headers := newAccessSettingsTestServer(t, "token")
+	r := handler.(*serverRuntime)
+	before, err := os.ReadFile(cfg.FullPath("config.web.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pending := activateTestPendingSettings(t, r, headers)
+	ruleHeaders := maps.Clone(headers)
+	ruleHeaders["Content-Type"] = "application/x-www-form-urlencoded"
+	response := testutil.ServeHTTP(t, r, http.MethodPost, "/hister/api/rules", strings.NewReader(url.Values{"skip": {"pending-rule"}}.Encode()), ruleHeaders)
+	if response.Code != http.StatusOK {
+		t.Fatalf("rule write during temporary activation: %d %s", response.Code, response.Body)
+	}
+	if status, err := r.cancelPending(pendingTestLease(r, headers), pending.Revision); err != nil || status != http.StatusOK {
+		t.Fatalf("cancel: %d %v", status, err)
+	}
+	_, values := readConfigurationState(t, r, headers)
+	if values["app.subtitle"].Value != cfg.App.Subtitle {
+		t.Fatal("cancellation did not restore confirmed settings")
+	}
+	rules := testutil.ServeHTTP(t, r, http.MethodGet, "/hister/api/rules", nil, headers)
+	if rules.Code != http.StatusOK || !strings.Contains(rules.Body.String(), "pending-rule") {
+		t.Fatalf("rollback lost a rule write: %d %s", rules.Code, rules.Body)
+	}
+	after, err := os.ReadFile(cfg.FullPath("config.web.yml"))
+	if err != nil || !bytes.Equal(before, after) {
+		t.Fatal("cancellation changed confirmed selections")
+	}
+	if status, _ := r.confirmPending(pendingTestLease(r, headers), pending.Revision); status != http.StatusConflict {
+		t.Fatalf("accepted confirmation after cancellation: %d", status)
+	}
+}
+
+func TestSettingsPendingTimeoutRestoresConfiguration(t *testing.T) {
+	cfg, handler, headers := newAccessSettingsTestServer(t, "token")
+	r := handler.(*serverRuntime)
+	r.confirmationTimeout = 50 * time.Millisecond
+	pending := activateTestPendingSettings(t, r, headers)
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		response := testutil.ServeHTTP(t, r, http.MethodGet, "/hister/api/config", nil, nil)
+		var active struct{ Subtitle string }
+		if response.Code == http.StatusOK && json.Unmarshal(response.Body.Bytes(), &active) == nil && active.Subtitle == cfg.App.Subtitle {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("timeout did not independently restore confirmed settings")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if status, _ := r.confirmPending(pendingTestLease(r, headers), pending.Revision); status != http.StatusConflict {
+		t.Fatalf("expired confirmation was accepted: %d", status)
+	}
+	loaded, _, err := config.LoadForInspection(cfg.Filename(), true)
+	if err != nil || loaded.App.Subtitle != cfg.App.Subtitle {
+		t.Fatal("timeout persisted unconfirmed settings")
+	}
+}
+
+func TestSettingsPendingRejectsCompetingWrites(t *testing.T) {
+	for _, operation := range []string{"save", "reload"} {
+		t.Run(operation, func(t *testing.T) {
+			_, handler, headers := newAccessSettingsTestServer(t, "token")
+			r := handler.(*serverRuntime)
+			pending := activateTestPendingSettings(t, r, headers)
+			revision, _ := readConfigurationState(t, r, headers)
+			path, body := "/hister/api/reload", ""
+			if operation == "save" {
+				path = "/hister/api/settings/apply"
+				body = fmt.Sprintf(`{"revision":%q,"edits":[{"path":"app.subtitle","action":"set","value":"Competing settings"}]}`, revision)
+			}
+			response := testutil.ServeHTTP(t, r, http.MethodPost, path, strings.NewReader(body), headers)
+			if response.Code != http.StatusConflict {
+				t.Fatalf("competing %s was accepted: %d %s", operation, response.Code, response.Body)
+			}
+			if status, err := r.confirmPending(pendingTestLease(r, headers), pending.Revision); status != http.StatusOK || err != nil {
+				t.Fatalf("competing write invalidated confirmation: %d %v", status, err)
+			}
+			_, values := readConfigurationState(t, r, headers)
+			if values["app.subtitle"].Value != "Temporary settings" {
+				t.Fatal("competing write changed pending configuration")
+			}
+		})
+	}
+}
+
+func TestSettingsPendingConfirmationFailureRestoresConfiguration(t *testing.T) {
+	for _, scenario := range []string{"staging disappeared", "main file changed", "managed file changed"} {
+		t.Run(scenario, func(t *testing.T) {
+			cfg, handler, headers := newAccessSettingsTestServer(t, "token")
+			r := handler.(*serverRuntime)
+			pending := activateTestPendingSettings(t, r, headers)
+			managed := cfg.FullPath("config.web.yml")
+			before, err := os.ReadFile(managed)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := http.StatusConflict
+			if scenario == "staging disappeared" {
+				files, err := filepath.Glob(cfg.FullPath(".config.web-*"))
+				if err != nil || len(files) == 0 {
+					t.Fatal("no staged write")
+				}
+				for _, name := range files {
+					if !strings.Contains(filepath.Base(name), "recovery") {
+						if err := os.Remove(name); err != nil {
+							t.Fatal(err)
+						}
+					}
+				}
+				want = http.StatusInternalServerError
+			} else {
+				name := cfg.Filename()
+				if scenario == "managed file changed" {
+					name = managed
+					before = append(before, []byte("# external edit\n")...)
+				}
+				file, err := os.OpenFile(name, os.O_APPEND|os.O_WRONLY, 0o600)
+				if err != nil {
+					t.Fatal(err)
+				}
+				_, err = file.WriteString("# external edit\n")
+				if closeErr := file.Close(); err != nil || closeErr != nil {
+					t.Fatalf("external edit: %v %v", err, closeErr)
+				}
+				state := testutil.ServeHTTP(t, r, http.MethodGet, cfg.BaseURL("/api/settings"), nil, headers)
+				var pendingState struct {
+					Pending *pendingConfiguration `json:"pending"`
+					Access  *pendingAccessStatus  `json:"pending_access"`
+				}
+				if json.Unmarshal(state.Body.Bytes(), &pendingState) != nil || pendingState.Pending == nil || pendingState.Access == nil {
+					t.Fatalf("pending access hid an external edit: %s", state.Body)
+				}
+			}
+			status, err := r.confirmPending(pendingTestLease(r, headers), pending.Revision)
+			if status != want || err == nil {
+				t.Fatalf("confirmation failure: %d %v, want %d", status, err, want)
+			}
+			_, values := readConfigurationState(t, r, headers)
+			if values["app.subtitle"].Value != cfg.App.Subtitle {
+				t.Fatal("failed confirmation left unconfirmed settings active")
+			}
+			after, err := os.ReadFile(managed)
+			if err != nil || !bytes.Equal(before, after) {
+				t.Fatal("failed confirmation overwrote confirmed or external settings")
+			}
+			if staged, err := filepath.Glob(cfg.FullPath(".config.web-*")); err != nil || len(staged) != 0 {
+				t.Fatalf("failed confirmation left staging files: %v %v", staged, err)
+			}
+		})
+	}
+}
+
+func TestSettingsPendingRestartUsesConfirmedConfiguration(t *testing.T) {
+	cfg, handler, headers := newAccessSettingsTestServer(t, "token")
+	r := handler.(*serverRuntime)
+	pending := activateTestPendingSettings(t, r, headers)
+	r.close()
+	loaded, err := config.Load(cfg.Filename())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := model.Init(loaded); err != nil {
+		t.Fatal(err)
+	}
+	restarted := startReloadTestRuntime(t, loaded).(*serverRuntime)
+	_, values := readConfigurationState(t, restarted, headers)
+	if values["app.subtitle"].Value != cfg.App.Subtitle {
+		t.Fatal("restart activated an unconfirmed configuration")
+	}
+	if status, _ := restarted.confirmPending(pendingTestLease(restarted, headers), pending.Revision); status != http.StatusConflict {
+		t.Fatalf("restart accepted an abandoned confirmation: %d", status)
+	}
+	if staged, err := filepath.Glob(cfg.FullPath(".config.web-*")); err != nil || len(staged) != 0 {
+		t.Fatalf("shutdown left unconfirmed staging files: %v %v", staged, err)
+	}
+}
+
+func TestSettingsPendingConcurrentConfirmationAndCancellation(t *testing.T) {
+	cfg, handler, headers := newAccessSettingsTestServer(t, "token")
+	r := handler.(*serverRuntime)
+	pending := activateTestPendingSettings(t, r, headers)
+	lease := pendingTestLease(r, headers)
+	confirmed, cancelled := make(chan int, 1), make(chan int, 1)
+	go func() { status, _ := r.confirmPending(lease, pending.Revision); confirmed <- status }()
+	go func() { status, _ := r.cancelPending(lease, pending.Revision); cancelled <- status }()
+	confirmation, cancellation := <-confirmed, <-cancelled
+	if (confirmation != http.StatusOK || cancellation != http.StatusConflict) && (cancellation != http.StatusOK || confirmation != http.StatusConflict) {
+		t.Fatalf("operations did not serialize: confirmation %d, cancellation %d", confirmation, cancellation)
+	}
+	loaded, _, err := config.LoadForInspection(cfg.Filename(), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, values := readConfigurationState(t, r, headers)
+	if loaded.App.Subtitle != values["app.subtitle"].Value || (loaded.App.Subtitle == "Temporary settings") != (confirmation == http.StatusOK) {
+		t.Fatal("concurrent completion left runtime and persistence inconsistent")
+	}
+}
+
+func TestSettingsPendingListenerRestoration(t *testing.T) {
+	for _, blockRecovery := range []bool{false, true} {
+		t.Run(fmt.Sprintf("blocked_%t", blockRecovery), func(t *testing.T) {
+			cfg, handler, headers := newAccessSettingsTestServer(t, "token")
+			r := handler.(*serverRuntime)
+			previousAddress := runtimeTestAddress(t)
+			web := fmt.Sprintf("app:\n  access_token: secret\n  public: true\nserver:\n  address: %s\n", previousAddress)
+			if err := os.WriteFile(cfg.FullPath("config.web.yml"), []byte(web), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if status := reloadRequest(t, r, "secret"); status != http.StatusOK {
+				t.Fatalf("prepare listener: %d", status)
+			}
+			revision, _ := readConfigurationState(t, r, headers)
+			address := runtimeTestAddress(t)
+			lease := pendingTestLease(r, headers)
+			next, fields := prepareConfigurationDraft(lease.generation.cfg, []config.SettingEdit{
+				{Path: "server.address", Action: "set", Value: json.RawMessage(fmt.Sprintf("%q", address))},
+			}, revision)
+			if len(fields) != 0 {
+				t.Fatal(fields)
+			}
+			status, pending, err := r.activatePending(lease, next)
+			if status != http.StatusAccepted || err != nil {
+				t.Fatalf("temporary listener: %d %v", status, err)
+			}
+			client := &http.Client{Timeout: 5 * time.Second}
+			defer client.CloseIdleConnections()
+			check := func(address string) {
+				t.Helper()
+				response, err := client.Get("http://" + address + "/hister/api/config")
+				if err != nil {
+					t.Fatal(err)
+				}
+				_ = response.Body.Close()
+				if response.StatusCode != http.StatusOK {
+					t.Fatalf("listener unavailable: %d", response.StatusCode)
+				}
+			}
+			check(address)
+			if blockRecovery {
+				listener, err := net.Listen("tcp", previousAddress)
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer func() { _ = listener.Close() }()
+			}
+			status, err = r.cancelPending(pendingTestLease(r, headers), pending.Revision)
+			if blockRecovery {
+				if status != http.StatusServiceUnavailable || err == nil || !strings.Contains(err.Error(), "restart") {
+					t.Fatalf("failed recovery was not reported: %d %v", status, err)
+				}
+				response := testutil.ServeHTTP(t, r, http.MethodGet, "/hister/api/config", nil, nil)
+				if response.Code != http.StatusServiceUnavailable {
+					t.Fatal("failed recovery continued serving the unconfirmed configuration")
+				}
+			} else {
+				if status != http.StatusOK || err != nil {
+					t.Fatalf("listener rollback: %d %v", status, err)
+				}
+				check(previousAddress)
+			}
+			loaded, _, err := config.LoadForInspection(cfg.Filename(), true)
+			if err != nil || loaded.Server.Address != previousAddress {
+				t.Fatal("temporary listener replaced confirmed settings")
+			}
+		})
+	}
+}
+
+func TestSettingsPendingConfirmationExpiresWhileDraining(t *testing.T) {
+	entered, release := make(chan struct{}), make(chan struct{})
+	unblock := sync.OnceFunc(func() { close(release) })
+	defer unblock()
+	previousEndpoints := Endpoints
+	Endpoints = append(append([]*Endpoint(nil), Endpoints...), &Endpoint{
+		Path: "/api/test-held", Method: GET,
+		Handler: func(c *webContext) { close(entered); <-release; serve200(c) },
+	})
+	t.Cleanup(func() { Endpoints = previousEndpoints })
+	cfg, handler, headers := newAccessSettingsTestServer(t, "token")
+	r := handler.(*serverRuntime)
+	r.confirmationTimeout = 250 * time.Millisecond
+	pending := activateTestPendingSettings(t, r, headers)
+	held := make(chan struct{})
+	go func() { testutil.ServeHTTP(t, r, http.MethodGet, "/hister/api/test-held", nil, headers); close(held) }()
+	<-entered
+	lease := pendingTestLease(r, headers)
+	done := make(chan int, 1)
+	go func() { status, _ := r.confirmPending(lease, pending.Revision); done <- status }()
+	waitRuntimePause(t, r)
+	time.Sleep(time.Until(pending.Deadline) + 10*time.Millisecond)
+	unblock()
+	<-held
+	if status := <-done; status != http.StatusConflict {
+		t.Fatalf("confirmation crossed the deadline: %d", status)
+	}
+	_, values := readConfigurationState(t, r, headers)
+	if values["app.subtitle"].Value != cfg.App.Subtitle {
+		t.Fatal("late confirmation did not restore the previous configuration")
+	}
+}
+
+func TestSettingsPendingActivationFailureKeepsRuntime(t *testing.T) {
+	cfg, handler, headers := newAccessSettingsTestServer(t, "token")
+	r := handler.(*serverRuntime)
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = listener.Close() }()
+	revision, _ := readConfigurationState(t, r, headers)
+	lease := pendingTestLease(r, headers)
+	next, fields := prepareConfigurationDraft(lease.generation.cfg, []config.SettingEdit{
+		{Path: "server.address", Action: "set", Value: json.RawMessage(fmt.Sprintf("%q", listener.Addr().String()))},
+	}, revision)
+	if len(fields) != 0 {
+		t.Fatal(fields)
+	}
+	status, _, err := r.activatePending(lease, next)
+	if status != http.StatusBadRequest || err == nil {
+		t.Fatalf("unavailable listener activation: %d %v", status, err)
+	}
+	if current, _ := readConfigurationState(t, r, headers); current != revision {
+		t.Fatal("failed activation changed the runtime")
+	}
+	if staged, err := filepath.Glob(cfg.FullPath(".config.web-*")); err != nil || len(staged) != 0 {
+		t.Fatalf("failed activation left staging files: %v %v", staged, err)
+	}
+	if status := reloadRequest(t, r, "secret"); status != http.StatusOK {
+		t.Fatalf("failed activation blocked later operations: %d", status)
+	}
+}
+
+func TestSettingsPendingActivationRechecksAdministrator(t *testing.T) {
+	entered, release := make(chan struct{}), make(chan struct{})
+	unblock := sync.OnceFunc(func() { close(release) })
+	defer unblock()
+	previousEndpoints := Endpoints
+	Endpoints = append(append([]*Endpoint(nil), Endpoints...), &Endpoint{
+		Path: "/api/test-remove-administrator", Method: GET,
+		Handler: func(c *webContext) {
+			close(entered)
+			<-release
+			if _, err := model.SyncOAuthAdmin("oidc-future-owner", false); err != nil {
+				t.Error(err)
+			}
+			serve200(c)
+		},
+	})
+	t.Cleanup(func() { Endpoints = previousEndpoints })
+	_, handler, headers := newAccessSettingsTestServer(t, "token")
+	r := handler.(*serverRuntime)
+	if _, err := model.CreateOAuthUser("future-owner", "oidc-future-owner"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := model.SyncOAuthAdmin("oidc-future-owner", true); err != nil {
+		t.Fatal(err)
+	}
+	revision, _ := readConfigurationState(t, r, headers)
+	lease := pendingTestLease(r, headers)
+	next, fields := prepareConfigurationDraft(lease.generation.cfg, []config.SettingEdit{
+		{Path: "app.user_handling", Action: "set", Value: json.RawMessage(`true`)},
+	}, revision)
+	if len(fields) != 0 {
+		t.Fatal(fields)
+	}
+	held := make(chan struct{})
+	go func() {
+		testutil.ServeHTTP(t, r, http.MethodGet, "/hister/api/test-remove-administrator", nil, headers)
+		close(held)
+	}()
+	<-entered
+	done := make(chan int, 1)
+	go func() { status, _, _ := r.activatePending(lease, next); done <- status }()
+	waitRuntimePause(t, r)
+	unblock()
+	<-held
+	if status := <-done; status != http.StatusUnprocessableEntity {
+		t.Fatalf("activated user handling after the administrator role was revoked: %d", status)
+	}
+	_, values := readConfigurationState(t, r, headers)
+	if values["app.user_handling"].Value != false {
+		t.Fatal("rejected activation changed authentication")
+	}
+}
+
+func activateTestPendingSettings(t *testing.T, r *serverRuntime, headers map[string]string) pendingAccessStatus {
+	t.Helper()
+	revision, _ := readConfigurationState(t, r, headers)
+	lease := pendingTestLease(r, headers)
+	next, fields := prepareConfigurationDraft(lease.generation.cfg, []config.SettingEdit{
+		{Path: "app.subtitle", Action: "set", Value: json.RawMessage(`"Temporary settings"`)},
+	}, revision)
+	if len(fields) != 0 {
+		t.Fatal(fields)
+	}
+	status, pending, err := r.activatePending(lease, next)
+	if err != nil || status != http.StatusAccepted {
+		t.Fatalf("temporary activation: %d %v", status, err)
+	}
+	return pending
+}
+
 func TestSettingsOrdinaryAppAndServerApply(t *testing.T) {
 	for _, multiUser := range []bool{false, true} {
 		t.Run(fmt.Sprintf("multi_user_%t", multiUser), func(t *testing.T) {
@@ -80,7 +551,15 @@ func TestSettingsOrdinaryAppAndServerApply(t *testing.T) {
 					}
 					edits = append(edits, edit)
 				}
-				body, err := json.Marshal(map[string]any{"revision": revision, "edits": edits})
+				draft := map[string]any{"revision": revision, "edits": edits}
+				if action == "enable" {
+					raw, err := json.Marshal(edits)
+					if err != nil {
+						t.Fatal(err)
+					}
+					draft["acknowledgment"] = settingsReview(t, handler, headers, revision, string(raw))
+				}
+				body, err := json.Marshal(draft)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -190,7 +669,12 @@ func TestSettingsSensitivePatternApply(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			revision, _ := readConfigurationState(t, handler, headers)
-			body := fmt.Sprintf(`{"revision":%q,"edits":[{"path":"sensitive_content_patterns",%s},{"path":"app.subtitle","action":"set","value":"Pattern draft"}]}`, revision, tc.edit)
+			edits := fmt.Sprintf(`[{"path":"sensitive_content_patterns",%s},{"path":"app.subtitle","action":"set","value":"Pattern draft"}]`, tc.edit)
+			extra := ""
+			if tc.name != "reset" {
+				extra = fmt.Sprintf(`,"acknowledgment":%q`, settingsReview(t, handler, headers, revision, edits))
+			}
+			body := fmt.Sprintf(`{"revision":%q,"edits":%s%s}`, revision, edits, extra)
 			response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(body), headers)
 			if response.Code != http.StatusOK {
 				t.Fatalf("apply patterns: %d %s", response.Code, response.Body)
@@ -325,13 +809,27 @@ func TestSettingsExtractionAndSemanticApply(t *testing.T) {
 		{"path":"semantic_search.api_key","action":"set","value":{"action":"replace","value":"private-api-key"}},
 		{"path":"semantic_search.headers","action":"set","value":{"x-key":{"action":"replace","value":"private-header"}}}
 	]`, embeddings.URL)
+	acknowledgment := ""
 	for _, operation := range []string{"validate", "apply"} {
-		response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/"+operation, strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":%s}`, revision, edits)), headers)
+		extra := ""
+		if operation == "apply" {
+			extra = fmt.Sprintf(`,"acknowledgment":%q`, acknowledgment)
+		}
+		response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/"+operation, strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":%s%s}`, revision, edits, extra)), headers)
 		if response.Code != http.StatusOK || strings.Contains(response.Body.String(), "private-") {
 			t.Fatalf("%s: %d %s", operation, response.Code, response.Body)
 		}
 		if requests.Load() != 0 {
 			t.Fatalf("%s probed the endpoint or rebuilt existing embeddings", operation)
+		}
+		if operation == "validate" {
+			var result struct {
+				Review struct{ Acknowledgment string }
+			}
+			if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil || result.Review.Acknowledgment == "" {
+				t.Fatalf("missing embedding destination review: %v", err)
+			}
+			acknowledgment = result.Review.Acknowledgment
 		}
 	}
 	_, values := readConfigurationState(t, handler, headers)
@@ -822,7 +1320,7 @@ func TestFullReloadAllowsMissingRecoveryAdministrator(t *testing.T) {
 				raw = []byte(strings.Replace(string(raw), "user_handling: false", "user_handling: true", 1))
 			}
 			if account == "oidc administrator" {
-				raw = []byte(strings.Replace(string(raw), "server:\n", "server:\n  oauth_only: true\n  oauth:\n    oidc:\n      client_id: hister\n      client_secret: secret\n      auth_url: https://provider.example/auth\n      admin_groups: [owners]\n", 1))
+				raw = []byte(strings.Replace(string(raw), "server:\n", "server:\n  oauth_only: true\n  oauth:\n    oidc:\n      client_id: hister\n      client_secret: secret\n      auth_url: https://provider.example/auth\n      token_url: https://provider.example/token\n      userinfo_url: https://provider.example/userinfo\n      admin_groups: [owners]\n", 1))
 			}
 			if err := os.WriteFile(cfg.Filename(), raw, 0o600); err != nil {
 				t.Fatal(err)
@@ -982,52 +1480,143 @@ func TestRuntimeDiscardsAbandonedConfigurationStaging(t *testing.T) {
 }
 
 func TestSettingsSaveRechecksActorAfterDraining(t *testing.T) {
-	entered, release := make(chan struct{}), make(chan struct{})
-	unblock := sync.OnceFunc(func() { close(release) })
-	defer unblock()
-	oldEndpoints := Endpoints
-	Endpoints = append(append([]*Endpoint(nil), Endpoints...), &Endpoint{
-		Path: "/api/test-demote", Method: GET,
-		Handler: func(c *webContext) {
-			close(entered)
-			<-release
-			if _, err := model.ToggleAdmin("saving-admin"); err != nil {
-				t.Error(err)
+	for _, change := range []string{"demote", "rotate token"} {
+		t.Run(change, func(t *testing.T) {
+			entered, release := make(chan struct{}), make(chan struct{})
+			unblock := sync.OnceFunc(func() { close(release) })
+			defer unblock()
+			oldEndpoints := Endpoints
+			Endpoints = append(append([]*Endpoint(nil), Endpoints...), &Endpoint{
+				Path: "/api/test-demote", Method: GET,
+				Handler: func(c *webContext) {
+					close(entered)
+					<-release
+					if change == "demote" {
+						if _, err := model.ToggleAdmin("saving-admin"); err != nil {
+							t.Error(err)
+						}
+					} else {
+						actor, err := model.GetUser("saving-admin")
+						if err == nil {
+							_, err = model.RotateUserToken(actor.ID, actor.ID, actor.Revision)
+						}
+						if err != nil {
+							t.Error(err)
+						}
+					}
+					serve200(c)
+				},
+			})
+			t.Cleanup(func() { Endpoints = oldEndpoints })
+			cfg, handler, _ := newReloadTestServer(t, true)
+			actor, err := model.CreateUser("saving-admin", "password123", true)
+			if err != nil {
+				t.Fatal(err)
 			}
-			serve200(c)
-		},
-	})
-	t.Cleanup(func() { Endpoints = oldEndpoints })
-	cfg, handler, _ := newReloadTestServer(t, true)
-	actor, err := model.CreateUser("saving-admin", "password123", true)
-	if err != nil {
-		t.Fatal(err)
+			headers := map[string]string{"Origin": "hister://", "X-Access-Token": actor.Token}
+			revision, _ := readConfigurationState(t, handler, headers)
+			held := make(chan struct{})
+			go func() {
+				testutil.ServeHTTP(t, handler, http.MethodGet, "/hister/api/test-demote", nil, headers)
+				close(held)
+			}()
+			<-entered
+			result := make(chan *httptest.ResponseRecorder, 1)
+			go func() {
+				result <- testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":[{"path":"app.subtitle","action":"set","value":"Unauthorized"}]}`, revision)), headers)
+			}()
+			waitRuntimePause(t, handler)
+			unblock()
+			<-held
+			response := <-result
+			if response.Code != http.StatusForbidden {
+				t.Fatalf("demoted actor applied settings: %d %s", response.Code, response.Body)
+			}
+			var failure struct{ Code string }
+			if err := json.Unmarshal(response.Body.Bytes(), &failure); err != nil || failure.Code != "admin_required" {
+				t.Fatalf("demoted actor failure code: %s (%v)", response.Body, err)
+			}
+			if _, err := os.Stat(filepath.Join(cfg.App.Directory, "config.web.yml")); !os.IsNotExist(err) {
+				t.Fatal("denied save changed the managed file")
+			}
+		})
 	}
-	headers := map[string]string{"Origin": "hister://", "X-Access-Token": actor.Token}
-	revision, _ := readConfigurationState(t, handler, headers)
-	held := make(chan struct{})
-	go func() {
-		testutil.ServeHTTP(t, handler, http.MethodGet, "/hister/api/test-demote", nil, headers)
-		close(held)
-	}()
-	<-entered
-	result := make(chan *httptest.ResponseRecorder, 1)
-	go func() {
-		result <- testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":[{"path":"app.subtitle","action":"set","value":"Unauthorized"}]}`, revision)), headers)
-	}()
-	waitRuntimePause(t, handler)
-	unblock()
-	<-held
-	response := <-result
-	if response.Code != http.StatusForbidden {
-		t.Fatalf("demoted actor applied settings: %d %s", response.Code, response.Body)
-	}
-	var failure struct{ Code string }
-	if err := json.Unmarshal(response.Body.Bytes(), &failure); err != nil || failure.Code != "admin_required" {
-		t.Fatalf("demoted actor failure code: %s (%v)", response.Body, err)
-	}
-	if _, err := os.Stat(filepath.Join(cfg.App.Directory, "config.web.yml")); !os.IsNotExist(err) {
-		t.Fatal("denied save changed the managed file")
+}
+
+func TestReloadRejectsRevokedCredentialsAfterDraining(t *testing.T) {
+	for _, method := range []string{"user token", "user session", "instance session"} {
+		t.Run(method, func(t *testing.T) {
+			entered, release := make(chan struct{}), make(chan struct{})
+			unblock := sync.OnceFunc(func() { close(release) })
+			defer unblock()
+			oldEndpoints := Endpoints
+			Endpoints = append(append([]*Endpoint(nil), Endpoints...), &Endpoint{
+				Path: "/api/test-revoke", Method: GET,
+				Handler: func(c *webContext) {
+					close(entered)
+					<-release
+					if method != "user token" {
+						serveLogout(c)
+						return
+					}
+					actor, err := model.GetUser("runtime-owner")
+					if err == nil {
+						_, err = model.RotateUserToken(actor.ID, actor.ID, actor.Revision)
+					}
+					if err != nil {
+						t.Error(err)
+					}
+					serve200(c)
+				},
+			})
+			t.Cleanup(func() { Endpoints = oldEndpoints })
+			_, handler, write := newReloadTestServer(t, method != "instance session")
+			headers := map[string]string{"Origin": "hister://", "X-Access-Token": "secret"}
+			if method != "instance session" {
+				actor, err := model.GetUser("runtime-owner")
+				if err != nil {
+					t.Fatal(err)
+				}
+				headers["X-Access-Token"] = actor.Token
+			}
+			if method != "user token" {
+				path, body := "/hister/api/login", `{"username":"runtime-owner","password":"password123"}`
+				if method == "instance session" {
+					path, body = "/hister/api/token-login", `{"token":"secret"}`
+				}
+				login := testutil.ServeHTTP(t, handler, http.MethodPost, path, strings.NewReader(body), headers)
+				if login.Code != http.StatusOK {
+					t.Fatalf("login: %d %s", login.Code, login.Body)
+				}
+				headers = map[string]string{"Origin": "hister://", "Cookie": responseSessionCookie(t, login).String()}
+			}
+			write("  title: Unauthorized reload\n")
+			held := make(chan *httptest.ResponseRecorder, 1)
+			go func() {
+				held <- testutil.ServeHTTP(t, handler, http.MethodGet, "/hister/api/test-revoke", nil, headers)
+			}()
+			<-entered
+			result := make(chan *httptest.ResponseRecorder, 1)
+			go func() {
+				result <- testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/reload", nil, headers)
+			}()
+			waitRuntimePause(t, handler)
+			unblock()
+			if response := <-held; response.Code != http.StatusOK {
+				t.Fatalf("credential revocation: %d %s", response.Code, response.Body)
+			}
+			if response := <-result; response.Code != http.StatusForbidden {
+				t.Errorf("revoked credential reloaded configuration: %d %s", response.Code, response.Body)
+			}
+			if response := testutil.ServeHTTP(t, handler, http.MethodGet, "/hister/api/settings", nil, headers); response.Code != http.StatusForbidden {
+				t.Errorf("revoked credential remains authorized: %d", response.Code)
+			}
+			response := testutil.ServeHTTP(t, handler, http.MethodGet, "/hister/api/config", nil, nil)
+			var current struct{ Title string }
+			if err := json.Unmarshal(response.Body.Bytes(), &current); err != nil || response.Code != http.StatusOK || current.Title != "Original" {
+				t.Fatalf("denied reload did not retain active configuration: %d %s (%v)", response.Code, response.Body, err)
+			}
+		})
 	}
 }
 

@@ -20,11 +20,12 @@ import (
 )
 
 const (
-	oauthStateKey       = "oauth_state"
-	oauthProviderKey    = "oauth_provider"
-	oauthVerifierKey    = "oauth_code_verifier"
-	oauthReturnToKey    = "oauth_return_to"
-	oauthRequestTimeout = 10 * time.Second
+	oauthStateKey         = "oauth_state"
+	oauthProviderKey      = "oauth_provider"
+	oauthVerifierKey      = "oauth_code_verifier"
+	oauthReturnToKey      = "oauth_return_to"
+	oauthConfigurationKey = "oauth_configuration"
+	oauthRequestTimeout   = 10 * time.Second
 )
 
 func generateOAuthState() (string, error) {
@@ -119,6 +120,9 @@ func serveOAuthRedirect(c *webContext) {
 	session.Values[oauthProviderKey] = providerName
 	session.Values[oauthVerifierKey] = verifier
 	session.Values[oauthReturnToKey] = authReturnPath(c.Request.URL.Query().Get("return_to"), c.Config.BasePathPrefix())
+	if lease, ok := c.Request.Context().Value(runtimeRequestKey{}).(*runtimeRequest); ok {
+		session.Values[oauthConfigurationKey] = lease.generation.authID
+	}
 	if err := session.Save(c.Request, c.Response); err != nil {
 		serve500(c)
 		return
@@ -160,10 +164,12 @@ func serveOAuthCallback(c *webContext) {
 	}
 	verifier, hasVerifier := session.Values[oauthVerifierKey].(string)
 	returnTo, _ := session.Values[oauthReturnToKey].(string)
+	configurationID, _ := session.Values[oauthConfigurationKey].(string)
 	delete(session.Values, oauthStateKey)
 	delete(session.Values, oauthProviderKey)
 	delete(session.Values, oauthVerifierKey)
 	delete(session.Values, oauthReturnToKey)
+	delete(session.Values, oauthConfigurationKey)
 	// Consume the flow before contacting the provider, including on errors.
 	if err := session.Save(c.Request, c.Response); err != nil {
 		serve500(c)
@@ -250,6 +256,9 @@ func serveOAuthCallback(c *webContext) {
 		return
 	}
 	sessionStore.authenticateUser(session, user)
+	if lease, ok := c.Request.Context().Value(runtimeRequestKey{}).(*runtimeRequest); ok && configurationID == lease.generation.authID {
+		recordConfigurationLogin(c, session, "oauth:"+providerName)
+	}
 	if err := session.Save(c.Request, c.Response); err != nil {
 		serve500(c)
 		return

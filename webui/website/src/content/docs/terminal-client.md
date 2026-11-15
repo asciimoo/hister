@@ -463,25 +463,6 @@ Run the search command without any arguments:
 hister search
 ```
 
-### TUI Features
-
-- **Multi-tab interface**: Search, History, Rules, and Add tabs
-- **Mouse support**: Scroll with mouse wheel, click to select, right-click for context menu
-- **Result actions**: Copy URLs, read full previews, edit labels, prioritize, or delete
-- **Responsive preview pane**: Read results beside the result list on wide terminals; smaller terminals switch the preview to full width
-- **Semantic search**: Toggle hybrid keyword/semantic results when semantic search is enabled
-- **Theming**: Built-in color themes with interactive picker (press `ctrl+t`)
-- **Settings overlay**: Change appearance mode or edit keybindings interactively (press `ctrl+s`)
-- **Responsive workspaces**: Every tab scrolls and adapts to the terminal size
-- **Contextual help and feedback**: Footer shortcuts match the active tab, while notices confirm actions
-
-### Tabs
-
-- **Search** (Alt+1): Main search interface
-- **History** (Alt+2): View your recent search history
-- **Rules** (Alt+3): Manage allow, skip, priority, versioning, and alias rules
-- **Add** (Alt+4): Manually add URLs, titles, and multiline text to the index
-
 ### TUI Keybindings
 
 The TUI uses the following keybindings by default:
@@ -509,15 +490,11 @@ The TUI uses the following keybindings by default:
 
 ### Mouse Controls
 
-- **Left-click**: Select results or open tabs
-- **Right-click**: Open the result menu (open, copy, details, label, prioritize, delete)
-- **Scroll wheel**: Navigate results or scroll the active workspace/overlay
-- **Scrollbar drag**: Quick scroll through long result lists
+Right clicking a result opens its context menu.
 
 When a preview is open on a wide terminal, use `tab` to move focus between the
 result list and the preview. Arrow keys or `j`/`k` then navigate the focused
-side. Clicking or scrolling either side focuses it. Press `v`, `esc`, or the
-`×` in the preview header to close it.
+side. Clicking or scrolling either side focuses it.
 
 Search input and result navigation are separate focus modes. While the search
 field is focused, printable keys edit the query and the footer only shows input

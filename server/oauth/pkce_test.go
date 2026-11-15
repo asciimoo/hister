@@ -37,7 +37,17 @@ func TestProviderPKCE(t *testing.T) {
 	const verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
 	const challenge = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
 	const callback = "https://hister.example/api/oauth/callback"
-	for _, name := range []string{"github", "google", "oidc"} {
+	for name, create := range map[string]func(*http.Client) Provider{
+		"github": func(client *http.Client) Provider {
+			return GitHubOAuth{AuthURL: "https://provider.example/auth", TokenURL: "https://provider.example/token", Client: client}
+		},
+		"google": func(client *http.Client) Provider {
+			return GoogleOAuth{AuthURL: "https://provider.example/auth", TokenURL: "https://provider.example/token", Client: client}
+		},
+		"oidc": func(client *http.Client) Provider {
+			return &OIDCOAuth{AuthURL: "https://provider.example/auth", TokenURL: "https://provider.example/token", Client: client}
+		},
+	} {
 		for _, mode := range []string{"enabled", "disabled", "existing constructors"} {
 			t.Run(name+"/"+mode, func(t *testing.T) {
 				t.Parallel()
@@ -68,12 +78,7 @@ func TestProviderPKCE(t *testing.T) {
 					}
 					return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("access_token=token"))}, nil
 				})}
-				providers := map[string]Provider{
-					"github": GitHubOAuth{AuthURL: "https://provider.example/auth", TokenURL: "https://provider.example/token", Client: client},
-					"google": GoogleOAuth{AuthURL: "https://provider.example/auth", TokenURL: "https://provider.example/token", Client: client},
-					"oidc":   &OIDCOAuth{AuthURL: "https://provider.example/auth", TokenURL: "https://provider.example/token", Client: client},
-				}
-				provider := providers[name]
+				provider := create(client)
 				redirectReq := NewRedirectURIRequest("client-id", callback, "state", nil)
 				tokenReq := NewTokenRequest("client-id", "client-secret", "code", callback)
 				if mode != "existing constructors" {

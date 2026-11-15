@@ -121,6 +121,20 @@ test('an authenticated visitor follows the requested page without another login'
   await expect(page).toHaveURL('http://127.0.0.1:4174/help#query-syntax');
 });
 
+test('access confirmation can request a fresh password login from an existing session', async ({
+  page,
+}) => {
+  const config = await mockLogin(page, 'user');
+  config.authenticated = true;
+  await page.goto(
+    '/auth?' + new URLSearchParams({ reauth: '1', method: 'password', return_to: '/settings' }),
+  );
+  await expect(page.getByRole('textbox', { name: 'Username', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Sign in with SSO' })).toHaveCount(0);
+  await signIn(page, 'user');
+  await expect(page).toHaveURL('http://127.0.0.1:4174/settings');
+});
+
 test('manual login from the menu preserves the current page', async ({ page }) => {
   await mockLogin(page, 'user', true);
   await page.goto('/help#query-syntax');

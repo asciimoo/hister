@@ -38,10 +38,9 @@ Install one or more of the following extensions to index any pages you _newly_ v
 - **Chrome**: [Install from Chrome Web Store](https://chromewebstore.google.com/detail/hister/cciilamhchpmbdnniabclekddabkifhb)
 - **Firefox**: [Install from Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/hister/) (also available on Firefox Mobile!)
 
-Click the extension's icon to access its settings; the server URL should already be the default of `http://127.0.0.1:4433`.
+The extension defaults to `http://127.0.0.1:4433`. Change the server URL if Hister runs elsewhere.
 
 To search Hister from your browser's address bar, add your Hister instance as a custom search engine in the browser settings.
-Feel free to make it the default. Hister's search interface has a button to forward your query to an external search engine like DuckDuckGo or Google.
 
 Note that the browser extensions _do not_ access the network except for downloading the page's favicon while collecting page data.
 In particular, they will never make requests to any site you are visiting (they only look at what the browser itself has loaded), and thus they are completely transparent to the indexed websites.

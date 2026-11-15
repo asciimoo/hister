@@ -171,11 +171,6 @@ var listenCmd = &cobra.Command{
 	Use:   "listen",
 	Short: "Start the Hister HTTP server",
 	Long:  `Start the Hister HTTP server and watch configured directories for file changes.`,
-	PreRun: func(cmd *cobra.Command, _ []string) {
-		if err := cfg.ValidatePublicMode(); err != nil {
-			exit(1, "Failed to initialize config: "+err.Error())
-		}
-	},
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		idx := initIndex(model.ReadWrite)
 		if (cfg.App.AccessToken != "" || cfg.App.UserHandling) && strings.HasPrefix(cfg.BaseURL(""), "http://") {
@@ -418,9 +413,6 @@ func initConfig(cmd *cobra.Command) {
 	}
 	cfg, err = config.Load(name, override...)
 	if err != nil {
-		exit(1, "Failed to initialize config: "+err.Error())
-	}
-	if err := cfg.ValidatePublicMode(); err != nil {
 		exit(1, "Failed to initialize config: "+err.Error())
 	}
 }

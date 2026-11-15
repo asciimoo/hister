@@ -184,7 +184,7 @@ func newOAuthTestServer(t *testing.T) (*config.Config, http.Handler) {
 	cfg := testutil.InitModel(t)
 	cfg.App.UserHandling = true
 	cfg.Server.OAuth = map[string]*config.OAuthEntry{
-		"oidc":   {ClientID: "hister", ClientSecret: "secret", AuthURL: "https://provider.example/auth"},
+		"oidc":   {ClientID: "hister", ClientSecret: "secret", AuthURL: "https://provider.example/auth", TokenURL: "https://provider.example/token", UserInfoURL: "https://provider.example/userinfo"},
 		"google": {ClientID: "google-client", ClientSecret: "google-secret"},
 	}
 	if err := cfg.UpdateBaseURL("http://hister.example/hister"); err != nil {

@@ -72,6 +72,68 @@ func TestLoadCommentedConfiguration(t *testing.T) {
 	}
 }
 
+func TestLoadValidatesBeforeInitializingRuntime(t *testing.T) {
+	for _, raw := range []string{
+		"crawler:\n  backend: typo\n",
+		"sensitive_content_patterns:\n  broken: '['\n",
+		"app:\n  public: true\n",
+		"hotkeys:\n  web: {alt+x: unknown_action}\n",
+		"semantic_search:\n  enable: true\n  dimensions: 0\n",
+		"indexer:\n  languages: [en]\n",
+		"server:\n  oauth:\n    github: {client_id: missing-secret}\n",
+	} {
+		t.Run(strings.Split(raw, ":")[0], func(t *testing.T) {
+			dir := t.TempDir()
+			dataDir := filepath.Join(dir, "data")
+			t.Setenv("HISTER_DATA_DIR", dataDir)
+			filename := filepath.Join(dir, "config.yml")
+			if err := os.WriteFile(filename, []byte(raw), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := Load(filename); err == nil {
+				t.Error("startup accepted invalid configuration")
+			}
+			if _, err := os.Stat(dataDir); !errors.Is(err, os.ErrNotExist) {
+				t.Errorf("invalid configuration initialized runtime files: %v", err)
+			}
+		})
+	}
+}
+
+func TestLoadPreservesDerivedBaseURL(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HISTER_DATA_DIR", filepath.Join(dir, "data"))
+	filename := filepath.Join(dir, "config.yml")
+	if err := os.WriteFile(filename, []byte("# defaults\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c, err := Load(filename)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := c.UpdateListenAddress("127.0.0.1:7788"); err != nil {
+		t.Fatal(err)
+	}
+	if c.BaseURL("") != "http://127.0.0.1:7788" {
+		t.Fatalf("derived base URL did not follow listen address: %q", c.BaseURL(""))
+	}
+}
+
+func TestLoadValidatesSeparateTUIHotkeys(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HISTER_DATA_DIR", filepath.Join(dir, "data"))
+	filename := filepath.Join(dir, "config.yml")
+	if err := os.WriteFile(filename, []byte("# defaults\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "tui.yaml"), []byte("hotkeys: {x: unknown_action}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(filename); err == nil || !strings.Contains(err.Error(), "tui hotkey") {
+		t.Fatalf("expected separate TUI hotkey validation, got %v", err)
+	}
+}
+
 func TestManagedConfigurationLoading(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HISTER_DATA_DIR", dir)
@@ -643,6 +705,50 @@ func TestCandidateOverridesFollowSpecialEnvironment(t *testing.T) {
 	}
 }
 
+func TestListenAddressOverridesPrecedeValidation(t *testing.T) {
+	for _, tc := range []struct {
+		name, address, port, override, want string
+	}{
+		{"flag replaces invalid address", "invalid", "", "127.0.0.1:7788", "127.0.0.1:7788"},
+		{"flag replaces invalid address with environment port", "invalid", "6655", "127.0.0.1:7788", "127.0.0.1:7788"},
+		{"environment replaces invalid port", "127.0.0.1:invalid", "6655", "", "127.0.0.1:6655"},
+		{"environment preserves empty host", ":4433", "6655", "", ":6655"},
+		{"environment preserves IPv6 host", "[::1]:4433", "6655", "", "[::1]:6655"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			t.Setenv("HISTER_DATA_DIR", filepath.Join(dir, "data"))
+			t.Setenv("HISTER_PORT", tc.port)
+			filename := filepath.Join(dir, "config.yml")
+			raw := fmt.Sprintf("server:\n  address: %q\n  base_url: https://hister.example\n", tc.address)
+			if err := os.WriteFile(filename, []byte(raw), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			var overrides []Override
+			if tc.override != "" {
+				overrides = append(overrides, Override{Path: "server.address", Value: tc.override, Source: ValueSource{Kind: "flag", Name: "--address"}})
+			}
+			c, _, err := LoadForInspection(filename, true, overrides...)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := c.Validate(); err != nil {
+				t.Fatal(err)
+			}
+			if c.Server.Address != tc.want {
+				t.Fatalf("address = %q, want %q", c.Server.Address, tc.want)
+			}
+			kind := "environment"
+			if tc.override != "" {
+				kind = "flag"
+			}
+			if source := c.Source("server.address"); source.Kind != kind {
+				t.Fatalf("source = %+v, want %s", source, kind)
+			}
+		})
+	}
+}
+
 func TestCandidateOverridesDoNotShareMutableInputs(t *testing.T) {
 	filename := filepath.Join(t.TempDir(), "config.yml")
 	if err := os.WriteFile(filename, []byte("# Defaults\n"), 0o600); err != nil {
@@ -960,6 +1066,71 @@ func TestIndexerDefaults(t *testing.T) {
 	}
 }
 
+func TestIndexerRejectsNullDirectoryRows(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HISTER_DATA_DIR", filepath.Join(dir, "data"))
+	filename := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(filename, []byte("indexer:\n  directories: [null]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(filename); err == nil {
+		t.Error("startup accepted a null directory row")
+	}
+	c, _, err := LoadForInspection(filename, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Validate(); err == nil {
+		t.Error("inspection accepted a null directory row")
+	}
+	fields := c.ValidateFields()
+	if len(fields) != 1 || fields[0].Path != "indexer.directories" {
+		t.Fatalf("directory validation fields = %v, want indexer.directories", fields)
+	}
+}
+
+func TestIndexerMaxFileSizeValidation(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		size    int64
+		wantErr bool
+	}{
+		{name: "negative", size: -1, wantErr: true},
+		{name: "zero", size: 0, wantErr: true},
+		{name: "minimum", size: 1},
+		{name: "maximum", size: 8796093022207},
+		{name: "byte conversion overflows", size: 8796093022208, wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			t.Setenv("HISTER_DATA_DIR", filepath.Join(dir, "data"))
+			filename := filepath.Join(dir, "config.yaml")
+			raw := fmt.Sprintf("indexer:\n  max_file_size_mb: %d\n", tc.size)
+			if err := os.WriteFile(filename, []byte(raw), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := Load(filename); (err != nil) != tc.wantErr {
+				t.Errorf("startup error = %v, wantErr %v", err, tc.wantErr)
+			}
+			c, _, err := LoadForInspection(filename, true)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := c.Validate(); (err != nil) != tc.wantErr {
+				t.Errorf("inspection error = %v, wantErr %v", err, tc.wantErr)
+			}
+			fields := c.ValidateFields()
+			if tc.wantErr {
+				if len(fields) != 1 || fields[0].Path != "indexer.max_file_size_mb" {
+					t.Fatalf("file size validation fields = %v, want indexer.max_file_size_mb", fields)
+				}
+			} else if len(fields) != 0 {
+				t.Fatalf("valid file size produced field errors: %v", fields)
+			}
+		})
+	}
+}
+
 func TestIndexerValidate(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
@@ -984,6 +1155,7 @@ func TestIndexerValidate(t *testing.T) {
 		{"low accuracy", Indexer{LanguageDetectionAccuracy: "low"}, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			tc.indexer.MaxFileSize = 1
 			if err := tc.indexer.Validate(); (err != nil) != tc.wantErr {
 				t.Fatalf("Validate() error = %v, wantErr %v", err, tc.wantErr)
 			}
@@ -992,7 +1164,7 @@ func TestIndexerValidate(t *testing.T) {
 }
 
 func TestIndexerValidationPreservesUnsupportedInput(t *testing.T) {
-	i := Indexer{Languages: []string{" EN-us ", "en-GB", "nb-NO", " ckb ", "xx"}}
+	i := Indexer{MaxFileSize: 1, Languages: []string{" EN-us ", "en-GB", "nb-NO", " ckb ", "xx"}}
 	want := slices.Clone(i.Languages)
 	err := i.Validate()
 	if err == nil || err.Error() != `unsupported language in indexer.languages: " ckb "` {
@@ -1036,6 +1208,7 @@ func TestIndexerValidationIdentifiesFields(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			tc.indexer.MaxFileSize = 1
 			err := tc.indexer.Validate()
 			if err == nil || err.Error() != tc.detail {
 				t.Fatalf("validation diagnostic = %v, want %q", err, tc.detail)
@@ -1123,6 +1296,51 @@ func TestDirectoryLabelConfig(t *testing.T) {
 	}
 }
 
+func TestDirectoryPatternsValidatedAcrossSources(t *testing.T) {
+	for _, tc := range []struct {
+		name, patterns, excludes string
+		valid                    bool
+	}{
+		{"malformed include", "['[private-pattern']", "[]", false},
+		{"malformed exclusion", "[]", "['[private-pattern']", false},
+		{"empty include", "['']", "[]", false},
+		{"empty exclusion", "[]", "['']", false},
+		{"relative directory with globs", "['*.txt']", "['secret*']", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			t.Setenv("HISTER_DATA_DIR", filepath.Join(dir, "data"))
+			filename := filepath.Join(dir, "config.yml")
+			raw := fmt.Sprintf("indexer:\n  directories:\n    - path: docs\n      patterns: %s\n      excludes: %s\n", tc.patterns, tc.excludes)
+			if err := os.WriteFile(filename, []byte(raw), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			c, _, err := LoadForInspection(filename, true)
+			if err != nil {
+				t.Fatal(err)
+			}
+			fields := c.ValidateFields()
+			if err := c.Validate(); (err == nil) != tc.valid {
+				t.Errorf("Validate() = %v, valid = %t", err, tc.valid)
+			}
+			if tc.valid {
+				if len(fields) > 0 {
+					t.Fatalf("relative directory with valid patterns rejected: %v", fields)
+				}
+				if !c.Indexer.Directories[0].IsMatching("public.txt") || c.Indexer.Directories[0].IsMatching("secret.txt") {
+					t.Fatal("valid glob selection changed")
+				}
+			} else if !slices.ContainsFunc(fields, func(field FieldError) bool { return field.Path == "indexer.directories" }) {
+				t.Errorf("missing directory error: %v", fields)
+			}
+			encoded, err := json.Marshal(fields)
+			if err != nil || strings.Contains(string(encoded), "private-pattern") {
+				t.Fatal("directory validation exposed pattern values")
+			}
+		})
+	}
+}
+
 func TestSemanticSearchRequestDefaults(t *testing.T) {
 	cfg, err := parseConfig([]byte("semantic_search:\n  max_context_length: 256\n"))
 	if err != nil {
@@ -1146,6 +1364,40 @@ func TestSemanticSearchRequestDefaults(t *testing.T) {
 
 	if got, want := cfg.SemanticSearch.Dimensions, 2000; got != want {
 		t.Errorf("semantic_search.dimensions = %d, want %d", got, want)
+	}
+}
+
+func TestSemanticSearchSQLiteLimits(t *testing.T) {
+	for _, tc := range []struct {
+		name, database, field string
+		dimensions, results   int
+		enabled               bool
+	}{
+		{"maximum dimensions", "db.sqlite3", "", 8192, 50, true},
+		{"excess dimensions", "db.sqlite3", "semantic_search.dimensions", 8193, 50, true},
+		{"maximum results", "db.sqlite3", "", 2000, 1024, true},
+		{"excess results", "db.sqlite3", "semantic_search.result_limit", 2000, 1025, true},
+		{"disabled", "db.sqlite3", "", 8193, 1025, false},
+		{"postgres results", "host=localhost dbname=hister", "", 2000, 1025, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := CreateDefaultConfig()
+			c.Server.Database = tc.database
+			c.SemanticSearch.Enable = tc.enabled
+			c.SemanticSearch.Dimensions = tc.dimensions
+			c.SemanticSearch.ResultLimit = tc.results
+			if err := c.Validate(); (err != nil) != (tc.field != "") {
+				t.Errorf("Validate() = %v, want field %q", err, tc.field)
+			}
+			fields := c.ValidateFields()
+			if tc.field == "" {
+				if len(fields) > 0 {
+					t.Fatalf("valid backend settings rejected: %v", fields)
+				}
+			} else if !slices.ContainsFunc(fields, func(field FieldError) bool { return field.Path == tc.field }) {
+				t.Errorf("missing error for %s: %v", tc.field, fields)
+			}
+		})
 	}
 }
 

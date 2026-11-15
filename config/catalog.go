@@ -10,15 +10,18 @@ import (
 	"io"
 	"maps"
 	"math"
+	"net"
 	"net/url"
 	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
 	"github.com/asciimoo/hister/server/languages"
+	"github.com/asciimoo/hister/server/oauth"
 )
 
 // SettingSchema describes a control independently of any stored value. Both
@@ -51,19 +54,38 @@ type SettingProperty struct {
 	Schema      SettingSchema `json:"schema"`
 }
 
-// FieldMetadata contains static descriptions only. Runtime values and sources
-// belong to FieldState, so secret data cannot accidentally become a default.
+type ConfirmationMode string
+
+const (
+	ConfirmAcknowledgment ConfirmationMode = "acknowledge"
+	ConfirmAccess         ConfirmationMode = "access"
+)
+
+// ConfirmationPolicy describes only changes that require consent. Describe
+// returns an empty string for a transition that can be saved normally.
+type ConfirmationPolicy struct {
+	Mode     ConfirmationMode
+	Describe func(current, candidate *Config) string
+}
+
+// FieldMetadata owns each setting's description and pure confirmation policy.
+// Runtime values and sources belong to FieldState, so secret data cannot
+// accidentally become a default.
 type FieldMetadata struct {
-	Path                 string        `json:"path"`
-	Category             string        `json:"category"`
-	Group                string        `json:"group,omitempty"`
-	Label                string        `json:"label"`
-	Description          string        `json:"description"`
-	Schema               SettingSchema `json:"schema"`
-	Default              any           `json:"default,omitempty"`
-	Effect               string        `json:"effect"`
-	ReadOnlyReason       string        `json:"read_only_reason,omitempty"`
-	RequiresConfirmation bool          `json:"requires_confirmation"`
+	Path           string        `json:"path"`
+	Category       string        `json:"category"`
+	Group          string        `json:"group,omitempty"`
+	Label          string        `json:"label"`
+	Description    string        `json:"description"`
+	Schema         SettingSchema `json:"schema"`
+	Default        any           `json:"default,omitempty"`
+	Effect         string        `json:"effect"`
+	ReadOnlyReason string        `json:"read_only_reason,omitempty"`
+	// Confirmation compares validated configurations without changing them or exposing secrets.
+	Confirmation *ConfirmationPolicy `json:"-"`
+	// RequiresConfirmation identifies fields that may need consent. Validation
+	// determines whether the actual transition requires it.
+	RequiresConfirmation bool `json:"requires_confirmation"`
 }
 
 type FieldState struct {
@@ -118,6 +140,9 @@ func (c *Config) FieldStatesForRevision(revision string, fields ...FieldMetadata
 	for _, field := range fields {
 		source := c.fieldSource(field.Path)
 		state := FieldState{Path: field.Path, Value: settingValue(c, field.Path), Source: source, Editable: !source.Locked && field.ReadOnlyReason == "", Reason: field.ReadOnlyReason}
+		if state.Value == nil && field.Schema.Sensitivity == "none" {
+			state.Value = field.Default
+		}
 		if field.Schema.Type == "dictionary" && !settingHasValue(state.Value) {
 			state.Value = map[string]any{}
 		}
@@ -411,8 +436,8 @@ func FieldCatalog() []FieldMetadata {
 		groupDocumentProcessing    = "Document processing"
 	)
 	minSnippet, maxSnippet := 1, 10000
-	minSeconds, maxSeconds := 0, int(min(int64(^uint(0)>>1), int64((1<<63-1)/1000000000)))
-	minFileSize, maxFileSize := 1, int(min(int64(^uint(0)>>1), int64((1<<63-1)/(1024*1024))))
+	minSeconds, maxSeconds := 0, int(min(math.MaxInt, math.MaxInt64/time.Second))
+	minFileSize, maxFileSize := 1, min(math.MaxInt, math.MaxInt64/bytesPerMiB)
 	fields := []FieldMetadata{
 		{
 			Path:        "app.title",
@@ -485,31 +510,55 @@ func FieldCatalog() []FieldMetadata {
 			Schema:      SettingSchema{Sensitivity: "none"},
 		},
 		{
-			Path:                 "app.access_token",
-			Group:                groupAccess,
-			Label:                "Access token",
-			Description:          "Credential used to access the instance.",
-			Schema:               SettingSchema{Sensitivity: "secret"},
-			ReadOnlyReason:       "Authentication changes require the access confirmation flow.",
-			RequiresConfirmation: true,
+			Path:        "app.access_token",
+			Group:       groupAccess,
+			Label:       "Access token",
+			Description: "Credential used to access the instance.",
+			Schema:      SettingSchema{Sensitivity: "secret"},
+			Confirmation: &ConfirmationPolicy{Mode: ConfirmAccess, Describe: func(current, candidate *Config) string {
+				if current.App.AccessToken == candidate.App.AccessToken {
+					return ""
+				}
+				if candidate.App.AccessToken == "" && !candidate.App.UserHandling {
+					return "The instance token will be cleared. Anyone who can reach this instance can use it without signing in."
+				}
+				return "The instance token selection will change. Clients using it must use the configured token."
+			}},
 		},
 		{
-			Path:                 "app.user_handling",
-			Group:                groupAccess,
-			Label:                "User handling",
-			Description:          "Require individual user accounts.",
-			Schema:               SettingSchema{Sensitivity: "none"},
-			ReadOnlyReason:       "Authentication changes require the access confirmation flow.",
-			RequiresConfirmation: true,
+			Path:        "app.user_handling",
+			Group:       groupAccess,
+			Label:       "User handling",
+			Description: "Require individual user accounts.",
+			Schema:      SettingSchema{Sensitivity: "none"},
+			Confirmation: &ConfirmationPolicy{Mode: ConfirmAccess, Describe: func(current, candidate *Config) string {
+				if current.App.UserHandling == candidate.App.UserHandling {
+					return ""
+				}
+				if candidate.App.UserHandling {
+					return "User accounts will be required. Sign in again as an administrator to confirm working access."
+				}
+				if candidate.App.AccessToken != "" {
+					return "User accounts will no longer be required. Access will use the instance token."
+				}
+				return "User accounts will no longer be required. Anyone who can reach this instance can use it without signing in."
+			}},
 		},
 		{
-			Path:                 "app.public",
-			Group:                groupAccess,
-			Label:                "Public access",
-			Description:          "Allow anonymous visitors to search.",
-			Schema:               SettingSchema{Sensitivity: "none"},
-			ReadOnlyReason:       "Access changes require the access confirmation flow.",
-			RequiresConfirmation: true,
+			Path:        "app.public",
+			Group:       groupAccess,
+			Label:       "Public access",
+			Description: "Allow anonymous visitors to search.",
+			Schema:      SettingSchema{Sensitivity: "none"},
+			Confirmation: &ConfirmationPolicy{Mode: ConfirmAccess, Describe: func(current, candidate *Config) string {
+				if current.App.Public == candidate.App.Public {
+					return ""
+				}
+				if candidate.App.Public {
+					return "Anonymous visitors will be able to search public documents. Administrative access still requires authentication."
+				}
+				return "Anonymous public search will be disabled."
+			}},
 		},
 		{
 			Path:        "app.log_level",
@@ -539,6 +588,12 @@ func FieldCatalog() []FieldMetadata {
 			Label:       "SQL debugging",
 			Description: "Log database queries for troubleshooting. Logs can contain private document and account data. Disable when finished.",
 			Schema:      SettingSchema{Sensitivity: "none"},
+			Confirmation: &ConfirmationPolicy{Mode: ConfirmAcknowledgment, Describe: func(current, candidate *Config) string {
+				if current.App.DebugSQL || !candidate.App.DebugSQL {
+					return ""
+				}
+				return "SQL debugging can write private document and account data to logs. Disable it when troubleshooting is finished."
+			}},
 		},
 		{
 			Path:        "app.profiler",
@@ -546,6 +601,12 @@ func FieldCatalog() []FieldMetadata {
 			Label:       "Profiler",
 			Description: "Enable runtime profiles at /debug/pprof. Profiles may contain private data. Requires an administrator or the instance token when authentication is enabled; otherwise anyone can access them.",
 			Schema:      SettingSchema{Sensitivity: "none"},
+			Confirmation: &ConfirmationPolicy{Mode: ConfirmAcknowledgment, Describe: func(current, candidate *Config) string {
+				if current.App.Profiler || !candidate.App.Profiler {
+					return ""
+				}
+				return "Runtime profiles may contain private data. Enabling the profiler makes them available to administrators, or to anyone who can reach the instance when authentication is disabled."
+			}},
 		},
 		{
 			Path:           "app.directory",
@@ -556,18 +617,48 @@ func FieldCatalog() []FieldMetadata {
 			ReadOnlyReason: "Storage locations are file managed.",
 		},
 		{
-			Path:                 "server.address",
-			Group:                groupConnection,
-			Label:                "Listen address",
-			Description:          "Address where the server accepts connections.",
-			Schema:               SettingSchema{Sensitivity: "none"},
-			ReadOnlyReason:       "Connection changes require confirmation and are not available in this editor yet.",
-			RequiresConfirmation: true,
+			Path:        "server.address",
+			Group:       groupConnection,
+			Label:       "Listen address",
+			Description: "Address where the server accepts connections.",
+			Schema:      SettingSchema{Sensitivity: "none"},
+			Confirmation: &ConfirmationPolicy{Mode: ConfirmAccess, Describe: func(current, candidate *Config) string {
+				if current.Server.Address == candidate.Server.Address {
+					return ""
+				}
+				network, address, _ := candidate.Server.ListenEndpoint()
+				if network == "unix" {
+					return "The server will use a local Unix socket. Check the configured public destination before confirming access."
+				}
+				host, _, _ := net.SplitHostPort(address)
+				if net.ParseIP(host).IsLoopback() {
+					return "Only connections from this machine will reach the new listener."
+				}
+				return "The new listener may accept connections from other machines."
+			}},
 		},
-		fileManagedField("server.base_url", groupConnection, "Base URL", "Public URL used to reach this instance."),
+		{
+			Path: "server.base_url", Group: groupConnection, Label: "Base URL", Description: "Public URL used to reach this instance.",
+			Schema: SettingSchema{Sensitivity: "none", Control: "url", MaxLength: 4096},
+			Confirmation: &ConfirmationPolicy{Mode: ConfirmAccess, Describe: func(current, candidate *Config) string {
+				if current.Server.BaseURL == candidate.Server.BaseURL {
+					return ""
+				}
+				return "Reconnect through the new public URL to confirm access. Existing credentials must not be forwarded automatically to a different origin."
+			}},
+		},
 		fileManagedField("server.proxy_auth_header", groupAuthentication, "Proxy authentication header", "Header identifying users authenticated by a trusted proxy."),
 		fileManagedField("server.oauth", groupAuthentication, "OAuth providers", "Providers used to sign in with external accounts."),
-		fileManagedField("server.oauth_only", groupAuthentication, "Require OAuth", "Allow sign in only through an OAuth provider."),
+		{
+			Path: "server.oauth_only", Group: groupAuthentication, Label: "Require OAuth", Description: "Allow sign in only through an OAuth provider.",
+			Schema: SettingSchema{Sensitivity: "none"},
+			Confirmation: &ConfirmationPolicy{Mode: ConfirmAccess, Describe: func(current, candidate *Config) string {
+				if current.Server.OAuthOnly == candidate.Server.OAuthOnly {
+					return ""
+				}
+				return "Changing the login policy requires a new login through the selected mechanism before confirmation."
+			}},
+		},
 		fileManagedField("server.database", groupStorage, "Database", "SQLite filename or PostgreSQL connection settings."),
 		{Path: "server.max_batch_body_size", Group: groupRequestLimits, Label: "Maximum batch size", Description: "Maximum batch request body size in MiB. Applies to subsequent requests. Larger limits allow greater memory use.", Schema: SettingSchema{Sensitivity: "none", Min: &minFileSize, Max: &maxFileSize}},
 		{Path: "server.metrics", Group: groupMonitoring, Label: "Metrics", Description: "Expose monitoring data at /metrics. Requires an administrator or the instance token when authentication is enabled; otherwise anyone can access it.", Schema: SettingSchema{Sensitivity: "none"}},
@@ -592,16 +683,24 @@ func FieldCatalog() []FieldMetadata {
 		{Path: "crawler.cookies", Group: groupRequests, Label: "Crawler cookies", Description: "Cookies for HTTP and Chrome crawls, scoped to domains and paths. BiDi uses its browser cookies. Stored values cannot be reused with a different name, domain, or path.", Schema: crawlerCookieSchema()},
 		{Path: "semantic_search.enable", Group: groupSearchBehavior, Label: "Semantic search", Description: "Enable search by meaning. Reindex existing documents to generate embeddings.", Schema: SettingSchema{Sensitivity: "none"}, Effect: "reembed"},
 		{Path: "semantic_search.similarity_threshold", Group: groupSearchBehavior, Label: "Similarity threshold", Description: "Minimum similarity required for a semantic result.", Schema: SettingSchema{Sensitivity: "none", Min: new(0), Max: new(1)}, Effect: "runtime"},
-		{Path: "semantic_search.result_limit", Group: groupSearchBehavior, Label: "Semantic result limit", Description: "Maximum number of semantic results to consider.", Schema: SettingSchema{Sensitivity: "none", Min: new(1)}, Effect: "runtime"},
+		{Path: "semantic_search.result_limit", Group: groupSearchBehavior, Label: "Semantic result limit", Description: "Maximum number of semantic results to consider. SQLite supports at most 1024.", Schema: SettingSchema{Sensitivity: "none", Min: new(1)}, Effect: "runtime"},
 		{Path: "semantic_search.semantic_weight", Group: groupSearchBehavior, Label: "Semantic weight", Description: "Weight of semantic scores when combining results, from zero to one.", Schema: SettingSchema{Sensitivity: "none", Min: new(0), Max: new(1)}, Effect: "runtime"},
 		{Path: "semantic_search.query_prefix", Group: groupSearchBehavior, Label: "Query prefix", Description: "Text prepended to queries before generating embeddings.", Schema: SettingSchema{Sensitivity: "none", MaxLength: 4096}, Effect: "runtime"},
 		{Path: "semantic_search.query_embedding_timeout", Group: groupSearchBehavior, Label: "Query embedding timeout", Description: "Maximum seconds for a query embedding request. Zero uses two seconds.", Schema: SettingSchema{Sensitivity: "none", Min: new(0), Max: new(86400)}, Effect: "runtime"},
 		{Path: "semantic_search.max_query_embedding_concurrency", Group: groupSearchBehavior, Label: "Query embedding concurrency", Description: "Concurrent query embedding requests. Zero uses one request.", Schema: SettingSchema{Sensitivity: "none", Min: new(0), Max: new(1024)}, Effect: "runtime"},
-		{Path: "semantic_search.embedding_endpoint", Group: groupEmbeddingService, Label: "Embedding endpoint", Description: "HTTP or HTTPS URL of the embedding service.", Schema: SettingSchema{Control: "url", Sensitivity: "none", MinLength: 1, MaxLength: 4096}, Effect: "reembed"},
+		{
+			Path: "semantic_search.embedding_endpoint", Group: groupEmbeddingService, Label: "Embedding endpoint", Description: "HTTP or HTTPS URL of the embedding service.", Schema: SettingSchema{Control: "url", Sensitivity: "none", MinLength: 1, MaxLength: 4096}, Effect: "reembed",
+			Confirmation: &ConfirmationPolicy{Mode: ConfirmAcknowledgment, Describe: func(current, candidate *Config) string {
+				if current.SemanticSearch.EmbeddingEndpoint == candidate.SemanticSearch.EmbeddingEndpoint {
+					return ""
+				}
+				return "When semantic search is enabled, document text, search queries, and configured credentials will be sent to the new embedding service. Check that you trust this destination."
+			}},
+		},
 		{Path: "semantic_search.embedding_model", Group: groupEmbeddingService, Label: "Embedding model", Description: "Model used to generate embeddings.", Schema: SettingSchema{Sensitivity: "none", MinLength: 1, MaxLength: 1024}, Effect: "reembed"},
 		{Path: "semantic_search.api_key", Group: groupEmbeddingService, Label: "Embedding API key", Description: "Credential used to access the embedding service.", Schema: SettingSchema{Sensitivity: "secret", MaxLength: 16384}, Effect: "runtime"},
 		{Path: "semantic_search.headers", Group: groupEmbeddingService, Label: "Embedding headers", Description: "Additional HTTP headers. Values stay hidden.", Schema: SettingSchema{Type: "dictionary", Control: "dictionary", Collection: "replace", Sensitivity: "mixed", MaxItems: 128, Items: &SettingSchema{Type: "string", Control: "secret", Collection: "none", Sensitivity: "secret", MaxLength: 16384}}, Effect: "runtime"},
-		{Path: "semantic_search.dimensions", Group: groupEmbeddingService, Label: "Embedding dimensions", Description: "Dimensions returned by the model. PostgreSQL supports at most 2000.", Schema: SettingSchema{Sensitivity: "none", Min: new(1)}, Effect: "reembed"},
+		{Path: "semantic_search.dimensions", Group: groupEmbeddingService, Label: "Embedding dimensions", Description: "Dimensions returned by the model. PostgreSQL supports at most 2000 and SQLite at most 8192.", Schema: SettingSchema{Sensitivity: "none", Min: new(1)}, Effect: "reembed"},
 		{Path: "semantic_search.max_context_length", Group: groupDocumentChunks, Label: "Maximum context length", Description: "Maximum tokens in a document chunk.", Schema: SettingSchema{Sensitivity: "none", Min: new(1)}, Effect: "reembed"},
 		{Path: "semantic_search.chunk_overlap", Group: groupDocumentChunks, Label: "Chunk overlap", Description: "Tokens shared by adjacent chunks. Must be less than the maximum context length.", Schema: SettingSchema{Sensitivity: "none", Min: new(0)}, Effect: "reembed"},
 		{Path: "semantic_search.document_prefix", Group: groupDocumentChunks, Label: "Document prefix", Description: "Text prepended to document chunks before generating embeddings.", Schema: SettingSchema{Sensitivity: "none", MaxLength: 4096}, Effect: "reembed"},
@@ -609,12 +708,55 @@ func FieldCatalog() []FieldMetadata {
 		{Path: "semantic_search.max_embedding_batch_size", Group: groupDocumentProcessing, Label: "Embedding batch size", Description: "Maximum chunks per embedding request. Zero uses eight chunks.", Schema: SettingSchema{Sensitivity: "none", Min: new(0), Max: new(4096)}, Effect: "runtime"},
 		{Path: "semantic_search.max_embedding_concurrency", Group: groupDocumentProcessing, Label: "Embedding concurrency", Description: "Concurrent document embedding requests. Zero uses the default worker count.", Schema: SettingSchema{Sensitivity: "none", Min: new(0), Max: new(1024)}, Effect: "runtime"},
 		{Path: "hotkeys.web", Label: "Web keyboard shortcuts", Description: "Shortcuts apply on the search page after saving. Use lowercase letters, digits, /, ?, enter, tab, arrowup, arrowdown, arrowleft, arrowright, or f1 through f12, optionally prefixed with ctrl+, alt+, or meta+. Some combinations are reserved by your browser or system. Built in navigation remains available without configured shortcuts. Terminal shortcuts are configured separately.", Schema: webHotkeySchema()},
-		{Path: "sensitive_content_patterns", Label: "Sensitive content patterns", Description: "Named regular expressions that block matching documents during subsequent indexing. Use lowercase names. Only listed patterns apply, including any defaults you retain. Existing documents are unchanged.", Schema: SettingSchema{Type: "dictionary", Control: "dictionary", Collection: "replace", Sensitivity: "none", KeyLabel: "Pattern name", ValueLabel: "Regular expression", MaxItems: 256, Items: &SettingSchema{Type: "string", Control: "text", Collection: "none", Sensitivity: "none", MinLength: 1, MaxLength: 4096}}},
+		{
+			Path: "sensitive_content_patterns", Label: "Sensitive content patterns", Description: "Named regular expressions that block matching documents during subsequent indexing. Use lowercase names. Only listed patterns apply, including any defaults you retain. Existing documents are unchanged.", Schema: SettingSchema{Type: "dictionary", Control: "dictionary", Collection: "replace", Sensitivity: "none", KeyLabel: "Pattern name", ValueLabel: "Regular expression", MaxItems: 256, Items: &SettingSchema{Type: "string", Control: "text", Collection: "none", Sensitivity: "none", MinLength: 1, MaxLength: 4096}},
+			Confirmation: &ConfirmationPolicy{Mode: ConfirmAcknowledgment, Describe: func(current, candidate *Config) string {
+				for name, pattern := range current.SensitiveContentPatterns {
+					if replacement, exists := candidate.SensitiveContentPatterns[name]; !exists || replacement != pattern {
+						return "Removing or replacing filters may allow sensitive content to be indexed. Existing indexed documents are unchanged."
+					}
+				}
+				return ""
+			}},
+		},
 		fileManagedField("extractors", "", "Extractors", "Extractor enable switches and options described by the extractor registry."),
 	}
 	defaults := CreateDefaultConfig()
+	// Provider endpoints and identity or role mappings remain file managed.
+	defaults.Server.OAuth = make(map[string]*OAuthEntry)
+	for _, provider := range oauth.ProviderNames() {
+		defaults.Server.OAuth[provider] = &OAuthEntry{}
+		for _, option := range []struct {
+			key, label, description string
+			schema                  SettingSchema
+		}{
+			{"client_id", "Client ID", "Client identifier registered with the provider.", SettingSchema{Type: "string", Control: "text", Sensitivity: "none", MaxLength: 4096}},
+			{"client_secret", "Client secret", "Credential used when exchanging authorization codes.", SettingSchema{Type: "string", Control: "secret", Sensitivity: "secret", MaxLength: 16384}},
+			{"scopes", "Scopes", "Permissions requested during provider login.", SettingSchema{Type: "list", Control: "list", Sensitivity: "none", Collection: "replace", MaxItems: 64, Items: &SettingSchema{Type: "string", Control: "text", Sensitivity: "none", Collection: "none", MinLength: 1, MaxLength: 256}}},
+			{"disable_pkce", "Disable PKCE", "Disable protection against intercepted authorization codes for providers that cannot support PKCE.", SettingSchema{Type: "boolean", Control: "switch", Sensitivity: "none"}},
+		} {
+			path := "server.oauth." + provider + "." + option.key
+			fields = append(fields, FieldMetadata{
+				Path: path, Group: "OAuth: " + provider, Label: option.label, Description: option.description, Schema: option.schema,
+				Confirmation: &ConfirmationPolicy{Mode: ConfirmAccess, Describe: func(current, candidate *Config) string {
+					if reflect.DeepEqual(settingValue(current, path), settingValue(candidate, path)) {
+						return ""
+					}
+					if candidate.Server.OAuth[provider] == nil {
+						return "Removing " + provider + " requires fresh administrative authentication through a remaining mechanism."
+					}
+					message := "Changing " + provider + " requires a new login through that provider before confirmation."
+					if option.key == "disable_pkce" && candidate.Server.OAuth[provider].DisablePKCE {
+						message += " Disabling PKCE removes protection against intercepted authorization codes."
+					}
+					return message
+				}},
+			})
+		}
+	}
 	for i := range fields {
 		field := &fields[i]
+		field.RequiresConfirmation = field.Confirmation != nil
 		field.Category, _, _ = strings.Cut(field.Path, ".")
 		if field.Effect == "" {
 			field.Effect = "runtime"
@@ -714,12 +856,8 @@ func (d *Directory) validateSetting() string {
 	if d == nil || strings.TrimSpace(d.Path) == "" || (!filepath.IsAbs(d.Path) && !strings.HasPrefix(d.Path, "~/")) {
 		return "Use an absolute server directory path or a ~/ path."
 	}
-	for _, patterns := range [][]string{d.Patterns, d.Excludes} {
-		for _, pattern := range patterns {
-			if _, err := filepath.Match(pattern, ""); err != nil || pattern == "" {
-				return "Use valid nonempty file name glob patterns."
-			}
-		}
+	if message := d.validatePatterns(); message != "" {
+		return message
 	}
 	for _, ext := range d.Filetypes {
 		if ext == "" || strings.ContainsAny(ext, ". /\\*?[]") {
@@ -765,6 +903,9 @@ func (s SettingSchema) ValidateValue(value any) (any, string) {
 			parsed, err := url.Parse(v)
 			if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.Fragment != "" {
 				return nil, "Use an HTTP or HTTPS URL without a fragment."
+			}
+			if s.Sensitivity == "none" && parsed.User != nil {
+				return nil, "This URL is visible in settings. Use the credential or header settings for authentication."
 			}
 		}
 		return v, ""

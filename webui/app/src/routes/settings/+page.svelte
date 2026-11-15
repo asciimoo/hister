@@ -11,6 +11,7 @@
   import { fetchConfig, resetConfig } from '#lib/api.js';
   import { redirectToAuth } from '#lib/auth-navigation.js';
   import SettingsField from '#lib/components/SettingsField.svelte';
+  import SettingsAccess from '#lib/components/SettingsAccess.svelte';
   import {
     categoryLabels,
     groupSettings,
@@ -27,6 +28,7 @@
     type SettingError,
     type SettingItemEditor,
     type SettingRemoval,
+    type PendingAccess,
   } from '#lib/settings.js';
 
   let state = $state<SettingsState | null>(null);
@@ -41,6 +43,9 @@
   let problem = $state('');
   let needsReload = $state(false);
   let review = $state<(SettingsReview & { draft: SettingsDraft }) | null>(null);
+  let access = $state<{ destination: string; initial?: PendingAccess; warning?: string } | null>(
+    null,
+  );
   let destroyed = false;
   const sidebarLayout = new MediaQuery('(min-width: 64rem)');
   const categories = $derived([...new Set(state?.fields.map((field) => field.category) ?? [])]);
@@ -74,6 +79,7 @@
     editor = null;
     removal = null;
     review = null;
+    access = null;
   });
   beforeNavigate((navigation) => {
     if (navigation.shallow && navigation.to?.url.pathname === page.url.pathname) return;
@@ -138,6 +144,43 @@
     });
     if (preserveDraft) reconcile(next);
     else state = next;
+    if (next.pending_access) startAccess(next.pending_access);
+  }
+
+  function startAccess(pending: PendingAccess) {
+    access = { destination: pending.destination_url, initial: pending };
+    edits = {};
+    editor = null;
+    removal = null;
+    review = null;
+    conflicts = {};
+    errors = [];
+    problem = '';
+    needsReload = false;
+  }
+
+  async function finishAccess(outcome: 'confirmed' | 'cancelled' | 'ended') {
+    access = null;
+    busy = true;
+    edits = {};
+    const result =
+      outcome === 'confirmed'
+        ? 'Settings confirmed and saved.'
+        : outcome === 'cancelled'
+          ? 'Previous settings restored.'
+          : 'No access change is awaiting confirmation. Check the active settings before making another change.';
+    try {
+      await readActive();
+      needsReload = false;
+      problem = '';
+      message = result;
+    } catch {
+      needsReload = true;
+      message = '';
+      problem = `${result} Reopen Hister at ${outcome === 'confirmed' ? 'the confirmed' : 'the original'} address and sign in to read the active settings.`;
+    } finally {
+      busy = false;
+    }
   }
 
   async function load() {
@@ -157,6 +200,7 @@
         return;
       }
       state = await retryRead(() => settingsRequest<SettingsState>());
+      if (state.pending_access) startAccess(state.pending_access);
       edits = {};
       conflicts = {};
       errors = [];
@@ -407,7 +451,17 @@
   }
 
   async function save(accepted?: SettingsReview & { draft: SettingsDraft }) {
-    if (!state || busy || !dirty || editor || needsReload || state.pending || conflictCount) return;
+    if (
+      !state ||
+      access ||
+      busy ||
+      !dirty ||
+      editor ||
+      needsReload ||
+      state.pending ||
+      conflictCount
+    )
+      return;
     const draft: SettingsDraft = {
       revision: state.revision,
       edits: JSON.parse(JSON.stringify(Object.values(edits))),
@@ -433,10 +487,14 @@
       review = null;
       message = 'Applying settings. Service may be briefly interrupted…';
       submitted = true;
-      await settingsRequest(
+      const result = await settingsRequest<PendingAccess | { saved: boolean }>(
         '/apply',
         accepted ? { ...accepted.draft, acknowledgment: accepted.acknowledgment } : draft,
       );
+      if ('deadline' in result) {
+        startAccess(result);
+        return;
+      }
       saved = true;
       edits = {};
       removal = null;
@@ -447,6 +505,17 @@
       conflicts = {};
       message = 'Settings saved and applied.';
     } catch (error) {
+      if (submitted && accepted?.mode === 'access' && !(error instanceof SettingsError)) {
+        access = {
+          destination: accepted.destination_url ?? page.url.href,
+          warning:
+            'The apply response was lost. Check the pending change at the reviewed address. Do not submit the draft again; unconfirmed changes roll back after two minutes.',
+        };
+        edits = {};
+        editor = null;
+        removal = null;
+        return;
+      }
       handleError(error);
       if (error instanceof SettingsError && error.code === 'sources_changed') {
         try {
@@ -492,7 +561,7 @@
     <div class="flex shrink-0 flex-col px-4 md:px-6">
       <div class="flex items-center justify-between gap-3">
         <h2 class="font-space text-2xl font-bold tracking-tight">Settings</h2>
-        {#if !denied}<Button
+        {#if !denied && !access}<Button
             type="button"
             variant="outline"
             disabled={busy}
@@ -515,7 +584,9 @@
         <p role="status" class="text-text-brand-muted my-2 text-sm">{message}</p>
       {/if}
     </div>
-    {#if state && !denied}
+    {#if access}
+      <SettingsAccess {...access} onFinished={finishAccess} />
+    {:else if state && !denied}
       <div class="border-border-brand-muted flex min-h-0 flex-1 flex-col lg:flex-row lg:border-t">
         <div
           role="tablist"
@@ -799,8 +870,9 @@
     <Dialog.Header>
       <Dialog.Title>Review sensitive changes</Dialog.Title>
       <Dialog.Description>
-        These changes affect access to Hister. Review the complete draft before applying it. You
-        will need to confirm working access separately after activation.
+        Review the complete draft before applying it.
+        {#if review?.mode !== 'acknowledge'}You will need to confirm working access separately after
+          activation.{/if}
       </Dialog.Description>
     </Dialog.Header>
     {#if review}

@@ -77,10 +77,7 @@ func loadSelected(name string, strict bool, overrides ...Override) (*Config, err
 	if err != nil {
 		return nil, err
 	}
-	environment, err := c.environmentOverrides()
-	if err != nil {
-		return nil, err
-	}
+	environment := c.environmentOverrides()
 	if len(environment)+len(overrides) > 0 {
 		if err := inputs.apply(append(environment, overrides...)...); err != nil {
 			return nil, err
@@ -157,10 +154,6 @@ func (c *Config) Validate() error {
 	if err := c.UpdateBaseURL(c.Server.BaseURL); err != nil {
 		return errors.New("invalid server.address or server.base_url; set an explicit base URL when listening on all interfaces or a Unix socket")
 	}
-	u := c.parsedBaseURL
-	if (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.RawQuery != "" || u.Fragment != "" {
-		return errors.New("server.base_url must be an HTTP or HTTPS URL without a query or fragment")
-	}
 	if err := c.ValidatePublicMode(); err != nil {
 		return err
 	}
@@ -206,11 +199,6 @@ func (c *Config) ValidateFields() []FieldError {
 	check("server.address", "Use a TCP address or unix: followed by an absolute socket path.", listenErr)
 	if err := candidate.UpdateBaseURL(candidate.Server.BaseURL); err != nil {
 		check("server.base_url", "Set a valid base URL for the configured listen address.", err)
-	} else {
-		u := candidate.parsedBaseURL
-		if (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
-			check("server.base_url", "Use an HTTP or HTTPS URL without credentials, a query, or a fragment.", errors.New("invalid base URL"))
-		}
 	}
 	check("app.public", "Public access requires a token or user handling.", candidate.ValidatePublicMode())
 	check("hotkeys.web", "Use supported key combinations and actions.", candidate.Hotkeys.Validate())

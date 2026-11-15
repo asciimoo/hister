@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"maps"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -124,7 +126,11 @@ func TestConfigurationReadAuthorization(t *testing.T) {
 					if subtitle := states["app.subtitle"]; subtitle.Value != "File subtitle" || subtitle.Editable || subtitle.Reason == "" {
 						t.Fatalf("locked subtitle: %+v", subtitle)
 					}
-					if token := states["app.access_token"]; token.Value != nil || token.SecretPresent != (mode != "none") {
+					var tokenValue any
+					if mode == "none" {
+						tokenValue = map[string]any{"action": "clear"}
+					}
+					if token := states["app.access_token"]; !reflect.DeepEqual(token.Value, tokenValue) || token.SecretPresent != (mode != "none") {
 						t.Fatalf("token state: %+v", token)
 					}
 					headers := maps.Clone(caller.headers)
@@ -214,6 +220,1090 @@ func readConfigurationState(t *testing.T, handler http.Handler, headers map[stri
 		values[field.Path] = field
 	}
 	return state.Revision, values
+}
+
+func newAccessSettingsTestServer(t *testing.T, mode string, serverSettings ...string) (*config.Config, http.Handler, map[string]string) {
+	t.Helper()
+	dir := t.TempDir()
+	filename := filepath.Join(dir, "config.yml")
+	main := fmt.Sprintf("app:\n  directory: %q\nserver:\n  base_url: http://127.0.0.1:4433/hister\n%sindexer:\n  detect_languages: false\n", dir, strings.Join(serverSettings, ""))
+	if err := os.WriteFile(filename, []byte(main), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	token := "secret"
+	if mode == "none" {
+		token = ""
+	}
+	web := fmt.Sprintf("app:\n  access_token: %q\n  user_handling: %t\n  public: %t\nserver:\n  address: 127.0.0.1:0\n", token, mode == "user", mode != "none")
+	if err := os.WriteFile(filepath.Join(dir, "config.web.yml"), []byte(web), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(filename)
+	if err != nil {
+		t.Fatal(err)
+	}
+	testutil.InitModelWithConfig(t, cfg)
+	if mode == "user" {
+		admin, err := model.CreateUser("review-owner", "password123", true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		token = admin.Token
+	}
+	return cfg, startReloadTestRuntime(t, cfg), map[string]string{"Origin": "hister://", "X-Access-Token": token, "Content-Type": "application/json"}
+}
+
+func TestSettingsAccessReviewRequiresAcknowledgment(t *testing.T) {
+	cfg, handler, headers := newAccessSettingsTestServer(t, "user")
+	revision, _ := readConfigurationState(t, handler, headers)
+	before := map[string]string{}
+	for _, filename := range []string{cfg.Filename(), cfg.FullPath("config.web.yml")} {
+		raw, err := os.ReadFile(filename)
+		if err != nil {
+			t.Fatal(err)
+		}
+		before[filename] = string(raw)
+	}
+	body := fmt.Sprintf(`{"revision":%q,"edits":[{"path":"app.user_handling","action":"set","value":false},{"path":"app.title","action":"set","value":"Reviewed title"},{"path":"server.address","action":"set","value":"0.0.0.0:5544"}]}`, revision)
+	response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/validate", strings.NewReader(body), headers)
+	var result struct {
+		Review struct {
+			Acknowledgment string                                 `json:"acknowledgment"`
+			Changes        []struct{ Path, Before, After string } `json:"changes"`
+			Consequences   []string                               `json:"consequences"`
+			Destination    string                                 `json:"destination_url"`
+		} `json:"review"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil || response.Code != http.StatusOK || result.Review.Acknowledgment == "" {
+		t.Fatalf("sensitive review unavailable: %d %s (%v)", response.Code, response.Body, err)
+	}
+	if len(result.Review.Changes) != 3 || result.Review.Destination != "http://127.0.0.1:4433/hister/settings" {
+		t.Fatalf("incomplete review: %s", response.Body)
+	}
+	consequences := strings.Join(result.Review.Consequences, " ")
+	if !strings.Contains(consequences, "instance token") || !strings.Contains(consequences, "other machines") {
+		t.Fatalf("review omitted access consequences: %s", consequences)
+	}
+	response = testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(body), headers)
+	if response.Code != http.StatusPreconditionRequired || !strings.Contains(response.Body.String(), `"code":"acknowledgment_required"`) {
+		t.Fatalf("missing acknowledgment was not rejected: %d %s", response.Code, response.Body)
+	}
+	activeRevision, values := readConfigurationState(t, handler, headers)
+	if activeRevision != revision || values["app.user_handling"].Value != true || values["server.address"].Value != "127.0.0.1:0" || values["app.title"].Value != "Hister" {
+		t.Fatal("review or rejected apply changed the running configuration")
+	}
+	for filename, original := range before {
+		raw, err := os.ReadFile(filename)
+		if err != nil || string(raw) != original {
+			t.Fatalf("review or rejected apply changed %s", filename)
+		}
+	}
+	if staged, err := filepath.Glob(cfg.FullPath(".config.web-*")); err != nil || len(staged) != 0 {
+		t.Fatal("rejected apply staged a configuration file")
+	}
+}
+
+func TestSettingsAccessControlsRespectSources(t *testing.T) {
+	_, handler, headers := newAccessSettingsTestServer(t, "user")
+	_, states := readConfigurationState(t, handler, headers)
+	for _, path := range []string{"app.access_token", "app.user_handling", "app.public", "server.address", "server.oauth_only", "server.oauth.github.client_id", "server.oauth.github.client_secret", "server.oauth.google.scopes", "server.oauth.oidc.disable_pkce"} {
+		if value := states[path]; !value.Editable || value.Source.Locked {
+			t.Errorf("access control %s is unavailable: %+v", path, value)
+		}
+	}
+	if value := states["server.base_url"]; value.Editable || !value.Source.Locked {
+		t.Fatalf("authoritative connection setting became editable: %+v", value)
+	}
+	if value := states["app.access_token"]; !value.SecretPresent {
+		t.Fatal("editable access token lost its stored value")
+	} else if secret, ok := value.Value.(map[string]any); !ok || secret["action"] != "keep" || secret["ref"] == "" || len(secret) != 2 {
+		t.Fatalf("editable access token did not use an opaque Keep reference: %+v", value)
+	}
+	if value := states["server.oauth.oidc.disable_pkce"].Value; value != false {
+		t.Fatalf("unconfigured provider has no boolean default: %v", value)
+	}
+}
+
+func TestSettingsAccessTokenRotationConfirmation(t *testing.T) {
+	for _, session := range []bool{false, true} {
+		t.Run(fmt.Sprintf("session_%t", session), func(t *testing.T) {
+			cfg, handler, headers := newAccessSettingsTestServer(t, "token")
+			login := testutil.ServeHTTP(t, handler, http.MethodPost, cfg.BaseURL("/api/token-login"), strings.NewReader(`{"token":"secret"}`), headers)
+			oldCookie := responseSessionCookie(t, login)
+			revision, _ := readConfigurationState(t, handler, headers)
+			const edits = `[{"path":"app.access_token","action":"set","value":{"action":"replace","value":"replacement-token"}}]`
+			ack := settingsReview(t, handler, headers, revision, edits)
+			response := testutil.ServeHTTP(t, handler, http.MethodPost, cfg.BaseURL("/api/settings/apply"), strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":%s,"acknowledgment":%q}`, revision, edits, ack)), headers)
+			if response.Code != http.StatusAccepted {
+				t.Fatalf("temporary token rotation: %d %s", response.Code, response.Body)
+			}
+			var pending struct {
+				Revision string `json:"revision"`
+			}
+			if err := json.Unmarshal(response.Body.Bytes(), &pending); err != nil || pending.Revision == "" {
+				t.Fatalf("missing pending revision: %s", response.Body)
+			}
+			body := fmt.Sprintf(`{"revision":%q}`, pending.Revision)
+			for _, denied := range []map[string]string{headers, {"Origin": "hister://", "Cookie": oldCookie.String()}} {
+				response = testutil.ServeHTTP(t, handler, http.MethodPost, cfg.BaseURL("/api/settings/confirm"), strings.NewReader(body), denied)
+				if response.Code != http.StatusForbidden {
+					t.Fatalf("old credential confirmed rotation: %d %s", response.Code, response.Body)
+				}
+			}
+			fresh := map[string]string{"Origin": "hister://", "X-Access-Token": "replacement-token"}
+			if session {
+				login = testutil.ServeHTTP(t, handler, http.MethodPost, cfg.BaseURL("/api/token-login"), strings.NewReader(`{"token":"replacement-token"}`), fresh)
+				fresh = map[string]string{"Origin": "hister://", "Cookie": responseSessionCookie(t, login).String()}
+			}
+			response = testutil.ServeHTTP(t, handler, http.MethodPost, cfg.BaseURL("/api/settings/confirm"), strings.NewReader(body), fresh)
+			if response.Code != http.StatusOK {
+				t.Fatalf("fresh credential could not confirm: %d %s", response.Code, response.Body)
+			}
+			loaded, _, err := config.LoadForInspection(cfg.Filename(), true)
+			if err != nil || loaded.App.AccessToken != "replacement-token" {
+				t.Fatalf("confirmed token did not persist: %v", err)
+			}
+		})
+	}
+}
+
+func activateReviewedSettings(t *testing.T, cfg *config.Config, handler http.Handler, headers map[string]string, edits string) pendingAccessStatus {
+	t.Helper()
+	revision, _ := readConfigurationState(t, handler, headers)
+	ack := settingsReview(t, handler, headers, revision, edits)
+	response := testutil.ServeHTTP(t, handler, http.MethodPost, cfg.BaseURL("/api/settings/apply"), strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":%s,"acknowledgment":%q}`, revision, edits, ack)), headers)
+	var pending pendingAccessStatus
+	if response.Code != http.StatusAccepted || json.Unmarshal(response.Body.Bytes(), &pending) != nil || pending.Revision == "" {
+		t.Fatalf("temporary activation: %d %s", response.Code, response.Body)
+	}
+	return pending
+}
+
+func TestSettingsAccessRequiresFreshSession(t *testing.T) {
+	cfg, handler, headers := newAccessSettingsTestServer(t, "user")
+	login := func() *http.Cookie {
+		t.Helper()
+		response := testutil.ServeHTTP(t, handler, http.MethodPost, cfg.BaseURL("/api/login"), strings.NewReader(`{"username":"review-owner","password":"password123"}`), headers)
+		if response.Code != http.StatusOK {
+			t.Fatalf("login: %d %s", response.Code, response.Body)
+		}
+		return responseSessionCookie(t, response)
+	}
+	old := login()
+	pending := activateReviewedSettings(t, cfg, handler, headers, `[{"path":"app.public","action":"set","value":false}]`)
+	body := fmt.Sprintf(`{"revision":%q}`, pending.Revision)
+	response := testutil.ServeHTTP(t, handler, http.MethodPost, cfg.BaseURL("/api/settings/confirm"), strings.NewReader(body), map[string]string{"Origin": "hister://", "Cookie": old.String()})
+	if response.Code != http.StatusForbidden || !strings.Contains(response.Body.String(), "fresh_authentication_required") {
+		t.Fatalf("old session confirmed an authentication change: %d %s", response.Code, response.Body)
+	}
+	fresh := login()
+	response = testutil.ServeHTTP(t, handler, http.MethodPost, cfg.BaseURL("/api/settings/confirm"), strings.NewReader(body), map[string]string{"Origin": "hister://", "Cookie": fresh.String()})
+	if response.Code != http.StatusOK {
+		t.Fatalf("fresh login could not confirm: %d %s", response.Code, response.Body)
+	}
+}
+
+func TestSettingsAccessDisablingAuthenticationBindsCompletion(t *testing.T) {
+	for _, operation := range []string{"confirm", "cancel"} {
+		t.Run(operation, func(t *testing.T) {
+			cfg, handler, headers := newAccessSettingsTestServer(t, "token")
+			pending := activateReviewedSettings(t, cfg, handler, headers, `[{"path":"app.access_token","action":"set","value":{"action":"clear"}},{"path":"app.public","action":"set","value":false}]`)
+			anonymous := map[string]string{"Origin": "hister://"}
+			body := fmt.Sprintf(`{"revision":%q}`, pending.Revision)
+			response := testutil.ServeHTTP(t, handler, http.MethodPost, cfg.BaseURL("/api/settings/"+operation), strings.NewReader(body), anonymous)
+			if response.Code != http.StatusForbidden {
+				t.Fatalf("visitor completed someone else's access change: %d %s", response.Code, response.Body)
+			}
+			if pending.ConfirmationToken == "" {
+				t.Fatal("initiator did not receive confirmation proof")
+			}
+			state := testutil.ServeHTTP(t, handler, http.MethodGet, cfg.BaseURL("/api/settings"), nil, anonymous)
+			if !strings.Contains(state.Body.String(), pending.Revision) || strings.Contains(state.Body.String(), pending.ConfirmationToken) {
+				t.Fatalf("pending status missing or exposes proof: %s", state.Body)
+			}
+			body = fmt.Sprintf(`{"revision":%q,"confirmation_token":%q}`, pending.Revision, pending.ConfirmationToken)
+			response = testutil.ServeHTTP(t, handler, http.MethodPost, cfg.BaseURL("/api/settings/"+operation), strings.NewReader(body), anonymous)
+			if response.Code != http.StatusOK {
+				t.Fatalf("initiator completion failed: %d %s", response.Code, response.Body)
+			}
+		})
+	}
+}
+
+func TestSettingsAccessConfirmationRequiresCandidateDestination(t *testing.T) {
+	cfg, handler, headers := newAccessSettingsTestServer(t, "token")
+	pending := activateReviewedSettings(t, cfg, handler, headers, `[{"path":"app.public","action":"set","value":false}]`)
+	body := fmt.Sprintf(`{"revision":%q}`, pending.Revision)
+	for _, destination := range []string{"http://other.example/hister/api/settings/confirm", "http://127.0.0.1:4433/api/settings/confirm"} {
+		response := testutil.ServeHTTP(t, handler, http.MethodPost, destination, strings.NewReader(body), headers)
+		if response.Code != http.StatusNotFound && (response.Code != http.StatusForbidden || !strings.Contains(response.Body.String(), "destination_required")) {
+			t.Fatalf("confirmed through a different destination: %s: %d %s", destination, response.Code, response.Body)
+		}
+	}
+	response := testutil.ServeHTTP(t, handler, http.MethodPost, cfg.BaseURL("/api/settings/confirm"), strings.NewReader(body), headers)
+	if response.Code != http.StatusOK {
+		t.Fatalf("candidate destination rejected: %d %s", response.Code, response.Body)
+	}
+}
+
+func TestSettingsAccessConfirmationAcceptsDefaultPort(t *testing.T) {
+	cfg, handler, headers := newAccessSettingsTestServer(t, "token")
+	main, err := os.ReadFile(cfg.Filename())
+	if err != nil {
+		t.Fatal(err)
+	}
+	main = []byte(strings.Replace(string(main), "http://127.0.0.1:4433/hister", "http://example.com:80/hister", 1))
+	if err := os.WriteFile(cfg.Filename(), main, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if status := reloadRequest(t, handler, "secret"); status != http.StatusOK {
+		t.Fatalf("setup reload: %d", status)
+	}
+	pending := activateReviewedSettings(t, cfg, handler, headers, `[{"path":"app.public","action":"set","value":false}]`)
+	body := fmt.Sprintf(`{"revision":%q}`, pending.Revision)
+	headers["Origin"] = "http://example.com"
+	headers["Sec-Fetch-Site"] = "same-origin"
+	response := testutil.ServeHTTP(t, handler, http.MethodPost, "http://example.com/hister/api/settings/confirm", strings.NewReader(body), headers)
+	if response.Code != http.StatusOK {
+		t.Fatalf("default port normalization rejected access: %d %s", response.Code, response.Body)
+	}
+}
+
+func TestSettingsAccessOAuthVerification(t *testing.T) {
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/token" {
+			if err := r.ParseForm(); err != nil || r.Form.Get("client_secret") != "rotated-provider-secret" {
+				t.Error("OAuth exchange did not use the temporary credential")
+			}
+			_, _ = io.WriteString(w, `{"access_token":"provider-token"}`)
+		} else {
+			_, _ = io.WriteString(w, `{"email":"owner@example.com"}`)
+		}
+	}))
+	t.Cleanup(provider.Close)
+	extra := fmt.Sprintf("  oauth:\n    oidc:\n      client_id: client\n      client_secret: provider-secret\n      auth_url: %s/auth\n      token_url: %s/token\n      userinfo_url: %s/userinfo\n", provider.URL, provider.URL, provider.URL)
+	cfg, handler, headers := newAccessSettingsTestServer(t, "user", extra)
+	main, err := os.ReadFile(cfg.Filename())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(cfg.Filename(), []byte(strings.Replace(string(main), "      client_secret: provider-secret\n", "", 1)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	web, err := os.ReadFile(cfg.FullPath("config.web.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	web = append(web, []byte("  oauth:\n    oidc:\n      client_secret: provider-secret\n")...)
+	if err := os.WriteFile(cfg.FullPath("config.web.yml"), web, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if status := reloadRequest(t, handler, headers["X-Access-Token"]); status != http.StatusOK {
+		t.Fatalf("provider setup reload: %d", status)
+	}
+	user, err := model.CreateOAuthUser("provider-owner", "oidc-owner@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := model.SyncOAuthAdmin(user.OAuthID, true); err != nil {
+		t.Fatal(err)
+	}
+	oldFlow, oldQuery := startOAuthLogin(t, handler, nil)
+	pending := activateReviewedSettings(t, cfg, handler, headers, `[{"path":"server.oauth.oidc.scopes","action":"set","value":["openid","profile"]},{"path":"server.oauth.oidc.client_secret","action":"set","value":{"action":"replace","value":"rotated-provider-secret"}},{"path":"server.oauth_only","action":"set","value":true}]`)
+	state := testutil.ServeHTTP(t, handler, http.MethodGet, cfg.BaseURL("/api/settings"), nil, headers)
+	if strings.Contains(state.Body.String(), "provider-secret") {
+		t.Fatal("pending state exposed an OAuth credential")
+	}
+	body := fmt.Sprintf(`{"revision":%q}`, pending.Revision)
+	confirm := func(credentials map[string]string, want int) {
+		t.Helper()
+		response := testutil.ServeHTTP(t, handler, http.MethodPost, cfg.BaseURL("/api/settings/confirm"), strings.NewReader(body), credentials)
+		if response.Code != want {
+			t.Fatalf("OAuth confirmation: %d %s, want %d", response.Code, response.Body, want)
+		}
+	}
+	confirm(headers, http.StatusForbidden)
+	oldLogin := oauthCallback(handler, oldFlow, url.Values{"provider": {"oidc"}, "state": {oldQuery.Get("state")}, "code": {"code"}})
+	if oldLogin.Code != http.StatusFound {
+		t.Fatalf("old login callback: %d %s", oldLogin.Code, oldLogin.Body)
+	}
+	confirm(map[string]string{"Origin": "hister://", "Cookie": responseSessionCookie(t, oldLogin).String()}, http.StatusForbidden)
+	flow, query := startOAuthLogin(t, handler, nil)
+	login := oauthCallback(handler, flow, url.Values{"provider": {"oidc"}, "state": {query.Get("state")}, "code": {"code"}})
+	if login.Code != http.StatusFound {
+		t.Fatalf("fresh OAuth login: %d %s", login.Code, login.Body)
+	}
+	confirm(map[string]string{"Origin": "hister://", "Cookie": responseSessionCookie(t, login).String()}, http.StatusOK)
+	loaded, _, err := config.LoadForInspection(cfg.Filename(), true)
+	if err != nil || loaded.Server.OAuth["oidc"].ClientSecret != "rotated-provider-secret" || !reflect.DeepEqual(loaded.Server.OAuth["oidc"].Scopes, []string{"openid", "profile"}) {
+		t.Fatalf("confirmed provider settings did not persist: %v", err)
+	}
+}
+
+func TestSettingsAccessChangedListenerAndBasePath(t *testing.T) {
+	cfg, handler, headers := newAccessSettingsTestServer(t, "token")
+	main, err := os.ReadFile(cfg.Filename())
+	if err != nil {
+		t.Fatal(err)
+	}
+	main = []byte(strings.Replace(string(main), "  base_url: http://127.0.0.1:4433/hister\n", "", 1))
+	if err := os.WriteFile(cfg.Filename(), main, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	managed := fmt.Sprintf("app:\n  access_token: secret\n  public: true\nserver:\n  address: 127.0.0.1:0\n  base_url: %s\n", cfg.Server.BaseURL)
+	if err := os.WriteFile(cfg.FullPath("config.web.yml"), []byte(managed), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if status := reloadRequest(t, handler, "secret"); status != http.StatusOK {
+		t.Fatalf("setup reload: %d", status)
+	}
+	address := runtimeTestAddress(t)
+	base := "http://" + address + "/changed"
+	edits := fmt.Sprintf(`[{"path":"server.address","action":"set","value":%q},{"path":"server.base_url","action":"set","value":%q}]`, address, base)
+	pending := activateReviewedSettings(t, cfg, handler, headers, edits)
+	if pending.DestinationURL != base+"/settings" {
+		t.Fatalf("wrong destination: %s", pending.DestinationURL)
+	}
+	body := fmt.Sprintf(`{"revision":%q}`, pending.Revision)
+	// Matching a destination header alone does not prove use of the new listener.
+	reply := testutil.ServeHTTP(t, handler, http.MethodPost, base+"/api/settings/confirm", strings.NewReader(body), headers)
+	if reply.Code != http.StatusForbidden {
+		t.Fatalf("confirmation bypassed the replacement listener: %d %s", reply.Code, reply.Body)
+	}
+	client := &http.Client{}
+	defer client.CloseIdleConnections()
+	request, err := http.NewRequest(http.MethodPost, base+"/api/settings/confirm", strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for key, value := range headers {
+		request.Header.Set(key, value)
+	}
+	response, err := client.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = response.Body.Close() }()
+	if response.StatusCode != http.StatusOK {
+		raw, _ := io.ReadAll(response.Body)
+		t.Fatalf("new listener confirmation: %d %s", response.StatusCode, raw)
+	}
+	loaded, _, err := config.LoadForInspection(cfg.Filename(), true)
+	if err != nil || loaded.Server.Address != address || loaded.Server.BaseURL != base {
+		t.Fatalf("destination was not persisted: %v", err)
+	}
+}
+
+func TestSettingsAccessCompletionRequestGuards(t *testing.T) {
+	for _, operation := range []string{"confirm", "cancel"} {
+		t.Run(operation, func(t *testing.T) {
+			cfg, handler, headers := newAccessSettingsTestServer(t, "user")
+			reader := testutil.CreateUser(t, "reader")
+			pending := activateReviewedSettings(t, cfg, handler, headers, `[{"path":"app.public","action":"set","value":false}]`)
+			body := fmt.Sprintf(`{"revision":%q}`, pending.Revision)
+			for _, denied := range []map[string]string{
+				{"Origin": "hister://"},
+				{"Origin": "hister://", "X-Access-Token": reader.Token},
+				{"Origin": "https://other.example", "X-Access-Token": headers["X-Access-Token"]},
+				{"Origin": "chrome-extension://example", "X-Access-Token": headers["X-Access-Token"]},
+			} {
+				response := testutil.ServeHTTP(t, handler, http.MethodPost, cfg.BaseURL("/api/settings/"+operation), strings.NewReader(body), denied)
+				if response.Code != http.StatusForbidden || response.Header().Get("Cache-Control") != "no-store" {
+					t.Fatalf("authorization or CSRF bypass: %d %s", response.Code, response.Body)
+				}
+			}
+			for _, invalid := range []string{
+				`{}`, `{"revision":null}`, body + `{}`, strings.TrimSuffix(body, "}") + `,"confirmed":true}`,
+				strings.TrimSuffix(body, "}") + `,"revision":"duplicate"}`, strings.TrimSuffix(body, "}") + `,"confirmation_token":false}`,
+				strings.TrimSuffix(body, "}") + `,"confirmation_token":null}`,
+			} {
+				response := testutil.ServeHTTP(t, handler, http.MethodPost, cfg.BaseURL("/api/settings/"+operation), strings.NewReader(invalid), headers)
+				if response.Code != http.StatusBadRequest {
+					t.Fatalf("ambiguous completion accepted: %s: %d %s", invalid, response.Code, response.Body)
+				}
+			}
+			response := testutil.ServeHTTP(t, handler, http.MethodPost, cfg.BaseURL("/api/settings/"+operation), strings.NewReader(body), headers)
+			if response.Code != http.StatusOK {
+				t.Fatalf("valid completion rejected: %d %s", response.Code, response.Body)
+			}
+			response = testutil.ServeHTTP(t, handler, http.MethodPost, cfg.BaseURL("/api/settings/"+operation), strings.NewReader(body), headers)
+			if response.Code != http.StatusConflict {
+				t.Fatalf("replayed completion accepted: %d %s", response.Code, response.Body)
+			}
+		})
+	}
+}
+
+func TestSettingsAccessValidationRetainsRecoveryRestrictions(t *testing.T) {
+	for _, tc := range []struct{ name, mode, extra, edits string }{
+		{"public without authentication", "token", "", `[{"path":"app.access_token","action":"set","value":{"action":"clear"}}]`},
+		{"user mode without administrator", "token", "", `[{"path":"app.user_handling","action":"set","value":true}]`},
+		{"OAuth only without provider", "user", "", `[{"path":"server.oauth_only","action":"set","value":true}]`},
+		{"identity mapping", "user", "", `[{"path":"server.oauth.oidc.identity_claim","action":"set","value":"sub"}]`},
+		{"provider endpoints", "user", "", `[{"path":"server.oauth.oidc.token_url","action":"set","value":"https://unreviewed.example"}]`},
+		{"parent object", "user", "", `[{"path":"server.oauth","action":"set","value":{"oidc":{"admin_groups":["everyone"]}}}]`},
+		{"role synchronization", "user", "  oauth:\n    oidc:\n      client_id: client\n      client_secret: provider-secret\n      auth_url: https://provider.example/auth\n      token_url: https://provider.example/token\n      userinfo_url: https://provider.example/userinfo\n      admin_groups: [owners]\n", `[{"path":"server.oauth.oidc.scopes","action":"set","value":["profile"]}]`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg, handler, headers := newAccessSettingsTestServer(t, tc.mode, tc.extra)
+			unchanged := assertSettingsUnchanged(t, cfg, handler, headers)
+			revision, _ := readConfigurationState(t, handler, headers)
+			for _, operation := range []string{"validate", "apply"} {
+				body := fmt.Sprintf(`{"revision":%q,"edits":%s}`, revision, tc.edits)
+				response := testutil.ServeHTTP(t, handler, http.MethodPost, cfg.BaseURL("/api/settings/"+operation), strings.NewReader(body), headers)
+				want := http.StatusUnprocessableEntity
+				if operation == "apply" && tc.name == "user mode without administrator" {
+					want = http.StatusPreconditionRequired
+				}
+				if response.Code != want {
+					t.Fatalf("unsafe access draft: %d %s, want %d", response.Code, response.Body, want)
+				}
+				if strings.Contains(response.Body.String(), "provider-secret") {
+					t.Fatal("validation exposed provider credentials")
+				}
+				unchanged()
+			}
+		})
+	}
+}
+
+func TestSettingsAccessEnablingUserHandlingRequiresAdministratorLogin(t *testing.T) {
+	cfg, handler, headers := newAccessSettingsTestServer(t, "token")
+	admin, err := model.CreateUser("future-owner", "password123", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	login := testutil.ServeHTTP(t, handler, http.MethodPost, cfg.BaseURL("/api/login"), strings.NewReader(`{"username":"future-owner","password":"password123"}`), headers)
+	oldCookie := responseSessionCookie(t, login)
+	pending := activateReviewedSettings(t, cfg, handler, headers, `[{"path":"app.user_handling","action":"set","value":true}]`)
+	body := fmt.Sprintf(`{"revision":%q}`, pending.Revision)
+	for _, denied := range []map[string]string{headers, {"Origin": "hister://", "Cookie": oldCookie.String()}} {
+		response := testutil.ServeHTTP(t, handler, http.MethodPost, cfg.BaseURL("/api/settings/confirm"), strings.NewReader(body), denied)
+		if response.Code != http.StatusForbidden {
+			t.Fatalf("old authentication confirmed user mode: %d %s", response.Code, response.Body)
+		}
+	}
+	response := testutil.ServeHTTP(t, handler, http.MethodPost, cfg.BaseURL("/api/settings/confirm"), strings.NewReader(body), map[string]string{"Origin": "hister://", "X-Access-Token": admin.Token})
+	if response.Code != http.StatusOK {
+		t.Fatalf("administrator could not confirm user mode: %d %s", response.Code, response.Body)
+	}
+}
+
+func TestSettingsAccessConfirmationRechecksAuthorityAfterDraining(t *testing.T) {
+	entered, release := make(chan struct{}), make(chan struct{})
+	unblock := sync.OnceFunc(func() { close(release) })
+	defer unblock()
+	previousEndpoints := Endpoints
+	Endpoints = append(append([]*Endpoint(nil), Endpoints...), &Endpoint{
+		Path: "/api/test-demote", Method: GET,
+		Handler: func(c *webContext) {
+			close(entered)
+			<-release
+			if _, err := model.ToggleAdmin("review-owner"); err != nil {
+				t.Error(err)
+			}
+			serve200(c)
+		},
+	})
+	t.Cleanup(func() { Endpoints = previousEndpoints })
+	cfg, handler, headers := newAccessSettingsTestServer(t, "user")
+	backup, err := model.CreateUser("backup-owner", "password123", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pending := activateReviewedSettings(t, cfg, handler, headers, `[{"path":"app.public","action":"set","value":false}]`)
+	held := make(chan struct{})
+	go func() {
+		testutil.ServeHTTP(t, handler, http.MethodGet, cfg.BaseURL("/api/test-demote"), nil, headers)
+		close(held)
+	}()
+	<-entered
+	body := fmt.Sprintf(`{"revision":%q}`, pending.Revision)
+	done := make(chan *httptest.ResponseRecorder, 1)
+	go func() {
+		done <- testutil.ServeHTTP(t, handler, http.MethodPost, cfg.BaseURL("/api/settings/confirm"), strings.NewReader(body), headers)
+	}()
+	waitRuntimePause(t, handler)
+	unblock()
+	<-held
+	if response := <-done; response.Code != http.StatusForbidden {
+		t.Fatalf("demoted caller confirmed access: %d %s", response.Code, response.Body)
+	}
+	loaded, _, err := config.LoadForInspection(cfg.Filename(), true)
+	if err != nil || !loaded.App.Public {
+		t.Fatalf("rejected confirmation persisted: %v", err)
+	}
+	response := testutil.ServeHTTP(t, handler, http.MethodPost, cfg.BaseURL("/api/settings/cancel"), strings.NewReader(body), map[string]string{"Origin": "hister://", "X-Access-Token": backup.Token})
+	if response.Code != http.StatusOK {
+		t.Fatalf("remaining administrator cannot cancel: %d %s", response.Code, response.Body)
+	}
+}
+
+func TestSettingsAcknowledgmentAllowsOrdinaryActivation(t *testing.T) {
+	for _, mode := range []string{"token", "user", "none"} {
+		t.Run(mode, func(t *testing.T) {
+			cfg, handler, headers := newAccessSettingsTestServer(t, mode)
+			unchanged := assertSettingsUnchanged(t, cfg, handler, headers)
+			revision, _ := readConfigurationState(t, handler, headers)
+			const edits = `[{"path":"app.profiler","action":"set","value":true},{"path":"app.title","action":"set","value":"Reviewed diagnostics"}]`
+			body := fmt.Sprintf(`{"revision":%q,"edits":%s}`, revision, edits)
+			response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/validate", strings.NewReader(body), headers)
+			var result struct {
+				Required bool `json:"requires_confirmation"`
+				Review   struct {
+					Mode           string   `json:"mode"`
+					Acknowledgment string   `json:"acknowledgment"`
+					Destination    string   `json:"destination_url"`
+					Consequences   []string `json:"consequences"`
+				} `json:"review"`
+			}
+			if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil || response.Code != http.StatusOK || !result.Required || result.Review.Mode != "acknowledge" || result.Review.Acknowledgment == "" {
+				t.Fatalf("missing acknowledgment review: %d %s (%v)", response.Code, response.Body, err)
+			}
+			if mode == "none" {
+				headers["Cookie"] = responseSessionCookie(t, response).String()
+			}
+			if result.Review.Destination != "" || !strings.Contains(strings.Join(result.Review.Consequences, " "), "private data") {
+				t.Fatalf("incorrect diagnostics consequences: %s", response.Body)
+			}
+			response = testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(body), headers)
+			if response.Code != http.StatusPreconditionRequired {
+				t.Fatalf("unacknowledged diagnostics: %d %s", response.Code, response.Body)
+			}
+			unchanged()
+			body = fmt.Sprintf(`{"revision":%q,"edits":%s,"acknowledgment":%q}`, revision, edits, result.Review.Acknowledgment)
+			response = testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(body), headers)
+			if response.Code != http.StatusOK {
+				t.Fatalf("acknowledged save: %d %s", response.Code, response.Body)
+			}
+			loaded, _, err := config.LoadForInspection(cfg.Filename(), true)
+			if err != nil || !loaded.App.Profiler || loaded.App.Title != "Reviewed diagnostics" {
+				t.Fatalf("acknowledged settings were not persisted: %v", err)
+			}
+			response = testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(body), headers)
+			if response.Code != http.StatusConflict {
+				t.Fatalf("replayed acknowledgment: %d %s", response.Code, response.Body)
+			}
+			for _, enabled := range []bool{true, false} {
+				revision, _ = readConfigurationState(t, handler, headers)
+				body = fmt.Sprintf(`{"revision":%q,"edits":[{"path":"app.profiler","action":"set","value":%t}]}`, revision, enabled)
+				response = testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/validate", strings.NewReader(body), headers)
+				var validation struct {
+					Required *bool           `json:"requires_confirmation"`
+					Review   json.RawMessage `json:"review"`
+				}
+				if err := json.Unmarshal(response.Body.Bytes(), &validation); err != nil || response.Code != http.StatusOK || validation.Required == nil || *validation.Required || len(validation.Review) != 0 {
+					t.Fatalf("unchanged or disabled diagnostics required consent: %d %s", response.Code, response.Body)
+				}
+				response = testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(body), headers)
+				if response.Code != http.StatusOK {
+					t.Fatalf("ordinary diagnostics save: %d %s", response.Code, response.Body)
+				}
+				_, values := readConfigurationState(t, handler, headers)
+				if values["app.profiler"].Value != enabled {
+					t.Fatal("diagnostics setting did not activate")
+				}
+			}
+		})
+	}
+}
+
+func TestSettingsAcknowledgmentRetainsAccessAndWriteGuards(t *testing.T) {
+	cfg, handler, headers := newAccessSettingsTestServer(t, "user")
+	revision, _ := readConfigurationState(t, handler, headers)
+	unchanged := assertSettingsUnchanged(t, cfg, handler, headers)
+	const edits = `[{"path":"app.profiler","action":"set","value":true},{"path":"app.title","action":"set","value":"Reviewed"}]`
+	ack := settingsReview(t, handler, headers, revision, edits)
+	apply := func(edits, ack string, headers map[string]string, want int) {
+		t.Helper()
+		body := fmt.Sprintf(`{"revision":%q,"edits":%s,"acknowledgment":%q}`, revision, edits, ack)
+		response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(body), headers)
+		if response.Code != want {
+			t.Fatalf("apply: %d, want %d: %s", response.Code, want, response.Body)
+		}
+		if want != http.StatusAccepted {
+			unchanged()
+		}
+	}
+	reader := testutil.CreateUser(t, "reader")
+	apply(edits, ack, map[string]string{"X-Access-Token": reader.Token, "Origin": "hister://"}, http.StatusForbidden)
+	apply(strings.Replace(edits, "Reviewed", "Unreviewed", 1), ack, headers, http.StatusConflict)
+	apply(edits, ack, headers, http.StatusConflict)
+	for _, restricted := range []string{
+		`{"path":"app.directory","action":"set","value":"/tmp/unreviewed"}`,
+		`{"path":"server.base_url","action":"set","value":"https://unreviewed.example"}`,
+		`{"path":"server.proxy_auth_header","action":"set","value":"X-User"}`,
+	} {
+		ack = settingsReview(t, handler, headers, revision, edits)
+		apply(strings.TrimSuffix(edits, "]")+","+restricted+"]", ack, headers, http.StatusUnprocessableEntity)
+	}
+	mixed := strings.TrimSuffix(edits, "]") + `,{"path":"app.user_handling","action":"set","value":false}]`
+	ack = settingsReview(t, handler, headers, revision, mixed)
+	apply(mixed, ack, headers, http.StatusAccepted)
+}
+
+func settingsReview(t *testing.T, handler http.Handler, headers map[string]string, revision, edits string) string {
+	t.Helper()
+	response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/validate", strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":%s}`, revision, edits)), headers)
+	var result struct {
+		Review struct {
+			Acknowledgment string `json:"acknowledgment"`
+		} `json:"review"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil || response.Code != http.StatusOK || result.Review.Acknowledgment == "" {
+		t.Fatalf("review: %d %s (%v)", response.Code, response.Body, err)
+	}
+	if response.Header().Get("Cache-Control") != "no-store" {
+		t.Fatal("review can be cached")
+	}
+	return result.Review.Acknowledgment
+}
+
+func assertSettingsUnchanged(t *testing.T, cfg *config.Config, handler http.Handler, headers map[string]string) func() {
+	t.Helper()
+	revision, values := readConfigurationState(t, handler, headers)
+	before := map[string]string{}
+	for _, path := range []string{cfg.Filename(), cfg.FullPath("config.web.yml")} {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		before[path] = string(data)
+	}
+	return func() {
+		t.Helper()
+		current, active := readConfigurationState(t, handler, headers)
+		if current != revision || !reflect.DeepEqual(active, values) {
+			t.Fatal("rejected access draft changed running settings")
+		}
+		for path, original := range before {
+			data, err := os.ReadFile(path)
+			if err != nil || string(data) != original {
+				t.Fatalf("rejected access draft changed %s", path)
+			}
+		}
+		if staged, err := filepath.Glob(cfg.FullPath(".config.web-*")); err != nil || len(staged) != 0 {
+			t.Fatal("rejected access draft left staging files")
+		}
+	}
+}
+
+func TestSettingsAccessAcknowledgmentBindsWholeDraft(t *testing.T) {
+	cfg, handler, headers := newAccessSettingsTestServer(t, "token")
+	unchanged := assertSettingsUnchanged(t, cfg, handler, headers)
+	revision, _ := readConfigurationState(t, handler, headers)
+	const edits = `[{"path":"app.access_token","action":"set","value":{"action":"replace","value":"new-secret"}},{"path":"app.title","action":"set","value":"Reviewed"}]`
+	apply := func(edits, acknowledgment string, want int) {
+		t.Helper()
+		body := fmt.Sprintf(`{"revision":%q,"edits":%s,"acknowledgment":%q}`, revision, edits, acknowledgment)
+		response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(body), headers)
+		if response.Code != want {
+			t.Fatalf("apply: %d %s, want %d", response.Code, response.Body, want)
+		}
+		if want != http.StatusAccepted {
+			unchanged()
+		}
+	}
+	for _, modified := range []string{
+		strings.Replace(edits, "new-secret", "different-secret", 1),
+		strings.Replace(edits, "Reviewed", "Unreviewed", 1),
+		`[{"path":"app.title","action":"set","value":"Reviewed"}]`,
+	} {
+		ack := settingsReview(t, handler, headers, revision, edits)
+		apply(modified, ack, http.StatusConflict)
+		// Even reverting the edit must require another explicit review.
+		apply(edits, ack, http.StatusConflict)
+	}
+	ack := settingsReview(t, handler, headers, revision, edits)
+	invalid := strings.Replace(edits, `"value":"Reviewed"`, `"value":42`, 1)
+	apply(invalid, ack, http.StatusUnprocessableEntity)
+	apply(edits, ack, http.StatusConflict)
+	ack = settingsReview(t, handler, headers, revision, edits)
+	response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/validate", strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":%s}`, revision, invalid)), headers)
+	if response.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("invalid revised draft: %d %s", response.Code, response.Body)
+	}
+	apply(edits, ack, http.StatusConflict)
+	old := settingsReview(t, handler, headers, revision, edits)
+	latest := settingsReview(t, handler, headers, revision, edits)
+	apply(edits, old, http.StatusConflict)
+	apply(edits, "forged", http.StatusConflict)
+	apply(edits, latest, http.StatusAccepted)
+}
+
+func TestSettingsAccessAcknowledgmentBindsActor(t *testing.T) {
+	cfg, handler, headers := newAccessSettingsTestServer(t, "user")
+	other, err := model.CreateUser("other-owner", "password123", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader := testutil.CreateUser(t, "reader")
+	unchanged := assertSettingsUnchanged(t, cfg, handler, map[string]string{"X-Access-Token": other.Token})
+	revision, _ := readConfigurationState(t, handler, headers)
+	const edits = `[{"path":"app.user_handling","action":"set","value":false}]`
+	ack := settingsReview(t, handler, headers, revision, edits)
+	body := fmt.Sprintf(`{"revision":%q,"edits":%s,"acknowledgment":%q}`, revision, edits, ack)
+	for _, caller := range []struct {
+		token  string
+		status int
+	}{{other.Token, http.StatusConflict}, {reader.Token, http.StatusForbidden}, {"", http.StatusForbidden}, {"secret", http.StatusForbidden}} {
+		response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(body), map[string]string{"Origin": "hister://", "X-Access-Token": caller.token})
+		if response.Code != caller.status {
+			t.Fatalf("unauthorized acknowledgment: %d %s", response.Code, response.Body)
+		}
+		unchanged()
+	}
+	owner, err := model.GetUser("review-owner")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, admin := range []bool{false, true} {
+		owner, err = model.UpdateUser(other.ID, owner.ID, owner.Revision, model.UserChanges{IsAdmin: &admin})
+		if err != nil {
+			t.Fatal(err)
+		}
+		response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(body), headers)
+		want := http.StatusForbidden
+		if admin {
+			want = http.StatusConflict
+		}
+		if response.Code != want {
+			t.Fatalf("lost authority revived acknowledgment: %d %s", response.Code, response.Body)
+		}
+		unchanged()
+	}
+}
+
+func TestSettingsAccessAcknowledgmentBindsSession(t *testing.T) {
+	for _, mode := range []string{"user", "token", "none"} {
+		t.Run(mode, func(t *testing.T) {
+			cfg, handler, headers := newAccessSettingsTestServer(t, mode)
+			unchanged := assertSettingsUnchanged(t, cfg, handler, headers)
+			revision, _ := readConfigurationState(t, handler, headers)
+			edits := fmt.Sprintf(`[{"path":"server.address","action":"set","value":%q}]`, runtimeTestAddress(t))
+			var cookies []*http.Cookie
+			for range 2 {
+				path, body := "/api/token-login", `{"token":"secret"}`
+				switch mode {
+				case "user":
+					path, body = "/api/login", `{"username":"review-owner","password":"password123"}`
+				case "none":
+					path, body = "/api/settings/validate", fmt.Sprintf(`{"revision":%q,"edits":%s}`, revision, edits)
+				}
+				response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister"+path, strings.NewReader(body), map[string]string{"Origin": "hister://"})
+				if response.Code != http.StatusOK {
+					t.Fatalf("establish session: %d %s", response.Code, response.Body)
+				}
+				cookies = append(cookies, responseSessionCookie(t, response))
+			}
+			initiator := map[string]string{"Origin": "hister://", "Cookie": cookies[0].String()}
+			ack := settingsReview(t, handler, initiator, revision, edits)
+			body := fmt.Sprintf(`{"revision":%q,"edits":%s,"acknowledgment":%q}`, revision, edits, ack)
+			for _, cookie := range []*http.Cookie{cookies[1], cookies[0]} {
+				response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(body), map[string]string{"Origin": "hister://", "Cookie": cookie.String()})
+				want := http.StatusConflict
+				if cookie == cookies[0] {
+					want = http.StatusAccepted
+				}
+				if response.Code != want {
+					t.Fatalf("session binding: %d %s, want %d", response.Code, response.Body, want)
+				}
+				if want == http.StatusAccepted {
+					var pending pendingAccessStatus
+					if err := json.Unmarshal(response.Body.Bytes(), &pending); err != nil {
+						t.Fatal(err)
+					}
+					cancelBody := fmt.Sprintf(`{"revision":%q,"confirmation_token":%q}`, pending.Revision, pending.ConfirmationToken)
+					cancel := testutil.ServeHTTP(t, handler, http.MethodPost, cfg.BaseURL("/api/settings/cancel"), strings.NewReader(cancelBody), initiator)
+					if cancel.Code != http.StatusOK {
+						t.Fatalf("cancel temporary change: %d %s", cancel.Code, cancel.Body)
+					}
+					revision, _ = readConfigurationState(t, handler, headers)
+					unchanged = assertSettingsUnchanged(t, cfg, handler, headers)
+				}
+				unchanged()
+			}
+			ack = settingsReview(t, handler, initiator, revision, edits)
+			response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/logout", nil, initiator)
+			if response.Code != http.StatusOK {
+				t.Fatalf("logout: %d %s", response.Code, response.Body)
+			}
+			body = fmt.Sprintf(`{"revision":%q,"edits":%s,"acknowledgment":%q}`, revision, edits, ack)
+			response = testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(body), initiator)
+			if response.Code != http.StatusForbidden {
+				t.Fatalf("revoked session: %d %s", response.Code, response.Body)
+			}
+			unchanged()
+		})
+	}
+}
+
+func TestSettingsAccessAcknowledgmentExpiresWithConfiguration(t *testing.T) {
+	for _, change := range []string{"save", "reload", "main file", "managed file"} {
+		t.Run(change, func(t *testing.T) {
+			cfg, handler, headers := newAccessSettingsTestServer(t, "token")
+			revision, _ := readConfigurationState(t, handler, headers)
+			const edits = `[{"path":"app.public","action":"set","value":false}]`
+			ack := settingsReview(t, handler, headers, revision, edits)
+			wantCode := "stale_revision"
+			switch change {
+			case "save":
+				body := fmt.Sprintf(`{"revision":%q,"edits":[{"path":"app.title","action":"set","value":"Another save"}]}`, revision)
+				response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(body), headers)
+				if response.Code != http.StatusOK {
+					t.Fatalf("ordinary save: %d %s", response.Code, response.Body)
+				}
+			case "reload":
+				if status := reloadRequest(t, handler, "secret"); status != http.StatusOK {
+					t.Fatalf("reload: %d", status)
+				}
+			default:
+				filename := cfg.Filename()
+				if change == "managed file" {
+					filename = cfg.FullPath("config.web.yml")
+				}
+				data, err := os.ReadFile(filename)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filename, append(data, []byte("\n# external edit\n")...), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				wantCode = "sources_changed"
+			}
+			unchanged := assertSettingsUnchanged(t, cfg, handler, headers)
+			body := fmt.Sprintf(`{"revision":%q,"edits":%s,"acknowledgment":%q}`, revision, edits, ack)
+			response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(body), headers)
+			if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), `"code":"`+wantCode+`"`) {
+				t.Fatalf("stale acknowledgment: %d %s", response.Code, response.Body)
+			}
+			unchanged()
+			if wantCode == "stale_revision" {
+				// Copying an old acknowledgment into a current revision cannot revive it.
+				current, _ := readConfigurationState(t, handler, headers)
+				response = testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(strings.Replace(body, revision, current, 1)), headers)
+				if response.Code != http.StatusConflict {
+					t.Fatalf("rebound acknowledgment: %d %s", response.Code, response.Body)
+				}
+				unchanged()
+			}
+		})
+	}
+}
+
+func TestSettingsAccessAdministratorPrerequisite(t *testing.T) {
+	cfg, handler, headers := newAccessSettingsTestServer(t, "token")
+	unchanged := assertSettingsUnchanged(t, cfg, handler, headers)
+	revision, _ := readConfigurationState(t, handler, headers)
+	const edits = `[{"path":"app.user_handling","action":"set","value":true}]`
+	validate := fmt.Sprintf(`{"revision":%q,"edits":%s}`, revision, edits)
+	response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/validate", strings.NewReader(validate), headers)
+	if response.Code != http.StatusUnprocessableEntity || !strings.Contains(response.Body.String(), "admin_required") {
+		t.Fatalf("review without administrator: %d %s", response.Code, response.Body)
+	}
+	user, err := model.CreateOAuthUser("provider-owner", "oidc-owner@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	response = testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/validate", strings.NewReader(validate), headers)
+	if response.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("ordinary user satisfied prerequisite: %d %s", response.Code, response.Body)
+	}
+	if _, err := model.SyncOAuthAdmin(user.OAuthID, true); err != nil {
+		t.Fatal(err)
+	}
+	ack := settingsReview(t, handler, headers, revision, edits)
+	if _, err := model.SyncOAuthAdmin(user.OAuthID, false); err != nil {
+		t.Fatal(err)
+	}
+	body := fmt.Sprintf(`{"revision":%q,"edits":%s,"acknowledgment":%q}`, revision, edits, ack)
+	response = testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(body), headers)
+	if response.Code != http.StatusUnprocessableEntity || !strings.Contains(response.Body.String(), "admin_required") {
+		t.Fatalf("apply did not recheck administrator: %d %s", response.Code, response.Body)
+	}
+	unchanged()
+	if _, err := model.SyncOAuthAdmin(user.OAuthID, true); err != nil {
+		t.Fatal(err)
+	}
+	response = testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(body), headers)
+	if response.Code != http.StatusConflict {
+		t.Fatalf("failed attempt reused: %d %s", response.Code, response.Body)
+	}
+	unchanged()
+}
+
+func TestSettingsAccessReviewRequiresIndependentRecoveryAdministrator(t *testing.T) {
+	cfg, handler, headers := newAccessSettingsTestServer(t, "token", "  oauth_only: true\n  oauth:\n    oidc:\n      client_id: hister\n      client_secret: provider-secret\n      auth_url: https://provider.example/auth\n      token_url: https://provider.example/token\n      userinfo_url: https://provider.example/userinfo\n      admin_groups: [owners]\n")
+	unchanged := assertSettingsUnchanged(t, cfg, handler, headers)
+	revision, _ := readConfigurationState(t, handler, headers)
+	user, err := model.CreateOAuthUser("provider-owner", "oidc-owner@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := model.SyncOAuthAdmin(user.OAuthID, true); err != nil {
+		t.Fatal(err)
+	}
+	const edits = `[{"path":"app.user_handling","action":"set","value":true}]`
+	body := fmt.Sprintf(`{"revision":%q,"edits":%s}`, revision, edits)
+	response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/validate", strings.NewReader(body), headers)
+	if response.Code != http.StatusUnprocessableEntity || !strings.Contains(response.Body.String(), "independent local administrator") || strings.Contains(response.Body.String(), "provider-secret") {
+		t.Fatalf("missing independent recovery: %d %s", response.Code, response.Body)
+	}
+	if _, err := model.CreateUser("recovery-owner", "password123", true); err != nil {
+		t.Fatal(err)
+	}
+	settingsReview(t, handler, headers, revision, edits)
+	unchanged()
+}
+
+func TestSettingsAccessReviewRedactsAndResolvesSecrets(t *testing.T) {
+	cfg, handler, headers := newAccessSettingsTestServer(t, "user")
+	unchanged := assertSettingsUnchanged(t, cfg, handler, headers)
+	revision, _ := readConfigurationState(t, handler, headers)
+	for _, edit := range []string{
+		`{"path":"app.access_token","action":"set","value":{"action":"replace","value":"private-review-secret"}}`,
+		`{"path":"app.access_token","action":"set","value":{"action":"clear"}}`,
+		`{"path":"app.access_token","action":"reset"}`,
+	} {
+		body := fmt.Sprintf(`{"revision":%q,"edits":[{"path":"app.user_handling","action":"set","value":false},{"path":"app.public","action":"set","value":false},%s]}`, revision, edit)
+		response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/validate", strings.NewReader(body), headers)
+		if response.Code != http.StatusOK || strings.Contains(response.Body.String(), `"secret"`) || strings.Contains(response.Body.String(), "private-review-secret") {
+			t.Fatalf("secret review: %d %s", response.Code, response.Body)
+		}
+		want := "without signing in"
+		if strings.Contains(edit, "replace") {
+			want = "instance token"
+		}
+		if !strings.Contains(response.Body.String(), want) {
+			t.Fatalf("review did not describe effective access: %s", response.Body)
+		}
+		unchanged()
+	}
+}
+
+func TestSettingsAccessReviewRetainsRestrictions(t *testing.T) {
+	t.Setenv("HISTER__SERVER__ADDRESS", "127.0.0.1:0")
+	cfg, handler, headers := newAccessSettingsTestServer(t, "token")
+	unchanged := assertSettingsUnchanged(t, cfg, handler, headers)
+	revision, _ := readConfigurationState(t, handler, headers)
+	for _, edit := range []string{
+		`{"path":"server.address","action":"set","value":"0.0.0.0:5544"}`,
+		`{"path":"server.base_url","action":"reset"}`,
+		`{"path":"app.directory","action":"set","value":"private-input"}`,
+		`{"path":"server.proxy_auth_header","action":"set","value":"private-input"}`,
+		`{"path":"server.oauth.oidc.admin_groups","action":"set","value":["private-input"]}`,
+		`{"path":"extractors.ytdlp.options.binary","action":"set","value":"private-input"}`,
+		`{"path":"server","action":"set","value":{"address":"private-input"}}`,
+		`{"path":"app.access_token","action":"set","value":{"action":"clear"}}`,
+	} {
+		// Retain public=true in the last case to test invalid public access.
+		body := fmt.Sprintf(`{"revision":%q,"edits":[{"path":"app.public","action":"set","value":true},%s]}`, revision, edit)
+		for _, operation := range []string{"validate", "apply"} {
+			response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/"+operation, strings.NewReader(body), headers)
+			if response.Code != http.StatusUnprocessableEntity || strings.Contains(response.Body.String(), "private-input") || strings.Contains(response.Body.String(), `"acknowledgment"`) {
+				t.Fatalf("restricted %s: %d %s", operation, response.Code, response.Body)
+			}
+			unchanged()
+		}
+	}
+}
+
+func TestSettingsAccessAcknowledgmentIsStrictAndSingleUse(t *testing.T) {
+	cfg, handler, headers := newAccessSettingsTestServer(t, "token")
+	unchanged := assertSettingsUnchanged(t, cfg, handler, headers)
+	revision, _ := readConfigurationState(t, handler, headers)
+	const edits = `[{"path":"app.public","action":"set","value":false}]`
+	ack := settingsReview(t, handler, headers, revision, edits)
+	for _, extra := range []string{
+		`"confirmed":true`, `"acknowledgment":true`, `"acknowledgment":null`, `"acknowledgment":{}`, `"Acknowledgment":"wrong"`,
+		fmt.Sprintf(`"acknowledgment":%q,"acknowledgment":%q`, ack, ack),
+		fmt.Sprintf(`"acknowledgment":%q`, strings.Repeat("x", 129)),
+	} {
+		body := fmt.Sprintf(`{"revision":%q,"edits":%s,%s}`, revision, edits, extra)
+		response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(body), headers)
+		if response.Code != http.StatusBadRequest {
+			t.Fatalf("ambiguous acknowledgment: %d %s", response.Code, response.Body)
+		}
+		unchanged()
+	}
+	body := fmt.Sprintf(`{"revision":%q,"edits":%s,"acknowledgment":%q}`, revision, edits, ack)
+	wrongOrigin := maps.Clone(headers)
+	wrongOrigin["Origin"] = "https://other.example"
+	response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(body), wrongOrigin)
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("CSRF bypass: %d %s", response.Code, response.Body)
+	}
+	responses := make(chan *httptest.ResponseRecorder, 2)
+	for range 2 {
+		go func() {
+			responses <- testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(body), headers)
+		}()
+	}
+	statuses := map[int]int{}
+	for range 2 {
+		statuses[(<-responses).Code]++
+	}
+	if statuses[http.StatusAccepted] != 1 || statuses[http.StatusConflict] != 1 {
+		t.Fatalf("acknowledgment reused concurrently: %v", statuses)
+	}
+	loaded, _, err := config.LoadForInspection(cfg.Filename(), true)
+	if err != nil || !loaded.App.Public {
+		t.Fatalf("unconfirmed selection was persisted: %v", err)
+	}
+	_, values := readConfigurationState(t, handler, headers)
+	if values["app.public"].Value != false {
+		t.Fatal("acknowledged change did not activate")
+	}
+}
+
+func TestSettingsAccessRechecksAuthenticatedCredential(t *testing.T) {
+	for _, operation := range []string{"validate", "apply"} {
+		t.Run(operation, func(t *testing.T) {
+			cfg, handler, headers := newAccessSettingsTestServer(t, "user")
+			revision, _ := readConfigurationState(t, handler, headers)
+			const edits = `[{"path":"app.user_handling","action":"set","value":false}]`
+			extra := ""
+			if operation == "apply" {
+				extra = fmt.Sprintf(`,"acknowledgment":%q`, settingsReview(t, handler, headers, revision, edits))
+			}
+			body := fmt.Sprintf(`{"revision":%q,"edits":%s%s}`, revision, edits, extra)
+			actor, err := model.GetUser("review-owner")
+			if err != nil {
+				t.Fatal(err)
+			}
+			reader, writer := io.Pipe()
+			defer func() {
+				_ = reader.Close()
+				_ = writer.Close()
+			}()
+			response := make(chan *httptest.ResponseRecorder, 1)
+			go func() {
+				response <- testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/"+operation, reader, headers)
+			}()
+			// Reading the body starts only after middleware has authenticated the caller.
+			if _, err := writer.Write([]byte(body[:1])); err != nil {
+				t.Fatal(err)
+			}
+			actor, err = model.RotateUserToken(actor.ID, actor.ID, actor.Revision)
+			if err != nil {
+				t.Fatal(err)
+			}
+			currentHeaders := maps.Clone(headers)
+			currentHeaders["X-Access-Token"] = actor.Token
+			unchanged := assertSettingsUnchanged(t, cfg, handler, currentHeaders)
+			if _, err := io.WriteString(writer, body[1:]); err != nil {
+				t.Fatal(err)
+			}
+			if err := writer.Close(); err != nil {
+				t.Fatal(err)
+			}
+			result := <-response
+			if result.Code != http.StatusForbidden || !strings.Contains(result.Body.String(), "admin_required") {
+				t.Fatalf("revoked credential: %d %s", result.Code, result.Body)
+			}
+			unchanged()
+		})
+	}
 }
 
 func TestSettingsWebHotkeySourceLocks(t *testing.T) {
@@ -389,6 +1479,51 @@ func TestSettingsDirectoryOwnership(t *testing.T) {
 	}
 }
 
+func TestSettingsUserHandlingChangesValidateDirectoryOwnership(t *testing.T) {
+	current, _ := newConfigurationTestServer(t, "none", "")
+	if _, err := model.CreateUser("file-owner", "password123", false); err != nil {
+		t.Fatal(err)
+	}
+	directory := t.TempDir()
+	current, fields := prepareConfigurationDraft(current, []config.SettingEdit{
+		{Path: "app.user_handling", Action: "set", Value: json.RawMessage(`true`)},
+		{Path: "indexer.directories", Action: "set", Value: json.RawMessage(fmt.Sprintf(`[{"path":%q,"user":"file-owner"}]`, directory))},
+	})
+	if len(fields) != 0 {
+		t.Fatal(fields)
+	}
+	for _, tc := range []struct {
+		name  string
+		edits []config.SettingEdit
+		valid bool
+	}{
+		{"disable users", []config.SettingEdit{{Path: "app.user_handling", Action: "set", Value: json.RawMessage(`false`)}}, false},
+		{"reset users", []config.SettingEdit{{Path: "app.user_handling", Action: "reset"}}, false},
+		{"clear owner", []config.SettingEdit{
+			{Path: "app.user_handling", Action: "set", Value: json.RawMessage(`false`)},
+			{Path: "indexer.directories", Action: "set", Value: json.RawMessage(fmt.Sprintf(`[{"path":%q,"user":""}]`, directory))},
+		}, true},
+		{"remove directories", []config.SettingEdit{
+			{Path: "app.user_handling", Action: "set", Value: json.RawMessage(`false`)},
+			{Path: "indexer.directories", Action: "set", Value: json.RawMessage(`[]`)},
+		}, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			candidate, fields := prepareConfigurationDraft(current, tc.edits)
+			if tc.valid {
+				if candidate == nil || len(fields) != 0 || candidate.App.UserHandling {
+					t.Fatalf("valid single user configuration rejected: %v", fields)
+				}
+			} else if candidate != nil || len(fields) != 1 || fields[0].Path != "indexer.directories" || !strings.Contains(fields[0].Message, "owner requires multi user mode") {
+				t.Fatalf("owned directories accepted without user handling: candidate=%v, errors=%v", candidate != nil, fields)
+			}
+			if !current.App.UserHandling || current.Indexer.Directories[0].User != "file-owner" {
+				t.Fatal("draft validation changed the active directory ownership")
+			}
+		})
+	}
+}
+
 func TestConfigurationDraftValidation(t *testing.T) {
 	cfg, handler := newConfigurationTestServer(t, "token", "semantic_search:\n  api_key: private-api-key\ncrawler:\n  headers:\n    X-Key: private-header\n  proxy: http://private-proxy.example.com:8080\n")
 	headers := map[string]string{"Authorization": "Bearer private-token", "Origin": "hister://", "Content-Type": "application/json"}
@@ -410,7 +1545,7 @@ func TestConfigurationDraftValidation(t *testing.T) {
 		{"parent bypass", `[{"path":"app","action":"set","value":{"access_token":"private-input"}}]`, "app", "unknown_field"},
 		{"file lock", `[{"path":"app.subtitle","action":"reset"}]`, "app.subtitle", "locked"},
 		{"storage", `[{"path":"app.directory","action":"set","value":"private-input"}]`, "app.directory", "read_only"},
-		{"secret", `[{"path":"app.access_token","action":"replace","value":"private-input"}]`, "app.access_token", "read_only"},
+		{"secret", `[{"path":"app.access_token","action":"replace","value":"private-input"}]`, "app.access_token", "locked"},
 		{"secret clear", `[{"path":"semantic_search.api_key","action":"clear"}]`, "semantic_search.api_key", "locked"},
 		{"extractor option", `[{"path":"extractors.ytdlp.options.binary","action":"set","value":"private-input"}]`, "extractors.ytdlp.options.binary", "unknown_field"},
 		{"duplicate operation", `[{"path":"app.title","action":"set","value":"One"},{"path":"app.title","action":"reset"}]`, "app.title", "duplicate"},
@@ -722,7 +1857,7 @@ func TestConfigurationStaleSources(t *testing.T) {
 }
 
 func TestConfigurationSecretsAndExtractorStates(t *testing.T) {
-	const extra = "semantic_search:\n  api_key: private-api-key\n  embedding_endpoint: https://embeddings.example/v1/embeddings\ncrawler:\n  headers:\n    X-Key: private-header\n  cookies:\n    - name: session\n      value: private-cookie\nextractors:\n  ytdlp:\n    options:\n      binary: private-binary\n      extra_args: [private-argument]\n"
+	const extra = "semantic_search:\n  api_key: private-api-key\n  embedding_endpoint: https://embeddings.example/v1/embeddings\ncrawler:\n  headers:\n    X-Key: private-header\n  cookies:\n    - name: session\n      value: private-cookie\n      domain: example.com\nextractors:\n  ytdlp:\n    options:\n      binary: private-binary\n      extra_args: [private-argument]\n"
 	t.Setenv("HISTER__EXTRACTORS__YTDLP__OPTIONS__COOKIES_FILE", "private-cookie-file")
 	cfg, handler := newConfigurationTestServer(t, "token", extra)
 	headers := map[string]string{"Authorization": "Bearer private-token"}

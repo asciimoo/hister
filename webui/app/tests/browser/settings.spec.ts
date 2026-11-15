@@ -1,10 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { expect, test, type Page } from '@playwright/test';
 import { mockAPI } from './fixtures';
-import type { SettingsDraft, SettingsState, SettingsReview } from '../../src/lib/settings';
+import type {
+  SettingsDraft,
+  SettingsState,
+  SettingsReview,
+  PendingAccess,
+} from '../../src/lib/settings';
 
 async function settingsAPI(page: Page, config: Record<string, unknown> = {}) {
-  const publicConfig = { canConfigure: true, ...config };
+  const publicConfig: Record<string, unknown> = { canConfigure: true, ...config };
   await mockAPI(page, { config: publicConfig });
   const fields = [
     {
@@ -145,10 +150,12 @@ async function ordinarySettingsAPI(page: Page) {
   return { state, publicConfig };
 }
 
-// Access fields stay read only in production until the server confirmation flow
-// is available. This fixture describes its pre-apply review contract.
-async function accessSettingsAPI(page: Page) {
-  const { state } = await settingsAPI(page, { authMode: 'user', authenticated: true });
+// Keep review failures separate from the pending operation fixtures below.
+async function accessSettingsAPI(page: Page, destination = 'http://localhost:5544/settings') {
+  const { state, publicConfig } = await settingsAPI(page, {
+    authMode: 'user',
+    authenticated: true,
+  });
   const address = state.fields.find((field) => field.path === 'server.address')!;
   delete address.read_only_reason;
   state.values.find((value) => value.path === address.path)!.editable = true;
@@ -211,10 +218,11 @@ async function accessSettingsAPI(page: Page) {
         ...(sensitive
           ? {
               review: {
+                mode: 'access',
                 acknowledgment: `review-${validations.length}`,
                 changes,
                 consequences,
-                destination_url: 'http://localhost:5544/settings',
+                destination_url: destination,
               },
             }
           : {}),
@@ -223,14 +231,207 @@ async function accessSettingsAPI(page: Page) {
   });
   await page.route('**/api/settings/apply', async (route) => {
     applications.push(route.request().postDataJSON());
-    // Activation and post-activation confirmation belong to a later slice.
+    // Exercise a rejected activation after the review has been accepted.
     await route.fulfill({
       status: 503,
       json: { code: 'unavailable', error: 'Temporary activation is not available yet.' },
     });
   });
-  return { state, validations, applications };
+  return { state, publicConfig, validations, applications };
 }
+
+async function pendingAccessAPI(page: Page) {
+  const fixture = await accessSettingsAPI(page, 'http://127.0.0.1:4174/settings');
+  const pending: PendingAccess = {
+    revision: 'access-revision',
+    deadline: new Date(Date.now() + 120_000).toISOString(),
+    destination_url: 'http://127.0.0.1:4174/settings',
+    confirmation_token: 'private-confirmation-proof',
+  };
+  const completions: { operation: string; body: unknown }[] = [];
+  await page.route('**/api/settings/apply', async (route) => {
+    fixture.applications.push(route.request().postDataJSON());
+    const { confirmation_token: _, ...status } = pending;
+    fixture.state.pending_access = status;
+    await route.fulfill({ status: 202, json: pending });
+  });
+  for (const operation of ['confirm', 'cancel']) {
+    await page.route(`**/api/settings/${operation}`, async (route) => {
+      completions.push({ operation, body: route.request().postDataJSON() });
+      delete fixture.state.pending_access;
+      await route.fulfill({
+        json: { confirmed: operation === 'confirm', cancelled: operation === 'cancel' },
+      });
+    });
+  }
+  return { ...fixture, pending, completions };
+}
+
+async function activateAccess(page: Page) {
+  await page.goto('/settings');
+  await page.getByRole('switch', { name: 'User handling', exact: true }).uncheck();
+  await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Confirm sensitive changes' }).click();
+}
+
+for (const operation of ['confirm', 'cancel'] as const) {
+  test(`temporary access changes ${operation} only after activation`, async ({ page }) => {
+    const { completions } = await pendingAccessAPI(page);
+    await activateAccess(page);
+    await expect(page.getByRole('heading', { name: 'Confirm working access' })).toBeVisible();
+    await expect(page.getByRole('timer')).toContainText(/1:\d\d|2:00/);
+    await expect(page.getByText('Settings saved and applied.', { exact: true })).toHaveCount(0);
+    expect(completions).toEqual([]);
+    const stored = await page.evaluate(() =>
+      JSON.stringify({ ...localStorage, ...sessionStorage }),
+    );
+    expect(stored).not.toContain('private-confirmation-proof');
+    expect(page.url()).not.toContain('private-confirmation-proof');
+    await page
+      .getByRole('button', {
+        name: operation === 'confirm' ? 'Confirm working access' : 'Restore previous settings',
+        exact: true,
+      })
+      .click();
+    await expect(page.getByRole('status')).toHaveText(
+      operation === 'confirm' ? 'Settings confirmed and saved.' : 'Previous settings restored.',
+    );
+    expect(completions).toEqual([
+      {
+        operation,
+        body: { revision: 'access-revision', confirmation_token: 'private-confirmation-proof' },
+      },
+    ]);
+  });
+}
+
+test('reopened access confirmation requires the original private code when authentication is disabled', async ({
+  page,
+}) => {
+  const { pending, state, publicConfig, completions } = await pendingAccessAPI(page);
+  publicConfig.authMode = 'none';
+  const { confirmation_token: _, ...status } = pending;
+  state.pending_access = status;
+  await page.goto('/settings');
+  const confirm = page.getByRole('button', { name: 'Confirm working access', exact: true });
+  await expect(confirm).toBeDisabled();
+  const code = page.getByLabel('Confirmation code', { exact: true });
+  await code.pressSequentially('private-confirmation-proof');
+  await expect(code).toHaveValue('private-confirmation-proof');
+  await confirm.click();
+  await expect(page.getByRole('status')).toHaveText('Settings confirmed and saved.');
+  expect(completions[0].body).toEqual({
+    revision: 'access-revision',
+    confirmation_token: 'private-confirmation-proof',
+  });
+});
+
+test('changed access destinations require explicit navigation without forwarding credentials', async ({
+  page,
+}) => {
+  await page.clock.install();
+  const { pending, completions } = await pendingAccessAPI(page);
+  pending.destination_url = 'http://localhost:5544/hister/settings';
+  const forwarded: string[] = [];
+  page.on('request', (request) => {
+    if (request.url().startsWith('http://localhost:5544')) forwarded.push(request.url());
+  });
+  await activateAccess(page);
+  const link = page.getByRole('link', { name: /Open new address/ });
+  await expect(link).toHaveAttribute('href', pending.destination_url);
+  await expect(link).toHaveAttribute('target', '_blank');
+  await expect(link).toHaveAttribute('rel', 'noreferrer');
+  await expect(page.getByLabel('Confirmation code', { exact: true })).toHaveAttribute(
+    'type',
+    'password',
+  );
+  await expect(
+    page.getByRole('button', { name: 'Confirm working access', exact: true }),
+  ).toHaveCount(0);
+  await page.clock.fastForward(5000);
+  expect(forwarded).toEqual([]);
+  expect(completions).toEqual([]);
+});
+
+test('expired access confirmation reads rollback status without confirming', async ({ page }) => {
+  await page.clock.install();
+  const { state, completions } = await pendingAccessAPI(page);
+  await activateAccess(page);
+  await expect(page.getByRole('timer')).toBeVisible();
+  // The server, not the browser timer, owns rollback.
+  delete state.pending_access;
+  await page.clock.fastForward(125_000);
+  await expect(page.getByRole('status')).toContainText(
+    'No access change is awaiting confirmation.',
+  );
+  expect(completions).toEqual([]);
+});
+
+test('a lost access confirmation response is checked without resubmitting', async ({ page }) => {
+  const { state } = await pendingAccessAPI(page);
+  let confirmations = 0;
+  await page.route('**/api/settings/confirm', async (route) => {
+    confirmations++;
+    delete state.pending_access;
+    await route.abort('failed');
+  });
+  await activateAccess(page);
+  await page.getByRole('button', { name: 'Confirm working access', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('The response was lost');
+  await page.getByRole('button', { name: 'Check status' }).click();
+  await expect(page.getByRole('status')).toContainText(
+    'No access change is awaiting confirmation.',
+  );
+  expect(confirmations).toBe(1);
+  await expect(page.getByText('Settings confirmed and saved.', { exact: true })).toHaveCount(0);
+});
+
+test('a lost access activation response recovers pending status without another apply', async ({
+  page,
+}) => {
+  const { state, pending, applications } = await pendingAccessAPI(page);
+  delete pending.confirmation_token;
+  pending.authentication = 'credentials';
+  await page.route('**/api/settings/apply', async (route) => {
+    applications.push(route.request().postDataJSON());
+    state.pending_access = pending;
+    await route.abort('failed');
+  });
+  await activateAccess(page);
+  await expect(page.getByRole('heading', { name: 'Confirm working access' })).toBeVisible();
+  await expect(page.getByRole('timer')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Sign in again', exact: true })).toBeVisible();
+  expect(applications).toHaveLength(1);
+});
+
+test('fresh authentication failures preserve pending access and offer the required OAuth login', async ({
+  page,
+}) => {
+  const { pending } = await pendingAccessAPI(page);
+  pending.authentication = 'oauth';
+  pending.oauth_provider = 'oidc';
+  delete pending.confirmation_token;
+  await page.route('**/api/settings/confirm', (route) =>
+    route.fulfill({
+      status: 403,
+      json: {
+        code: 'fresh_authentication_required',
+        error: 'Sign in again using the temporary configuration before confirming access.',
+      },
+    }),
+  );
+  await activateAccess(page);
+  await page.getByRole('button', { name: 'Confirm working access', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('Sign in again');
+  await expect(page.getByRole('timer')).toBeVisible();
+  const login = page.getByRole('link', { name: 'Sign in with oidc' });
+  await expect(login).toHaveAttribute('href', '/api/oauth?provider=oidc&return_to=%2Fsettings');
+  await page.route('**/api/oauth?*', (route) =>
+    route.fulfill({ contentType: 'text/plain', body: 'New OAuth flow started' }),
+  );
+  await login.click();
+  await expect(page.getByText('New OAuth flow started')).toBeVisible();
+});
 
 test('sensitive review requires explicit consent for a mixed draft before any apply', async ({
   page,
@@ -450,6 +651,85 @@ test('ordinary saves do not open a sensitive review or send an acknowledgment', 
   ]);
 });
 
+for (const decision of ['not required', 'required', 'stale'] as const) {
+  test(`conditional confirmation ${decision} for disabling diagnostics`, async ({ page }) => {
+    const { state } = await ordinarySettingsAPI(page);
+    state.fields.find((field) => field.path === 'app.profiler')!.requires_confirmation = true;
+    state.values.find((value) => value.path === 'app.profiler')!.value = true;
+    const applications: SettingsDraft[] = [];
+    await page.route('**/api/settings/validate', (route) =>
+      route.fulfill({
+        json: {
+          revision: decision === 'stale' ? 'old-revision' : state.revision,
+          values: state.values,
+          requires_confirmation: decision === 'required',
+        },
+      }),
+    );
+    await page.route('**/api/settings/apply', (route) => {
+      applications.push(route.request().postDataJSON());
+      state.values.find((value) => value.path === 'app.profiler')!.value = false;
+      return route.fulfill({ json: { saved: true } });
+    });
+    await page.goto('/settings');
+    await page.getByRole('switch', { name: 'Profiler', exact: true }).uncheck();
+    await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    if (decision === 'not required') {
+      await expect(page.getByText('Settings saved and applied.', { exact: true })).toBeVisible();
+      expect(applications).toEqual([
+        { revision: 'revision-1', edits: [{ path: 'app.profiler', action: 'set', value: false }] },
+      ]);
+    } else {
+      await expect(page.getByRole('alert')).toContainText(
+        decision === 'stale' ? 'Refresh settings before saving again.' : 'No changes were applied.',
+      );
+      expect(applications).toEqual([]);
+    }
+  });
+}
+
+test('acknowledgment applies diagnostics without an access confirmation step', async ({ page }) => {
+  const { state } = await ordinarySettingsAPI(page);
+  state.fields.find((field) => field.path === 'app.profiler')!.requires_confirmation = true;
+  const applications: SettingsDraft[] = [];
+  await page.route('**/api/settings/validate', (route) =>
+    route.fulfill({
+      json: {
+        revision: state.revision,
+        values: state.values,
+        requires_confirmation: true,
+        review: {
+          mode: 'acknowledge',
+          acknowledgment: 'diagnostics-review',
+          changes: [{ path: 'app.profiler', before: 'false', after: 'true' }],
+          consequences: ['Runtime profiles may contain private data.'],
+        },
+      },
+    }),
+  );
+  await page.route('**/api/settings/apply', (route) => {
+    applications.push(route.request().postDataJSON());
+    state.values.find((value) => value.path === 'app.profiler')!.value = true;
+    return route.fulfill({ json: { saved: true } });
+  });
+  await page.goto('/settings');
+  await page.getByRole('switch', { name: 'Profiler', exact: true }).check();
+  await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Review sensitive changes' });
+  await expect(dialog).toContainText('private data');
+  expect(applications).toEqual([]);
+  await dialog.getByRole('button', { name: 'Confirm sensitive changes', exact: true }).click();
+  await expect(page.getByText('Settings saved and applied.', { exact: true })).toBeVisible();
+  expect(applications).toEqual([
+    {
+      revision: 'revision-1',
+      edits: [{ path: 'app.profiler', action: 'set', value: true }],
+      acknowledgment: 'diagnostics-review',
+    },
+  ]);
+});
+
 for (const missing of ['review', 'acknowledgment', 'changes', 'consequences', 'revision']) {
   test(`sensitive review cannot apply without a matching ${missing}`, async ({ page }) => {
     const { state, applications } = await accessSettingsAPI(page);
@@ -472,7 +752,9 @@ for (const missing of ['review', 'acknowledgment', 'changes', 'consequences', 'r
     await page.goto('/settings');
     await page.getByRole('switch', { name: 'User handling', exact: true }).uncheck();
     await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
-    await expect(page.getByRole('alert')).toContainText('No changes were applied.');
+    await expect(page.getByRole('alert')).toContainText(
+      missing === 'revision' ? 'Refresh settings before saving again.' : 'No changes were applied.',
+    );
     await expect(page.getByRole('dialog')).toHaveCount(0);
     await expect(
       page.getByRole('switch', { name: 'User handling', exact: true }),

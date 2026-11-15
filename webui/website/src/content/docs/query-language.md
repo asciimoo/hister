@@ -17,8 +17,6 @@ hister
 
 This searches for "hister" in the title, text content, URL, and domain of all indexed pages.
 
-In the web app, use **Filters** and **Sort** above the results, or select **Web** to search the web. Active filters remain below the search field, where you can remove them individually or clear them all. Open **Actions** (the three dots) for exports, snippet preferences, and search timing. On desktop, **Actions → Show preview** reopens a closed preview panel.
-
 ## Quoted Phrases
 
 Use double quotes to search for exact phrases:
@@ -542,7 +540,9 @@ Use the search web UI to build a query that selects unwanted documents. For exam
 domain:example.com updated:>90d
 ```
 
-Review the results and refine the query as needed, then open **Actions**, click **Delete all matching results**, and confirm. This deletes every document matching the query, like `hister delete`, so you can quickly clean up unwanted results as you search. See [Deleting Documents](data-lifecycle#deleting-documents) for details about what deletion removes.
+Bulk deletion in the web interface removes every document matching the query, including
+matches beyond the displayed results. See [Deleting Documents](data-lifecycle#deleting-documents)
+for deletion scope and command line examples.
 
 ### Finding Documentation
 

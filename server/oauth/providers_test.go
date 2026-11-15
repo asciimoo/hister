@@ -2,11 +2,55 @@ package oauth
 
 import (
 	"context"
+	"maps"
 	"net/url"
 	"slices"
 	"strings"
 	"testing"
 )
+
+func TestProviderRegistry(t *testing.T) {
+	t.Parallel()
+	defaults := map[string]string{
+		"github": "https://github.com/login/oauth/authorize",
+		"google": "https://accounts.google.com/o/oauth2/auth",
+		"oidc":   "",
+	}
+	wantNames := slices.Sorted(maps.Keys(defaults))
+	names := ProviderNames()
+	if !slices.Equal(names, wantNames) {
+		t.Fatalf("provider names = %v, want %v", names, wantNames)
+	}
+	for _, name := range names {
+		t.Run(name, func(t *testing.T) {
+			for _, endpoint := range []string{"https://provider.example/auth", ""} {
+				provider, ok := NewProvider(name, ProviderConfig{AuthURL: endpoint})
+				if !ok || provider == nil {
+					t.Fatalf("registered provider %q cannot be constructed", name)
+				}
+				u, err := url.Parse(provider.GetRedirectURL(NewRedirectURIRequest("client", "https://hister.example/callback", "state", nil)))
+				if err != nil {
+					t.Fatal(err)
+				}
+				u.RawQuery = ""
+				want := endpoint
+				if want == "" {
+					want = defaults[name]
+				}
+				if u.String() != want {
+					t.Errorf("authorization endpoint = %q, want %q", u, want)
+				}
+			}
+		})
+	}
+	names[0] = "unknown"
+	if got := ProviderNames(); !slices.Equal(got, wantNames) {
+		t.Fatalf("mutating provider names changed the registry: %v", got)
+	}
+	if provider, ok := NewProvider("unknown", ProviderConfig{}); ok || provider != nil {
+		t.Fatal("constructed an unknown provider")
+	}
+}
 
 func TestGoogleUserInfoRequestKeepsTokenOutOfURL(t *testing.T) {
 	t.Parallel()

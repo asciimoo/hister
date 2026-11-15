@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"os"
@@ -11,6 +12,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/asciimoo/hister/server/oauth"
 
 	"gopkg.in/yaml.v3"
 )
@@ -41,6 +44,12 @@ func TestFieldCatalogCoversMainConfig(t *testing.T) {
 		}
 	}
 	visit(reflect.TypeFor[Config](), "")
+	required := maps.Clone(want)
+	// OAuth providers are structural maps. Described leaves must correspond to
+	// real entry fields; the file managed parent still covers other members.
+	for _, provider := range oauth.ProviderNames() {
+		visit(reflect.TypeFor[OAuthEntry](), "server.oauth."+provider+".")
+	}
 	seen := make(map[string]bool)
 	for _, field := range FieldCatalog() {
 		if seen[field.Path] {
@@ -51,7 +60,7 @@ func TestFieldCatalogCoversMainConfig(t *testing.T) {
 			t.Errorf("catalog field %s has no main config setting", field.Path)
 		}
 	}
-	for path := range want {
+	for path := range required {
 		if !seen[path] {
 			t.Errorf("main config setting %s has no catalog field", path)
 		}
@@ -70,7 +79,8 @@ func TestFieldCatalogPreservesEditorContract(t *testing.T) {
 			t.Fatalf("incomplete description for %s", field.Path)
 		}
 		ordinaryIndexer := field.Category == "indexer" && !strings.HasPrefix(field.Path, "indexer.pdf_parser.")
-		ordinaryServer := slices.Contains([]string{"server.address", "server.max_batch_body_size", "server.metrics", "server.expose_version"}, field.Path)
+		ordinaryServer := slices.Contains([]string{"server.address", "server.base_url", "server.oauth_only", "server.max_batch_body_size", "server.metrics", "server.expose_version"}, field.Path)
+		ordinaryServer = ordinaryServer || (strings.HasPrefix(field.Path, "server.oauth.") && slices.Contains([]string{"client_id", "client_secret", "scopes", "disable_pkce"}, field.Path[strings.LastIndex(field.Path, ".")+1:]))
 		if field.Category != "app" && !ordinaryServer && !ordinaryIndexer && field.Category != "crawler" && field.Category != "semantic_search" && field.Path != "hotkeys.web" && field.Path != "sensitive_content_patterns" {
 			if field.Schema.Type != "unknown" || field.Schema.Sensitivity != "unknown" || field.Default != nil || field.ReadOnlyReason == "" {
 				t.Fatalf("unsupported setting %s gained editing support or exposed defaults", field.Path)
@@ -121,6 +131,104 @@ func TestFieldCatalogPreservesEditorContract(t *testing.T) {
 	}
 	if fields["app.directory"].ReadOnlyReason == "" || fields["app.log_file"].ReadOnlyReason == "" {
 		t.Fatal("storage locations became editable")
+	}
+}
+
+func TestFieldCatalogDescribesConfirmationConsequences(t *testing.T) {
+	fields := make(map[string]FieldMetadata)
+	for _, field := range FieldCatalog() {
+		fields[field.Path] = field
+	}
+	for _, tc := range []struct {
+		name, path, token, address, want string
+		users, public                    bool
+	}{
+		{name: "enable users", path: "app.user_handling", users: true, want: "Sign in again as an administrator"},
+		{name: "disable users with token", path: "app.user_handling", token: "private-token", want: "Access will use the instance token"},
+		{name: "disable all authentication", path: "app.user_handling", want: "without signing in"},
+		{name: "replace token", path: "app.access_token", token: "private-token", want: "Clients using it must use the configured token"},
+		{name: "clear token with users", path: "app.access_token", users: true, want: "The instance token selection will change"},
+		{name: "clear last credential", path: "app.access_token", want: "without signing in"},
+		{name: "enable public search", path: "app.public", token: "private-token", public: true, want: "Anonymous visitors will be able to search public documents"},
+		{name: "disable public search", path: "app.public", want: "Anonymous public search will be disabled"},
+		{name: "local IPv4", path: "server.address", address: "127.0.0.1:4433", want: "Only connections from this machine"},
+		{name: "local IPv6", path: "server.address", address: "[::1]:4433", want: "Only connections from this machine"},
+		{name: "external listener", path: "server.address", address: "0.0.0.0:4433", want: "connections from other machines"},
+		{name: "unix socket", path: "server.address", address: "unix:" + filepath.Join(t.TempDir(), "hister.sock"), want: "local Unix socket"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			field := fields[tc.path]
+			if field.Confirmation == nil {
+				t.Fatalf("catalog cannot explain the confirmation required for %s", tc.path)
+			}
+			candidate := CreateDefaultConfig()
+			candidate.App.UserHandling, candidate.App.Public, candidate.App.AccessToken = tc.users, tc.public, tc.token
+			if tc.address != "" {
+				candidate.Server.Address = tc.address
+			}
+			before, err := yaml.Marshal(candidate)
+			if err != nil {
+				t.Fatal(err)
+			}
+			current := CreateDefaultConfig()
+			current.App.UserHandling = !candidate.App.UserHandling
+			current.App.Public = !candidate.App.Public
+			current.App.AccessToken = "previous-private-token"
+			current.Server.Address = "192.0.2.1:4433"
+			message := field.Confirmation.Describe(current, candidate)
+			if !strings.Contains(message, tc.want) || strings.Contains(message, "private-token") {
+				t.Fatalf("unsafe or inaccurate consequence for %s: %q", tc.path, message)
+			}
+			after, err := yaml.Marshal(candidate)
+			if err != nil || string(before) != string(after) {
+				t.Fatal("describing consequences modified the candidate")
+			}
+		})
+	}
+}
+
+func TestFieldCatalogAcknowledgmentTransitions(t *testing.T) {
+	fields := make(map[string]FieldMetadata)
+	for _, field := range FieldCatalog() {
+		fields[field.Path] = field
+	}
+	for _, path := range []string{"app.debug_sql", "app.profiler", "semantic_search.embedding_endpoint", "sensitive_content_patterns"} {
+		t.Run(path, func(t *testing.T) {
+			policy := fields[path].Confirmation
+			if policy == nil || policy.Mode != ConfirmAcknowledgment {
+				t.Fatal("field requires an acknowledgment policy")
+			}
+			current, candidate := CreateDefaultConfig(), CreateDefaultConfig()
+			if policy.Describe(current, candidate) != "" {
+				t.Fatal("unchanged settings require acknowledgment")
+			}
+			var want string
+			switch path {
+			case "app.debug_sql":
+				candidate.App.DebugSQL, want = true, "private document"
+			case "app.profiler":
+				candidate.App.Profiler, want = true, "private data"
+			case "semantic_search.embedding_endpoint":
+				candidate.SemanticSearch.EmbeddingEndpoint, want = "https://embeddings.example/v1/embeddings", "document text"
+				candidate.SemanticSearch.APIKey = "private-review-secret"
+			case "sensitive_content_patterns":
+				candidate.SensitiveContentPatterns, want = map[string]string{}, "sensitive content"
+			}
+			message := policy.Describe(current, candidate)
+			if !strings.Contains(message, want) || strings.Contains(message, "private-review-secret") {
+				t.Fatalf("incorrect consequence: %q", message)
+			}
+			if path == "app.debug_sql" || path == "app.profiler" || path == "sensitive_content_patterns" {
+				if policy.Describe(candidate, current) != "" {
+					t.Fatal("disabling diagnostics or adding filters requires acknowledgment")
+				}
+			}
+		})
+	}
+	for _, path := range []string{"app.title", "app.search_url", "crawler.timeout", "app.color_scheme"} {
+		if fields[path].Confirmation != nil || fields[path].RequiresConfirmation {
+			t.Fatalf("ordinary setting %s requires acknowledgment", path)
+		}
 	}
 }
 
@@ -217,7 +325,7 @@ func TestOrdinaryAppAndServerValidation(t *testing.T) {
 			t.Errorf("unsafe search URL accepted or exposed: %v", fields)
 		}
 	}
-	for _, path := range []string{"app.access_token", "app.user_handling", "app.public", "app.directory", "app.log_file", "server.address", "server.base_url", "server.oauth", "server.oauth_only", "server.database", "server.proxy_auth_header"} {
+	for _, path := range []string{"app.directory", "app.log_file", "server.oauth", "server.database", "server.proxy_auth_header"} {
 		candidate, fields := c.PrepareDraft([]SettingEdit{{Path: path, Action: "reset"}})
 		if candidate != nil || len(fields) != 1 || fields[0].Code != "read_only" {
 			t.Errorf("restricted setting %s became editable: %v", path, fields)
@@ -486,6 +594,58 @@ func TestWebHotkeyDraftControls(t *testing.T) {
 	}
 }
 
+func TestEmbeddingEndpointRejectsCredentials(t *testing.T) {
+	for _, enabled := range []bool{false, true} {
+		for _, endpoint := range []string{
+			"https://user:private-credential@embeddings.example/v1",
+			"https://private-credential@embeddings.example/v1",
+		} {
+			t.Run(fmt.Sprintf("enabled=%t/%s", enabled, endpoint), func(t *testing.T) {
+				dir := t.TempDir()
+				t.Setenv("HISTER_DATA_DIR", filepath.Join(dir, "data"))
+				filename := filepath.Join(dir, "config.yml")
+				raw := fmt.Sprintf("semantic_search:\n  enable: %t\n  embedding_endpoint: %q\n", enabled, endpoint)
+				if err := os.WriteFile(filename, []byte(raw), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				c, _, err := LoadForInspection(filename, true)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := c.Validate(); err == nil || strings.Contains(err.Error(), "private-credential") {
+					t.Fatalf("expected safe validation error, got %v", err)
+				}
+				fields := c.ValidateFields()
+				if !slices.ContainsFunc(fields, func(field FieldError) bool { return field.Path == "semantic_search.embedding_endpoint" }) {
+					t.Errorf("missing endpoint field error: %v", fields)
+				}
+				if _, err := Load(filename); err == nil {
+					t.Error("startup accepted credentials in a visible setting")
+				}
+				if err := os.WriteFile(filename, []byte(fmt.Sprintf("semantic_search:\n  enable: %t\n", enabled)), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				c, _, err = LoadForInspection(filename, true)
+				if err != nil {
+					t.Fatal(err)
+				}
+				value, err := json.Marshal(endpoint)
+				if err != nil {
+					t.Fatal(err)
+				}
+				next, fields := c.PrepareDraft([]SettingEdit{{Path: "semantic_search.embedding_endpoint", Action: "set", Value: value}})
+				if next != nil || len(fields) == 0 || strings.Contains(fmt.Sprint(fields), "private-credential") {
+					t.Fatalf("draft must reject credentials with a safe error: %v", fields)
+				}
+				next, fields = c.PrepareDraft([]SettingEdit{{Path: "semantic_search.embedding_endpoint", Action: "set", Value: json.RawMessage(`"https://embeddings.example/v1?api-version=2026-01-01"`)}})
+				if next == nil || len(fields) > 0 {
+					t.Fatalf("ordinary endpoint query was rejected: %v", fields)
+				}
+			})
+		}
+	}
+}
+
 func TestSemanticSearchDraftControls(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HISTER_DATA_DIR", dir)
@@ -536,6 +696,7 @@ func TestSemanticSearchDraftControls(t *testing.T) {
 		{"query_embedding_timeout", `-1`},
 		{"max_query_embedding_concurrency", `-1`},
 		{"headers", `{"invalid header":{"action":"replace","value":"private-header"}}`},
+		{"api_key", `{"action":"replace","value":"private-key\n"}`},
 	} {
 		path := "semantic_search." + tc.path
 		candidate, errors := next.PrepareDraft([]SettingEdit{{Path: path, Action: "set", Value: json.RawMessage(tc.value)}})
@@ -600,7 +761,7 @@ func TestFieldCatalogIncludesDisplayGroups(t *testing.T) {
 	}
 	wantGroups := map[string][]string{
 		"app":             {"Appearance", "Search behavior", "Access", "Logging and diagnostics", "Storage"},
-		"server":          {"Connection", "Authentication", "Storage", "Request limits", "Monitoring"},
+		"server":          {"Connection", "Authentication", "Storage", "Request limits", "Monitoring", "OAuth: github", "OAuth: google", "OAuth: oidc"},
 		"indexer":         {"Language and text", "Local files", "PDF extraction"},
 		"crawler":         {"Crawl behavior", "Page fetching", "Requests"},
 		"semantic_search": {"Search behavior", "Embedding service", "Document chunks", "Document processing"},
@@ -666,12 +827,13 @@ func TestListenAddressSourceInEditor(t *testing.T) {
 					continue
 				}
 				state := cfg.FieldStates(field)[0]
-				if state.Value != DefaultServerAddress || state.Source.Locked != explicit || state.Editable || !field.RequiresConfirmation || field.ReadOnlyReason == "" {
-					t.Fatalf("address must show its source and value without allowing unconfirmed changes: %+v, %+v", field, state)
+				if state.Value != DefaultServerAddress || state.Source.Locked != explicit || state.Editable == explicit || !field.RequiresConfirmation || field.ReadOnlyReason != "" {
+					t.Fatalf("address must remain source locked or editable with confirmation: %+v, %+v", field, state)
 				}
 			}
-			if candidate, errors := cfg.PrepareDraft([]SettingEdit{{Path: "server.address", Action: "set", Value: json.RawMessage(`"0.0.0.0:4433"`)}}); candidate != nil || len(errors) == 0 {
-				t.Fatal("address became writable before the confirmation workflow")
+			candidate, errors := cfg.PrepareDraft([]SettingEdit{{Path: "server.address", Action: "set", Value: json.RawMessage(`"127.0.0.1:5544"`)}})
+			if explicit && (candidate != nil || len(errors) != 1 || errors[0].Code != "locked") || !explicit && (candidate == nil || len(errors) != 0) {
+				t.Fatalf("address draft did not respect its source: %v", errors)
 			}
 		})
 	}
@@ -921,6 +1083,62 @@ func TestCrawlerProxyValidationPreservesEmptyProxyBehavior(t *testing.T) {
 	}
 }
 
+func TestTransportHeaderValueValidation(t *testing.T) {
+	for _, path := range []string{"crawler.user_agent", "semantic_search.api_key"} {
+		for _, value := range []string{"private-value\r", "private-value\n", "private-value\x7f", "private-value\x01"} {
+			t.Run(fmt.Sprintf("%s/%q", path, value), func(t *testing.T) {
+				c := CreateDefaultConfig()
+				c.SemanticSearch.Enable = true
+				if path == "crawler.user_agent" {
+					c.Crawler.UserAgent = value
+				} else {
+					c.SemanticSearch.APIKey = value
+				}
+				if err := c.Validate(); err == nil {
+					t.Error("accepted a value the HTTP transport cannot send")
+				}
+				fields := c.ValidateFields()
+				if !slices.ContainsFunc(fields, func(field FieldError) bool { return field.Path == path }) {
+					t.Errorf("missing field error for %s: %v", path, fields)
+				}
+				if strings.Contains(fmt.Sprint(fields), "private-value") {
+					t.Fatal("validation exposed header contents")
+				}
+			})
+		}
+	}
+}
+
+func TestCrawlerCookiePathsUseEffectiveScope(t *testing.T) {
+	for _, tc := range []struct {
+		path  string
+		valid bool
+	}{
+		{"", false},
+		{"/", false},
+		{"/other", true},
+	} {
+		t.Run(tc.path, func(t *testing.T) {
+			c := CreateDefaultConfig()
+			c.Crawler.Cookies = []CrawlerCookie{
+				{Name: "session", Value: "first", Domain: "example.com", Path: ""},
+				{Name: "session", Value: "second", Domain: ".EXAMPLE.com", Path: tc.path},
+			}
+			if err := c.Validate(); (err == nil) != tc.valid {
+				t.Errorf("Validate() = %v, valid = %t", err, tc.valid)
+			}
+			fields := c.ValidateFields()
+			if tc.valid {
+				if len(fields) > 0 {
+					t.Fatalf("distinct cookie path rejected: %v", fields)
+				}
+			} else if !slices.ContainsFunc(fields, func(field FieldError) bool { return field.Path == "crawler.cookies" }) {
+				t.Errorf("missing cookie error: %v", fields)
+			}
+		})
+	}
+}
+
 func TestCrawlerSocketSurvivesBackendOptionEdits(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HISTER_DATA_DIR", dir)
@@ -1122,6 +1340,7 @@ func TestCrawlerDraftSettings(t *testing.T) {
 		{"crawler.delay", `1.5`},
 		{"crawler.backend", `"unknown"`},
 		{"crawler.user_agent", `"private-input\r\nInjected: value"`},
+		{"crawler.user_agent", `"private-input\u007f"`},
 		{"crawler", `{"backend_options":{"exec_path":"/bin/sh"}}`},
 	} {
 		candidate, errors := c.PrepareDraft([]SettingEdit{{Path: tc.path, Action: "set", Value: json.RawMessage(tc.value)}})
@@ -1355,8 +1574,6 @@ func TestDraftFieldStatesAndRestrictions(t *testing.T) {
 		{Path: "app.title", Action: "reset"},
 		{Path: "app.directory", Action: "set", Value: json.RawMessage(`"/tmp/other"`)},
 		{Path: "app.access_token", Action: "set", Value: json.RawMessage(`"replacement-secret"`)},
-		{Path: "app.user_handling", Action: "set", Value: json.RawMessage(`false`)},
-		{Path: "server.address", Action: "set", Value: json.RawMessage(`"0.0.0.0:4433"`)},
 		{Path: "app", Action: "set", Value: json.RawMessage(`{"title":"bypass"}`)},
 		{Path: "app.show_suggestions", Action: "set", Value: json.RawMessage(`"true"`)},
 		{Path: "app.snippet_length", Action: "set", Value: json.RawMessage(`1.5`)},
@@ -1530,6 +1747,65 @@ func TestValidateRejectsNilOAuthEntry(t *testing.T) {
 	}
 }
 
+func TestServerConnectionValidation(t *testing.T) {
+	for _, tc := range []struct {
+		name, address, baseURL, field string
+	}{
+		{"credentials", "127.0.0.1:4433", "https://alice:private-credential@example.com", "server.base_url"},
+		{"username", "127.0.0.1:4433", "https://alice@example.com", "server.base_url"},
+		{"missing hostname", "127.0.0.1:4433", "http://:4433", "server.base_url"},
+		{"invalid base URL port", "127.0.0.1:4433", "https://example.com:65536", "server.base_url"},
+		{"unsupported scheme", "127.0.0.1:4433", "ftp://example.com", "server.base_url"},
+		{"query", "127.0.0.1:4433", "https://example.com/?key=private-credential", "server.base_url"},
+		{"missing listen port", "localhost", "https://example.com", "server.address"},
+		{"invalid listen port", "127.0.0.1:65536", "https://example.com", "server.address"},
+		{"unknown listen service", "127.0.0.1:invalid-service", "https://example.com", "server.address"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := CreateDefaultConfig()
+			c.Server.Address, c.Server.BaseURL = tc.address, tc.baseURL
+			if err := c.Validate(); err == nil {
+				t.Error("accepted invalid server connection settings")
+			} else if strings.Contains(err.Error(), "private-credential") {
+				t.Error("validation error exposed credentials")
+			}
+			fields := c.ValidateFields()
+			if !slices.ContainsFunc(fields, func(field FieldError) bool { return field.Path == tc.field }) {
+				t.Errorf("missing error for %s: %v", tc.field, fields)
+			}
+			dir := t.TempDir()
+			t.Setenv("HISTER_DATA_DIR", filepath.Join(dir, "data"))
+			filename := filepath.Join(dir, "config.yml")
+			raw := fmt.Sprintf("server:\n  address: %q\n  base_url: %q\n", tc.address, tc.baseURL)
+			if err := os.WriteFile(filename, []byte(raw), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := Load(filename); err == nil {
+				t.Error("startup accepted invalid server connection settings")
+			} else if strings.Contains(err.Error(), "private-credential") {
+				t.Error("startup error exposed credentials")
+			}
+			if _, err := os.Stat(filepath.Join(dir, "data")); !errors.Is(err, os.ErrNotExist) {
+				t.Errorf("invalid configuration initialized runtime files: %v", err)
+			}
+		})
+	}
+}
+
+func TestServerConnectionValidationAcceptsSupportedAddresses(t *testing.T) {
+	for _, address := range []string{"127.0.0.1:4433", "[::1]:4433", ":0", "localhost:http", "unix:" + filepath.Join(t.TempDir(), "hister.sock")} {
+		c := CreateDefaultConfig()
+		c.Server.Address = address
+		c.Server.BaseURL = "https://example.com/hister/"
+		if err := c.Validate(); err != nil {
+			t.Errorf("address %q rejected: %v", address, err)
+		}
+		if c.BaseURL("") != "https://example.com/hister" {
+			t.Errorf("base URL was not normalized: %q", c.BaseURL(""))
+		}
+	}
+}
+
 func TestResolvePathDoesNotParseYAML(t *testing.T) {
 	filename := filepath.Join(t.TempDir(), "config.yml")
 	if err := os.WriteFile(filename, []byte("["), 0o600); err != nil {
@@ -1570,5 +1846,31 @@ func TestRedactedConfigHidesCredentialsWithoutMutation(t *testing.T) {
 	}
 	if c.Indexer.PDFParser.Args[1] != "pdf-credential" {
 		t.Fatal("redaction mutated PDF parser arguments")
+	}
+}
+
+func TestLoadRejectsUnknownSettingsBeforeRuntimeInitialization(t *testing.T) {
+	for _, source := range []string{"file", "environment"} {
+		t.Run(source, func(t *testing.T) {
+			dir := t.TempDir()
+			t.Setenv("HISTER_DATA_DIR", filepath.Join(dir, "data"))
+			filename := filepath.Join(dir, "config.yml")
+			raw := "app: {}\n"
+			if source == "file" {
+				raw = "app:\n  user_handlig: true\n"
+			} else {
+				t.Setenv("HISTER__APP__USER_HANDLIG", "true")
+			}
+			if err := os.WriteFile(filename, []byte(raw), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := Load(filename); err == nil || !strings.Contains(err.Error(), "app.user_handlig") {
+				t.Errorf("unknown authentication setting error = %v, want app.user_handlig", err)
+			}
+			entries, err := os.ReadDir(dir)
+			if err != nil || len(entries) != 1 || entries[0].Name() != "config.yml" {
+				t.Errorf("invalid configuration created runtime files: %v, error=%v", entries, err)
+			}
+		})
 	}
 }

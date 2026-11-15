@@ -91,10 +91,25 @@ export interface SettingsState {
   revision: string;
   fields: SettingField[];
   values: SettingValue[];
+  pending_access?: PendingAccess | null;
   pending?: {
     status: 'changed' | 'invalid' | 'unreadable';
     values?: SettingValue[];
   } | null;
+}
+
+export interface PendingAccess {
+  revision: string;
+  deadline: string;
+  destination_url: string;
+  confirmation_token?: string;
+  authentication?: 'credentials' | 'password' | 'oauth';
+  oauth_provider?: string;
+}
+
+export interface SettingsCompletion {
+  revision: string;
+  confirmation_token?: string;
 }
 
 export function sameSetting(a?: SettingValue, b?: SettingValue): boolean {
@@ -133,6 +148,7 @@ export interface SettingsDraft {
 // Contract for sensitive validation: the server must supply redacted changes
 // and bind acknowledgments to the actor, revision and complete candidate.
 export interface SettingsReview {
+  mode?: 'acknowledge' | 'access';
   acknowledgment: string;
   changes: { path: string; before: string; after: string }[];
   consequences: string[];
@@ -143,6 +159,7 @@ interface SettingsValidation {
   revision: string;
   values: SettingValue[];
   review?: SettingsReview;
+  requires_confirmation?: boolean;
 }
 
 export interface SettingError {
@@ -162,7 +179,10 @@ export class SettingsError extends Error {
   }
 }
 
-export async function settingsRequest<T>(operation = '', draft?: SettingsDraft): Promise<T> {
+export async function settingsRequest<T>(
+  operation = '',
+  draft?: SettingsDraft | SettingsCompletion,
+): Promise<T> {
   const response = await apiFetch(`/settings${operation}`, {
     redirectOnForbidden: false,
     cache: 'no-store',
@@ -191,11 +211,19 @@ export async function readSettingsReview(
   fields: SettingField[],
 ): Promise<SettingsReview | undefined> {
   const validation = await settingsRequest<SettingsValidation>('/validate', draft);
+  if (validation.revision !== draft.revision)
+    throw new SettingsError(
+      409,
+      'stale_revision',
+      'The server validated a different settings revision. No changes were applied.',
+    );
   if (validation.review) {
     requireCompleteReview(validation.review, validation.revision === draft.revision);
     return validation.review;
   }
+  if (validation.requires_confirmation === false) return;
   if (
+    validation.requires_confirmation === true ||
     draft.edits.some((edit) =>
       fields.some((field) => field.path === edit.path && field.requires_confirmation),
     )

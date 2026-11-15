@@ -89,13 +89,14 @@ app:
 
 Restart Hister after changing the setting. Running `hister reindex` while previews are disabled removes previously stored HTML files and rebuilds the search indexes without preview content. Extracted plain text remains searchable. Favicons are not affected.
 
-See [Disable Previews](configuration#disable-previews) for the user interface effects.
+See [Disable Previews](configuration#disable-previews) for configuration details.
 
 ## Deleting Documents
 
 Delete one result from the web or terminal interface, or prune every document matching a search query from the search web UI or command line client.
 
-In the search web UI, enter a query such as `domain:example.com` or `updated:>90d`. Refine the query while reviewing the results until it selects the documents you want to remove. Open **Actions**, click **Delete all matching results**, and confirm the deletion. Like `hister delete`, this removes every document matching the query, including matches beyond the currently displayed results. This lets you quickly build and adjust cleanup queries without leaving the search page.
+Bulk deletion in the web interface has the same scope as `hister delete`: it removes every
+document matching the query, including matches beyond the currently displayed results.
 
 To delete matching documents from the command line:
 

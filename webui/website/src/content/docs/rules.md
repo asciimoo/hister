@@ -45,9 +45,8 @@ Skip rules prevent matching URLs from being added to the index. When a URL
 matches any pattern in the skip list, Hister silently discards the document
 during indexing and during `hister reindex`.
 
-To save an individual page excluded by allow or skip rules, click **Index this page now**
-in the browser extension or use its indexing shortcut. This explicitly overrides
-both rule groups for that submission and saves the choice with the document, so the
+Manual indexing in the browser extension overrides allow and skip rules for that submission
+and saves the choice with the document, so the
 page survives `hister reindex`. Automatic submissions still respect the rules.
 
 From the command line, use `--ignore-rules` with `hister index` or any `hister import`
@@ -108,10 +107,8 @@ trusted resource last changed.
 
 #### Viewing stored versions
 
-Once Hister has recorded at least one version diff for a document, open
-**Document details** (the **i** icon) in the preview panel and click the previous
-version count. This opens a changelog with each recorded diff and timestamp.
-From there you can inspect a diff or reconstruct and display an archived version.
+Stored differences can reconstruct earlier document versions. Version history is available
+only after Hister has recorded at least one change for that document.
 
 ### Aliases
 
@@ -145,11 +142,9 @@ Allow, skip, priority, and versioning rules are matched against the **full URL**
 - A trailing `$` anchor will **not** match URLs that have a query string:
   `/login$` does not match `https://foo.com/login?auth=1`.
 
-When adding or editing a skip rule on the Rules page, or adding one from a result action menu,
-select **Delete matching documents already in the index** to apply the saved rule to existing
-documents. The option is available only when the resulting rule type is skip and is disabled by
-default. When documents match, the page shows their count and asks for confirmation before deleting
-them. Cancelling keeps the saved rule and leaves the existing documents in the index.
+Saving a skip rule does not delete existing documents by default. Optional deletion applies
+the rule to documents already in the index. Cancelling deletion leaves both the saved rule
+and the existing documents intact.
 
 ## Storage
 

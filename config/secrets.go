@@ -132,7 +132,11 @@ func mapSettingSecrets(schema SettingSchema, value any, scope string, transform 
 
 func (c *Config) secretSettingState(field FieldMetadata, revision string) (any, map[string]keptSecret, error) {
 	refs := make(map[string]keptSecret)
-	value, err := mapSettingSecrets(field.Schema, settingTree(settingValue(c, field.Path)), field.Path, func(value any, scope string) (any, error) {
+	stored := settingValue(c, field.Path)
+	if stored == nil && field.Schema.Type == "string" {
+		stored = ""
+	}
+	value, err := mapSettingSecrets(field.Schema, settingTree(stored), field.Path, func(value any, scope string) (any, error) {
 		text, ok := value.(string)
 		if !ok {
 			return nil, errors.New("the stored secret has an unsupported type")

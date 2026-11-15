@@ -552,7 +552,7 @@ description: 'Explore every configuration section, option, default value, enviro
       name: 'embedding_endpoint',
       type: 'string',
       defaultValue: 'http://localhost:11434/v1/embeddings',
-      description: 'URL of the OpenAI compatible embeddings endpoint.',
+      description: 'URL of the OpenAI compatible embeddings endpoint. This URL is visible in settings. Put credentials in api_key or headers, not in the URL.',
     },
     {
       name: 'embedding_model',
@@ -754,56 +754,49 @@ hister listen --config /path/to/my/config.yml
 
 ## Settings in the Web Interface
 
-Open **Settings** from the navigation menu to change appearance, snippet length, search
-behavior, logging, monitoring, request limits, indexing, crawler defaults, web keyboard shortcuts,
-and sensitive content patterns. Administrators can configure multi user instances.
+Web configuration requires administrator access in multi user instances.
 Token protected instances require signing in; instances without authentication need no login.
 
-Keep one draft across category tabs, then choose **Save and apply**. Saving briefly interrupts
-service and refreshes the interface. Validation errors preserve your draft. Use **Refresh settings**
-to check for external changes without losing your draft. Resolve highlighted conflicts before saving.
+Saving briefly interrupts service. Changes made to configuration files require a
+[reload](#reloading-a-running-server). Invalid or unreadable files block saving.
+If a save or reload response is lost, check the active values before retrying.
 
-Cookies, headers, and watched directories show compact summaries. Directory filters are under
-**Filters and options**. Finish editing an open item before saving the complete draft.
-
-File changes appear as **Configured on disk, not applied**, alongside the active settings.
-Choose **Reload configuration** to apply them, with a brief service interruption. Unrelated draft
-edits are kept; settings that changed or became locked need review. Invalid or unreadable files
-block saving until you fix the file and refresh settings. If a save or reload response is lost,
-refresh settings and check the active values before retrying.
-
-Each setting shows its source. Explicit values in the main config, environment, or startup
+Explicit values in the main config, environment, or startup
 flags are locked, even when they equal a default. Commented examples do not lock settings.
 A locked setting can retain a web selection that takes effect when its overriding source is removed.
 
 Web selections persist in `config.web.yml` inside the data directory, including when there is
-no main config file. Saving does not rewrite your main configuration. Connection, authentication,
-storage, executable, and proxy trust settings remain read only. Stored credentials stay hidden.
+no main config file. Saving does not rewrite your main configuration. Storage, executable,
+proxy trust, and OAuth endpoint and identity mapping settings remain file managed.
+Stored credentials stay hidden.
 
-In **App**, the search engine URL accepts an HTTP or HTTPS address with `{query}` once in its
-path or query, for example `https://www.google.com/search?q={query}`. Edit the displayed URL
-directly; **Clear** selects the default search engine and **Reset** removes the web selection.
-This destination is shared with visitors, so never include credentials. Extractor option
-visibility shows described options while keeping credentials hidden.
+Connection and authentication changes require confirmation within two minutes. A timeout or
+restart restores the last confirmed configuration. Authentication changes require a fresh sign in
+using the temporary settings. If access fails, wait for rollback and reconnect at the original address.
+When disabling authentication, keep the originating page open: its private confirmation code
+cannot be recovered after closing or reloading it. Losing the code requires waiting for rollback.
+
+The search engine URL accepts an HTTP or HTTPS address with `{query}` once in its
+path or query, for example `https://www.google.com/search?q={query}`. An empty value uses
+the default search engine; resetting removes the web selection and inherits the configured value.
+This destination is shared with visitors, so never include credentials.
 
 **SQL debugging** logs database queries, which can include private document and account data.
 **Profiler** enables runtime profiles at `/debug/pprof`, which can also contain private data.
-Disable these troubleshooting options when finished. In **Server**, **Metrics** enables monitoring
+Disable these troubleshooting options when finished. **Metrics** enables monitoring
 at `/metrics`. Both profiling and metrics require an administrator or the instance token when
 authentication is enabled; without authentication anyone can access them. **Expose version** shares
-the installed version with all visitors. **Maximum batch size** sets the request limit in MiB,
-with a minimum of 1; larger limits allow greater memory use. These changes apply after saving.
+the installed version with all visitors. Larger batch request limits allow greater memory use.
 
-The **Indexer** tab offers language detection, a language multiselect, detection accuracy,
-stopword handling, and the maximum file size in MiB. Select at least two languages, or clear
-the selection to detect all supported languages. Reindex existing documents after changing
+Language detection requires at least two selected languages, or an empty selection to detect
+all supported languages. Reindex existing documents after changing
 language or stopword settings. Saving does not reindex them automatically.
 
-Add watched directory rows with an absolute path on the server or a `~/` path. Each directory
-must exist, be readable by the server, and have no overlap with another row, including through
-symbolic links. Supply extensions without dots and file name glob patterns, one per line.
+Watched directories require an absolute path on the server or a `~/` path. Each directory
+must exist, be readable by the server, and have no overlap with another watched directory,
+including through symbolic links.
 An empty owner makes files global; a named owner must already exist in multi user mode.
-Saving starts a scan and replaces the active watches. Removing a row stops watching but keeps
+Saving starts a scan and replaces the active watches. Removing a directory stops watching but keeps
 indexed documents. Changing an owner does not remove documents indexed for the previous owner.
 Delete those documents separately if their previous visibility is no longer appropriate.
 
@@ -811,15 +804,9 @@ Delete those documents separately if their previous visibility is no longer appr
 or renamed. It never deletes files from disk. An authoritative directory or language list locks the
 whole collection. PDF parser controls remain managed in the main configuration.
 
-The **Extractors** tab enables or disables individual extractors. yt-dlp also offers timeout,
-concurrency, subtitle, additional domain, and cookie source controls. Enter one additional host
-name per line, without a scheme or path. Editing an option does not enable the extractor.
+Editing an extractor option does not enable the extractor.
 Executable paths, arbitrary arguments, and options without supported controls remain file managed.
 Changes apply to future extraction; fetch documents again to update previously extracted content.
-
-The **Semantic search** tab controls the embedding service, model, dimensions, document chunks,
-prefixes, request limits, and result ranking. The endpoint URL is visible and directly editable.
-API keys, headers, and extractor cookie sources stay hidden.
 
 After enabling semantic search or changing its endpoint, model, dimensions, document prefix,
 context length, or overlap, run `hister reindex` to rebuild embeddings for existing documents.
@@ -827,10 +814,7 @@ Ranking, query, credential, and request limit changes do not need reindexing. Sa
 contact the embedding service to test it or start reindexing. Dimensions must match the model;
 PostgreSQL supports at most 2000. Chunk overlap must be less than the context length.
 
-The **Crawler** tab controls request timeout and delay in seconds, robots checks, backend,
-proxy, user agent, headers, and cookies. Browser options include fractional capture delay and
-BiDi host, port, and socket URL. Remove options that do not belong to the selected backend.
-An executable path or any other authoritative backend option locks the entire options collection.
+An executable path or any other authoritative crawler backend option locks the entire options collection.
 Executable paths remain managed in the main configuration.
 
 Saved crawler settings apply to subsequent commands using this instance's configuration and
@@ -839,14 +823,13 @@ configuration. Saving does not start a crawl or check browser or proxy connectiv
 Headers, cookies, and user agent apply to HTTP and Chrome crawls; BiDi uses its browser's values.
 Proxy URLs support HTTP and SOCKS5 without credentials.
 
-Stored header, cookie, proxy, and socket values stay hidden. Stored cookie values cannot be reused
+Stored cookie values cannot be reused
 with a different name, domain, or path. An authoritative member locks the whole
 collection. After a revision conflict, use the current values and reapply secret edits.
 Replacement values remain only in the open page and are discarded after saving or leaving it.
 
-In **Sensitive content patterns**, each regular expression needs a unique lowercase name.
-Invalid expressions keep the row open for correction. Matching documents are blocked during future
-indexing; existing documents are unchanged. These checks cannot detect every kind of sensitive content.
+Sensitive content patterns block matching documents during future indexing; existing documents
+are unchanged. These checks cannot detect every kind of sensitive content.
 
 The pattern collection replaces the inherited patterns, including built in defaults.
 A pattern supplied by the main configuration or environment locks the whole collection.
@@ -992,7 +975,7 @@ Semantic search is **opt-in** and disabled by default. It requires an OpenAI-com
 
 The vector store backend is chosen automatically based on `server.database`:
 
-- **SQLite** (default) stores vectors in a separate `vectors.sqlite3` file in the same directory as the main database, using the [sqlite-vec](https://github.com/asg017/sqlite-vec) extension. No extra setup required.
+- **SQLite** (default) stores vectors in a separate `vectors.sqlite3` file in the same directory as the main database, using the [sqlite-vec](https://github.com/asg017/sqlite-vec) extension. No extra setup required. It supports at most 8192 embedding dimensions and a `semantic_search.result_limit` of at most 1024.
 - **PostgreSQL** stores vectors in the same database as the main data using the [pgvector](https://github.com/pgvector/pgvector) extension. Hister uses an HNSW index with the `vector` type, which supports at most 2000 dimensions. Make sure `pgvector` is installed and enabled (`CREATE EXTENSION vector;`) before starting Hister.
 
 Use `HISTER__SEMANTIC_SEARCH__QUERY_EMBEDDING_TIMEOUT` and `HISTER__SEMANTIC_SEARCH__MAX_QUERY_EMBEDDING_CONCURRENCY` to override the query deadline and concurrency through environment variables. Changing these settings does not require reindexing.
@@ -1117,7 +1100,6 @@ By default, Hister stores the full HTML content of every indexed page on disk an
 
 - HTML content is **never written to disk** during indexing or re-indexing. Only the extracted plain text, title, URL, domain, language, and favicon are kept.
 - Running `hister reindex` with this option enabled will delete all previously stored HTML files, reclaiming disk space.
-- The preview panel, the per-result **view** button, and the **Preview** toggle are hidden in the web UI.
 
 This is useful when disk space is limited or when you prefer not to retain full page snapshots.
 
@@ -1343,16 +1325,11 @@ The equivalent environment variable is `HISTER__SERVER__OAUTH__OIDC__DISABLE_PKC
 
 Logins started before upgrading must be restarted because their sessions lack the verifier and provider binding. A callback consumes its matching login state before exchanging the code, so failed or denied logins must also be restarted. GitHub token exchanges now use a form POST to keep credentials and the verifier out of the URL; custom GitHub token endpoints or proxies must accept POST.
 
-### How It Works
-
-1. The login page shows a **Sign in with &lt;Provider&gt;** button for each configured provider.
-2. Clicking the button redirects the user to the provider's authorization page.
-3. After the user grants access the provider redirects back to `/api/oauth/callback?provider=<name>`.
-4. Hister verifies the state token and provider, exchanges the authorization code with the PKCE verifier for a token, and fetches the user's identity from the provider.
-5. If no local account is linked to that identity, one is created automatically. GitHub uses the login name, Google uses the account name with the full email address as a fallback, and OIDC uses `preferred_username`, then the full email address, then the OAuth identity as the username.
-6. The user is logged in and redirected to the home page.
-
-> **Note**: OAuth login requires `app.user_handling: true`. The buttons only appear on the login page when user handling is active and at least one provider is configured.
+OAuth login requires `app.user_handling: true` and at least one configured provider.
+If no local account is linked to the provider identity, Hister creates one automatically.
+GitHub uses the login name, Google uses the account name with the full email address as a
+fallback, and OIDC uses `preferred_username`, then the full email address, then the OAuth
+identity as the username.
 
 ## OAuth-Only Mode
 
@@ -1368,8 +1345,6 @@ server:
 ```
 
 Personal access tokens continue to work regardless of this setting, so API clients, the CLI, and the browser extension can authenticate without a browser login. In multiple user mode, `app.access_token` is a client default and must contain a user's personal token to authenticate.
-
-The login page hides the username/password form when `oauth_only` is active, showing only the OAuth provider buttons.
 
 > **Note**: Use `oauth_only` with `app.user_handling: true` and at least one configured OAuth provider. Enabling it without a provider leaves users with no browser login path.
 

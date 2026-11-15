@@ -24,19 +24,15 @@ Org files that read other files through `#+INCLUDE` or `#+SETUPFILE` are rejecte
 
 For directories watched by the server, symbolic links are indexed only when their targets remain inside the configured directory. The configured directory itself may be a symbolic link. Run `hister reindex` after upgrading to remove previously indexed files reached through links outside those directories.
 
-Click a local file result title to open its full screen preview within Hister.
-
 PDF previews preserve extracted line breaks, indentation, and paragraph spacing. Pages appear separately when page boundaries are available. Previews show saved text, so original images, fonts, and column layouts are not reproduced. Older PDFs gain the improved text layout immediately; import or submit them again to recover page boundaries, or use `hister reindex` for watched local PDFs.
 
 DOCX previews preserve paragraphs, standard headings, and directly applied bold, italic, and underline formatting. Images, tables, list numbering, and original page layouts are not reproduced. Older DOCX files gain paragraph spacing immediately; import them again to recover formatting, or use `hister reindex` for watched local files.
 
 Plain text previews preserve line breaks, blank lines, and indentation. Long lines wrap to fit the preview panel.
 
-Source code and data files with common extensions are highlighted automatically. Use **Code language** to choose a language for unknown file types, correct the detected language, or select **Plain text**. Language choices are remembered for each document in your browser. Select **Automatic** to restore filename detection.
-
-The **Highlight syntax**, **Wrap lines**, and **Line numbers** controls apply to text previews and are saved in your browser. Colors follow the app's light or dark theme. Large files and very long lines remain readable as plain text without highlighting or line numbers.
-
-Use **Copy** to copy the original text, including whitespace, without line numbers.
+Code language overrides are remembered per document in your browser. Preview preferences
+are also stored in the browser. Large files and very long lines use plain text without
+highlighting or line numbers. Copying preserves the original whitespace and excludes line numbers.
 
 Watched HTML files use the same extractor chain as browser submissions, including Readability and structured metadata extraction, before language detection. Their original HTML is kept for previews, and their file identity is preserved even when the page contains a canonical URL. Run `hister reindex` after upgrading to extract text and correct language detection for previously indexed local HTML files. Existing remote HTML snapshots must be imported again from the source files.
 

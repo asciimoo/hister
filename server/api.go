@@ -2,8 +2,10 @@ package server
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/asciimoo/hister/config"
+	"github.com/asciimoo/hister/server/oauth"
 )
 
 const (
@@ -128,7 +130,7 @@ func init() {
 			AdminOnly:   true,
 			NoStore:     true,
 			Handler:     serveSettings,
-			Description: "Read configuration field descriptions, redacted active values, sources, editability, and an opaque revision. Includes pending status (changed, invalid, or unreadable) when configuration sources differ, with redacted pending values for valid changes. Requires administrative access. Does not save or apply settings.",
+			Description: "Read configuration field descriptions, redacted active values, sources, editability, and an opaque revision. Includes pending disk changes and pending_access with an unconfirmed operation's revision, deadline, destination, and authentication requirements. Never returns the private confirmation token. Requires administrative access.",
 		},
 		{
 			Name:         "ValidateSettings",
@@ -138,7 +140,7 @@ func init() {
 			NoStore:      true,
 			CSRFRequired: true,
 			Handler:      serveValidateSettings,
-			Description:  "Validate a complete configuration candidate without saving or applying it. Accepts supported App, Indexer, Crawler, Extractor, and Semantic search edits. Returns redacted candidate values on success, field errors with status 422, or status 409 when the revision or configuration sources have changed.",
+			Description:  "Validate a complete configuration candidate without saving or applying it. Returns redacted values and requires_confirmation for this transition, field errors with status 422, or status 409 for changed revisions or sources. Required reviews include mode (acknowledge or access), redacted changes, consequences, and a single use acknowledgment bound to the caller, candidate, and revision. Access reviews include destination_url and require a usable administrator when the candidate enables user handling.",
 			JSONSchema: []*JSONSchemaField{
 				{Name: "revision", Type: "string", Required: true, Description: "Revision returned by GET /api/settings."},
 				{Name: "edits", Type: "array", Required: true, Description: "Explicit setting operations; an empty array validates the inherited configuration.", Fields: []*JSONSchemaField{
@@ -156,10 +158,29 @@ func init() {
 			NoStore:      true,
 			CSRFRequired: true,
 			Handler:      serveApplySettings,
-			Description:  "Save and apply supported ordinary configuration settings. Uses the revision and explicit edits format of POST /api/settings/validate. Changed selections briefly interrupt service; unchanged selections preserve the active revision without interruption. Returns 409 for changed sources or an outdated revision and 422 for invalid settings. Failure codes distinguish sources_changed, admin_required, persistence_failed, and recovery_failed. Read GET /api/settings after success or a lost response to obtain the active revision. Sensitive access settings remain read only.",
+			Description:  "Apply supported configuration settings using the current revision and any required review acknowledgment. Ordinary saves return 200. Access changes return 202 with the pending revision, deadline, destination_url, and authentication requirements; they persist only after confirmation within two minutes. When the candidate disables authentication, this response alone includes a private confirmation_token. Competing writes, stale sources, and replayed acknowledgments return 409; missing acknowledgments return 428; invalid settings return 422. Read GET /api/settings after a lost response.",
 			JSONSchema: []*JSONSchemaField{
 				{Name: "revision", Type: "string", Required: true, Description: "Revision returned by GET /api/settings."},
 				{Name: "edits", Type: "array", Required: true, Description: "Explicit setting operations using path, action (set or reset), and value for set."},
+				{Name: "acknowledgment", Type: "string", Description: "Opaque acknowledgment from the latest review of this exact draft and revision by the same caller or initiating session. Required for sensitive drafts."},
+			},
+		},
+		{
+			Name: "ConfirmSettings", Path: "/api/settings/confirm", Method: POST,
+			AdminOnly: true, NoStore: true, CSRFRequired: true, Handler: serveConfirmSettings,
+			Description: "Persist the exact pending access change through its candidate host, base path, and listener before its deadline. Requires current administrative authority and fresh authentication for changed authentication policies. Changed OAuth providers require a new login through that provider. Returns 409 for stale or expired operations and 403 for missing access proof.",
+			JSONSchema: []*JSONSchemaField{
+				{Name: "revision", Type: "string", Required: true, Description: "Pending revision returned by activation or pending_access."},
+				{Name: "confirmation_token", Type: "string", Description: "Private token returned only to the initiator when the candidate disables authentication."},
+			},
+		},
+		{
+			Name: "CancelSettings", Path: "/api/settings/cancel", Method: POST,
+			AdminOnly: true, NoStore: true, CSRFRequired: true, Handler: serveCancelSettings,
+			Description: "Cancel the exact pending access change and restore the confirmed configuration. Requires administrative access under the temporary configuration.",
+			JSONSchema: []*JSONSchemaField{
+				{Name: "revision", Type: "string", Required: true, Description: "Pending revision returned by activation or pending_access."},
+				{Name: "confirmation_token", Type: "string", Description: "Required when the candidate disables authentication; returned only to the initiating caller."},
 			},
 		},
 		{
@@ -1334,7 +1355,7 @@ func init() {
 					Name:        "provider",
 					Type:        "string",
 					Required:    true,
-					Description: "OAuth provider name (github, google, oidc)",
+					Description: "OAuth provider name (" + strings.Join(oauth.ProviderNames(), ", ") + ")",
 				},
 				{
 					Name:        "return_to",

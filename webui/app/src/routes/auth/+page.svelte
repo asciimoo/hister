@@ -9,6 +9,7 @@
   import { setFlashMessage, showFlashMessage } from '#lib/flash.js';
   import { authReturnPath } from '#lib/auth-navigation.js';
   import { resolve } from '$app/paths';
+  import { page } from '$app/state';
 
   let authMode = $state<'token' | 'user' | 'none'>('token');
   let token = $state('');
@@ -19,6 +20,8 @@
   let oauthProviders = $state<string[]>([]);
   let oauthOnly = $state(false);
   let basePath = $state(resolve('/').replace(/\/$/, ''));
+  const reauthenticate = $derived(page.url.searchParams.get('reauth') === '1');
+  const requiredMethod = $derived(reauthenticate ? page.url.searchParams.get('method') : null);
 
   function returnDestination(): string {
     return authReturnPath(new URLSearchParams(window.location.search).get('return_to'), basePath);
@@ -37,7 +40,7 @@
         oauthProviders = cfg.oauthProviders ?? [];
         oauthOnly = cfg.oauthOnly ?? false;
         basePath = cfg.basePath ?? '';
-        if (authMode === 'none' || cfg.authenticated) {
+        if (authMode === 'none' || (cfg.authenticated && !reauthenticate)) {
           window.location.href = returnDestination();
         }
       })
@@ -129,7 +132,7 @@
         <Card.Title
           class="font-outfit text-text-brand text-2xl font-extrabold tracking-wide uppercase"
         >
-          Authentication Required
+          {reauthenticate ? 'Sign in again' : 'Authentication Required'}
         </Card.Title>
         <Card.Description class="font-inter text-text-brand-secondary">
           {#if authMode === 'user'}
@@ -144,7 +147,7 @@
           <p class="text-hister-rose font-inter text-sm">{error}</p>
         {/if}
         {#if authMode === 'user'}
-          {#if !oauthOnly}
+          {#if !oauthOnly && requiredMethod !== 'oauth'}
             <div class="space-y-2">
               <label
                 for="username"
@@ -188,8 +191,8 @@
               {loading ? 'Signing in…' : 'Sign In'}
             </Button>
           {/if}
-          {#if oauthProviders.length > 0}
-            {#if !oauthOnly}
+          {#if oauthProviders.length > 0 && requiredMethod !== 'password'}
+            {#if !oauthOnly && requiredMethod !== 'oauth'}
               <div class="relative flex items-center py-2">
                 <div class="border-border-brand-muted flex-grow border-t"></div>
                 <span class="text-text-brand-muted font-inter mx-3 flex-shrink text-xs uppercase"

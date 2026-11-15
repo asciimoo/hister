@@ -76,6 +76,7 @@ type webContext struct {
 	Username      string
 	IsAdmin       bool
 	Authenticated bool
+	settingsActor configurationActor
 	userRules     *config.Rules
 	reloader      *configReloader
 	releaseConfig func()
@@ -209,12 +210,14 @@ func requestAccessToken(c *webContext) string {
 func populateTokenContext(c *webContext) {
 	if tok := requestAccessToken(c); tok != "" && tok == c.Config.App.AccessToken {
 		c.Authenticated = true
+		c.settingsActor = configurationTokenActor(nil, tok)
 		return
 	}
 	session, err := sessionStore.Get(c.Request, storeName)
 	if err == nil && session != nil {
 		if sessionStore.tokenAuthenticated(session, c.Config.App.AccessToken) {
 			c.Authenticated = true
+			c.settingsActor = configurationActor{session: sessionTokenHash(session.ID)}
 		}
 	}
 }
@@ -223,6 +226,7 @@ func withTokenAuth(handler endpointHandler) endpointHandler {
 	return func(c *webContext) {
 		if tok := requestAccessToken(c); tok != "" && tok == c.Config.App.AccessToken {
 			c.Authenticated = true
+			c.settingsActor = configurationTokenActor(nil, tok)
 			handler(c)
 			return
 		}
@@ -233,6 +237,7 @@ func withTokenAuth(handler endpointHandler) endpointHandler {
 		}
 		if sessionStore.tokenAuthenticated(session, c.Config.App.AccessToken) {
 			c.Authenticated = true
+			c.settingsActor = configurationActor{session: sessionTokenHash(session.ID)}
 			handler(c)
 			return
 		}
@@ -254,6 +259,7 @@ func populateUserContext(c *webContext) {
 				c.UserID = u.ID
 				c.Username = u.Username
 				c.IsAdmin = u.IsAdmin
+				c.settingsActor = configurationActor{userID: u.ID, userRevision: u.Revision, proxy: true}
 				c.Authenticated = true
 				if rules, err := u.ParseRules(); err == nil {
 					c.userRules = rules
@@ -275,6 +281,7 @@ func populateUserContext(c *webContext) {
 			c.UserID = u.ID
 			c.Username = u.Username
 			c.IsAdmin = u.IsAdmin
+			c.settingsActor = configurationActor{userID: u.ID, userRevision: u.Revision, session: sessionTokenHash(session.ID)}
 			c.Authenticated = true
 			if rules, err := u.ParseRules(); err == nil {
 				c.userRules = rules
@@ -288,6 +295,7 @@ func populateUserContext(c *webContext) {
 			c.UserID = u.ID
 			c.Username = u.Username
 			c.IsAdmin = u.IsAdmin
+			c.settingsActor = configurationTokenActor(u, tok)
 			c.Authenticated = true
 			if rules, err := u.ParseRules(); err == nil {
 				c.userRules = rules

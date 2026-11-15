@@ -30,6 +30,17 @@ const tokenAuthKey = "token_auth_proof"
 
 const userSessionVersionKey = "user_session_version"
 
+const configurationLoginKey = "configuration_login"
+
+const configurationLoginMethodKey = "configuration_login_method"
+
+func recordConfigurationLogin(c *webContext, session *sessions.Session, method string) {
+	if lease, ok := c.Request.Context().Value(runtimeRequestKey{}).(*runtimeRequest); ok {
+		session.Values[configurationLoginKey] = lease.generation.authID
+		session.Values[configurationLoginMethodKey] = method
+	}
+}
+
 type databaseSessionStore struct {
 	Options      *sessions.Options
 	maxAge       time.Duration

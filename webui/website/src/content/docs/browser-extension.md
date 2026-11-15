@@ -44,8 +44,6 @@ The Hister browser extension is the primary way to automatically index your brow
 - **Firefox**: [Install from Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/hister/) (also works on Firefox for Android)
 - **qutebrowser**: Use the built in `hister companion qutebrowser` command as described below.
 
-After installing, click the extension icon in your browser toolbar to open the popup and verify the server URL is correct.
-
 > The extension only communicates with your Hister server, it never contacts any third-party services or the websites you visit (except for downloading the page's favicon while collecting page data).
 
 ### qutebrowser
@@ -119,11 +117,9 @@ extension reads the status of every main frame response with the `webRequest`
 API, which works in both Chromium based browsers and Firefox. Manual reindex
 overrides this check.
 
-Automatic indexing can be paused at any time using the toggle in the popup.
-
 ### Manual Reindex
 
-The **Index this page now** button in the popup immediately submits the current
+Manual indexing immediately submits the current
 page or PDF, even when automatic indexing is disabled or allow or skip rules exclude it.
 The indexing keyboard shortcut does the same. This is useful when you exclude a
 domain from automatic indexing but want to save an individual page from it.
@@ -143,58 +139,37 @@ The extension defines browser level shortcuts for common indexing actions.
 | Disable indexing for current page   | `Ctrl+B`          | `Command+B` | Adds a skip rule for the exact current URL.                           |
 | Disable indexing for current domain | `Ctrl+Y`          | `Command+Y` | Adds a skip rule for the current origin, including scheme and domain. |
 
-Successful shortcut actions show a `✓` badge on the extension icon for a few seconds. Failed actions show a `!` badge.
-
 Browser shortcuts can be changed in the browser extension shortcut settings. In Chrome, Chromium, and Edge, open `chrome://extensions/shortcuts`. In Firefox, open `about:addons`, choose the extension shortcut settings, then edit the Hister shortcuts.
 
 ### Search Engine Result Tracking
 
 The extension detects when you click on a search result in **Google** or **DuckDuckGo** and records the query alongside the result's title and URL to provide that result for the same query in the future.
 
-## Popup
+### Indexed Page Indicator
 
-Clicking the extension icon opens the popup, which provides quick access to the most common controls.
-
-| Control                                      | Description                                                                                                           |
-| -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| **Automatic indexing** toggle                | Enable or disable automatic page indexing. The setting is saved immediately.                                          |
-| **Reindex Page** button                      | Force a re-submission of the current page to the server.                                                              |
-| **Authenticate with Browser Session** button | Copy session cookies from the logged in Hister web UI to authenticate the extension when no access token is used.     |
-| **Settings icon** (⚙)                        | Expand an inline form to view and update the Server URL and Access Token without opening the full options page.       |
-| **Show indicator for indexed pages** setting | Show a `✓` badge on pages that are already indexed. This is available after opening the settings view from the popup. |
-| **Submit as public documents** setting       | Store newly indexed pages as public documents with user id `0`. This appears after the extension is authenticated.    |
-
-A status banner appears at the bottom of the popup after any action, showing success or error feedback. If the server rejected the last submission, a `!` badge is shown on the extension icon; saving valid settings clears it.
-
-The indexed page indicator is off by default. To enable it, click the extension icon, open the settings view with the settings icon, then turn on **Show indicator for indexed pages**. When enabled, the extension checks the active page against your Hister server and keeps a `✓` badge visible on pages already present in the index.
+The optional indexed page indicator checks the active page against your Hister server.
+It is disabled by default.
 
 ## Options Page
-
-The full options page is accessible via your browser's extension manager (right-click the icon → _Options_, or navigate to the extensions settings page). It provides all configuration in one place.
-
-To open it directly, right click on the extension icon and select "Options", or with:
-
-- **Chrome**: `chrome://extensions` → find Hister → click **Details** → **Extension options**
-- **Firefox**: `about:addons` → find Hister → click the **…** menu → **Preferences**
 
 ### Connection Settings
 
 <ConfigReference items={connectionOptions} />
 
-Click **Save Settings** to apply. The extension validates the connection by calling `GET /api/config` before saving; an invalid URL will show an error instead.
+The extension checks the server connection before saving settings.
 
 ### Authentication
 
-The extension supports access token and browser session authentication. To use a token, enter a global access token or a personal access token in the popup settings or options page, then save the settings.
+The extension supports global or personal access tokens and browser session authentication.
 
-When [user handling](/docs/user-handling) is enabled, you can instead share the session cookies from the Hister web interface:
+Browser session authentication requires an existing login to the Hister web interface in
+the same browser when [user handling](/docs/user-handling) is enabled.
 
-1. Log in to the Hister web interface in the same browser.
-2. Click the **Authenticate with Browser Session** button in the popup or options page.
+The extension shares the active web session. Logging out revokes that session;
+a personal access token authenticates independently.
 
-The extension copies the active session cookie, so it submits pages under your user account. You don't need to repeat this step if you log out in the web interface.
-
-After authentication, the popup settings and options page show **Submit as public documents**. Turn this on when pages indexed from the extension should be visible as public documents instead of being stored only under your user account. The extension sends this preference with document submissions, and the server stores those documents with user id `0`.
+**Submit as public documents** makes newly indexed pages visible as public documents instead
+of storing them only under your user account.
 
 ## Troubleshooting
 
@@ -204,7 +179,7 @@ The last attempt to send page data to the server failed. Open the popup to see t
 
 - The Hister server is not running: start it with `hister listen`.
 - The **Server URL** is wrong: confirm it matches the address printed when the server starts (default `http://127.0.0.1:4433/`).
-- User handling is enabled but the extension is not authenticated: configure an access token, or click **Authenticate with Browser Session** after logging in to the web interface.
+- User handling is enabled but the extension is not authenticated: configure an access token or use an active browser session.
 
 **Pages are not being indexed**
 
