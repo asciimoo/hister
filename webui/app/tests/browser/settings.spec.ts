@@ -3738,6 +3738,69 @@ async function crawlerSettingsAPI(page: Page) {
   return state;
 }
 
+for (const type of ['list', 'dictionary']) {
+  test(`unrecognized ${type} collections use schema summaries and keep secret drafts hidden`, async ({
+    page,
+  }) => {
+    const state = await crawlerSettingsAPI(page);
+    const field = state.fields.find((field) => field.path === 'crawler.cookies')!;
+    const active = state.values.find((value) => value.path === field.path)!;
+    field.path = active.path = 'crawler.custom_entries';
+    field.label = 'Custom entries';
+    field.schema.type = field.schema.control = type;
+    field.schema.items!.properties!.find((property) => property.name === 'name')!.label =
+      'Display name';
+    field.schema.items!.properties!.find((property) => property.name === 'domain')!.label = 'Host';
+    if (type === 'dictionary') active.value = { primary: (active.value as unknown[])[0] };
+    let saved: SettingsDraft | undefined;
+    await page.route('**/api/settings/apply', async (route) => {
+      saved = route.request().postDataJSON();
+      await route.fulfill({ json: { saved: true } });
+    });
+
+    await page.goto('/settings?tab=crawler');
+    const collection = page.getByRole('group', { name: field.label, exact: true });
+    const row = collection.getByRole('group', { name: 'Custom entries 1', exact: true });
+    await expect(
+      row.getByText(type === 'dictionary' ? 'primary' : 'Custom entries 1', { exact: true }),
+    ).toBeVisible();
+    await expect(row).toContainText('Display name: session');
+    await expect(row).toContainText('Host: example.com');
+    await expect(row).toContainText('Value: Value stored');
+    await expect(row).not.toContainText('cookie-reference');
+    await expect(collection.getByRole('button', { name: 'Add item', exact: true })).toBeVisible();
+
+    await row.getByRole('button', { name: 'Edit', exact: true }).click();
+    await row.getByRole('textbox', { name: 'Display name', exact: true }).fill('Updated entry');
+    await row.getByRole('combobox', { name: 'Value action', exact: true }).selectOption('replace');
+    await row.getByLabel('Value replacement', { exact: true }).fill('private-generic-draft');
+    await row.getByRole('button', { name: 'Done', exact: true }).click();
+    await expect(row).toContainText('Display name: Updated entry');
+    await expect(row).toContainText('Value: New value');
+    await expect(row).not.toContainText('private-generic-draft');
+    await row.getByRole('button', { name: 'Edit', exact: true }).click();
+    await expect(row.getByLabel('Value replacement', { exact: true })).toHaveValue(
+      'private-generic-draft',
+    );
+    await row.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
+    await expect(page.getByRole('status')).toContainText('Settings saved and applied');
+    const item = {
+      name: 'Updated entry',
+      domain: 'example.com',
+      path: '/',
+      value: { action: 'replace', ref: 'cookie-reference', value: 'private-generic-draft' },
+    };
+    expect(saved?.edits).toEqual([
+      {
+        path: field.path,
+        action: 'set',
+        value: type === 'dictionary' ? { primary: item } : [item],
+      },
+    ]);
+  });
+}
+
 test('collection items switch between summaries and cancellable editors', async ({ page }) => {
   await crawlerSettingsAPI(page);
   const applied: any[] = [];

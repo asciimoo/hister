@@ -11,8 +11,47 @@
     type SettingField,
     type SettingItemEditor,
     type SettingRemoval,
+    type SettingSchema,
   } from '#lib/settings.js';
   import SettingInput from './SettingInput.svelte';
+
+  type CollectionPresentation = {
+    noun: string;
+    plural?: string;
+    layout?: 'shortcut' | 'pattern';
+    primaryProperties?: string[];
+    summary?: (item: Record<string, unknown>) => { title: string; detail: string };
+  };
+  const presentations: Record<string, CollectionPresentation> = {
+    'crawler.cookies': {
+      noun: 'cookie',
+      summary: (item) => ({
+        title: String(item.name || 'Cookie'),
+        detail: `${item.domain ?? ''} · ${item.path || '/'} · ${secretSummary(item.value)}`,
+      }),
+    },
+    'crawler.headers': { noun: 'header' },
+    'semantic_search.headers': { noun: 'header' },
+    'indexer.directories': {
+      noun: 'directory',
+      plural: 'directories',
+      primaryProperties: ['path', 'label', 'user'],
+      summary: (item) => ({
+        title: String(item.path || 'Directory'),
+        detail: [
+          Array.isArray(item.filetypes) && item.filetypes.length
+            ? item.filetypes.join(', ')
+            : 'All file types',
+          item.user ? `Owner: ${item.user}` : 'Everyone with search access',
+          item.label ? `Label: ${item.label}` : '',
+        ]
+          .filter(Boolean)
+          .join(' · '),
+      }),
+    },
+    'hotkeys.web': { noun: 'shortcut', layout: 'shortcut' },
+    sensitive_content_patterns: { noun: 'pattern', layout: 'pattern' },
+  };
 
   let {
     id,
@@ -46,33 +85,20 @@
   const entries = $derived(toEntries(value));
   const activeEntries = $derived(toEntries(activeValue));
   const current = $derived(editor?.path === field.path ? editor : null);
-  const noun = $derived(
-    (
-      {
-        'crawler.cookies': 'cookie',
-        'crawler.headers': 'header',
-        'semantic_search.headers': 'header',
-        'indexer.directories': 'directory',
-        'hotkeys.web': 'shortcut',
-        sensitive_content_patterns: 'pattern',
-      } as Record<string, string>
-    )[field.path] ?? 'item',
-  );
-  const directory = $derived(field.path === 'indexer.directories');
-  const shortcut = $derived(field.path === 'hotkeys.web');
-  const pattern = $derived(field.path === 'sensitive_content_patterns');
+  const presentation = $derived(presentations[field.path] ?? { noun: 'item' });
+  const noun = $derived(presentation.noun);
   const keyLabel = $derived(field.schema.key_label ?? 'Name');
   const valueLabel = $derived(field.schema.value_label ?? 'Value');
   const primarySchema = $derived({
     ...schema,
     properties: schema.properties?.filter((property) =>
-      ['path', 'label', 'user'].includes(property.name),
+      presentation.primaryProperties?.includes(property.name),
     ),
   });
   const filtersSchema = $derived({
     ...schema,
     properties: schema.properties?.filter(
-      (property) => !['path', 'label', 'user'].includes(property.name),
+      (property) => !presentation.primaryProperties?.includes(property.name),
     ),
   });
   let nameError = $state('');
@@ -121,33 +147,36 @@
     await onDone(collection(next));
   }
 
-  function summary(name: string, value: unknown) {
-    const item = value as Record<string, unknown>;
-    if (dictionary)
-      return {
-        title: name,
-        detail:
-          schema.sensitivity === 'none'
-            ? choiceLabel(schema, String(value ?? ''))
-            : secretSummary(value),
-      };
-    if (directory)
-      return {
-        title: String(item.path || 'Directory'),
-        detail: [
-          Array.isArray(item.filetypes) && item.filetypes.length
-            ? item.filetypes.join(', ')
-            : 'All file types',
-          item.user ? `Owner: ${item.user}` : 'Everyone with search access',
-          item.label ? `Label: ${item.label}` : '',
-        ]
-          .filter(Boolean)
-          .join(' · '),
-      };
+  function summary(name: string, value: unknown, index: number) {
+    if (presentation.summary) return presentation.summary(value as Record<string, unknown>);
     return {
-      title: String(item.name || 'Cookie'),
-      detail: `${item.domain ?? ''} · ${item.path || '/'} · ${secretSummary(item.value)}`,
+      title: dictionary ? name : `${field.label} ${index + 1}`,
+      detail: valueSummary(schema, value),
     };
+  }
+
+  function valueSummary(schema: SettingSchema, value: unknown): string {
+    if (schema.sensitivity === 'secret' || schema.sensitivity === 'url')
+      return secretSummary(value);
+    if (!['none', 'mixed'].includes(schema.sensitivity)) return 'Value hidden';
+    if (schema.type === 'object') {
+      const item = (value ?? {}) as Record<string, unknown>;
+      return (schema.properties ?? [])
+        .map(
+          (property) => `${property.label}: ${valueSummary(property.schema, item[property.name])}`,
+        )
+        .join(' · ');
+    }
+    const items = schema.items;
+    if (schema.type === 'list' && items && Array.isArray(value))
+      return value.map((item) => valueSummary(items, item)).join(', ');
+    if (schema.type === 'dictionary' && items)
+      return Object.entries((value ?? {}) as Record<string, unknown>)
+        .map(([name, item]) => `${name}: ${valueSummary(items, item)}`)
+        .join(' · ');
+    if (schema.sensitivity !== 'none') return 'Value hidden';
+    if (typeof value === 'boolean') return value ? 'Enabled' : 'Disabled';
+    return choiceLabel(schema, String(value ?? ''));
   }
 
   function secretSummary(value: unknown) {
@@ -190,12 +219,12 @@
       <SettingInput
         id={`${id}-${index}${dictionary ? '-value' : ''}`}
         label={dictionary ? valueLabel : `${field.label} ${index + 1}`}
-        schema={directory ? primarySchema : schema}
+        schema={presentation.primaryProperties ? primarySchema : schema}
         value={current.value}
         {disabled}
         onChange={(value) => onEditor({ ...current!, value })}
       />
-      {#if directory}
+      {#if presentation.primaryProperties}
         <details class="border-border-brand-muted border-t pt-3">
           <summary class="cursor-pointer text-sm font-medium">Filters and options</summary>
           <div class="pt-4">
@@ -227,7 +256,7 @@
 {/snippet}
 
 {#snippet itemSummary(name: string, item: unknown, index: number)}
-  {@const text = summary(name, item)}
+  {@const text = summary(name, item, index)}
   {@const changed = !activeEntries.some(
     ([key, active]) => key === name && JSON.stringify(active) === JSON.stringify(item),
   )}
@@ -239,7 +268,7 @@
   >
     <div class="flex min-w-0 items-start justify-between gap-2">
       <div class="flex min-h-10 min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1.5 sm:min-h-9">
-        {#if shortcut}
+        {#if presentation.layout === 'shortcut'}
           <Kbd class="border-border-brand-muted text-text-brand h-7 border px-2 font-mono text-xs"
             >{text.title}</Kbd
           >
@@ -303,12 +332,12 @@
         </Tooltip.Provider>
       </div>
     </div>
-    {#if pattern}
+    {#if presentation.layout === 'pattern'}
       <code
         class="bg-muted/50 text-text-brand block min-w-0 px-2.5 py-2 font-mono text-xs leading-relaxed [overflow-wrap:anywhere] whitespace-pre-wrap"
         >{text.detail}</code
       >
-    {:else if !shortcut}
+    {:else if presentation.layout !== 'shortcut'}
       <p class="text-text-brand-muted pb-1 text-xs [overflow-wrap:anywhere]">{text.detail}</p>
     {/if}
   </fieldset>
@@ -326,7 +355,7 @@
     {@render itemEditor(entries.length)}
   {:else}
     {#if !entries.length}<p class="text-text-brand-muted text-sm">
-        No {noun === 'directory' ? 'directories' : `${noun}s`} configured.
+        No {presentation.plural ?? `${noun}s`} configured.
       </p>{/if}
     <Button
       id={`${id}-add`}
