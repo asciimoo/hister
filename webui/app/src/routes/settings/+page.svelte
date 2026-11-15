@@ -31,21 +31,46 @@
     type PendingAccess,
   } from '#lib/settings.js';
 
+  const activityMessages = {
+    loading: 'Loading settings…',
+    refreshing: 'Refreshing settings…',
+    reloading: 'Reloading configuration. Service may be briefly interrupted…',
+    checking: 'Checking item…',
+    validating: 'Validating settings…',
+    applying: 'Applying settings. Service may be briefly interrupted…',
+    reconnecting: 'Reconnecting and reading active settings…',
+  };
+  type SettingsActivity = keyof typeof activityMessages;
+  type EditingPhase = 'editing' | 'refresh-required';
+  type ReviewedDraft = SettingsReview & { draft: SettingsDraft };
+  type AccessConfirmation = { destination: string; initial?: PendingAccess; warning?: string };
+  type SettingsWorkflow =
+    | { phase: EditingPhase | 'denied' | 'closed' }
+    | { phase: 'working'; activity: SettingsActivity; resume: EditingPhase }
+    | { phase: 'review'; review: ReviewedDraft }
+    | { phase: 'access'; access: AccessConfirmation };
+
   let state = $state<SettingsState | null>(null);
   let edits = $state<Record<string, SettingEdit>>({});
   let editor = $state<SettingItemEditor | null>(null);
   let removal = $state<SettingRemoval | null>(null);
   let conflicts = $state<Record<string, string>>({});
   let errors = $state<SettingError[]>([]);
-  let busy = $state(true);
-  let denied = $state(false);
-  let message = $state('Loading settings…');
+  let workflow = $state<SettingsWorkflow>({
+    phase: 'working',
+    activity: 'loading',
+    resume: 'editing',
+  });
+  let message = $state(activityMessages.loading);
   let problem = $state('');
-  let needsReload = $state(false);
-  let review = $state<(SettingsReview & { draft: SettingsDraft }) | null>(null);
-  let access = $state<{ destination: string; initial?: PendingAccess; warning?: string } | null>(
-    null,
+  const busy = $derived(workflow.phase === 'working');
+  const denied = $derived(workflow.phase === 'denied');
+  const needsReload = $derived(
+    workflow.phase === 'refresh-required' ||
+      (workflow.phase === 'working' && workflow.resume === 'refresh-required'),
   );
+  const review = $derived(workflow.phase === 'review' ? workflow.review : null);
+  const access = $derived(workflow.phase === 'access' ? workflow.access : null);
   let destroyed = false;
   const sidebarLayout = new MediaQuery('(min-width: 64rem)');
   const categories = $derived([...new Set(state?.fields.map((field) => field.category) ?? [])]);
@@ -75,11 +100,8 @@
   });
   onDestroy(() => {
     destroyed = true;
-    edits = {};
-    editor = null;
-    removal = null;
-    review = null;
-    access = null;
+    clearDraft();
+    workflow = { phase: 'closed' };
   });
   beforeNavigate((navigation) => {
     if (navigation.shallow && navigation.to?.url.pathname === page.url.pathname) return;
@@ -99,6 +121,55 @@
     if (!dirty && !access) return;
     event.preventDefault();
     event.returnValue = '';
+  }
+
+  function beginWork(activity: SettingsActivity) {
+    workflow = {
+      phase: 'working',
+      activity,
+      resume: needsReload ? 'refresh-required' : 'editing',
+    };
+    problem = '';
+    showActivity(activity);
+    const operation = workflow;
+    // A completed request must not replace a review, access confirmation,
+    // denied state, or a newer operation that has already taken over.
+    return () => {
+      if (workflow === operation) workflow = { phase: operation.resume };
+    };
+  }
+
+  function showActivity(activity: SettingsActivity) {
+    if (workflow.phase !== 'working') return;
+    workflow.activity = activity;
+    message = activityMessages[activity];
+  }
+
+  function requireRefresh(required = true) {
+    const phase = required ? 'refresh-required' : 'editing';
+    if (workflow.phase === 'working') workflow.resume = phase;
+    else if (workflow.phase === 'editing' || workflow.phase === 'refresh-required')
+      workflow = { phase };
+  }
+
+  function clearDraft() {
+    edits = {};
+    editor = null;
+    removal = null;
+    conflicts = {};
+    errors = [];
+  }
+
+  function dismissReview() {
+    if (workflow.phase === 'review') workflow = { phase: 'editing' };
+  }
+
+  function denyAccess() {
+    state = null;
+    clearDraft();
+    workflow = { phase: 'denied' };
+    problem = 'You do not have permission to configure this instance.';
+    message = '';
   }
 
   // Only reads are retried. A disconnected save may already have committed.
@@ -148,25 +219,23 @@
     });
     if (preserveDraft) reconcile(next);
     else state = next;
-    if (next.pending_access) startAccess(next.pending_access);
+    if (next.pending_access)
+      startAccess({
+        destination: next.pending_access.destination_url,
+        initial: next.pending_access,
+      });
   }
 
-  function startAccess(pending: PendingAccess) {
-    access = { destination: pending.destination_url, initial: pending };
-    edits = {};
-    editor = null;
-    removal = null;
-    review = null;
-    conflicts = {};
-    errors = [];
+  function startAccess(confirmation: AccessConfirmation) {
+    clearDraft();
+    workflow = { phase: 'access', access: confirmation };
     problem = '';
-    needsReload = false;
+    message = '';
   }
 
   async function finishAccess(outcome: 'confirmed' | 'cancelled' | 'ended') {
-    access = null;
-    busy = true;
-    edits = {};
+    const finish = beginWork('reconnecting');
+    clearDraft();
     const result =
       outcome === 'confirmed'
         ? 'Settings confirmed and saved.'
@@ -175,22 +244,20 @@
           : 'No access change is awaiting confirmation. Check the active settings before making another change.';
     try {
       await readActive();
-      needsReload = false;
+      requireRefresh(false);
       problem = '';
       message = result;
     } catch {
-      needsReload = true;
+      requireRefresh();
       message = '';
       problem = `${result} Reopen Hister at ${outcome === 'confirmed' ? 'the confirmed' : 'the original'} address and sign in to read the active settings.`;
     } finally {
-      busy = false;
+      finish();
     }
   }
 
   async function load() {
-    busy = true;
-    problem = '';
-    message = 'Loading settings…';
+    const finish = beginWork('loading');
     try {
       const config = await retryRead(() => fetchConfig());
       if (!config.canConfigure) {
@@ -198,70 +265,64 @@
           redirectToAuth();
           return;
         }
-        denied = true;
-        problem = 'You do not have permission to configure this instance.';
-        message = '';
+        denyAccess();
         return;
       }
       state = await retryRead(() => settingsRequest<SettingsState>());
-      if (state.pending_access) startAccess(state.pending_access);
-      edits = {};
-      conflicts = {};
-      errors = [];
-      needsReload = false;
-      denied = false;
+      clearDraft();
+      requireRefresh(false);
+      if (state.pending_access)
+        startAccess({
+          destination: state.pending_access.destination_url,
+          initial: state.pending_access,
+        });
       message = '';
     } catch (error) {
       handleError(error);
     } finally {
-      busy = false;
+      finish();
     }
   }
 
   async function refreshSettings() {
     if (busy || denied) return;
-    review = null;
     if (!state) {
       resetConfig();
       await load();
       return;
     }
-    busy = true;
-    problem = '';
-    message = 'Refreshing settings…';
+    const finish = beginWork('refreshing');
     try {
       await readActive(true);
       errors = [];
-      needsReload = false;
+      requireRefresh(false);
       message = conflictCount
         ? 'Settings refreshed. Resolve the highlighted draft conflicts before saving.'
         : 'Settings refreshed. Your unsaved changes have been kept.';
     } catch (error) {
       handleError(error);
-      needsReload = true;
+      requireRefresh();
     } finally {
-      busy = false;
+      finish();
     }
   }
 
   async function applyConfiguration() {
     if (busy || !state || state.pending?.status !== 'changed') return;
-    busy = true;
-    problem = '';
-    message = 'Reloading configuration. Service may be briefly interrupted…';
+    const finish = beginWork('reloading');
     let reloaded = false;
     try {
       await reloadConfiguration();
       reloaded = true;
       await readActive(true);
       errors = [];
-      needsReload = false;
+      requireRefresh(false);
       message = conflictCount
         ? 'Configuration reloaded. Resolve the highlighted draft conflicts before saving.'
         : 'Configuration reloaded. Your unsaved changes have been kept.';
     } catch (error) {
       handleError(error);
-      needsReload = true;
+      requireRefresh();
       if (denied) return;
       if (reloaded) {
         problem =
@@ -283,22 +344,16 @@
         }
       }
     } finally {
-      busy = false;
+      finish();
     }
   }
 
   function handleError(error: unknown) {
     if (error instanceof SettingsError) {
       if (error.status === 403 || error.status === 401) {
-        denied = true;
-        state = null;
-        edits = {};
-        editor = null;
-        removal = null;
-        conflicts = {};
-        problem = 'You do not have permission to configure this instance.';
+        denyAccess();
       } else if (error.status === 409) {
-        needsReload = true;
+        requireRefresh();
         problem =
           error.code === 'sources_changed'
             ? 'Configuration sources changed or cannot be read. Refresh settings to check the file changes.'
@@ -314,7 +369,7 @@
   }
 
   function update(path: string, edit?: SettingEdit) {
-    review = null;
+    dismissReview();
     if (editor?.path === path) editor = null;
     if (removal?.path === path) removal = null;
     if (edit) edits[path] = edit;
@@ -353,9 +408,7 @@
     const edit = collectionEdit(path, value);
     const draft = Object.values(edits).filter((edit) => edit.path !== path);
     if (edit) draft.push(edit);
-    busy = true;
-    problem = '';
-    message = 'Checking item…';
+    const finish = beginWork('checking');
     let otherErrors: SettingError[] = [];
     try {
       try {
@@ -376,7 +429,7 @@
       errors = otherErrors;
       message = 'Item ready. Save and apply activates your changes.';
       // The summary button must be enabled before returning keyboard focus.
-      busy = false;
+      finish();
       await tick();
       document
         .getElementById(
@@ -386,7 +439,7 @@
     } catch (error) {
       handleError(error);
     } finally {
-      busy = false;
+      finish();
     }
   }
 
@@ -402,12 +455,8 @@
 
   function discard() {
     if (busy || !dirty) return;
-    review = null;
-    edits = {};
-    editor = null;
-    removal = null;
-    conflicts = {};
-    errors = [];
+    dismissReview();
+    clearDraft();
     if (!needsReload) problem = '';
     message = 'Unsaved changes discarded.';
   }
@@ -450,11 +499,12 @@
   }
 
   function cancelReview() {
-    review = null;
+    if (!review) return;
+    dismissReview();
     message = 'Sensitive changes were not applied. Your draft is still here.';
   }
 
-  async function save(accepted?: SettingsReview & { draft: SettingsDraft }) {
+  async function save(accepted?: ReviewedDraft) {
     if (
       !state ||
       access ||
@@ -471,53 +521,42 @@
       edits: JSON.parse(JSON.stringify(Object.values(edits))),
     };
     if (accepted && JSON.stringify(accepted.draft) !== JSON.stringify(draft)) {
-      review = null;
+      dismissReview();
       problem = 'The draft changed. Save and apply again to review the current changes.';
       return;
     }
-    busy = true;
+    const finish = beginWork('validating');
     errors = [];
-    problem = '';
-    message = 'Validating settings…';
-    let submitted = false;
-    let saved = false;
     try {
       const details = accepted ? undefined : await readSettingsReview(draft, state.fields);
       if (details) {
-        review = { ...details, draft };
+        workflow = { phase: 'review', review: { ...details, draft } };
         message = 'Review the sensitive changes before applying this draft.';
         return;
       }
-      review = null;
-      message = 'Applying settings. Service may be briefly interrupted…';
-      submitted = true;
+      showActivity('applying');
       const result = await settingsRequest<PendingAccess | { saved: boolean }>(
         '/apply',
         accepted ? { ...accepted.draft, acknowledgment: accepted.acknowledgment } : draft,
       );
       if ('deadline' in result) {
-        startAccess(result);
+        startAccess({ destination: result.destination_url, initial: result });
         return;
       }
-      saved = true;
-      edits = {};
-      removal = null;
-      conflicts = {};
-      message = 'Reconnecting and reading active settings…';
+      clearDraft();
+      showActivity('reconnecting');
       await readActive();
-      edits = {};
-      conflicts = {};
       message = 'Settings saved and applied.';
     } catch (error) {
+      const activity = workflow.phase === 'working' ? workflow.activity : undefined;
+      const submitted = activity === 'applying' || activity === 'reconnecting';
+      const saved = activity === 'reconnecting';
       if (submitted && accepted?.mode === 'access' && !(error instanceof SettingsError)) {
-        access = {
+        startAccess({
           destination: accepted.destination_url ?? page.url.href,
           warning:
             'The apply response was lost. Check the pending change at the reviewed address. Do not submit the draft again; unconfirmed changes roll back after two minutes.',
-        };
-        edits = {};
-        editor = null;
-        removal = null;
+        });
         return;
       }
       handleError(error);
@@ -528,10 +567,10 @@
         } catch (readError) {
           handleError(readError);
         }
-        needsReload = true;
+        requireRefresh();
       }
       if (submitted && !(error instanceof SettingsError && error.status < 500)) {
-        needsReload = true;
+        requireRefresh();
         if (saved)
           problem =
             'Settings were saved, but active settings could not be refreshed. Refresh settings before making another change.';
@@ -552,7 +591,7 @@
         }
       }
     } finally {
-      busy = false;
+      finish();
     }
   }
 </script>

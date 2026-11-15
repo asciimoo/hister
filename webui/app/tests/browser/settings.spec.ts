@@ -406,6 +406,48 @@ test('pending access warning allows explicitly leaving without persisting the pr
   ).toBeDisabled();
 });
 
+for (const outcome of ['access confirmation', 'permission denied']) {
+  test(`sensitive apply stays locked until it transitions to ${outcome}`, async ({ page }) => {
+    await pendingAccessAPI(page);
+    let finishApply = () => {};
+    const applyGate = new Promise<void>((resolve) => {
+      finishApply = resolve;
+    });
+    await page.route('**/api/settings/apply', async (route) => {
+      await applyGate;
+      if (outcome === 'permission denied')
+        return route.fulfill({ status: 403, json: { error: 'Administrator access revoked.' } });
+      return route.fallback();
+    });
+    try {
+      await activateAccess(page);
+      await expect(page.getByRole('dialog')).toHaveCount(0);
+      await expect(page.getByRole('status')).toHaveText(
+        'Applying settings. Service may be briefly interrupted…',
+      );
+      for (const name of ['Save and apply', 'Discard changes', 'Refresh settings'])
+        await expect(page.getByRole('button', { name, exact: true })).toBeDisabled();
+      await expect(page.getByRole('textbox', { name: 'Title', exact: true })).toBeDisabled();
+    } finally {
+      finishApply();
+    }
+    if (outcome === 'access confirmation') {
+      await expect(page.getByRole('heading', { name: 'Confirm working access' })).toBeVisible();
+      await expect(
+        page.getByRole('button', { name: 'Confirm working access', exact: true }),
+      ).toBeEnabled();
+    } else {
+      await expect(page.getByRole('alert')).toContainText('do not have permission');
+      await expect(page.getByRole('heading', { name: 'Confirm working access' })).toHaveCount(0);
+    }
+    await expect(page.getByRole('button', { name: 'Save and apply', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Refresh settings', exact: true })).toHaveCount(
+      0,
+    );
+    await expect(page.getByRole('textbox', { name: 'Title', exact: true })).toHaveCount(0);
+  });
+}
+
 test('reopened access confirmation requires the original private code when authentication is disabled', async ({
   page,
 }) => {
