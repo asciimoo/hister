@@ -538,6 +538,60 @@ test('copy failure is reported and can be retried', async ({ page, context, isMo
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(original);
 });
 
+for (const [query, deletionQuery] of [
+  ['article', 'article'],
+  ['article sort:date', 'article'],
+  ['title: sort:date sort:date', 'title: sort:date'],
+  ['sort:date', '*'],
+]) {
+  test(`delete all matching results confirms and removes six matches for ${query}`, async ({
+    page,
+  }) => {
+    const search = emptySearchCapabilities();
+    search.fields = [{ name: 'title', label: 'Title', description: '', kind: 'text' }];
+    search.sort = {
+      field: 'sort',
+      label: 'Sort',
+      description: '',
+      options: [{ value: 'date', label: 'Date', visible: true }],
+    };
+    await mockAPI(page, { config: { search } });
+    let documents = Array.from({ length: 6 }, (_, index) => ({
+      id: `document-${index}`,
+      url: `${original}/${index}`,
+      title: `Article ${index + 1}`,
+      text: 'An indexed article',
+    }));
+    await page.routeWebSocket('**/search', (socket) => {
+      socket.onMessage(() => socket.send(JSON.stringify({ documents, total: documents.length })));
+    });
+    const requests: unknown[] = [];
+    await page.route('**/api/delete', async (route) => {
+      requests.push(route.request().postDataJSON());
+      documents = [];
+      await route.fulfill({ json: { deleted: 6 } });
+    });
+    await page.goto(`/?${new URLSearchParams({ q: query })}`);
+    await expect(page.locator('[data-result]')).toHaveCount(6);
+    await page.getByRole('button', { name: 'Actions', exact: true }).click();
+    await page.getByRole('button', { name: 'Delete all matching results', exact: true }).click();
+    const confirmation = page.getByRole('dialog', { name: 'Delete all matching results' });
+    await expect(confirmation).toBeVisible();
+    await expect(confirmation).toContainText('all 6 result(s)');
+    expect(requests).toHaveLength(0);
+    await confirmation.getByRole('button', { name: 'No', exact: true }).click();
+    await expect(confirmation).toHaveCount(0);
+    await expect(page.locator('[data-result]')).toHaveCount(6);
+    expect(requests).toHaveLength(0);
+    await page.getByRole('button', { name: 'Delete all matching results', exact: true }).click();
+    await confirmation.getByRole('button', { name: 'Yes, delete all', exact: true }).click();
+    await expect(confirmation).toHaveCount(0);
+    await expect(page.locator('[data-result]')).toHaveCount(0);
+    await expect(page.getByText('0 results', { exact: true })).toBeVisible();
+    expect(requests).toEqual([{ query: deletionQuery }]);
+  });
+}
+
 test('the mobile delete action removes the selected result', async ({ page, isMobile }) => {
   test.skip(!isMobile, 'Mobile actions');
   await mockAPI(page);

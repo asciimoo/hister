@@ -950,7 +950,7 @@
 
   async function deleteAllResults() {
     if (!config.canWrite) return;
-    const searchText = removeSortDirectives(query, config.search.sort) || '*';
+    const searchText = removeSortDirectives(query, config.search) || '*';
     const q = searchText + (getUserId() !== undefined ? ' user_id:' + getUserId() : '');
     const res = await apiFetch('/delete', {
       method: 'POST',
