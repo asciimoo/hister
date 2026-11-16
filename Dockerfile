@@ -50,7 +50,7 @@ RUN --mount=type=cache,id=hister-go-mod,target=/go/pkg/mod,sharing=locked \
 
 # Fetch a versioned, architecture-specific yt-dlp binary and verify it against
 # the checksums published with that release.
-FROM alpine:3.24@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a AS ytdlp
+FROM alpine:3.24@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf AS ytdlp
 
 ARG TARGETARCH=amd64
 ARG YT_DLP_VERSION=2026.07.04
@@ -76,7 +76,7 @@ RUN set -eux; \
 
 # Put shared runtime content in one stage so release, root, and debug variants
 # reuse the same immutable layers in the registry and on container hosts.
-FROM alpine:3.24@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a AS runtime
+FROM alpine:3.24@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf AS runtime
 
 LABEL org.opencontainers.image.title="Hister" \
       org.opencontainers.image.description="Self-hosted browser history search engine" \
