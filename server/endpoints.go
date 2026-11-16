@@ -1813,7 +1813,7 @@ func serveOpensearch(c *webContext) {
   <Url type="text/html" template="%s/?q={searchTerms}"/>
   <Url type="application/x-suggestions+json" template="%s/suggest?q={searchTerms}"/>
 </OpenSearchDescription>`, baseURL, baseURL)
-	c.Response.Header().Set("Content-Type", "application/xml")
+	c.Response.Header().Set("Content-Type", "application/opensearchdescription+xml")
 	if _, err := c.Response.Write([]byte(xml)); err != nil {
 		log.Warn().Err(err).Msg("failed to write opensearch response")
 	}

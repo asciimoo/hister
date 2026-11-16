@@ -59,6 +59,18 @@ func newTokenTestServerWithProfiler(t *testing.T, public, profiler bool) (*confi
 	return cfg, registerEndpoints(cfg, newServerTestIndexer(t, cfg))
 }
 
+func TestOpenSearchContentType(t *testing.T) {
+	_, handler := newTokenTestServer(t, false)
+	rec := testutil.ServeHTTP(t, handler, http.MethodGet, "/opensearch.xml", nil, nil)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /opensearch.xml status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if got := rec.Header().Get("Content-Type"); got != "application/opensearchdescription+xml" {
+		t.Fatalf("Content-Type = %q, want application/opensearchdescription+xml", got)
+	}
+}
+
 func TestPublicModeConfigResponse(t *testing.T) {
 	cfg, handler := newPublicTokenTestServer(t)
 	cfg.App.ColorScheme = "dark"
