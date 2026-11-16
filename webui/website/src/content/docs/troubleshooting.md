@@ -36,7 +36,10 @@ hister config path
 hister config validate
 ```
 
-`config path` prints the selected configuration file, even if its YAML is invalid. If it prints `(defaults)`, no configuration file was found and Hister is using its defaults. Environment variables and command line options can still override those defaults.
+`config path` prints the selected main configuration file, even if its YAML is invalid. If it prints
+`(defaults)`, no main file was found. Saved web selections, environment variables, and command line
+options can still override the built in defaults. Use `hister config show` to inspect effective
+settings with credentials hidden.
 
 `config validate` checks configuration without needing a running server. A successful check prints `Configuration valid:` followed by the selected path or `(defaults)`. If it reports an error, correct the named setting and run the command again. A valid configuration does not confirm that the server is reachable or required programs are installed; use `doctor` for those checks.
 
@@ -55,6 +58,8 @@ See [Configuration and Diagnostics](/docs/terminal-client#configuration-and-diag
 
 - Check if port 4433 (or whatever was configured instead) is already in use
 - Run `hister config validate` and correct any reported settings
+- For errors involving `config.web.yml` or inaccessible saved settings, follow
+  [Recovering Saved Settings](/docs/configuration#recovering-saved-settings) with Hister stopped.
 
 ### Web interface loads, but looks broken
 

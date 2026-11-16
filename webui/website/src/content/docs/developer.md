@@ -91,7 +91,10 @@ the web application, website, shared components, and browser extension.
 ### Configuration loading
 
 `config.ResolvePath` selects a main file. Pass the selected path to `config.Load`, or an empty
-string to start with defaults and environment settings. `LoadForInspection` and `Config.Reload`
+string to start without a main file. Loading composes defaults, managed selections from
+`<app.directory>/config.web.yml`, main YAML, environment, and explicit startup overrides in that
+order. Resolve the data directory from authoritative sources before loading managed selections;
+the managed file cannot change its own location. `LoadForInspection` and `Config.Reload`
 share candidate decoding without creating runtime files. Reload retains the original main file
 selection, independently of the TUI preferences path.
 
@@ -123,12 +126,20 @@ The built in registry registers editable field schemas with `config.RegisterExtr
 initialization so managed file loading uses the same types as draft validation without importing
 the extractor runtime into `config`. Undescribed options and executable controls remain file managed.
 `POST /api/settings/validate` checks a draft without changing configuration or runtime resources.
-`POST /api/settings/apply` saves and applies supported App, Indexer, Crawler, Extractor, and Semantic search edits. Both POST
+`POST /api/settings/apply` saves and applies supported edits across all configuration categories. Both POST
 operations accept `revision` and an `edits` array with explicit `path`, `action`
 (`set` or `reset`), and a typed `value` for `set`. Access changes use the same catalog
 and draft preparation as ordinary settings, with additional review and confirmation.
 File managed restrictions still apply. These routes use administrative
 authorization, CSRF protection for writes, and `Cache-Control: no-store`.
+
+Secret fields use `set` with an action object such as `{"action":"keep"}`,
+`{"action":"replace","value":"new credential"}`, or `{"action":"clear"}`;
+`reset` remains a separate setting operation. Secret collection members use opaque references
+scoped to the current revision. Read fresh state after a conflict before rebuilding a collection
+edit. Do not submit redacted display text as a value or persist credentials in browser storage.
+Public `GET /api/config` exposes only the `canConfigure` capability for Settings navigation,
+not private editor state.
 
 Validation can preview `app.user_handling`, `app.access_token`, `app.public`, and
 `server.address`, `server.base_url`, `server.oauth_only`, and described OAuth credential

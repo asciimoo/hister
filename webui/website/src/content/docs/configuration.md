@@ -42,7 +42,7 @@ description: 'Explore every configuration section, option, default value, enviro
       type: 'int',
       defaultValue: '300',
       scopes: ['server'],
-      description: 'Maximum number of characters in search result text snippets and semantic previews, excluding highlighting and ellipses. Must be positive. Restart after changing; no reindexing is needed.',
+      description: 'Maximum number of characters in search result text snippets and semantic previews, excluding highlighting and ellipses. Must be positive. Web changes apply immediately; reload or restart after editing the file. No reindexing is needed.',
     },
     {
       name: 'search_url',
@@ -662,7 +662,8 @@ description: 'Explore every configuration section, option, default value, enviro
   ];
 </script>
 
-Hister is configured via a YAML file. It selects a primary config path using this precedence:
+Use **Settings** in the web interface to configure Hister, or manage selected settings in a YAML
+file. A main configuration file is optional. Hister selects a primary config path using this precedence:
 
 1. The path supplied with `--config`.
 2. The path in `HISTER_CONFIG`, when `--config` is not supplied.
@@ -693,6 +694,25 @@ If the selected primary path does not exist, Hister searches the platform paths 
 - `~\.config\hister\config.yml` (legacy)
 
 If you have a legacy `~/.histerrc` file and Hister finds it, you'll see a deprecation warning suggesting you move it to the recommended location.
+
+## Setting Precedence
+
+For each setting, the highest priority source wins:
+
+1. Explicit startup flags.
+2. Environment variables, including `HISTER_DATA_DIR` and `HISTER_PORT`.
+3. Explicit values in the main configuration file.
+4. Saved web selections in `<app.directory>/config.web.yml`.
+5. Built in defaults for the installed version.
+
+Settings shows each value's source. Main file, environment, and startup flag values are locked,
+including explicit `false`, zero, empty values, and values equal to a default. Commented examples
+do not lock settings. Removing an overriding value exposes any saved web selection underneath it.
+
+The managed file contains only web selections and can contain credentials. Keep it and its backups
+private. Hister never rewrites the main file when saving web settings. Changing the data directory
+selects the managed file in the new directory; it does not move the previous file or its selections.
+Remote CLI clients use their own local configuration and do not inherit the server's web selections.
 
 ## Creating a Config File
 
@@ -729,7 +749,11 @@ Use `--full` to write all defaults as active YAML values:
 hister config create --full /path/to/config.yml
 ```
 
-Omit the filename to print YAML to standard output. Existing files are never overwritten.
+These active values lock their settings in the editor, even when they match the defaults.
+Hister does not automatically remove or comment out existing active values.
+
+Omit the filename to print YAML to standard output. New files have private permissions, and
+existing files are never overwritten.
 Config creation works even when the current configuration is missing or invalid, and does not
 initialize runtime data.
 
@@ -754,27 +778,42 @@ hister listen --config /path/to/my/config.yml
 
 ## Settings in the Web Interface
 
-Web configuration requires administrator access in multi user instances.
-Token protected instances require signing in; instances without authentication need no login.
+Open **Settings** from the navigation menu, edit fields in any category, then select **Save and apply**
+for the complete draft. **Discard changes** abandons unsaved edits. Validation errors appear beside
+fields and keep the draft available to correct.
+
+Web configuration requires administrator access in multi user instances. Token protected instances
+require signing in; instances without authentication need no login. Public search access does not
+grant anonymous visitors access to Settings on an authenticated instance.
 
 Saving briefly interrupts service. Changes made to configuration files require a
 [reload](#reloading-a-running-server). Invalid or unreadable files block saving.
-If a save or reload response is lost, check the active values before retrying.
+If another save or a file change causes a conflict, refresh settings and resolve conflicting fields
+before saving again. If a save or reload response is lost, read the active values before retrying.
 
-Explicit values in the main config, environment, or startup
-flags are locked, even when they equal a default. Commented examples do not lock settings.
-A locked setting can retain a web selection that takes effect when its overriding source is removed.
+Storage locations, executable controls, proxy trust, and OAuth endpoint and identity mapping
+settings remain file managed. Rules have their own editor; terminal preferences remain local.
 
-Web selections persist in `config.web.yml` inside the data directory, including when there is
-no main config file. Saving does not rewrite your main configuration. Storage, executable,
-proxy trust, and OAuth endpoint and identity mapping settings remain file managed.
-Stored credentials stay hidden.
+### Reset, Collections, and Secrets
 
-Connection and authentication changes require confirmation within two minutes. A timeout or
-restart restores the last confirmed configuration. Authentication changes require a fresh sign in
-using the temporary settings. If access fails, wait for rollback and reconnect at the original address.
-When disabling authentication, keep the originating page open: its private confirmation code
-cannot be recovered after closing or reloading it. Losing the code requires waiting for rollback.
+**Reset** removes a web selection and inherits the next applicable value. **Clear** stores an explicit
+empty value where allowed. Selecting `false` or zero is also an explicit choice, not a reset.
+For example, clearing sensitive content patterns disables those checks; resetting them restores
+inherited patterns.
+
+Lists and dictionaries, including watched directories, headers, cookies, hotkeys, and patterns,
+are saved as complete collections. An empty collection replaces the inherited collection.
+If the main file or environment supplies any member, the whole collection is locked. Ordinary
+nested fields and individual extractor options remain independent; an empty section alone does
+not lock its settings.
+
+Stored secrets are hidden. **Keep** preserves a credential, **Replace** supplies a new one, and
+**Clear** stores an empty credential when valid. **Reset** instead removes the web selection.
+Keep existing header and cookie credentials when editing other collection rows. Hidden values
+are not replacement text. Unsaved replacement secrets stay only in the open page and are lost
+when leaving or reloading it.
+
+### When Changes Take Effect
 
 The search engine URL accepts an HTTP or HTTPS address with `{query}` once in its
 path or query, for example `https://www.google.com/search?q={query}`. An empty value uses
@@ -834,6 +873,62 @@ are unchanged. These checks cannot detect every kind of sensitive content.
 The pattern collection replaces the inherited patterns, including built in defaults.
 A pattern supplied by the main configuration or environment locks the whole collection.
 
+### Confirming Sensitive Changes
+
+After **Save and apply**, review the actual changes and consequences before explicitly applying
+sensitive changes. Cancel keeps the draft without applying it. Editing the draft requires a new
+review. Enabling SQL debugging or profiling, changing the embedding destination, or removing or
+replacing sensitive content patterns requires this review but no later access confirmation.
+
+Connection and authentication changes, including the listen address and disabling user handling,
+apply temporarily. Open Settings at the displayed destination, sign in again if requested, and
+confirm working access within two minutes to save the complete draft. Changed OAuth settings
+require a new login through that provider. Credentials are not forwarded to a changed destination.
+Only one OAuth provider can change at a time; providers that manage administrator roles remain
+file managed.
+
+Access changes that leave user handling enabled require an existing usable administrator, including
+an independent local recovery administrator when OIDC manages roles. Settings does not create the
+first administrator; see [User Handling](/docs/user-handling#activation).
+
+Canceling after activation restores the previous configuration. Timeout or restart also restores
+the last confirmed configuration, including ordinary edits submitted in the same draft. If access
+fails, wait for rollback and reconnect at the original address with the previous credentials.
+Other saves and reloads are unavailable while confirmation is pending.
+
+When disabling authentication, keep the originating page open. Its private confirmation code is
+needed to confirm or restore settings. For a changed destination, copy the code into that Settings
+page yourself. It cannot be recovered after closing or reloading the originating page. If the code
+or activation response is lost, wait for rollback. Restoring settings does not undo indexing or
+other work already performed while the temporary settings were active.
+
+## Recovering Saved Settings
+
+If Settings is unavailable or Hister cannot load its configuration:
+
+1. Stop Hister and locate `config.web.yml` in the instance's data directory. Use the same main
+   configuration, environment, and startup flags as the service.
+2. Back up the managed file privately before editing it. Correct or remove the affected selection,
+   or move the whole file to a backup location to discard all web selections. A missing managed
+   file is allowed. Malformed, unreadable, or unsupported content must be repaired or removed;
+   a main file override does not bypass these errors.
+3. To override a valid but unwanted web selection, set that value in the main file instead.
+   Environment and startup flags still take precedence. The web selection stays stored and becomes
+   active again if the overriding value is later removed.
+4. Run `hister config validate` and inspect `hister config show` with the service's configuration.
+   Check the resulting address and authentication before restarting, especially after removing
+   all web selections. Restart Hister and reconnect using those settings.
+
+Changing the data directory is not a recovery shortcut: it selects different data and web settings.
+If Hister reports failed recovery, preserve the managed file and any recovery copies before
+restarting and inspect them to choose the intended configuration.
+
+Configuration recovery does not restore passwords, administrator roles, or user accounts.
+For account recovery, stop the server and use
+[`hister user create --offline --admin USERNAME`](/docs/user-handling#user-create) with the same
+database and data directory and user handling enabled. Keep the new account's token if password
+login is disabled. Do not disable user handling merely to recover an administrator account.
+
 ## Reloading a Running Server
 
 After editing the main configuration or `rules.json`, run:
@@ -849,9 +944,10 @@ their own settings.
 Edit the configuration file used to start the server. Settings supplied through startup flags or
 environment variables still take precedence. An admin token is required in multi user mode.
 
-If the server started without a configuration file, reload keeps using defaults and startup
-overrides. Restart with `--config FILENAME` to select a new file. If the server started with a
-file, that file must remain readable; reload never silently switches to another one.
+If the server started without a main configuration file, reload still reads its managed web
+selections, environment, and startup overrides. Restart with `--config FILENAME` to select a new file.
+If the server started with a file, that file must remain readable; reload never silently switches
+to another one.
 
 Logging changes take effect on reload, including `app.log_file`, `app.log_format`, and
 `app.log_level`. You can also reload after renaming a log file for rotation. Clearing
@@ -1361,7 +1457,9 @@ The default is 300 characters. The value must be a positive integer. Highlightin
 
 The web app shows up to three lines of each snippet. Select **Show more** to expand a clipped snippet or **Show less** to collapse it. To expand snippets by default, enable **Always expand snippets** in **Actions**. This preference is remembered in your browser.
 
-You can also set `HISTER__APP__SNIPPET_LENGTH=800`. Restart Hister after changing the setting. Existing documents use the new length immediately after restart; no reindexing is needed.
+You can also set `HISTER__APP__SNIPPET_LENGTH=800`. Web changes apply immediately; reload or restart
+after editing the file, and restart after changing the service's environment. Existing documents
+use the new length without reindexing.
 
 ## Language Detection
 
