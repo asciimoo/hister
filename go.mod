@@ -1,11 +1,11 @@
 module github.com/asciimoo/hister
 
-go 1.26.0
+go 1.26.7
 
 require (
 	charm.land/bubbles/v2 v2.2.1
 	charm.land/bubbletea/v2 v2.1.1
-	charm.land/lipgloss/v2 v2.0.6
+	charm.land/lipgloss/v2 v2.1.0
 	codeberg.org/readeck/go-readability/v2 v2.1.3
 	github.com/PuerkitoBio/goquery v1.13.0
 	github.com/asciimoo/lingua-go v0.15.0
@@ -17,7 +17,7 @@ require (
 	github.com/charmbracelet/ultraviolet v0.0.0-20261008173134-6b8d4baf91b4
 	github.com/charmbracelet/x/ansi v0.11.9
 	github.com/charmbracelet/x/term v0.2.2
-	github.com/chromedp/cdproto v0.159.2
+	github.com/chromedp/cdproto v0.160.1
 	github.com/chromedp/chromedp v0.23.0
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/go-viper/mapstructure/v2 v2.5.0
@@ -25,7 +25,7 @@ require (
 	github.com/google/jsonschema-go v0.4.3
 	github.com/gorilla/sessions v1.4.0
 	github.com/gorilla/websocket v1.5.3
-	github.com/jackc/pgx/v5 v5.12.0
+	github.com/jackc/pgx/v5 v5.13.0
 	github.com/mattn/go-sqlite3 v1.14.53
 	github.com/microcosm-cc/bluemonday v1.0.27
 	github.com/mmcdole/gofeed v1.5.0
@@ -35,7 +35,7 @@ require (
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
 	github.com/prometheus/client_golang v1.25.0
 	github.com/prometheus/client_model v0.6.3
-	github.com/prometheus/common v0.73.1
+	github.com/prometheus/common v0.74.0
 	github.com/rs/zerolog v1.35.1
 	github.com/sergi/go-diff v1.4.0
 	github.com/spf13/cobra v1.10.2
@@ -43,10 +43,10 @@ require (
 	github.com/spf13/viper v1.21.0
 	github.com/stazelabs/gozim v0.1.1-0.20260309223645-3cee05ef5c11
 	github.com/temoto/robotstxt v1.1.2
-	golang.org/x/crypto v0.58.0
+	golang.org/x/crypto v0.59.0
 	golang.org/x/net v0.62.0
-	golang.org/x/sys v0.49.0
-	golang.org/x/text v0.43.0
+	golang.org/x/sys v0.50.0
+	golang.org/x/text v0.44.0
 	gopkg.in/yaml.v3 v3.0.1
 	gorm.io/driver/postgres v1.6.3
 	gorm.io/driver/sqlite v1.6.0
@@ -112,7 +112,7 @@ require (
 	github.com/mschoch/smat v0.2.0 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
-	github.com/pandatix/go-abnf v0.5.3 // indirect
+	github.com/pandatix/go-abnf v0.5.5 // indirect
 	github.com/pelletier/go-toml/v2 v2.4.3 // indirect
 	github.com/pierrec/lz4/v4 v4.1.33 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
@@ -134,8 +134,8 @@ require (
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	go4.org v0.0.0-20260112195520-a5071408f32f // indirect
 	golang.org/x/exp v0.0.0-20261011100332-faecfb24eb49 // indirect
-	golang.org/x/oauth2 v0.37.0 // indirect
-	golang.org/x/sync v0.24.0 // indirect
+	golang.org/x/oauth2 v0.38.0 // indirect
+	golang.org/x/sync v0.25.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
 )
