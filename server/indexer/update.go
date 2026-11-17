@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/asciimoo/hister/server/document"
-	"github.com/asciimoo/hister/server/indexer/querybuilder"
-	servertypes "github.com/asciimoo/hister/server/types"
+	"github.com/asciimoo/nogon/server/document"
+	"github.com/asciimoo/nogon/server/indexer/querybuilder"
+	servertypes "github.com/asciimoo/nogon/server/types"
 
 	"github.com/blevesearch/bleve/v2"
 	"github.com/blevesearch/bleve/v2/search/query"

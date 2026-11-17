@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/asciimoo/hister/server/model"
+	"github.com/asciimoo/nogon/server/model"
 
 	"github.com/rs/zerolog/log"
 )

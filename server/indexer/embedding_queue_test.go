@@ -17,12 +17,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/asciimoo/hister/config"
-	"github.com/asciimoo/hister/server/document"
-	"github.com/asciimoo/hister/server/model"
-	"github.com/asciimoo/hister/server/testutil"
-	servertypes "github.com/asciimoo/hister/server/types"
-	"github.com/asciimoo/hister/server/vectorstore"
+	"github.com/asciimoo/nogon/config"
+	"github.com/asciimoo/nogon/server/document"
+	"github.com/asciimoo/nogon/server/model"
+	"github.com/asciimoo/nogon/server/testutil"
+	servertypes "github.com/asciimoo/nogon/server/types"
+	"github.com/asciimoo/nogon/server/vectorstore"
 )
 
 func TestLanguageOverridesRefreshEmbeddingContext(t *testing.T) {

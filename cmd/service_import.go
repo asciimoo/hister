@@ -13,11 +13,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/asciimoo/hister/client"
-	"github.com/asciimoo/hister/config"
-	"github.com/asciimoo/hister/server/crawler"
-	"github.com/asciimoo/hister/server/document"
-	"github.com/asciimoo/hister/server/extractor"
+	"github.com/asciimoo/nogon/client"
+	"github.com/asciimoo/nogon/config"
+	"github.com/asciimoo/nogon/server/crawler"
+	"github.com/asciimoo/nogon/server/document"
+	"github.com/asciimoo/nogon/server/extractor"
 
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"

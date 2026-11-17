@@ -16,10 +16,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/asciimoo/hister/client"
-	"github.com/asciimoo/hister/config"
-	"github.com/asciimoo/hister/server/crawler"
-	"github.com/asciimoo/hister/server/model"
+	"github.com/asciimoo/nogon/client"
+	"github.com/asciimoo/nogon/config"
+	"github.com/asciimoo/nogon/server/crawler"
+	"github.com/asciimoo/nogon/server/model"
 
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/rs/zerolog/log"

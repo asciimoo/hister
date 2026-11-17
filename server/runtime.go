@@ -16,14 +16,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/asciimoo/hister/config"
-	"github.com/asciimoo/hister/files"
-	"github.com/asciimoo/hister/logging"
-	"github.com/asciimoo/hister/server/diagnostics"
-	"github.com/asciimoo/hister/server/extractor"
-	"github.com/asciimoo/hister/server/indexer"
-	"github.com/asciimoo/hister/server/metrics"
-	"github.com/asciimoo/hister/server/model"
+	"github.com/asciimoo/nogon/config"
+	"github.com/asciimoo/nogon/files"
+	"github.com/asciimoo/nogon/logging"
+	"github.com/asciimoo/nogon/server/diagnostics"
+	"github.com/asciimoo/nogon/server/extractor"
+	"github.com/asciimoo/nogon/server/indexer"
+	"github.com/asciimoo/nogon/server/metrics"
+	"github.com/asciimoo/nogon/server/model"
 
 	"github.com/rs/zerolog/log"
 )

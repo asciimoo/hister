@@ -10,7 +10,7 @@ import (
 
 	"golang.org/x/net/html"
 
-	"github.com/asciimoo/hister/server/extractor/sdk"
+	"github.com/asciimoo/nogon/server/extractor/sdk"
 )
 
 // videoEntry holds a single embedded video found in a document.

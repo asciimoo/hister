@@ -16,7 +16,7 @@ import (
 	"github.com/mmonterroca/docxgo/v2/domain"
 	"github.com/rs/zerolog/log"
 
-	"github.com/asciimoo/hister/server/sanitizer"
+	"github.com/asciimoo/nogon/server/sanitizer"
 )
 
 type docxFileType struct{}

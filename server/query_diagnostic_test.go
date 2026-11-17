@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/asciimoo/hister/server/testutil"
+	"github.com/asciimoo/nogon/server/testutil"
 
 	"github.com/gorilla/websocket"
 	"github.com/modelcontextprotocol/go-sdk/mcp"

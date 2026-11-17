@@ -11,8 +11,8 @@ import (
 
 	"github.com/rs/zerolog/log"
 
-	"github.com/asciimoo/hister/client"
-	"github.com/asciimoo/hister/server/document"
+	"github.com/asciimoo/nogon/client"
+	"github.com/asciimoo/nogon/server/document"
 )
 
 // raindropCSVReader maps exported columns by name so both collection exports

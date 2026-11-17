@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/asciimoo/hister/server/indexer/searchschema"
+	"github.com/asciimoo/nogon/server/indexer/searchschema"
 
 	"github.com/blevesearch/bleve/v2"
 	"github.com/blevesearch/bleve/v2/mapping"

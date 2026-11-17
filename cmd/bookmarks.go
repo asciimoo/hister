@@ -12,8 +12,8 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 
-	"github.com/asciimoo/hister/config"
-	"github.com/asciimoo/hister/server/model"
+	"github.com/asciimoo/nogon/config"
+	"github.com/asciimoo/nogon/server/model"
 )
 
 var importBookmarksCmd = &cobra.Command{

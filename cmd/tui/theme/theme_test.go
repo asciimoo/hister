@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/asciimoo/hister/config"
+	"github.com/asciimoo/nogon/config"
 
 	"charm.land/lipgloss/v2"
 )

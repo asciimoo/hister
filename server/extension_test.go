@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/asciimoo/hister/server/testutil"
+	"github.com/asciimoo/nogon/server/testutil"
 )
 
 func TestExtensionCSRFAllowsOrionReferer(t *testing.T) {

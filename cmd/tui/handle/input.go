@@ -5,9 +5,9 @@
 package handle
 
 import (
-	"github.com/asciimoo/hister/cmd/tui/model"
-	"github.com/asciimoo/hister/cmd/tui/render"
-	"github.com/asciimoo/hister/config"
+	"github.com/asciimoo/nogon/cmd/tui/model"
+	"github.com/asciimoo/nogon/cmd/tui/render"
+	"github.com/asciimoo/nogon/config"
 
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"

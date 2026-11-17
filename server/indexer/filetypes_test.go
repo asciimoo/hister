@@ -15,10 +15,10 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/asciimoo/hister/config"
-	"github.com/asciimoo/hister/files"
-	"github.com/asciimoo/hister/server/document"
-	"github.com/asciimoo/hister/server/testutil"
+	"github.com/asciimoo/nogon/config"
+	"github.com/asciimoo/nogon/files"
+	"github.com/asciimoo/nogon/server/document"
+	"github.com/asciimoo/nogon/server/testutil"
 )
 
 func TestPDFParserProcess(t *testing.T) {

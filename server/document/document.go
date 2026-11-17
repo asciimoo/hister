@@ -17,7 +17,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/asciimoo/hister/files"
+	"github.com/asciimoo/nogon/files"
 
 	"github.com/rs/zerolog/log"
 )

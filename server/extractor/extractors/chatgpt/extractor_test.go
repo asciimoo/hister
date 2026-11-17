@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/asciimoo/hister/server/document"
-	"github.com/asciimoo/hister/server/extractor/sdk"
+	"github.com/asciimoo/nogon/server/document"
+	"github.com/asciimoo/nogon/server/extractor/sdk"
 )
 
 func TestExtractsTurnMarkers(t *testing.T) {

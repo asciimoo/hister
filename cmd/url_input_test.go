@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/asciimoo/hister/config"
+	"github.com/asciimoo/nogon/config"
 )
 
 func TestIndexFlagCompatibility(t *testing.T) {

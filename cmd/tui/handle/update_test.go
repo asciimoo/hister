@@ -12,10 +12,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/asciimoo/hister/client"
-	"github.com/asciimoo/hister/cmd/tui/model"
-	"github.com/asciimoo/hister/cmd/tui/theme"
-	"github.com/asciimoo/hister/config"
+	"github.com/asciimoo/nogon/client"
+	"github.com/asciimoo/nogon/cmd/tui/model"
+	"github.com/asciimoo/nogon/cmd/tui/theme"
+	"github.com/asciimoo/nogon/config"
 
 	tea "charm.land/bubbletea/v2"
 )

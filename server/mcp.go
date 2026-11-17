@@ -25,12 +25,12 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/asciimoo/hister/server/document"
-	"github.com/asciimoo/hister/server/extractor"
-	"github.com/asciimoo/hister/server/indexer"
-	"github.com/asciimoo/hister/server/indexer/querybuilder"
-	"github.com/asciimoo/hister/server/indexer/searchschema"
-	"github.com/asciimoo/hister/server/model"
+	"github.com/asciimoo/nogon/server/document"
+	"github.com/asciimoo/nogon/server/extractor"
+	"github.com/asciimoo/nogon/server/indexer"
+	"github.com/asciimoo/nogon/server/indexer/querybuilder"
+	"github.com/asciimoo/nogon/server/indexer/searchschema"
+	"github.com/asciimoo/nogon/server/model"
 
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"

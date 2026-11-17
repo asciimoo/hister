@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/asciimoo/hister/server/model"
-	"github.com/asciimoo/hister/server/testutil"
+	"github.com/asciimoo/nogon/server/model"
+	"github.com/asciimoo/nogon/server/testutil"
 )
 
 func TestGetLatestHistoryItemsFiltered(t *testing.T) {

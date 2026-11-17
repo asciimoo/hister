@@ -15,7 +15,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
-	"github.com/asciimoo/hister/config"
+	"github.com/asciimoo/nogon/config"
 )
 
 const (

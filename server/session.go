@@ -18,7 +18,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/asciimoo/hister/server/model"
+	"github.com/asciimoo/nogon/server/model"
 
 	"github.com/gorilla/sessions"
 	"github.com/rs/zerolog/log"

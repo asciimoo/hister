@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/asciimoo/hister/server/types"
+	"github.com/asciimoo/nogon/server/types"
 )
 
 // AddDocumentResult describes the outcome of one document in a bulk request.

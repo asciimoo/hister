@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/asciimoo/hister/client"
-	"github.com/asciimoo/hister/server/document"
+	"github.com/asciimoo/nogon/client"
+	"github.com/asciimoo/nogon/server/document"
 )
 
 func raindropTestSource(t *testing.T, handler roundTripFunc) *raindropClient {

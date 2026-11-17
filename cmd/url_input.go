@@ -6,8 +6,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/asciimoo/hister/server/crawler"
-	"github.com/asciimoo/hister/server/model"
+	"github.com/asciimoo/nogon/server/crawler"
+	"github.com/asciimoo/nogon/server/model"
 
 	"github.com/spf13/cobra"
 )

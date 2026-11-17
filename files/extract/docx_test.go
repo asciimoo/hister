@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/asciimoo/hister/config"
+	"github.com/asciimoo/nogon/config"
 
 	docx "github.com/mmonterroca/docxgo/v2"
 	"github.com/mmonterroca/docxgo/v2/domain"

@@ -22,11 +22,11 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 
-	"github.com/asciimoo/hister/client"
-	"github.com/asciimoo/hister/config"
-	"github.com/asciimoo/hister/server/document"
-	"github.com/asciimoo/hister/server/model"
-	"github.com/asciimoo/hister/server/testutil"
+	"github.com/asciimoo/nogon/client"
+	"github.com/asciimoo/nogon/config"
+	"github.com/asciimoo/nogon/server/document"
+	"github.com/asciimoo/nogon/server/model"
+	"github.com/asciimoo/nogon/server/testutil"
 )
 
 type roundTripFunc func(*http.Request) (*http.Response, error)

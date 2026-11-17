@@ -15,10 +15,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/asciimoo/hister/config"
-	"github.com/asciimoo/hister/files"
-	"github.com/asciimoo/hister/server/extractor"
-	"github.com/asciimoo/hister/server/model"
+	"github.com/asciimoo/nogon/config"
+	"github.com/asciimoo/nogon/files"
+	"github.com/asciimoo/nogon/server/extractor"
+	"github.com/asciimoo/nogon/server/model"
 
 	"github.com/gorilla/sessions"
 	"gopkg.in/yaml.v3"

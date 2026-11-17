@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/asciimoo/hister/client"
-	"github.com/asciimoo/hister/cmd/tui/model"
-	"github.com/asciimoo/hister/config"
+	"github.com/asciimoo/nogon/client"
+	"github.com/asciimoo/nogon/cmd/tui/model"
+	"github.com/asciimoo/nogon/config"
 
 	"charm.land/bubbles/v2/viewport"
 	"charm.land/lipgloss/v2"

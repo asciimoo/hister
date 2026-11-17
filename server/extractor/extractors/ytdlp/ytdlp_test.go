@@ -15,9 +15,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/asciimoo/hister/config"
-	"github.com/asciimoo/hister/server/document"
-	"github.com/asciimoo/hister/server/extractor/sdk"
+	"github.com/asciimoo/nogon/config"
+	"github.com/asciimoo/nogon/server/document"
+	"github.com/asciimoo/nogon/server/extractor/sdk"
 )
 
 // sampleJSONTemplate is based on real yt-dlp --dump-json output from

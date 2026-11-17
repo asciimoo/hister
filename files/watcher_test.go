@@ -10,7 +10,7 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 
-	"github.com/asciimoo/hister/config"
+	"github.com/asciimoo/nogon/config"
 )
 
 func startTestWatcher(t *testing.T, dirs []*config.Directory, paths []string) (<-chan string, <-chan string, context.CancelFunc) {

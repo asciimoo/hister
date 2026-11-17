@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/asciimoo/hister/server/model"
-	"github.com/asciimoo/hister/server/testutil"
+	"github.com/asciimoo/nogon/server/model"
+	"github.com/asciimoo/nogon/server/testutil"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"

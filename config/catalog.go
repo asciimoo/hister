@@ -20,8 +20,8 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/asciimoo/hister/server/languages"
-	"github.com/asciimoo/hister/server/oauth"
+	"github.com/asciimoo/nogon/server/languages"
+	"github.com/asciimoo/nogon/server/oauth"
 )
 
 // SettingSchema describes a control independently of any stored value. Both

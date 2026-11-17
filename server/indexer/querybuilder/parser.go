@@ -5,7 +5,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/asciimoo/hister/server/indexer/searchschema"
+	"github.com/asciimoo/nogon/server/indexer/searchschema"
 )
 
 type TokenType int

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/asciimoo/hister/config"
+	"github.com/asciimoo/nogon/config"
 )
 
 const (

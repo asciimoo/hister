@@ -44,8 +44,8 @@ RUN --mount=type=cache,id=hister-go-mod,target=/go/pkg/mod,sharing=locked \
     -tags netgo,osusergo \
     -ldflags "\
       -linkmode external -extldflags '-static' -s -w \
-      -X 'github.com/asciimoo/hister/config.DefaultServerAddress=$LISTEN_ADDRESS' \
-      -X 'github.com/asciimoo/hister/config.DefaultServerBaseURL=$BASE_URL'" \
+      -X 'github.com/asciimoo/nogon/config.DefaultServerAddress=$LISTEN_ADDRESS' \
+      -X 'github.com/asciimoo/nogon/config.DefaultServerBaseURL=$BASE_URL'" \
     -o /out/nogon .
 
 # Fetch a versioned, architecture-specific yt-dlp binary and verify it against

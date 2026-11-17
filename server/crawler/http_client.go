@@ -10,7 +10,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/asciimoo/hister/config"
+	"github.com/asciimoo/nogon/config"
 )
 
 const defaultTimeout = 5 * time.Second

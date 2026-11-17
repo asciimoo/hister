@@ -5,7 +5,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/asciimoo/hister/server/languages"
+	"github.com/asciimoo/nogon/server/languages"
 
 	// register lingua-go language packs
 	"github.com/asciimoo/lingua-go"

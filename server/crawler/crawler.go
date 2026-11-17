@@ -13,8 +13,8 @@ import (
 
 	"github.com/rs/zerolog/log"
 
-	"github.com/asciimoo/hister/config"
-	"github.com/asciimoo/hister/server/document"
+	"github.com/asciimoo/nogon/config"
+	"github.com/asciimoo/nogon/server/document"
 )
 
 // Crawler is the public interface for scraping backends.

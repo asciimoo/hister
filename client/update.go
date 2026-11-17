@@ -6,7 +6,7 @@ import (
 	"context"
 	"net/http"
 
-	servertypes "github.com/asciimoo/hister/server/types"
+	servertypes "github.com/asciimoo/nogon/server/types"
 )
 
 // UpdateDocuments changes attributes on documents selected by a search query.

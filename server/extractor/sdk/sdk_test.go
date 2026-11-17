@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/asciimoo/hister/server/extractor/sdk"
+	"github.com/asciimoo/nogon/server/extractor/sdk"
 )
 
 type testExtractor struct {

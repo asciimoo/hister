@@ -6,7 +6,7 @@ import (
 	"os"
 	"os/signal"
 
-	qutebrowsercompanion "github.com/asciimoo/hister/cmd/companion/qutebrowser"
+	qutebrowsercompanion "github.com/asciimoo/nogon/cmd/companion/qutebrowser"
 
 	"github.com/spf13/cobra"
 )

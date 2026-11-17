@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/asciimoo/hister/server/document"
+	"github.com/asciimoo/nogon/server/document"
 
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"

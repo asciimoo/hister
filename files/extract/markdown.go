@@ -11,7 +11,7 @@ import (
 	"github.com/gomarkdown/markdown/html"
 	"github.com/gomarkdown/markdown/parser"
 
-	"github.com/asciimoo/hister/server/sanitizer"
+	"github.com/asciimoo/nogon/server/sanitizer"
 )
 
 type markdownFileType struct{}

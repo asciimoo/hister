@@ -38,6 +38,21 @@ type releaseConfig struct {
 	}
 }
 
+func TestSourceBuildCommandName(t *testing.T) {
+	cmd := exec.Command("go", "list", "-f", "{{.Target}}", ".")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("resolve the source build command: %v\n%s", err, output)
+	}
+	want := "nogon"
+	if runtime.GOOS == "windows" {
+		want += ".exe"
+	}
+	if got := filepath.Base(strings.TrimSpace(string(output))); got != want {
+		t.Fatalf("Go's default executable name = %q, want %q", got, want)
+	}
+}
+
 func TestContainerHealthcheckPortAliases(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("container healthchecks run in a Unix shell")

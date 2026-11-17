@@ -16,7 +16,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/asciimoo/hister/server/document"
+	"github.com/asciimoo/nogon/server/document"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/spf13/cobra"

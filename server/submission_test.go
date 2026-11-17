@@ -7,8 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/asciimoo/hister/server/document"
-	"github.com/asciimoo/hister/server/testutil"
+	"github.com/asciimoo/nogon/server/document"
+	"github.com/asciimoo/nogon/server/testutil"
 )
 
 // submitTestDocuments exercises the public request formats and reports the

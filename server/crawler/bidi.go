@@ -14,7 +14,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/rs/zerolog/log"
 
-	"github.com/asciimoo/hister/config"
+	"github.com/asciimoo/nogon/config"
 )
 
 // bidiFetcher implements the fetcher interface using the W3C WebDriver BiDi

@@ -7,10 +7,10 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/asciimoo/hister/config"
-	"github.com/asciimoo/hister/server/extractor"
-	"github.com/asciimoo/hister/server/indexer"
-	"github.com/asciimoo/hister/server/types"
+	"github.com/asciimoo/nogon/config"
+	"github.com/asciimoo/nogon/server/extractor"
+	"github.com/asciimoo/nogon/server/indexer"
+	"github.com/asciimoo/nogon/server/types"
 )
 
 // Extractors validates a fresh registry so inspection cannot alter the running

@@ -11,9 +11,9 @@ import (
 
 	"github.com/rs/zerolog/log"
 
-	"github.com/asciimoo/hister/config"
-	"github.com/asciimoo/hister/server/document"
-	"github.com/asciimoo/hister/server/model"
+	"github.com/asciimoo/nogon/config"
+	"github.com/asciimoo/nogon/server/document"
+	"github.com/asciimoo/nogon/server/model"
 )
 
 // PersistentCrawler persists traversal and document processing outcomes so

@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/asciimoo/hister/client"
-	"github.com/asciimoo/hister/server/document"
+	"github.com/asciimoo/nogon/client"
+	"github.com/asciimoo/nogon/server/document"
 )
 
 func raindropTestClient(t *testing.T, batches *[][]*document.Document) *client.Client {

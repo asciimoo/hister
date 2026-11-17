@@ -4,8 +4,8 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/asciimoo/hister/server/document"
-	"github.com/asciimoo/hister/server/testutil"
+	"github.com/asciimoo/nogon/server/document"
+	"github.com/asciimoo/nogon/server/testutil"
 )
 
 func TestSearchSiteFilter(t *testing.T) {

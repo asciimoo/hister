@@ -5,12 +5,12 @@
 package tui
 
 import (
-	"github.com/asciimoo/hister/cmd/tui/handle"
-	"github.com/asciimoo/hister/cmd/tui/model"
-	"github.com/asciimoo/hister/cmd/tui/network"
-	"github.com/asciimoo/hister/cmd/tui/render"
-	"github.com/asciimoo/hister/cmd/tui/theme"
-	"github.com/asciimoo/hister/config"
+	"github.com/asciimoo/nogon/cmd/tui/handle"
+	"github.com/asciimoo/nogon/cmd/tui/model"
+	"github.com/asciimoo/nogon/cmd/tui/network"
+	"github.com/asciimoo/nogon/cmd/tui/render"
+	"github.com/asciimoo/nogon/cmd/tui/theme"
+	"github.com/asciimoo/nogon/config"
 
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"

@@ -14,7 +14,7 @@ import (
 
 	"github.com/rs/zerolog"
 
-	"github.com/asciimoo/hister/config"
+	"github.com/asciimoo/nogon/config"
 )
 
 func testManager(t *testing.T, stderr io.Writer) *Manager {

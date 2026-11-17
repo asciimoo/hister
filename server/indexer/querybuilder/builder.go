@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/asciimoo/hister/files"
-	"github.com/asciimoo/hister/server/indexer/searchschema"
-	"github.com/asciimoo/hister/server/languages"
+	"github.com/asciimoo/nogon/files"
+	"github.com/asciimoo/nogon/server/indexer/searchschema"
+	"github.com/asciimoo/nogon/server/languages"
 
 	"github.com/blevesearch/bleve/v2"
 	"github.com/blevesearch/bleve/v2/search/query"

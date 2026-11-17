@@ -18,8 +18,8 @@ import (
 
 	"github.com/rs/zerolog/log"
 
-	"github.com/asciimoo/hister/config"
-	"github.com/asciimoo/hister/server/extractor/sdk"
+	"github.com/asciimoo/nogon/config"
+	"github.com/asciimoo/nogon/server/extractor/sdk"
 )
 
 const (

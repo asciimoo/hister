@@ -9,7 +9,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/asciimoo/hister/server/model"
+	"github.com/asciimoo/nogon/server/model"
 
 	"github.com/spf13/cobra"
 )

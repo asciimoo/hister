@@ -8,10 +8,10 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"github.com/asciimoo/hister/config"
-	"github.com/asciimoo/hister/server/document"
-	"github.com/asciimoo/hister/server/testutil"
-	"github.com/asciimoo/hister/server/vectorstore"
+	"github.com/asciimoo/nogon/config"
+	"github.com/asciimoo/nogon/server/document"
+	"github.com/asciimoo/nogon/server/testutil"
+	"github.com/asciimoo/nogon/server/vectorstore"
 
 	"github.com/charmbracelet/x/ansi"
 )

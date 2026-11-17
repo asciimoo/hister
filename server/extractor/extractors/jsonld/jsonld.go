@@ -12,8 +12,8 @@ import (
 	"github.com/rs/zerolog/log"
 	"golang.org/x/net/html"
 
-	"github.com/asciimoo/hister/server/extractor/sdk"
-	"github.com/asciimoo/hister/server/sanitizer"
+	"github.com/asciimoo/nogon/server/extractor/sdk"
+	"github.com/asciimoo/nogon/server/sanitizer"
 )
 
 // scriptTypeMarker is the substring we look for to cheaply rule out pages

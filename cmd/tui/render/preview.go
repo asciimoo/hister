@@ -12,8 +12,8 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"golang.org/x/net/html"
 
-	"github.com/asciimoo/hister/client"
-	"github.com/asciimoo/hister/cmd/tui/model"
+	"github.com/asciimoo/nogon/client"
+	"github.com/asciimoo/nogon/cmd/tui/model"
 )
 
 func ResultDetailsContent(m *model.Model) string {

@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/asciimoo/hister/server/model"
-	"github.com/asciimoo/hister/server/testutil"
+	"github.com/asciimoo/nogon/server/model"
+	"github.com/asciimoo/nogon/server/testutil"
 )
 
 func newProxyAuthTestServer(t *testing.T, headerName string) (*http.ServeMux, uint) {

@@ -7,7 +7,7 @@ import (
 )
 
 func TestClientDependencies(t *testing.T) {
-	cmd := exec.Command("go", "list", "-deps", "-f", "{{if not .Standard}}{{.ImportPath}}{{end}}", "github.com/asciimoo/hister/client")
+	cmd := exec.Command("go", "list", "-deps", "-f", "{{if not .Standard}}{{.ImportPath}}{{end}}", "github.com/asciimoo/nogon/client")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("list client dependencies: %v\n%s", err, out)
@@ -15,7 +15,7 @@ func TestClientDependencies(t *testing.T) {
 	var unexpected []string
 	for pkg := range strings.FieldsSeq(string(out)) {
 		switch pkg {
-		case "github.com/asciimoo/hister/client", "github.com/asciimoo/hister/server/types":
+		case "github.com/asciimoo/nogon/client", "github.com/asciimoo/nogon/server/types":
 		default:
 			unexpected = append(unexpected, pkg)
 		}

@@ -15,8 +15,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/asciimoo/hister/config"
-	"github.com/asciimoo/hister/server/crawler"
+	"github.com/asciimoo/nogon/config"
+	"github.com/asciimoo/nogon/server/crawler"
 )
 
 func gzipSitemap(t *testing.T, content string) []byte {

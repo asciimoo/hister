@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/asciimoo/hister/config"
-	"github.com/asciimoo/hister/server/oauth"
+	"github.com/asciimoo/nogon/config"
+	"github.com/asciimoo/nogon/server/oauth"
 )
 
 const (

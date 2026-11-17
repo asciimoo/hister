@@ -3,8 +3,8 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/asciimoo/hister/client"
-	"github.com/asciimoo/hister/config"
+	"github.com/asciimoo/nogon/client"
+	"github.com/asciimoo/nogon/config"
 
 	"github.com/spf13/cobra"
 )

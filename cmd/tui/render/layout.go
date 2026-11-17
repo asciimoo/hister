@@ -9,8 +9,8 @@ import (
 	"image/color"
 	"strings"
 
-	"github.com/asciimoo/hister/cmd/tui/component"
-	"github.com/asciimoo/hister/cmd/tui/model"
+	"github.com/asciimoo/nogon/cmd/tui/component"
+	"github.com/asciimoo/nogon/cmd/tui/model"
 
 	"charm.land/lipgloss/v2"
 	uv "github.com/charmbracelet/ultraviolet"

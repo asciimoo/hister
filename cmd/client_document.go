@@ -3,8 +3,8 @@
 package cmd
 
 import (
-	"github.com/asciimoo/hister/client"
-	"github.com/asciimoo/hister/server/document"
+	"github.com/asciimoo/nogon/client"
+	"github.com/asciimoo/nogon/server/document"
 )
 
 // clientDocument prepares locally extracted content for submission to the server.

@@ -10,8 +10,8 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/asciimoo/hister/client"
-	"github.com/asciimoo/hister/server/model"
+	"github.com/asciimoo/nogon/client"
+	"github.com/asciimoo/nogon/server/model"
 
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"

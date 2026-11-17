@@ -10,7 +10,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/asciimoo/hister/server/extractor/sdk"
+	"github.com/asciimoo/nogon/server/extractor/sdk"
 )
 
 const liveManifestPath = "live_cases.yaml"

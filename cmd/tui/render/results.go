@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/asciimoo/hister/client"
-	"github.com/asciimoo/hister/cmd/tui/model"
+	"github.com/asciimoo/nogon/client"
+	"github.com/asciimoo/nogon/cmd/tui/model"
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"

@@ -1,4 +1,4 @@
-module github.com/asciimoo/hister
+module github.com/asciimoo/nogon
 
 go 1.26.7
 

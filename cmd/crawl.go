@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/asciimoo/hister/server/crawler"
-	"github.com/asciimoo/hister/server/model"
+	"github.com/asciimoo/nogon/server/crawler"
+	"github.com/asciimoo/nogon/server/model"
 
 	"charm.land/lipgloss/v2"
 	"github.com/rs/zerolog/log"

@@ -77,8 +77,6 @@ buildGoModule (finalAttrs: {
   subPackages = [ "." ];
 
   postInstall = ''
-    # The Go module still determines the original installed filename.
-    mv "$out/bin/hister" "$out/bin/nogon"
     wrapProgram "$out/bin/nogon" \
       --prefix PATH : ${lib.makeBinPath [ yt-dlp ]}
     ln -s nogon "$out/bin/hister"

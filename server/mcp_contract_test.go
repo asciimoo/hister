@@ -15,9 +15,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/asciimoo/hister/server/document"
-	"github.com/asciimoo/hister/server/model"
-	"github.com/asciimoo/hister/server/testutil"
+	"github.com/asciimoo/nogon/server/document"
+	"github.com/asciimoo/nogon/server/model"
+	"github.com/asciimoo/nogon/server/testutil"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"

@@ -9,9 +9,9 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/asciimoo/hister/client"
-	"github.com/asciimoo/hister/server/diagnostics"
-	"github.com/asciimoo/hister/server/types"
+	"github.com/asciimoo/nogon/client"
+	"github.com/asciimoo/nogon/server/diagnostics"
+	"github.com/asciimoo/nogon/server/types"
 
 	"github.com/spf13/cobra"
 )

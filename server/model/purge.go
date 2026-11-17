@@ -3,7 +3,7 @@ package model
 import (
 	"context"
 
-	"github.com/asciimoo/hister/server/types"
+	"github.com/asciimoo/nogon/server/types"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"

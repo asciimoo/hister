@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/asciimoo/hister/server/extractor/sdk"
+	"github.com/asciimoo/nogon/server/extractor/sdk"
 )
 
 const richIssuePage = `<title>Fix &lt;img src=x onerror=alert(1)&gt; · Issue #305</title>

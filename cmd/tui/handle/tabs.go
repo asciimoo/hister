@@ -7,8 +7,8 @@ package handle
 import (
 	"strings"
 
-	"github.com/asciimoo/hister/cmd/tui/model"
-	"github.com/asciimoo/hister/config"
+	"github.com/asciimoo/nogon/cmd/tui/model"
+	"github.com/asciimoo/nogon/config"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/pkg/browser"

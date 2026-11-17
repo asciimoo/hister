@@ -7,10 +7,10 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/asciimoo/hister/client"
-	"github.com/asciimoo/hister/server/document"
-	"github.com/asciimoo/hister/server/indexer"
-	"github.com/asciimoo/hister/server/model"
+	"github.com/asciimoo/nogon/client"
+	"github.com/asciimoo/nogon/server/document"
+	"github.com/asciimoo/nogon/server/indexer"
+	"github.com/asciimoo/nogon/server/model"
 )
 
 func contractDocument() *document.Document {

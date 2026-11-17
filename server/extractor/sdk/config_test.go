@@ -3,8 +3,8 @@ package sdk_test
 import (
 	"testing"
 
-	"github.com/asciimoo/hister/config"
-	"github.com/asciimoo/hister/server/extractor/sdk"
+	"github.com/asciimoo/nogon/config"
+	"github.com/asciimoo/nogon/server/extractor/sdk"
 )
 
 func TestOptionMetadataRequiresExplicitPolicies(t *testing.T) {

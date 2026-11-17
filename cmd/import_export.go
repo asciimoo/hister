@@ -22,10 +22,10 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/asciimoo/hister/client"
-	"github.com/asciimoo/hister/server/crawler"
-	"github.com/asciimoo/hister/server/document"
-	"github.com/asciimoo/hister/server/model"
+	"github.com/asciimoo/nogon/client"
+	"github.com/asciimoo/nogon/server/crawler"
+	"github.com/asciimoo/nogon/server/document"
+	"github.com/asciimoo/nogon/server/model"
 
 	"charm.land/lipgloss/v2"
 	"github.com/bodgit/sevenzip"

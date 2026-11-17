@@ -11,7 +11,7 @@ import (
 	"slices"
 	"strings"
 
-	servererrors "github.com/asciimoo/hister/server/errors"
+	servererrors "github.com/asciimoo/nogon/server/errors"
 )
 
 const (

@@ -6,8 +6,8 @@ import (
 
 	"golang.org/x/text/language"
 
-	"github.com/asciimoo/hister/server/languages"
 	"github.com/asciimoo/lingua-go"
+	"github.com/asciimoo/nogon/server/languages"
 )
 
 func codesOf(t *testing.T, codes []string) []string {

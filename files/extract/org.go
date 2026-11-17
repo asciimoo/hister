@@ -11,7 +11,7 @@ import (
 
 	"github.com/niklasfasching/go-org/org"
 
-	"github.com/asciimoo/hister/server/sanitizer"
+	"github.com/asciimoo/nogon/server/sanitizer"
 )
 
 type orgFileType struct{}

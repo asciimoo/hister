@@ -13,7 +13,7 @@ import (
 
 	"github.com/mmonterroca/docxgo/v2/domain"
 
-	"github.com/asciimoo/hister/config"
+	"github.com/asciimoo/nogon/config"
 )
 
 func TestExtract(t *testing.T) {

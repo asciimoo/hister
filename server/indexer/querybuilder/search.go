@@ -3,7 +3,7 @@ package querybuilder
 import (
 	"strings"
 
-	"github.com/asciimoo/hister/server/indexer/searchschema"
+	"github.com/asciimoo/nogon/server/indexer/searchschema"
 )
 
 // SearchExpression separates search directives from text matched by Bleve.

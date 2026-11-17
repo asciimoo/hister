@@ -6,7 +6,7 @@ version = "2"
 enable = ["goimports", "gofumpt"]
 
 [formatters.settings.gofumpt]
-module-path = "github.com/asciimoo/hister"
+module-path = "github.com/asciimoo/nogon"
 
 [formatters.settings.goimports]
 local-prefixes = ["github.com/asciimoo"]

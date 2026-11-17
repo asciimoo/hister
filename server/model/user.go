@@ -12,7 +12,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/asciimoo/hister/config"
+	"github.com/asciimoo/nogon/config"
 
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"

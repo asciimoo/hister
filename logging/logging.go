@@ -9,7 +9,7 @@ import (
 
 	"github.com/rs/zerolog"
 
-	"github.com/asciimoo/hister/config"
+	"github.com/asciimoo/nogon/config"
 )
 
 var Default = New(os.Stderr)

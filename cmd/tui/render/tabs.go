@@ -7,7 +7,7 @@ package render
 import (
 	"strings"
 
-	"github.com/asciimoo/hister/cmd/tui/model"
+	"github.com/asciimoo/nogon/cmd/tui/model"
 
 	"charm.land/lipgloss/v2"
 )

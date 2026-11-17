@@ -10,9 +10,9 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 
-	"github.com/asciimoo/hister/server/extractor/sdk"
-	"github.com/asciimoo/hister/server/extractor/urlutil"
-	"github.com/asciimoo/hister/server/sanitizer"
+	"github.com/asciimoo/nogon/server/extractor/sdk"
+	"github.com/asciimoo/nogon/server/extractor/urlutil"
+	"github.com/asciimoo/nogon/server/sanitizer"
 )
 
 // possible apex domains for the stack exchange network

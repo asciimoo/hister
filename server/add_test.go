@@ -9,10 +9,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/asciimoo/hister/server/document"
-	"github.com/asciimoo/hister/server/indexer"
-	"github.com/asciimoo/hister/server/testutil"
-	"github.com/asciimoo/hister/server/types"
+	"github.com/asciimoo/nogon/server/document"
+	"github.com/asciimoo/nogon/server/indexer"
+	"github.com/asciimoo/nogon/server/testutil"
+	"github.com/asciimoo/nogon/server/types"
 )
 
 type statusCountingWriter struct {

@@ -87,7 +87,7 @@ instructions.
 | `scripts/`          | Dataset utilities                                                       |
 | `contrib/`          | Service integration files                                               |
 
-The Go module is `github.com/asciimoo/hister`. The root npm workspace includes
+The Go module is `github.com/asciimoo/nogon`. The root npm workspace includes
 the web application, website, shared components, and browser extension.
 
 ### Rename compatibility
@@ -102,7 +102,7 @@ Preserve these when changing visible branding:
 | Search indexes             | `hister_keep_stopwords`, `hister_snippet`, `hister.*` index metadata                     | Reopen existing indexes without changing their stored definitions.           |
 | Monitoring                 | `hister_*` metric names                                                                  | Preserve queries and dashboards.                                             |
 | Configuration and services | Legacy environment aliases, config and data paths, service identities, container volumes | Reuse existing configuration, permissions, and data.                         |
-| Distribution and Go module | Legacy executable and download aliases, Go module, registry URLs, package identifiers    | Keep existing consumers working while publication is coordinated separately. |
+| Distribution               | Legacy executable and download aliases, registry URLs, package identifiers               | Keep existing consumers working while publication is coordinated separately. |
 | Published content          | Post slugs, old heading anchors, RSS GUIDs, historical examples and fixtures             | Preserve links, subscriptions, and regression coverage.                      |
 
 Internal helper symbols, temporary file prefixes, cache names, and test controls

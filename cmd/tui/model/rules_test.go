@@ -7,8 +7,8 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/asciimoo/hister/client"
-	"github.com/asciimoo/hister/config"
+	"github.com/asciimoo/nogon/client"
+	"github.com/asciimoo/nogon/config"
 )
 
 func TestPrioritizeRulePreservesRulesNotLoadedInTUI(t *testing.T) {

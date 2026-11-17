@@ -188,12 +188,12 @@ pkgs.runCommand "nogon-package-compatibility"
   ''
     mkdir -p "$out/bin"
     # Exercise the actual install hook with a small executable fixture.
-    cat > "$out/bin/hister" <<'EOF'
+    cat > "$out/bin/nogon" <<'EOF'
     #!${pkgs.runtimeShell}
     command -v yt-dlp
     printf '%s\n' "$@"
     EOF
-    chmod +x "$out/bin/hister"
+    chmod +x "$out/bin/nogon"
     ${package.postInstall}
 
     test -x "$out/bin/nogon"

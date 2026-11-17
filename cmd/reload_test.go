@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/asciimoo/hister/config"
+	"github.com/asciimoo/nogon/config"
 
 	"github.com/spf13/cobra"
 )

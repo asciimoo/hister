@@ -15,8 +15,8 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/asciimoo/hister/cmd/tui/component"
-	"github.com/asciimoo/hister/cmd/tui/theme"
+	"github.com/asciimoo/nogon/cmd/tui/component"
+	"github.com/asciimoo/nogon/cmd/tui/theme"
 )
 
 // pads s with spaces on the right to reach exactly width display columns

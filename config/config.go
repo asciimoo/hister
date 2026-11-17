@@ -32,8 +32,8 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/asciimoo/hister/server/languages"
-	"github.com/asciimoo/hister/server/oauth"
+	"github.com/asciimoo/nogon/server/languages"
+	"github.com/asciimoo/nogon/server/oauth"
 
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"

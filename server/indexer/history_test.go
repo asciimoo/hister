@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/asciimoo/hister/server/document"
-	"github.com/asciimoo/hister/server/testutil"
+	"github.com/asciimoo/nogon/server/document"
+	"github.com/asciimoo/nogon/server/testutil"
 )
 
 func TestGetLatestDocumentsFiltered(t *testing.T) {

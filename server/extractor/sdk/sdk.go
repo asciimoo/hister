@@ -5,8 +5,8 @@ import (
 	"context"
 	"errors"
 
-	"github.com/asciimoo/hister/config"
-	"github.com/asciimoo/hister/server/document"
+	"github.com/asciimoo/nogon/config"
+	"github.com/asciimoo/nogon/server/document"
 )
 
 // Document is the document passed through the extractor chain.

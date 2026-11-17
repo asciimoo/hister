@@ -8,7 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/asciimoo/hister/server/model"
+	"github.com/asciimoo/nogon/server/model"
 )
 
 var importBrowserHistoryCmd = &cobra.Command{

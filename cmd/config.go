@@ -11,9 +11,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/asciimoo/hister/config"
-	"github.com/asciimoo/hister/server/diagnostics"
-	"github.com/asciimoo/hister/server/document"
+	"github.com/asciimoo/nogon/config"
+	"github.com/asciimoo/nogon/server/diagnostics"
+	"github.com/asciimoo/nogon/server/document"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"

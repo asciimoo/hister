@@ -3,8 +3,8 @@
 package server
 
 import (
-	"github.com/asciimoo/hister/server/diagnostics"
-	"github.com/asciimoo/hister/server/types"
+	"github.com/asciimoo/nogon/server/diagnostics"
+	"github.com/asciimoo/nogon/server/types"
 )
 
 func serveDiagnostics(c *webContext) {

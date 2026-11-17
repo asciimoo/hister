@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/asciimoo/hister/cmd"
+	"github.com/asciimoo/nogon/cmd"
 )
 
 func main() {

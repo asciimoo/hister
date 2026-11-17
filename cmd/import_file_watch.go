@@ -16,10 +16,10 @@ import (
 
 	"github.com/rs/zerolog/log"
 
-	"github.com/asciimoo/hister/client"
-	"github.com/asciimoo/hister/config"
-	"github.com/asciimoo/hister/files"
-	"github.com/asciimoo/hister/server/document"
+	"github.com/asciimoo/nogon/client"
+	"github.com/asciimoo/nogon/config"
+	"github.com/asciimoo/nogon/files"
+	"github.com/asciimoo/nogon/server/document"
 )
 
 type fileWatchOptions struct {

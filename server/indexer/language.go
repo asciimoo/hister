@@ -3,8 +3,8 @@ package indexer
 import (
 	"fmt"
 
-	"github.com/asciimoo/hister/server/document"
-	"github.com/asciimoo/hister/server/languages"
+	"github.com/asciimoo/nogon/server/document"
+	"github.com/asciimoo/nogon/server/languages"
 
 	_ "github.com/blevesearch/bleve/v2/analysis/lang/ar"
 	_ "github.com/blevesearch/bleve/v2/analysis/lang/cjk"

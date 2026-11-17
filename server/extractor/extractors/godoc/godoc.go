@@ -12,9 +12,9 @@ import (
 
 	"golang.org/x/net/html"
 
-	"github.com/asciimoo/hister/server/extractor/sdk"
-	"github.com/asciimoo/hister/server/extractor/urlutil"
-	"github.com/asciimoo/hister/server/sanitizer"
+	"github.com/asciimoo/nogon/server/extractor/sdk"
+	"github.com/asciimoo/nogon/server/extractor/urlutil"
+	"github.com/asciimoo/nogon/server/sanitizer"
 )
 
 const pkgGoDevPrefix = "https://pkg.go.dev/"

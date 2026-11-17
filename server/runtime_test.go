@@ -27,14 +27,14 @@ import (
 	"github.com/rs/zerolog/log"
 	"gopkg.in/yaml.v3"
 
-	"github.com/asciimoo/hister/config"
-	"github.com/asciimoo/hister/files"
-	"github.com/asciimoo/hister/server/document"
-	"github.com/asciimoo/hister/server/extractor"
-	"github.com/asciimoo/hister/server/indexer"
-	"github.com/asciimoo/hister/server/model"
-	"github.com/asciimoo/hister/server/testutil"
-	"github.com/asciimoo/hister/server/types"
+	"github.com/asciimoo/nogon/config"
+	"github.com/asciimoo/nogon/files"
+	"github.com/asciimoo/nogon/server/document"
+	"github.com/asciimoo/nogon/server/extractor"
+	"github.com/asciimoo/nogon/server/indexer"
+	"github.com/asciimoo/nogon/server/model"
+	"github.com/asciimoo/nogon/server/testutil"
+	"github.com/asciimoo/nogon/server/types"
 )
 
 func TestSettingsPendingActivationKeepsConfirmedConfiguration(t *testing.T) {

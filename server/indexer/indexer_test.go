@@ -13,12 +13,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/asciimoo/hister/config"
-	"github.com/asciimoo/hister/server/document"
-	"github.com/asciimoo/hister/server/indexer/searchschema"
-	servermetrics "github.com/asciimoo/hister/server/metrics"
-	"github.com/asciimoo/hister/server/testutil"
-	"github.com/asciimoo/hister/server/vectorstore"
+	"github.com/asciimoo/nogon/config"
+	"github.com/asciimoo/nogon/server/document"
+	"github.com/asciimoo/nogon/server/indexer/searchschema"
+	servermetrics "github.com/asciimoo/nogon/server/metrics"
+	"github.com/asciimoo/nogon/server/testutil"
+	"github.com/asciimoo/nogon/server/vectorstore"
 
 	"github.com/blevesearch/bleve/v2"
 	"github.com/blevesearch/bleve/v2/search/query"

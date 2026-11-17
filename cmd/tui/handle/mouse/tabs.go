@@ -5,7 +5,7 @@
 package mouse
 
 import (
-	"github.com/asciimoo/hister/cmd/tui/model"
+	"github.com/asciimoo/nogon/cmd/tui/model"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/pkg/browser"

@@ -3,7 +3,7 @@ package component
 import (
 	"testing"
 
-	"github.com/asciimoo/hister/config"
+	"github.com/asciimoo/nogon/config"
 
 	tea "charm.land/bubbletea/v2"
 )

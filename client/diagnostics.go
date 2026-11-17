@@ -6,7 +6,7 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/asciimoo/hister/server/types"
+	"github.com/asciimoo/nogon/server/types"
 )
 
 func (c *Client) FetchDiagnostics(ctx context.Context) ([]types.DiagnosticCheck, error) {

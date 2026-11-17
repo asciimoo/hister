@@ -98,7 +98,7 @@ cd nogon
 ./manage.sh build
 ```
 
-The build produces a `hister` binary in the repository root. Source is also mirrored on [Codeberg](https://codeberg.org/asciimoo/nogon).
+The build produces a `nogon` binary in the repository root. Source is also mirrored on [Codeberg](https://codeberg.org/asciimoo/nogon).
 
 ## Homebrew
 

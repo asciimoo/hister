@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/asciimoo/hister/config"
+	"github.com/asciimoo/nogon/config"
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"

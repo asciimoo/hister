@@ -16,10 +16,10 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/asciimoo/hister/config"
-	"github.com/asciimoo/hister/server/extractor"
-	"github.com/asciimoo/hister/server/model"
-	"github.com/asciimoo/hister/server/testutil"
+	"github.com/asciimoo/nogon/config"
+	"github.com/asciimoo/nogon/server/extractor"
+	"github.com/asciimoo/nogon/server/model"
+	"github.com/asciimoo/nogon/server/testutil"
 )
 
 func newConfigurationTestServer(t *testing.T, mode, extra string) (*config.Config, http.Handler) {

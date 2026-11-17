@@ -39,7 +39,7 @@ run_extractor_tests [filter]
 
  ========
 
- Execute 'go run nogon.go' or 'go build && ./hister' for application related actions
+ Execute 'go run nogon.go' or 'go build && ./nogon' for application related actions
  "
 	[ -z "$1" ] && exit 0 || exit 1
 }

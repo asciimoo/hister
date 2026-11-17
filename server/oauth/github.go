@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	servererrors "github.com/asciimoo/hister/server/errors"
+	servererrors "github.com/asciimoo/nogon/server/errors"
 )
 
 const scopeReadUser ScopeValue = "read:user"

@@ -18,10 +18,10 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/asciimoo/hister/client"
-	"github.com/asciimoo/hister/files"
-	"github.com/asciimoo/hister/files/extract"
-	"github.com/asciimoo/hister/server/document"
+	"github.com/asciimoo/nogon/client"
+	"github.com/asciimoo/nogon/files"
+	"github.com/asciimoo/nogon/files/extract"
+	"github.com/asciimoo/nogon/server/document"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/spf13/cobra"

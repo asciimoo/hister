@@ -21,11 +21,11 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
-	"github.com/asciimoo/hister/config"
-	"github.com/asciimoo/hister/server/indexer"
-	"github.com/asciimoo/hister/server/model"
-	"github.com/asciimoo/hister/server/testutil"
-	"github.com/asciimoo/hister/server/types"
+	"github.com/asciimoo/nogon/config"
+	"github.com/asciimoo/nogon/server/indexer"
+	"github.com/asciimoo/nogon/server/model"
+	"github.com/asciimoo/nogon/server/testutil"
+	"github.com/asciimoo/nogon/server/types"
 )
 
 func TestPurgeCommandPreviewsBeforeDeletion(t *testing.T) {

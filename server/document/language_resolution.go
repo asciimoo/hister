@@ -6,7 +6,7 @@ import (
 
 	"golang.org/x/net/html"
 
-	"github.com/asciimoo/hister/server/languages"
+	"github.com/asciimoo/nogon/server/languages"
 )
 
 // ResolveLanguage applies a pin or evaluates current content. A page declaration

@@ -11,8 +11,8 @@ import (
 	readabilityrender "codeberg.org/readeck/go-readability/v2/render"
 	"github.com/PuerkitoBio/goquery"
 
-	"github.com/asciimoo/hister/server/extractor/sdk"
-	"github.com/asciimoo/hister/server/sanitizer"
+	"github.com/asciimoo/nogon/server/extractor/sdk"
+	"github.com/asciimoo/nogon/server/sanitizer"
 )
 
 func extractIssue(d *sdk.Document) sdk.ExtractResult {

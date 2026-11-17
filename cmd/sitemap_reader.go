@@ -16,8 +16,8 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/asciimoo/hister/config"
-	"github.com/asciimoo/hister/server/crawler"
+	"github.com/asciimoo/nogon/config"
+	"github.com/asciimoo/nogon/server/crawler"
 )
 
 const (

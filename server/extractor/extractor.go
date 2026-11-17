@@ -17,11 +17,11 @@ import (
 	"github.com/rs/zerolog/log"
 	"golang.org/x/net/html"
 
-	"github.com/asciimoo/hister/config"
-	"github.com/asciimoo/hister/files/extract"
-	"github.com/asciimoo/hister/server/document"
-	"github.com/asciimoo/hister/server/extractor/sdk"
-	"github.com/asciimoo/hister/server/sanitizer"
+	"github.com/asciimoo/nogon/config"
+	"github.com/asciimoo/nogon/files/extract"
+	"github.com/asciimoo/nogon/server/document"
+	"github.com/asciimoo/nogon/server/extractor/sdk"
+	"github.com/asciimoo/nogon/server/sanitizer"
 )
 
 // Extractor is retained as an alias for the stable SDK contract.

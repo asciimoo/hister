@@ -14,10 +14,10 @@ import (
 	docx "github.com/mmonterroca/docxgo/v2"
 	"github.com/mmonterroca/docxgo/v2/domain"
 
-	"github.com/asciimoo/hister/config"
-	"github.com/asciimoo/hister/files/extract"
-	"github.com/asciimoo/hister/server/document"
-	"github.com/asciimoo/hister/server/extractor/sdk"
+	"github.com/asciimoo/nogon/config"
+	"github.com/asciimoo/nogon/files/extract"
+	"github.com/asciimoo/nogon/server/document"
+	"github.com/asciimoo/nogon/server/extractor/sdk"
 )
 
 type stubExtractor struct {

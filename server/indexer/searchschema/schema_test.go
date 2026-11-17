@@ -7,7 +7,7 @@ package searchschema
 import (
 	"testing"
 
-	"github.com/asciimoo/hister/server/document"
+	"github.com/asciimoo/nogon/server/document"
 )
 
 func TestDefinitionsAreInternallyConsistent(t *testing.T) {

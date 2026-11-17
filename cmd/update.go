@@ -5,7 +5,7 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/asciimoo/hister/server/types"
+	"github.com/asciimoo/nogon/server/types"
 
 	"github.com/spf13/cobra"
 )

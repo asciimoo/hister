@@ -15,10 +15,10 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/asciimoo/hister/config"
-	"github.com/asciimoo/hister/server/crawler"
-	"github.com/asciimoo/hister/server/document"
-	"github.com/asciimoo/hister/server/extractor/sdk"
+	"github.com/asciimoo/nogon/config"
+	"github.com/asciimoo/nogon/server/crawler"
+	"github.com/asciimoo/nogon/server/document"
+	"github.com/asciimoo/nogon/server/extractor/sdk"
 )
 
 const liveUserAgent = "HisterLiveExtractorTest/1.0 (+https://github.com/asciimoo/nogon)"

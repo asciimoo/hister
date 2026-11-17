@@ -6,8 +6,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/asciimoo/hister/client"
-	"github.com/asciimoo/hister/cmd/tui"
+	"github.com/asciimoo/nogon/client"
+	"github.com/asciimoo/nogon/cmd/tui"
 
 	"github.com/spf13/cobra"
 )

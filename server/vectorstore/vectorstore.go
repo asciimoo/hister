@@ -5,7 +5,7 @@ package vectorstore
 import (
 	"sort"
 
-	"github.com/asciimoo/hister/config"
+	"github.com/asciimoo/nogon/config"
 )
 
 const (

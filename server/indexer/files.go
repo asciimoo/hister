@@ -14,12 +14,12 @@ import (
 	"github.com/blevesearch/bleve/v2"
 	"github.com/rs/zerolog/log"
 
-	"github.com/asciimoo/hister/config"
-	"github.com/asciimoo/hister/files"
-	"github.com/asciimoo/hister/files/extract"
-	"github.com/asciimoo/hister/server/document"
-	"github.com/asciimoo/hister/server/extractor"
-	"github.com/asciimoo/hister/server/model"
+	"github.com/asciimoo/nogon/config"
+	"github.com/asciimoo/nogon/files"
+	"github.com/asciimoo/nogon/files/extract"
+	"github.com/asciimoo/nogon/server/document"
+	"github.com/asciimoo/nogon/server/extractor"
+	"github.com/asciimoo/nogon/server/model"
 )
 
 var (

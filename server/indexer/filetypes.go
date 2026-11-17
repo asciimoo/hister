@@ -3,9 +3,9 @@ package indexer
 import (
 	"context"
 
-	"github.com/asciimoo/hister/files/extract"
-	"github.com/asciimoo/hister/server/document"
-	"github.com/asciimoo/hister/server/extractor"
+	"github.com/asciimoo/nogon/files/extract"
+	"github.com/asciimoo/nogon/server/document"
+	"github.com/asciimoo/nogon/server/extractor"
 )
 
 var ErrExtractedContentTooLarge = extract.ErrExtractedContentTooLarge

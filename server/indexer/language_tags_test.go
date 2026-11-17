@@ -5,10 +5,10 @@ package indexer
 import (
 	"testing"
 
-	"github.com/asciimoo/hister/config"
-	"github.com/asciimoo/hister/server/document"
-	"github.com/asciimoo/hister/server/testutil"
-	servertypes "github.com/asciimoo/hister/server/types"
+	"github.com/asciimoo/nogon/config"
+	"github.com/asciimoo/nogon/server/document"
+	"github.com/asciimoo/nogon/server/testutil"
+	servertypes "github.com/asciimoo/nogon/server/types"
 
 	"github.com/blevesearch/bleve/v2"
 )

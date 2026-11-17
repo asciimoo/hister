@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/asciimoo/hister/config"
+	"github.com/asciimoo/nogon/config"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/rs/zerolog/log"

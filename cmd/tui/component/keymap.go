@@ -10,7 +10,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/asciimoo/hister/config"
+	"github.com/asciimoo/nogon/config"
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"

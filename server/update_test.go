@@ -9,10 +9,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/asciimoo/hister/server/document"
-	"github.com/asciimoo/hister/server/model"
-	"github.com/asciimoo/hister/server/testutil"
-	servertypes "github.com/asciimoo/hister/server/types"
+	"github.com/asciimoo/nogon/server/document"
+	"github.com/asciimoo/nogon/server/model"
+	"github.com/asciimoo/nogon/server/testutil"
+	servertypes "github.com/asciimoo/nogon/server/types"
 )
 
 func TestUpdateDocumentsAuthorizationScopeAndVersionMove(t *testing.T) {

@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	servertypes "github.com/asciimoo/hister/server/types"
+	servertypes "github.com/asciimoo/nogon/server/types"
 )
 
 func TestUpdateDocumentsPayloadAndResponse(t *testing.T) {

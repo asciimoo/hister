@@ -17,7 +17,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/asciimoo/hister/client"
+	"github.com/asciimoo/nogon/client"
 
 	"github.com/rs/zerolog/log"
 )

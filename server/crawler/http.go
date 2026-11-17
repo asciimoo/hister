@@ -11,7 +11,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 
-	"github.com/asciimoo/hister/config"
+	"github.com/asciimoo/nogon/config"
 )
 
 // Match the extracted content allowance while bounding downloads before parsing.

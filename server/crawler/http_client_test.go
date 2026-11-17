@@ -17,7 +17,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/asciimoo/hister/config"
+	"github.com/asciimoo/nogon/config"
 )
 
 type httpTestTransport func(*http.Request) (*http.Response, error)

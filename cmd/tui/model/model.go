@@ -13,10 +13,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/asciimoo/hister/client"
-	"github.com/asciimoo/hister/cmd/tui/component"
-	"github.com/asciimoo/hister/cmd/tui/theme"
-	"github.com/asciimoo/hister/config"
+	"github.com/asciimoo/nogon/client"
+	"github.com/asciimoo/nogon/cmd/tui/component"
+	"github.com/asciimoo/nogon/cmd/tui/theme"
+	"github.com/asciimoo/nogon/config"
 
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/spinner"

@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/asciimoo/hister/config"
-	"github.com/asciimoo/hister/server/indexer"
+	"github.com/asciimoo/nogon/config"
+	"github.com/asciimoo/nogon/server/indexer"
 )
 
 type testMetadata struct {

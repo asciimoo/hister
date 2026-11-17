@@ -12,7 +12,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
-	"github.com/asciimoo/hister/logging"
+	"github.com/asciimoo/nogon/logging"
 )
 
 func useReloadLogger(t *testing.T) {

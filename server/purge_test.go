@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/asciimoo/hister/server/document"
-	"github.com/asciimoo/hister/server/model"
-	"github.com/asciimoo/hister/server/testutil"
-	"github.com/asciimoo/hister/server/types"
+	"github.com/asciimoo/nogon/server/document"
+	"github.com/asciimoo/nogon/server/model"
+	"github.com/asciimoo/nogon/server/testutil"
+	"github.com/asciimoo/nogon/server/types"
 )
 
 func TestPurgeVersionsPreviewsAndPreservesCurrentDocuments(t *testing.T) {

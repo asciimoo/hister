@@ -11,13 +11,13 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/asciimoo/hister/config"
-	"github.com/asciimoo/hister/server/indexer"
-	"github.com/asciimoo/hister/server/indexer/searchschema"
-	"github.com/asciimoo/hister/server/metrics"
-	"github.com/asciimoo/hister/server/model"
-	"github.com/asciimoo/hister/server/testutil"
-	"github.com/asciimoo/hister/server/timeline"
+	"github.com/asciimoo/nogon/config"
+	"github.com/asciimoo/nogon/server/indexer"
+	"github.com/asciimoo/nogon/server/indexer/searchschema"
+	"github.com/asciimoo/nogon/server/metrics"
+	"github.com/asciimoo/nogon/server/model"
+	"github.com/asciimoo/nogon/server/testutil"
+	"github.com/asciimoo/nogon/server/timeline"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )

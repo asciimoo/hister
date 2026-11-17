@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/asciimoo/hister/server/document"
+	"github.com/asciimoo/nogon/server/document"
 )
 
 const Version = 3

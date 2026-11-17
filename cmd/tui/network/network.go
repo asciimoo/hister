@@ -9,8 +9,8 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/asciimoo/hister/client"
-	"github.com/asciimoo/hister/cmd/tui/model"
+	"github.com/asciimoo/nogon/client"
+	"github.com/asciimoo/nogon/cmd/tui/model"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/gorilla/websocket"

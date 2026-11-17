@@ -11,7 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/asciimoo/hister/config"
+	"github.com/asciimoo/nogon/config"
 )
 
 func TestBrowserImportExplicitOverrideIncludesSkippedURLs(t *testing.T) {

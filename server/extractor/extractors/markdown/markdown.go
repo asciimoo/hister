@@ -6,8 +6,8 @@ package markdown
 import (
 	"strings"
 
-	"github.com/asciimoo/hister/server/extractor/sdk"
-	"github.com/asciimoo/hister/server/sanitizer"
+	"github.com/asciimoo/nogon/server/extractor/sdk"
+	"github.com/asciimoo/nogon/server/sanitizer"
 )
 
 // MarkdownExtractor serves previews for locally indexed Markdown files.

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/asciimoo/hister/server/oauth"
+	"github.com/asciimoo/nogon/server/oauth"
 
 	"gopkg.in/yaml.v3"
 )

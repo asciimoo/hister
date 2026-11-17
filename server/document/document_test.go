@@ -15,7 +15,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/asciimoo/hister/files"
+	"github.com/asciimoo/nogon/files"
 )
 
 type faviconTestTransport func(*http.Request) (*http.Response, error)

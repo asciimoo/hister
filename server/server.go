@@ -15,10 +15,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/asciimoo/hister/config"
-	"github.com/asciimoo/hister/server/indexer"
-	"github.com/asciimoo/hister/server/model"
-	"github.com/asciimoo/hister/server/static"
+	"github.com/asciimoo/nogon/config"
+	"github.com/asciimoo/nogon/server/indexer"
+	"github.com/asciimoo/nogon/server/model"
+	"github.com/asciimoo/nogon/server/static"
 
 	"github.com/rs/zerolog/log"
 )

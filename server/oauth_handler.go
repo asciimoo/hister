@@ -12,9 +12,9 @@ import (
 	"strings"
 	"time"
 
-	servererrors "github.com/asciimoo/hister/server/errors"
-	"github.com/asciimoo/hister/server/model"
-	"github.com/asciimoo/hister/server/oauth"
+	servererrors "github.com/asciimoo/nogon/server/errors"
+	"github.com/asciimoo/nogon/server/model"
+	"github.com/asciimoo/nogon/server/oauth"
 
 	"github.com/rs/zerolog/log"
 )

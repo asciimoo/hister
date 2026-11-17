@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/asciimoo/hister/client"
-	"github.com/asciimoo/hister/server/types"
+	"github.com/asciimoo/nogon/client"
+	"github.com/asciimoo/nogon/server/types"
 
 	"github.com/spf13/cobra"
 )
