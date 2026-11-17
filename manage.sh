@@ -4,9 +4,9 @@ BASE_DIR="$(dirname -- "`readlink -f -- "$0"`")"
 ACTION="$1"
 [ -z "$ACTION" ] || shift
 
-EXT_CHROME_ZIP='hister_ext_chrome.zip'
-EXT_FF_ZIP='hister_ext_ff.zip'
-EXT_SRC_ZIP='hister_ext_src.zip'
+EXT_CHROME_ZIP='nogon_ext_chrome.zip'
+EXT_FF_ZIP='nogon_ext_ff.zip'
+EXT_SRC_ZIP='nogon_ext_src.zip'
 
 cd -- "$BASE_DIR"
 set -e
@@ -87,9 +87,11 @@ build_addon_artifact() {
     [ -e "webui/ext/$EXT_SRC_ZIP" ] && rm "webui/ext/$EXT_SRC_ZIP" || :
     [ -e "webui/ext/$EXT_CHROME_ZIP" ] && rm "webui/ext/$EXT_CHROME_ZIP" || :
     [ -e "webui/ext/$EXT_FF_ZIP" ] && rm "webui/ext/$EXT_FF_ZIP" || :
-    cd webui/ext
-    zip -r "$EXT_SRC_ZIP" src tsconfig.json package* webpack.config.js
-    cd dist
+    zip -r "webui/ext/$EXT_SRC_ZIP" LICENSE package.json package-lock.json \
+        webui/ext/src webui/ext/assets webui/ext/package.json \
+        webui/ext/tsconfig.json webui/ext/svelte.config.js webui/ext/vite.config.ts \
+        webui/components/src webui/components/package.json webui/components/tsconfig.json
+    cd webui/ext/dist
     zip "../$EXT_CHROME_ZIP" ./* assets/* assets/icons/*
     cd ../
     cp "$EXT_CHROME_ZIP" "$EXT_FF_ZIP"

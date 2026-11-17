@@ -258,7 +258,7 @@ test('disabled automatic indexing uses only a thick red border and an explicit t
     assert.equal(border.path, undefined, 'the disabled icon has no diagonal lines');
     assert.deepEqual(border.rect, size === 16 ? [1.5, 1.5, 13, 13] : [3, 3, 26, 26]);
   }
-  assert.equal(b.titles.get(1), 'Hister: automatic indexing is off');
+  assert.equal(b.titles.get(1), 'Nogon: automatic indexing is off');
 });
 
 test('saved automatic indexing state is restored without a tab event', async () => {
@@ -270,7 +270,7 @@ test('saved automatic indexing state is restored without a tab event', async () 
       assert.equal(b.icons.get(tabId)[16].strokes.length > 0, !indexingEnabled);
       assert.equal(
         b.titles.get(tabId),
-        indexingEnabled ? 'Hister' : 'Hister: automatic indexing is off',
+        indexingEnabled ? 'Nogon' : 'Nogon: automatic indexing is off',
       );
     }
   }
@@ -293,7 +293,7 @@ test('toggling automatic indexing refreshes all windows, inactive tabs and inter
       assert.equal(icon.strokes.length > 0, enabled === false, `tab ${tabId}`);
       assert.equal(
         b.titles.get(tabId),
-        enabled === false ? 'Hister: automatic indexing is off' : 'Hister',
+        enabled === false ? 'Nogon: automatic indexing is off' : 'Nogon',
       );
       if (enabled !== false) {
         if (tabId === 3) {
@@ -317,7 +317,7 @@ test('manual HTML and PDF indexing preserve the automatic indexing off indicator
     assert.equal(result.status_code, 201);
     await b.flush();
     assert.deepEqual(b.icons.get(1), disabledIcon);
-    assert.equal(b.titles.get(1), 'Hister: automatic indexing is off');
+    assert.equal(b.titles.get(1), 'Nogon: automatic indexing is off');
   }
 });
 
@@ -331,7 +331,7 @@ test('disabling indexing while icons load cannot restore an enabled icon', async
   await Promise.all([activation, change]);
   for (const tabId of [undefined, 1]) {
     assert.ok(b.icons.get(tabId)[16].strokes.length > 0);
-    assert.equal(b.titles.get(tabId), 'Hister: automatic indexing is off');
+    assert.equal(b.titles.get(tabId), 'Nogon: automatic indexing is off');
   }
 });
 

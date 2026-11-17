@@ -128,7 +128,7 @@
       const cookieHeader = await syncServerCookies(authURL);
       if (!cookieHeader) {
         message =
-          'No cookies found for server URL. Make sure you are logged in to the Hister web app.';
+          'No cookies found for server URL. Make sure you are logged in to the Nogon web app.';
         messageType = 'error';
         return;
       }
@@ -136,7 +136,7 @@
         message = 'Authentication successful';
         messageType = 'success';
       } else {
-        message = 'Authentication failed. Make sure you are logged in to the Hister web app.';
+        message = 'Authentication failed. Make sure you are logged in to the Nogon web app.';
         messageType = 'error';
       }
     } catch (error) {
@@ -154,7 +154,7 @@
     class="bg-brutal-bg border-brutal-border flex items-center justify-between border-b-[3px] px-8 py-5"
   >
     <span class="font-outfit text-text-brand-muted text-sm font-bold tracking-widest uppercase">
-      Hister <span class="mx-1">/</span> Options
+      Nogon <span class="mx-1">/</span> Options
     </span>
     <button
       onclick={toggleMode}
@@ -179,7 +179,7 @@
           >Connection Settings</Card.Title
         >
         <Card.Description class="font-inter text-sm text-white/70"
-          >Configure how the extension connects to your Hister server.</Card.Description
+          >Configure how the extension connects to your Nogon server.</Card.Description
         >
       </Card.Header>
 
@@ -199,7 +199,7 @@
             label="Server URL"
             bind:value={url}
             placeholder="Server URL..."
-            description="The full URL of your Hister server, including the port number."
+            description="The full URL of your Nogon server, including the port number."
           />
 
           <SettingsInput

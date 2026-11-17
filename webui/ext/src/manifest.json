@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Hister",
-  "version": "0.1.0",
-  "description": "Web history on steroids",
+  "name": "Nogon",
+  "version": "0.34.0",
+  "description": "Your Own Search Engine",
   "icons": {
     "128": "assets/icons/icon128.png"
   },
@@ -11,7 +11,7 @@
       "128": "assets/icons/icon128.png"
     },
     "default_popup": "popup.html",
-    "default_title": "Hister"
+    "default_title": "Nogon"
   },
   "commands": {
     "index-current-page": {

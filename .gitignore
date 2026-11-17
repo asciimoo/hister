@@ -4,6 +4,9 @@ webui/ext/node_modules
 webui/ext/hister_ext_src.zip
 webui/ext/hister_ext_ff.zip
 webui/ext/hister_ext_chrome.zip
+webui/ext/nogon_ext_src.zip
+webui/ext/nogon_ext_ff.zip
+webui/ext/nogon_ext_chrome.zip
 result
 node_modules/
 dist/

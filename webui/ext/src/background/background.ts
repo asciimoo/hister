@@ -5,7 +5,7 @@ import { getTabPageURL } from '../modules/tabs';
 void ensureDefaultServerURL();
 
 const missingURLMsg = {
-  error: 'Missing or invalid Hister server URL. Configure it in the addon popup.',
+  error: 'Missing or invalid Nogon server URL. Configure it in the addon popup.',
 };
 
 type CustomHeader = { name: string; value: string };
@@ -108,7 +108,7 @@ async function setIcon(tabId?: number, grey = false): Promise<void> {
     const disabled = data['indexingEnabled'] === false;
     chrome.action.setTitle(
       {
-        title: disabled ? 'Hister: automatic indexing is off' : 'Hister',
+        title: disabled ? 'Nogon: automatic indexing is off' : 'Nogon',
         tabId,
       },
       () => void chrome.runtime.lastError,

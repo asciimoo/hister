@@ -249,16 +249,14 @@
       const cookieHeader = await syncServerCookies(authURL);
       if (!cookieHeader) {
         setErrorMessage(
-          'No cookies found for server URL. Make sure you are logged in to the Hister web app.',
+          'No cookies found for server URL. Make sure you are logged in to the Nogon web app.',
         );
         return;
       }
       if (await checkAuth(url)) {
         setSuccessMessage('Authentication successful');
       } else {
-        setErrorMessage(
-          'Authentication failed. Make sure you are logged in to the Hister web app.',
-        );
+        setErrorMessage('Authentication failed. Make sure you are logged in to the Nogon web app.');
       }
     } catch (error) {
       setErrorMessage((error as Error).message ?? 'Failed to read browser cookies.');
@@ -330,7 +328,7 @@
         chrome.tabs.create({ url });
       }}
       class="font-outfit cursor-pointer text-lg font-black tracking-widest text-white uppercase hover:underline"
-      >Hister</a
+      >Nogon</a
     >
     <div class="flex items-center gap-2">
       <button
