@@ -77,7 +77,7 @@ var supportedLanguages = []lingua.Language{
 	lingua.Turkish,    // tr
 }
 
-// languageCode returns the ISO 639-1 code Hister uses for a lingua language.
+// languageCode returns the ISO 639-1 code Nogon uses for a lingua language.
 func languageCode(l lingua.Language) string {
 	return strings.ToLower(l.IsoCode639_1().String())
 }

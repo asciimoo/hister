@@ -13,6 +13,9 @@ test('canonical metadata uses the Nogon domain and preserves existing page paths
       'content',
       'https://nogon.eu/logo.png',
     );
+    const feed = page.locator('link[rel="alternate"][type="application/rss+xml"]');
+    await expect(feed).toHaveAttribute('title', 'Nogon Posts');
+    await expect(feed).toHaveAttribute('href', '/posts/rss.xml');
     const schemas = await page.locator('script[type="application/ld+json"]').allTextContents();
     expect(schemas.length).toBeGreaterThan(0);
     for (const schema of schemas) {

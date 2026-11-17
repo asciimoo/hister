@@ -1,5 +1,5 @@
 {
-  "name": "hister-webui",
+  "name": "nogon-webui",
   "private": true,
   "scripts": {
     "build:app": "npm -w @nogon/app run build",

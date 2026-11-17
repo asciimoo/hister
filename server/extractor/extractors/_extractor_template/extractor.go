@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package extractor_template is a starting point for implementing a new Hister
+// Package extractor_template is a starting point for implementing a new Nogon
 // extractor. To use it:
 //
 //  1. Copy this directory to server/extractor/extractors/<myname>/.

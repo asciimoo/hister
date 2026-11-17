@@ -1,4 +1,4 @@
-// Package sdk defines the stable contracts used to implement Hister extractors.
+// Package sdk defines the stable contracts used to implement Nogon extractors.
 package sdk
 
 import (

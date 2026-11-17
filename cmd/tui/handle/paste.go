@@ -12,7 +12,7 @@ import (
 
 // Paste routes Bubble Tea v2's dedicated bracketed-paste message to the
 // focused Bubbles component. Paste is intentionally separate from key action
-// dispatch: pasted text must never be interpreted as a Hister hotkey.
+// dispatch: pasted text must never be interpreted as a Nogon hotkey.
 func Paste(m *model.Model, msg tea.PasteMsg) tea.Cmd {
 	switch m.State {
 	case model.StatePrioritizeInput:

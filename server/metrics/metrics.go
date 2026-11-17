@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package metrics provides Prometheus instrumentation for Hister.
+// Package metrics provides Prometheus instrumentation for Nogon.
 // All collectors are registered on a dedicated registry so that the
 // default process/Go runtime metrics are included only when the
 // /metrics endpoint is enabled.
@@ -27,7 +27,7 @@ type GaugeSource interface {
 }
 
 // Metrics holds all Prometheus collectors and the background refresh
-// goroutine for a single Hister server instance.  Create one with New()
+// goroutine for a single Nogon server instance.  Create one with New()
 // and call Stop() when the server shuts down.
 type Metrics struct {
 	QueriesTotal          *prometheus.CounterVec

@@ -14,7 +14,7 @@
 //
 // OAuth providers are configured in the application config file with client IDs,
 // secrets, and scopes. Users can sign in using any configured provider, and their
-// OAuth ID is linked to their Hister account.
+// OAuth ID is linked to their Nogon account.
 //
 // NewProvider creates a fresh instance with optional endpoint overrides:
 //

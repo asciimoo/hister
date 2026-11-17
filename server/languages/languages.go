@@ -26,7 +26,7 @@ type Resolution struct {
 	Index    string // Empty selects the default index; otherwise an allowlisted code.
 }
 
-// A definition records Hister's capabilities, not whether a language tag is
+// A definition records Nogon's capabilities, not whether a language tag is
 // valid. Resolve also accepts valid tags without a detector or custom analyzer.
 type definition struct {
 	name          string
@@ -184,7 +184,7 @@ func StoredTags(tag string) []string {
 	return values
 }
 
-// IsIndexCode accepts only the finite set of language index names Hister has
+// IsIndexCode accepts only the finite set of language index names Nogon has
 // written. Keep legacy analyzer names readable independently of new routing.
 func IsIndexCode(code string) bool {
 	// Older versions combined Chinese, Japanese, and Korean in one CJK index.

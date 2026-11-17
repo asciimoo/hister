@@ -26,7 +26,7 @@ const conversationRoleSelector = `[data-message-author-role], [data-testid^="con
 
 const noConversationTurns = "no visible user or assistant turns found; capture the loaded conversation with the browser extension or a browser crawler (chromedp or bidi); private conversations require a signed in browser"
 
-// ChatGPTExtractor extracts one visible ChatGPT conversation into one Hister
+// ChatGPTExtractor extracts one visible ChatGPT conversation into one Nogon
 // document. It intentionally works only with the rendered HTML already on the
 // document and never fetches conversation data itself.
 type ChatGPTExtractor struct {

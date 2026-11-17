@@ -39,7 +39,7 @@ type Hint struct {
 	Binding key.Binding
 }
 
-// KeyMap adapts Hister's user-configurable action map to the Bubbles key and
+// KeyMap adapts Nogon's user-configurable action map to the Bubbles key and
 // help abstractions. Copies are cheap and can carry a view-specific context.
 type KeyMap struct {
 	bindings map[config.Action]key.Binding

@@ -5,7 +5,7 @@ on:
 
 jobs:
   hister:
-    name: Hister binary build
+    name: Nogon binary build
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

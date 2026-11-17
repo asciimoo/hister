@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-// parseProxyURL validates the proxy formats supported by Hister.
+// parseProxyURL validates the proxy formats supported by Nogon.
 func parseProxyURL(raw string) (*url.URL, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {

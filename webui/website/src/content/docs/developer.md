@@ -90,6 +90,26 @@ good first issues. Coding agents should also follow the repository
 The Go module is `github.com/asciimoo/hister`. The root npm workspace includes
 the web application, website, shared components, and browser extension.
 
+### Rename compatibility
+
+Nogon retains identifiers used by existing installations and integrations.
+Preserve these when changing visible branding:
+
+| Surface                       | Retained identifiers                                                                                 | Purpose                                                                      |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| HTTP clients and sessions     | `hister` cookie, `hister://` origin, `X-Hister-Public`, `X-Hister-Target-User-ID`                    | Keep existing authentication and client requests working.                    |
+| Browser state                 | `hister*` app preferences and extension storage keys, extension IDs and Chrome key                   | Preserve settings, server connections, and extension upgrades.               |
+| Search indexes                | `hister_keep_stopwords`, `hister_snippet`, `hister.*` index metadata                                 | Reopen existing indexes without changing their stored definitions.           |
+| Monitoring                    | `hister_*` metric names                                                                              | Preserve queries and dashboards.                                             |
+| Configuration and services    | Legacy environment aliases, config and data paths, service identities, container volumes             | Reuse existing configuration, permissions, and data.                         |
+| Distribution and repositories | Legacy executable and download aliases, Go module, repository and registry URLs, package identifiers | Keep existing consumers working while publication is coordinated separately. |
+| Published content             | Post slugs, old heading anchors, RSS GUIDs, historical examples and fixtures                         | Preserve links, subscriptions, and regression coverage.                      |
+
+Internal helper symbols, temporary file prefixes, cache names, and test controls
+can retain their existing spellings. The live extractor and optional ZIM fixture
+controls below still use `HISTER_*` names. Repository and package links should
+change only when their replacement destinations are available.
+
 ### Dataset utilities
 
 Run `sh scripts/fetch_dataset.sh` to list available datasets. For crawled
