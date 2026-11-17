@@ -23,7 +23,7 @@
     {
       icon: LockKeyhole,
       title: 'Your chosen server',
-      text: 'Clients send indexed content only to the Hister server you configure.',
+      text: 'Clients send indexed content only to the Nogon server you configure.',
       color: 'var(--nogon-lime)',
     },
     {
@@ -46,7 +46,7 @@
           class="mb-7 inline-flex items-center gap-2 border-[2px] border-white/40 bg-[#924653] px-3 py-1.5 shadow-[4px_4px_0_rgba(255,255,255,0.18)]"
         >
           <ShieldCheck size={15} />
-          <span class="font-fira text-[10px] font-bold tracking-[1.7px] uppercase">Why Hister</span>
+          <span class="font-fira text-[10px] font-bold tracking-[1.7px] uppercase">Why Nogon</span>
         </div>
         <h2
           class="font-outfit max-w-[720px] text-4xl leading-[0.9] font-black tracking-[-0.045em] uppercase md:text-7xl"
@@ -55,7 +55,7 @@
           <span class="text-nogon-amber">Keep Control.</span>
         </h2>
         <p class="mt-7 max-w-[620px] text-lg leading-[1.8] text-white/65">
-          The index, stored page content, and rules remain on the Hister server you configure. The
+          The index, stored page content, and rules remain on the Nogon server you configure. The
           server has no telemetry and does not require a cloud service.
         </p>
 
@@ -100,7 +100,7 @@
         >
       </div>
       <div class="grid items-stretch md:grid-cols-[1fr_auto_1fr_auto_1fr]">
-        {#each [{ icon: EyeOff, label: 'Your sources', copy: 'Pages, files, and history you choose', color: 'bg-nogon-coral' }, { icon: Server, label: 'Your Hister server', copy: 'Extraction, rules, and searchable index', color: 'bg-nogon-indigo' }, { icon: Check, label: 'Your answers', copy: 'Results, previews, and integrations', color: 'bg-nogon-lime' }] as stage, i}
+        {#each [{ icon: EyeOff, label: 'Your sources', copy: 'Pages, files, and history you choose', color: 'bg-nogon-coral' }, { icon: Server, label: 'Your Nogon server', copy: 'Extraction, rules, and searchable index', color: 'bg-nogon-indigo' }, { icon: Check, label: 'Your answers', copy: 'Results, previews, and integrations', color: 'bg-nogon-lime' }] as stage, i}
           <article class="flex items-center gap-4 p-6 md:p-8">
             <div
               class="flex h-12 w-12 shrink-0 items-center justify-center border-[2px] border-white/35 {stage.color} {i ===

@@ -9,8 +9,8 @@
   let { data } = $props();
   const setupSteps = [
     {
-      title: 'Install Hister',
-      description: 'Install and start a local Hister server.',
+      title: 'Install Nogon',
+      description: 'Install and start a local Nogon server.',
       href: '/docs/installing',
     },
     {
@@ -27,8 +27,8 @@
 </script>
 
 <Seo
-  title="Documentation | Hister"
-  description="Learn how to install, configure, and use Hister across the web, terminal, browser extensions, API, and MCP."
+  title="Documentation | Nogon"
+  description="Learn how to install, configure, and use Nogon across the web, terminal, browser extensions, API, and MCP."
   path="/docs"
 />
 
@@ -50,7 +50,7 @@
       id="getting-started-heading"
       class="font-space text-2xl font-extrabold text-(--text-primary)"
     >
-      Start searching with Hister
+      Start searching with Nogon
     </h2>
     <p class="font-inter mt-2 text-sm leading-relaxed text-(--text-secondary)">
       Set up your own search engine in three steps. No configuration file needed.
@@ -81,7 +81,7 @@
     <section
       aria-labelledby="docs-category-{i}"
       class="docs-category"
-      style="--section-accent: var(--hister-{category.color})"
+      style="--section-accent: var(--nogon-{category.color})"
     >
       <div class="docs-category-heading">
         <span class="docs-category-mark" aria-hidden="true"></span>

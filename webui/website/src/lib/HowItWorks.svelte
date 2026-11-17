@@ -25,7 +25,7 @@
     {
       label: 'Index',
       description:
-        'Hister extracts the parts that matter and indexes their full text on the server you choose.',
+        'Nogon extracts the parts that matter and indexes their full text on the server you choose.',
       icon: FolderSearch,
       color: 'var(--nogon-amber)',
       items: [
@@ -59,7 +59,7 @@
           <p
             class="font-fira text-xs font-bold tracking-[1.8px] text-[var(--text-secondary)] uppercase"
           >
-            How Hister works
+            How Nogon works
           </p>
         </div>
         <h2

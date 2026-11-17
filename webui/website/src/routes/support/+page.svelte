@@ -52,7 +52,7 @@
     {
       icon: Network,
       title: 'Federation and Distributed Search',
-      desc: 'Connect trusted Hister instances so they can exchange selected public results, datasets, and index metadata while administrators remain in control of what they share and import.',
+      desc: 'Connect trusted Nogon instances so they can exchange selected public results, datasets, and index metadata while administrators remain in control of what they share and import.',
       href: null,
       linkLabel: null,
       color: 'bg-nogon-amber',
@@ -60,7 +60,7 @@
     {
       icon: Puzzle,
       title: 'Content-Specific Extractors',
-      desc: 'Add extractors for more content types to improve integration and index quality so Hister understands the web deeply, not just superficially.',
+      desc: 'Add extractors for more content types to improve integration and index quality so Nogon understands the web deeply, not just superficially.',
       href: '/docs/extractors',
       linkLabel: 'Learn about extractors',
       color: 'bg-nogon-indigo',
@@ -76,7 +76,7 @@
     {
       icon: Globe,
       title: 'Public Dataset Imports',
-      desc: 'Support importing data from public datasets such as the Open Search Foundation and the Internet Archive, giving Hister access to the breadth of human knowledge.',
+      desc: 'Support importing data from public datasets such as the Open Search Foundation and the Internet Archive, giving Nogon access to the breadth of human knowledge.',
       href: null,
       linkLabel: null,
       color: 'bg-nogon-coral',
@@ -85,8 +85,8 @@
 </script>
 
 <Seo
-  title="Support Hister. Help Build the Future of Search"
-  description="Support Hister's mission to eliminate dependence on untrusted search services by contributing code or sponsoring ongoing development."
+  title="Support Nogon. Help Build the Future of Search"
+  description="Support Nogon's mission to eliminate dependence on untrusted search services by contributing code or sponsoring ongoing development."
   path="/support"
 />
 
@@ -117,8 +117,8 @@
             Sponsor Development
           </h3>
           <p class="font-inter text-base leading-[1.7] text-[var(--text-secondary)]">
-            Financial support directly funds to work on Hister. Faster bug fixes, new features, and
-            a more polished experience for everyone.
+            Financial support directly funds to work on Nogon. Faster bug fixes, new features, and a
+            more polished experience for everyone.
           </p>
         </div>
         <div class="mt-auto">
@@ -149,7 +149,7 @@
             Contribute Code
           </h3>
           <p class="font-inter text-base leading-[1.7] text-[var(--text-secondary)]">
-            Hister is free, open-source software. Whether it's a bug report, a pull request, or
+            Nogon is free, open-source software. Whether it's a bug report, a pull request, or
             improving documentation, every contribution moves the project forward.
           </p>
         </div>
@@ -178,7 +178,7 @@
             Donate with Cryptocurrency
           </h3>
           <p class="font-inter text-base leading-[1.7] text-[var(--text-secondary)]">
-            Send BTC or ETH directly to support Hister development.
+            Send BTC or ETH directly to support Nogon development.
           </p>
         </div>
 
@@ -274,7 +274,7 @@
         Future Plans
       </h2>
       <p class="font-inter max-w-[540px] text-lg leading-relaxed text-white">
-        Where your support takes Hister next.<br /> These are the major pillars of the roadmap.
+        Where your support takes Nogon next.<br /> These are the major pillars of the roadmap.
       </p>
     </div>
 

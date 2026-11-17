@@ -92,7 +92,7 @@
         </h2>
       </div>
       <p class="max-w-[470px] text-base leading-[1.75] text-[var(--text-secondary)] lg:text-right">
-        Hister indexes visited pages, watched files, imported browser history, and crawled websites.
+        Nogon indexes visited pages, watched files, imported browser history, and crawled websites.
         The index is available through web, terminal, CLI, HTTP API, and MCP interfaces.
       </p>
     </header>
@@ -147,7 +147,7 @@
           Additional capabilities
         </h3>
         <p class="mt-1 text-sm leading-relaxed text-[var(--text-secondary)]">
-          Hister also supports multiple crawler backends, language specific indexes, content
+          Nogon also supports multiple crawler backends, language specific indexes, content
           versioning, ownership rules, and configurable extractors.
         </p>
       </div>

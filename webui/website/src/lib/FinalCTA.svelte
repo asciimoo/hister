@@ -76,7 +76,7 @@
         Preserve Knowledge.<br />Find It Again.
       </h2>
       <p class="mt-7 max-w-[650px] text-lg leading-[1.75] text-[#1f1f1f]">
-        Hister stores extracted document content with the search index and displays it as a readable
+        Nogon stores extracted document content with the search index and displays it as a readable
         preview alongside search results.
       </p>
 
@@ -87,7 +87,7 @@
           rel="noopener noreferrer"
           class="font-space brutal-press-lg border-brutal-border h-auto justify-center rounded-none border-[3px] bg-[var(--text-primary)] px-8 py-4 text-[15px] font-bold tracking-[1.3px] text-white uppercase no-underline"
         >
-          Download Hister
+          Download Nogon
           <Download size={18} />
         </Button>
         <Button

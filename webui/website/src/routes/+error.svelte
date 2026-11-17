@@ -12,14 +12,14 @@
   const description = $derived(
     notFound
       ? 'The page may have moved, changed its name, or never existed.'
-      : 'Hister could not load this page. Try again or continue from one of the links below.',
+      : 'Nogon could not load this page. Try again or continue from one of the links below.',
   );
 
   const destinations = [
     {
       href: '/',
       label: 'Home',
-      description: 'Return to the Hister overview.',
+      description: 'Return to the Nogon overview.',
       icon: House,
       color: 'bg-nogon-cyan',
     },
@@ -33,7 +33,7 @@
     {
       href: '/posts',
       label: 'Posts',
-      description: 'Read Hister news and practical guides.',
+      description: 'Read Nogon news and practical guides.',
       icon: Newspaper,
       color: 'bg-nogon-amber',
     },
@@ -41,7 +41,7 @@
 </script>
 
 <svelte:head>
-  <title>{page.status} {title} | Hister</title>
+  <title>{page.status} {title} | Nogon</title>
   <meta name="description" content={description} />
   <meta name="robots" content="noindex, nofollow" />
 </svelte:head>

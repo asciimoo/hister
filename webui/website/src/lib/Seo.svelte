@@ -28,7 +28,7 @@
     path,
     type = 'website',
     image = '/logo.png',
-    imageAlt = 'Hister logo',
+    imageAlt = 'Nogon logo',
     publishedTime,
     modifiedTime,
     author,
@@ -45,7 +45,7 @@
   const organization = {
     '@type': 'Organization',
     '@id': `${SITE_URL}/#organization`,
-    name: 'Hister',
+    name: 'Nogon',
     url: SITE_URL,
     logo: {
       '@type': 'ImageObject',
@@ -60,7 +60,7 @@
       graph.push({
         '@type': 'SoftwareApplication',
         '@id': `${canonicalUrl}#software`,
-        name: schemaTitle ?? 'Hister',
+        name: schemaTitle ?? 'Nogon',
         description,
         url: canonicalUrl,
         applicationCategory: 'UtilitiesApplication',
@@ -133,7 +133,7 @@
   <meta name="description" content={description} />
   <link rel="canonical" href={canonicalUrl} />
 
-  <meta property="og:site_name" content="Hister" />
+  <meta property="og:site_name" content="Nogon" />
   <meta property="og:locale" content="en_US" />
   <meta property="og:title" content={title} />
   <meta property="og:description" content={description} />

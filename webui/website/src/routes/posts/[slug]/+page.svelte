@@ -6,8 +6,8 @@
 </script>
 
 <Seo
-  title={`${data.meta.title} | Hister`}
-  description={(data.meta.description as string) ?? `Read ${data.meta.title} on the Hister blog.`}
+  title={`${data.meta.title} | Nogon`}
+  description={(data.meta.description as string) ?? `Read ${data.meta.title} on the Nogon blog.`}
   path={`/posts/${data.slug}`}
   type="article"
   image={data.meta.image ? `/posts/${data.meta.image as string}` : undefined}

@@ -1,13 +1,15 @@
 ---
 date: '2026-07-14T00:00:00+02:00'
 draft: false
-title: 'Installing Hister'
-description: 'Install a release binary, build from source, or run Hister with Docker, Nix, or Proxmox VE.'
+title: 'Installing Nogon'
+description: 'Install a release binary, build from source, or run Nogon with Docker, Nix, or Proxmox VE.'
 ---
 
-The `hister` program contains both the search server and the terminal client. For the fastest local setup, download a prebuilt binary and continue with the [quickstart guide](quickstart).
+The `nogon` program contains both the search server and the terminal client. For the fastest local setup, download a prebuilt binary and continue with the [quickstart guide](quickstart).
 
-If someone else already operates the Hister server you use and you only search through the web interface, you do not need to install this program.
+Downloads and package listings may still use the Hister name. If your installation provides `hister`, use that command in place of `nogon` in these guides.
+
+If someone else already operates the Nogon server you use and you only search through the web interface, you do not need to install this program.
 
 ## Prebuilt binary
 
@@ -23,21 +25,21 @@ If someone else already operates the Hister server you use and you only search t
    | macOS   | Intel               | `darwin_amd64`      |
    | Windows | Intel or AMD 64 bit | `windows_amd64.exe` |
 
-3. Rename the downloaded file to `hister` or `hister.exe`.
+3. Rename the downloaded file to `nogon` or `nogon.exe`.
 
 4. On Linux or macOS, open a terminal in the download directory and make the file executable:
 
    ```bash
-   chmod +x hister
+   chmod +x nogon
    ```
 
 5. Start the server:
 
    ```bash
-   ./hister listen
+   ./nogon listen
    ```
 
-   On Windows, run `hister.exe listen` instead.
+   On Windows, run `.\nogon.exe listen` instead.
 
 6. Open <http://127.0.0.1:4433> in your browser, then continue with the [quickstart](quickstart) to install the browser extension and begin indexing.
 
@@ -47,7 +49,7 @@ You may optionally move the binary to a directory on your `PATH`, such as `/usr/
 
 ## Building from source
 
-Building Hister requires Go 1.26, npm, and a C compiler for CGO dependencies.
+Building Nogon requires Go 1.26, npm, and a C compiler for CGO dependencies.
 
 ```bash
 git clone https://github.com/asciimoo/hister.git
@@ -59,13 +61,13 @@ The build produces a `hister` binary in the repository root. Source is also mirr
 
 ## Homebrew
 
-If you use Homebrew, getting started with Hister is quick and easy to do:
+If you use Homebrew, getting started with Nogon is quick and easy to do:
 
 ```bash
 brew install hister
 ```
 
-Running this command will place `hister` in your `$PATH`. This can be either `opt/homebrew` for Apple Silicon, `/usr/local` for macOS Intel, or `/home/linuxbrew/.linuxbrew` for Linux.
+The formula currently installs the `hister` command. Start the server with `hister listen`.
 
 ## Docker
 
@@ -209,10 +211,10 @@ For Home Manager:
 
 ## Proxmox VE
 
-Hister is available through the [Proxmox VE Community Scripts](https://community-scripts.org/scripts/hister) project for LXC installations:
+Nogon is available through the [Proxmox VE Community Scripts](https://community-scripts.org/scripts/hister) project for LXC installations:
 
 ```bash
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVED/main/ct/hister.sh)"
 ```
 
-This installer is maintained by the community scripts project, not by Hister. Review the script before running it on your Proxmox host.
+This installer is maintained by the community scripts project, not by Nogon. Review the script before running it on your Proxmox host.

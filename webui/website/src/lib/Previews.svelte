@@ -41,8 +41,8 @@
         <p
           class="mt-6 max-w-[560px] text-base leading-[1.75] text-[var(--text-secondary)] md:text-lg"
         >
-          Look beyond bookmarks and filenames. Hister indexes the full content of the pages and
-          files you choose, then keeps that searchable knowledge on a server you control.
+          Look beyond bookmarks and filenames. Nogon indexes the full content of the pages and files
+          you choose, then keeps that searchable knowledge on a server you control.
         </p>
 
         <div class="mt-9 flex w-full flex-col gap-3">
@@ -90,7 +90,7 @@
           <BrowserFrame>
             <img
               src={screenshot}
-              alt="Hister search results with a stored document preview open"
+              alt="Nogon search results with a stored document preview open"
               width="1052"
               height="710"
               loading="lazy"

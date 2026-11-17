@@ -59,9 +59,10 @@
       </h1>
 
       <p class="mt-8 max-w-[650px] text-lg leading-[1.65] text-[var(--text-secondary)] md:text-xl">
-        Hister turns the pages you visit and the files you keep into a private, full content search
+        Nogon turns the pages you visit and the files you keep into a private, full content search
         index that you control.
       </p>
+      <p class="mt-3 text-sm text-[var(--text-secondary)]">Formerly known as Hister.</p>
 
       <div class="mt-9 flex w-full flex-col gap-4 sm:w-auto sm:flex-row">
         <Button

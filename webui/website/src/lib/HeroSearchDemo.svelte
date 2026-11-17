@@ -31,7 +31,7 @@
     >
       <div class="flex items-center gap-3">
         <img src="/logo.png" alt="" class="h-6 w-6" />
-        <span class="font-space text-xs font-black tracking-[1.8px] uppercase">Hister</span>
+        <span class="font-space text-xs font-black tracking-[1.8px] uppercase">Nogon</span>
       </div>
       <span class="font-fira text-[9px] tracking-[1px] text-white/70 uppercase"
         >1,924 pages indexed</span

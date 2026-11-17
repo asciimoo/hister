@@ -13,7 +13,7 @@ description: 'Install and configure browser capture, authentication, search inte
       name: 'Server URL',
       type: 'string',
       defaultValue: 'http://127.0.0.1:4433/',
-      description: 'Full URL of the Hister server, including its scheme and port.',
+      description: 'Full URL of the Nogon server, including its scheme and port.',
     },
     {
       name: 'Custom Headers',
@@ -36,26 +36,30 @@ description: 'Install and configure browser capture, authentication, search inte
   ];
 </script>
 
-The Hister browser extension is the primary way to automatically index your browsing history. It runs silently in the background, sending page content to your Hister server as you browse.
+Nogon was formerly known as Hister. Updating the extension preserves your saved server URL, access token, and indexing preferences.
+
+The Nogon browser extension is the primary way to automatically index your browsing history. It runs silently in the background, sending page content to your Nogon server as you browse.
 
 ## Installation
 
 - **Chrome / Chromium / Edge**: [Install from Chrome Web Store](https://chromewebstore.google.com/detail/hister/cciilamhchpmbdnniabclekddabkifhb)
 - **Firefox**: [Install from Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/hister/) (also works on Firefox for Android)
-- **qutebrowser**: Use the built in `hister companion qutebrowser` command as described below.
+- **qutebrowser**: Use the built in `nogon companion qutebrowser` command as described below.
 
-> The extension only communicates with your Hister server, it never contacts any third-party services or the websites you visit (except for downloading the page's favicon while collecting page data).
+> The extension only communicates with your Nogon server, it never contacts any third-party services or the websites you visit (except for downloading the page's favicon while collecting page data).
 
 ### qutebrowser
 
-The qutebrowser companion submits the rendered page title, text, HTML, and
-favicon to Hister, then monitors changes made by single page applications.
-Pages served from the configured Hister base URL are ignored.
+If your package provides the `hister` command, use that name in place of `nogon` below.
 
-The built in `hister companion qutebrowser` command receives tab, navigation,
+The qutebrowser companion submits the rendered page title, text, HTML, and
+favicon to Nogon, then monitors changes made by single page applications.
+Pages served from the configured Nogon base URL are ignored.
+
+The built in `nogon companion qutebrowser` command receives tab, navigation,
 and DOM update events through the local Qt WebEngine DevTools endpoint.
 Extraction runs in an isolated JavaScript world, then the companion submits the
-rendered content directly to Hister. The access token is never injected into
+rendered content directly to Nogon. The access token is never injected into
 the inspected page.
 
 Close all qutebrowser processes, then start qutebrowser with a loopback only
@@ -68,15 +72,15 @@ QTWEBENGINE_REMOTE_DEBUGGING=127.0.0.1:9222 qutebrowser
 Run the companion in a separate terminal:
 
 ```bash
-hister companion qutebrowser
+nogon companion qutebrowser
 ```
 
 The command uses `server.base_url` and `app.access_token` from the normal
-Hister configuration. Global `--server-url`, `--token`, and `--client-timeout`
+Nogon configuration. Global `--server-url`, `--token`, and `--client-timeout`
 options can override the destination settings:
 
 ```bash
-hister --server-url http://127.0.0.1:4433 \
+nogon --server-url http://127.0.0.1:4433 \
   --token 'replace-with-app-access-token' \
   companion qutebrowser
 ```
@@ -96,9 +100,9 @@ WebEngine debugging port to a network.
 
 ### Automatic Page Indexing
 
-The extension captures visible pages, including the page title, full text, HTML, and favicon, then sends them to your Hister server via its API. Pages opened in a background tab are captured when you view them.
+The extension captures visible pages, including the page title, full text, HTML, and favicon, then sends them to your Nogon server via its API. Pages opened in a background tab are captured when you view them.
 
-Turn off **Automatic indexing** in the extension popup to pause automatic capture. A thick red border around the toolbar icon and the tooltip "Hister: automatic indexing is off" indicate this setting. You can still index pages manually.
+Turn off **Automatic indexing** in the extension popup to pause automatic capture. A thick red border around the toolbar icon and the tooltip "Nogon: automatic indexing is off" indicate this setting. You can still index pages manually.
 
 When a page provides a `<link rel="canonical">` URL, the extension uses it for indexing if it is an HTTP or HTTPS URL with exactly the same hostname as the visited page. Relative canonical URLs are resolved against the document base URL. Other domains and subdomains, invalid URLs, and URLs containing credentials are ignored. URL fragments are removed. Automatic indexing checks allow and skip rules against both the visited URL and the canonical URL.
 
@@ -108,7 +112,7 @@ Changes to text, title, favicon, or page metadata trigger an update. Cosmetic ma
 
 When you hide a tab, the extension captures one final snapshot and stops polling. If that snapshot has changed, it is submitted after any remaining submission delay. Showing the tab again resumes checks using fresh content. Closing the tab or navigating away flushes changed content immediately to the extension's background process, bypassing the remaining delay. Unchanged content is not submitted again. Manual indexing also submits immediately and bypasses these delays.
 
-To capture only selected websites, add allow patterns on the Hister Rules page. A URL
+To capture only selected websites, add allow patterns on the Nogon Rules page. A URL
 must match at least one allow pattern when the list is nonempty, and skip rules take
 precedence. The extension checks both lists before uploading pages or PDFs. Patterns
 that JavaScript cannot evaluate are checked by the server when the page is submitted.
@@ -141,7 +145,7 @@ The extension defines browser level shortcuts for common indexing actions.
 | Disable indexing for current page   | `Ctrl+B`          | `Command+B` | Adds a skip rule for the exact current URL.                           |
 | Disable indexing for current domain | `Ctrl+Y`          | `Command+Y` | Adds a skip rule for the current origin, including scheme and domain. |
 
-Browser shortcuts can be changed in the browser extension shortcut settings. In Chrome, Chromium, and Edge, open `chrome://extensions/shortcuts`. In Firefox, open `about:addons`, choose the extension shortcut settings, then edit the Hister shortcuts.
+Browser shortcuts can be changed in the browser extension shortcut settings. In Chrome, Chromium, and Edge, open `chrome://extensions/shortcuts`. In Firefox, open `about:addons`, choose the extension shortcut settings, then edit the Nogon shortcuts.
 
 ### Search Engine Result Tracking
 
@@ -149,7 +153,7 @@ The extension detects when you click on a search result in **Google** or **DuckD
 
 ### Indexed Page Indicator
 
-The optional indexed page indicator checks the active page against your Hister server.
+The optional indexed page indicator checks the active page against your Nogon server.
 It is disabled by default.
 
 ## Options Page
@@ -164,7 +168,7 @@ The extension checks the server connection before saving settings.
 
 The extension supports global or personal access tokens and browser session authentication.
 
-Browser session authentication requires an existing login to the Hister web interface in
+Browser session authentication requires an existing login to the Nogon web interface in
 the same browser when [user handling](/docs/user-handling) is enabled.
 
 The extension shares the active web session. Logging out revokes that session;
@@ -179,7 +183,7 @@ of storing them only under your user account.
 
 The last attempt to send page data to the server failed. Open the popup to see the error. Common causes:
 
-- The Hister server is not running: start it with `hister listen`.
+- The Nogon server is not running: start it with `nogon listen`.
 - The **Server URL** is wrong: confirm it matches the address printed when the server starts (default `http://127.0.0.1:4433/`).
 - User handling is enabled but the extension is not authenticated: configure an access token or use an active browser session.
 

@@ -7,8 +7,8 @@
 </script>
 
 <Seo
-  title="Posts | Hister"
-  description="Read Hister news, guides, technical articles, and practical stories about private search and personal knowledge management."
+  title="Posts | Nogon"
+  description="Read Nogon news, guides, technical articles, and practical stories about private search and personal knowledge management."
   path="/posts"
 />
 

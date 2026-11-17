@@ -35,7 +35,7 @@
     {#each categories as category}
       <section>
         <div class="mb-1.5 flex items-center gap-2 px-1">
-          <span aria-hidden="true" class="h-2 w-2 shrink-0 bg-hister-{category.color}"></span>
+          <span aria-hidden="true" class="h-2 w-2 shrink-0 bg-nogon-{category.color}"></span>
           <h2
             class="font-inter text-sm font-bold {category.docs.some(
               (doc) => doc.slug === currentSlug,

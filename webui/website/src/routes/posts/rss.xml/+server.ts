@@ -1,8 +1,8 @@
 import type { RequestHandler } from '@sveltejs/kit';
 import { SITE_URL } from '#lib/config.js';
 
-const FEED_TITLE = 'Hister Posts';
-const FEED_DESCRIPTION = 'Latest posts from the Hister blog';
+const FEED_TITLE = 'Nogon Posts';
+const FEED_DESCRIPTION = 'Latest posts from the Nogon blog';
 
 const modules = import.meta.glob('../../../content/posts/*.md', { eager: true });
 

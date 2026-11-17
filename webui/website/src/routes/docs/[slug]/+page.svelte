@@ -154,14 +154,14 @@
 </script>
 
 <Seo
-  title={`${data.meta.title} | Hister Documentation`}
+  title={`${data.meta.title} | Nogon Documentation`}
   description={(data.meta.description as string) ??
-    `Learn about ${data.meta.title} in the Hister documentation.`}
+    `Learn about ${data.meta.title} in the Nogon documentation.`}
   path={`/docs/${data.slug}`}
   type="article"
   publishedTime={data.meta.date as string | undefined}
   modifiedTime={(data.meta.updated as string | undefined) ?? (data.meta.date as string | undefined)}
-  author="Hister contributors"
+  author="Nogon contributors"
   section="Documentation"
   schemaType="TechArticle"
   schemaTitle={data.meta.title as string}

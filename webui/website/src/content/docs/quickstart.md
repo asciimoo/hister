@@ -2,24 +2,26 @@
 date: '2026-02-21T16:18:00+01:00'
 draft: false
 title: 'Quickstart'
-description: 'Start a local Hister server, connect a browser extension, and search your first indexed pages.'
+description: 'Start a local Nogon server, connect a browser extension, and search your first indexed pages.'
 ---
 
 <script>
 import screenshot from "#lib/assets/landing_screenshot.png";
 </script>
 
-The simplest way to use Hister requires no configuration. First [install the Hister binary](installing), then follow the steps below.
+The simplest way to use Nogon requires no configuration. First [install the Nogon binary](installing), then follow the steps below.
 
 ## Running the Server
 
 Open a terminal, and start the server:
 
 ```bash
-./hister listen
+./nogon listen
 ```
 
-On Windows, run `.\hister.exe listen` in PowerShell instead.
+On Windows, run `.\nogon.exe listen` in PowerShell instead.
+
+If installed through a package manager, use `nogon listen` or `hister listen`, depending on the command your package provides.
 
 The server will start on http://127.0.0.1:4433 and thus be accessible only from the same machine.
 This is perfect for personal use on a single computer.
@@ -38,25 +40,25 @@ Install one or more of the following extensions to index any pages you _newly_ v
 - **Chrome**: [Install from Chrome Web Store](https://chromewebstore.google.com/detail/hister/cciilamhchpmbdnniabclekddabkifhb)
 - **Firefox**: [Install from Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/hister/) (also available on Firefox Mobile!)
 
-The extension defaults to `http://127.0.0.1:4433`. Change the server URL if Hister runs elsewhere.
+The extension defaults to `http://127.0.0.1:4433`. Change the server URL if Nogon runs elsewhere.
 
-To search Hister from your browser's address bar, add your Hister instance as a custom search engine in the browser settings.
+To search Nogon from your browser's address bar, add your Nogon instance as a custom search engine in the browser settings.
 
 Note that the browser extensions _do not_ access the network except for downloading the page's favicon while collecting page data.
 In particular, they will never make requests to any site you are visiting (they only look at what the browser itself has loaded), and thus they are completely transparent to the indexed websites.
 
 ## Accessing the Web Interface
 
-Type <http://localhost:4433> (or, equivalently, `http://127.0.0.1:4433`) into your browser's address bar, and you will access Hister's interface.
+Type <http://localhost:4433> (or, equivalently, `http://127.0.0.1:4433`) into your browser's address bar, and you will access Nogon's interface.
 There, you can perform searches, add indexing rules... feel free to look around!
 
 To find your first page:
 
 1. With the server running and the extension enabled, visit a page you want to keep.
-2. Open Hister at <http://127.0.0.1:4433> and refresh to check that the indexed page count has increased.
+2. Open Nogon at <http://127.0.0.1:4433> and refresh to check that the indexed page count has increased.
 3. Search for a few distinctive words from the page. Open the matching result or its stored preview.
 
-<img src={screenshot} alt="Screenshot of Hister's landing page" />
+<img src={screenshot} alt="Screenshot of Nogon's landing page" />
 
 As you visit more pages in your browser (with the extension enabled), the number of indexed pages should increase!
 (Just refresh the page to update it.)
@@ -66,10 +68,10 @@ If you can't access the Web interface at all, check that [the server is running]
 
 ## Next Steps
 
-- [Create a config file to customize Hister](configuration#creating-a-config-file)
+- [Create a config file to customize Nogon](configuration#creating-a-config-file)
 - [Import browser history, browser bookmarks, files, or content from reading services](import)
 - [Index local directories](configuration#local-directory-indexing)
 - [Enable semantic search](configuration#semantic-search)
 - In the Web interface, set up ignoring and priority rules, as well as keyword aliases for efficient searching
-- Explore the [Hister query language](query-language)
+- Explore the [Nogon query language](query-language)
 - Configure [web hotkeys](configuration#hotkeysweb-section) and review the [sensitive content patterns](configuration#sensitive_content_patterns-section)

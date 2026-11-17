@@ -6,15 +6,15 @@ test('new users can follow the setup steps from installation to their first sear
 }) => {
   await page.goto('/docs');
   await expect(page.getByRole('heading', { level: 2 }).first()).toHaveText(
-    'Start searching with Hister',
+    'Start searching with Nogon',
   );
 
   for (const [link, destination] of [
-    ['Install Hister', 'Installing Hister'],
+    ['Install Nogon', 'Installing Nogon'],
     ['Connect your browser', 'Installing a Browser Extension'],
     ['Find your first page', 'Accessing the Web Interface'],
   ]) {
-    const setup = page.getByRole('region', { name: 'Start searching with Hister' });
+    const setup = page.getByRole('region', { name: 'Start searching with Nogon' });
     await setup.getByRole('link', { name: new RegExp(link) }).click();
     await expect(page.getByRole('heading', { name: destination, exact: true })).toBeInViewport();
     if (link === 'Find your first page') {
@@ -37,7 +37,7 @@ test('Start Here guides follow setup without a separate task section', async ({ 
   await expect(page.getByRole('heading', { level: 2 }).nth(1)).toHaveText('Start Here');
   const guides = page.getByRole('region', { name: 'Start Here', exact: true });
   await expect(guides).toBeVisible();
-  await guides.getByRole('link', { name: /^What Hister Is/ }).focus();
+  await guides.getByRole('link', { name: /^What Nogon Is/ }).focus();
   await page.keyboard.press('Tab');
   await expect(guides.getByRole('link', { name: /^Quickstart/ })).toBeFocused();
   await page.keyboard.press('Enter');
@@ -48,7 +48,7 @@ test('the quickstart shows its first command without scrolling', async ({ page }
   await page.goto('/docs/quickstart');
   await page.evaluate(() => document.fonts.ready);
   await expect(page.getByRole('button', { name: 'Copy code block' }).first()).toBeVisible();
-  await expect(page.getByText('./hister listen', { exact: true })).toBeInViewport({ ratio: 1 });
+  await expect(page.getByText('./nogon listen', { exact: true })).toBeInViewport({ ratio: 1 });
 });
 
 test('the docs entry page fits narrow phone screens', async ({ page }) => {
@@ -72,7 +72,7 @@ test('documentation search, code copying, and page navigation remain available',
   await page.getByRole('button', { name: 'Copy code block' }).first().click();
   await expect
     .poll(() => page.evaluate(() => navigator.clipboard.readText()))
-    .toBe('./hister listen');
+    .toBe('./nogon listen');
 
   if (isMobile) await page.getByRole('article').getByText('On this page', { exact: true }).click();
   await page

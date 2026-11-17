@@ -140,8 +140,8 @@
 </script>
 
 <Seo
-  title="Datasets | Hister"
-  description="Browse public datasets compatible with Hister. Filter by tag, license or author and download what you need."
+  title="Datasets | Nogon"
+  description="Browse public datasets compatible with Nogon. Filter by tag, license or author and download what you need."
   path="/datasets"
 />
 
@@ -154,7 +154,7 @@
       Datasets
     </h1>
     <p class="font-inter mt-3 max-w-[70em] text-base text-(--text-secondary)">
-      Public datasets you can import into Hister to extend your local index. <button
+      Public datasets you can import into Nogon to extend your local index. <button
         onclick={() => (submitModalOpen = true)}
         aria-haspopup="dialog"
         class="font-space border-brutal-border brutal-press cursor-pointer border-[2px] bg-(--nogon-cyan) px-4 py-2.5 text-[12px] font-bold tracking-[1px] text-white uppercase"
@@ -376,7 +376,7 @@
                 </h2>
                 <p class="font-inter mt-1 text-sm leading-relaxed text-(--text-secondary)">
                   An external dataset library offering Wikipedia, reference works, and educational
-                  collections. Download ZIM archives from Kiwix, then import them into Hister.
+                  collections. Download ZIM archives from Kiwix, then import them into Nogon.
                 </p>
               </div>
             </div>
@@ -398,7 +398,7 @@
               <Terminal size={16} aria-hidden="true" class="shrink-0 text-white/60" />
               <code
                 class="font-fira min-w-0 text-xs leading-6 break-words select-all sm:text-[13px]"
-                >hister import zim <span class="text-[#b9d8ce]">collection.zim</span></code
+                >nogon import zim <span class="text-[#b9d8ce]">collection.zim</span></code
               >
             </div>
             <a
@@ -592,7 +592,7 @@
         </div>
 
         <dl class="font-inter grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1.5 text-sm">
-          {#each [['name', 'Display name of the dataset (string, required)'], ['description', 'Short description of the dataset contents (string, required)'], ['downloadUrl', 'Direct URL to the Hister dataset JSON file (string, required)'], ['image', 'Optional cover image URL, or null (string | null)'], ['tags', 'List of topic tags (string[], required)'], ['license', 'License identifier, e.g. "CC-BY 4.0" (string, required)'], ['author', 'Name of the dataset author or publisher (string, required)'], ['diskSizeBytes', 'File size of the download in bytes (number, required)'], ['documentCount', 'Number of documents in the dataset (number, required)'], ['latestUpdate', 'Date the dataset was last updated, YYYY-MM-DD (string, required)']] as [field, desc]}
+          {#each [['name', 'Display name of the dataset (string, required)'], ['description', 'Short description of the dataset contents (string, required)'], ['downloadUrl', 'Direct URL to the Nogon dataset JSON file (string, required)'], ['image', 'Optional cover image URL, or null (string | null)'], ['tags', 'List of topic tags (string[], required)'], ['license', 'License identifier, e.g. "CC-BY 4.0" (string, required)'], ['author', 'Name of the dataset author or publisher (string, required)'], ['diskSizeBytes', 'File size of the download in bytes (number, required)'], ['documentCount', 'Number of documents in the dataset (number, required)'], ['latestUpdate', 'Date the dataset was last updated, YYYY-MM-DD (string, required)']] as [field, desc]}
             <dt
               class="font-space font-semibold tracking-[0.5px] whitespace-nowrap text-(--text-primary)"
             >

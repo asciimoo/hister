@@ -26,7 +26,7 @@ export const docsStructure: DocsCategory[] = [
     color: 'lime',
   },
   {
-    name: 'Running Hister',
+    name: 'Running Nogon',
     slugs: ['configuration', 'server-setup', 'docker', 'monitoring', 'troubleshooting'],
     color: 'teal',
   },
