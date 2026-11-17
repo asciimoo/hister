@@ -1,12 +1,13 @@
 ---
 version: 2
+project_name: nogon
 
 snapshot:
   version_template: 'latest'
 
 builds:
   - id: build_cgo
-    binary: hister
+    binary: nogon
     env:
       - CGO_ENABLED=1
     goos:
@@ -48,8 +49,10 @@ builds:
         env:
           - CC=oa64-clang
     hooks:
+      # Keep the original build path valid for GoReleaser metadata.
       post:
-        - mv "{{ .Path }}" "dist/{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}{{ .Ext }}"
+        - cp "{{ .Path }}" "{{ dir (dir .Path) }}/nogon_cgo_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}{{ .Ext }}"
+        - cp "{{ .Path }}" "{{ dir (dir .Path) }}/hister_cgo_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}{{ .Ext }}"
 
 release:
   replace_existing_artifacts: true

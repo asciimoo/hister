@@ -50,7 +50,7 @@ jobs:
       - name: Upload assets
         uses: actions/upload-artifact@v7
         with:
-          name: hister
+          name: nogon
           path: dist/*
         env:
           GITHUB_TOKEN: ${{ secrets.GORELEASER_TOKEN }}

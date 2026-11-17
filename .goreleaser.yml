@@ -1,9 +1,10 @@
 ---
 version: 2
+project_name: nogon
 
 builds:
   - id: build_cgo
-    binary: hister
+    binary: nogon
     env:
       - CGO_ENABLED=1
     goos:
@@ -46,4 +47,12 @@ builds:
           - CC=oa64-clang
 
 archives:
-  - formats: ['binary']
+  - id: nogon
+    formats: ['binary']
+    name_template: 'nogon_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ . }}{{ end }}'
+  - id: hister-compat
+    formats: ['binary']
+    name_template: 'hister_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ . }}{{ end }}'
+
+checksum:
+  name_template: 'hister_{{ .Version }}_checksums.txt'

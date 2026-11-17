@@ -24,6 +24,11 @@ jobs:
         with:
           go-version: 'stable'
 
+      - name: Set up Node
+        uses: actions/setup-node@v6.4.0
+        with:
+          node-version: latest
+
         # Mark the checkout as 'safe' despite being owned by `root`
       - run: git config --global --add safe.directory "$FORGEJO_WORKSPACE"
       - run: git config --global --add safe.directory "$(pwd)"
@@ -36,7 +41,7 @@ jobs:
         with:
           distribution: goreleaser
           version: latest
-          args: build --snapshot --clean
+          args: build --snapshot --clean -f .goreleaser-rolling.yml
 
       - name: Force Update 'Rolling' Tag
         run: |
@@ -52,24 +57,16 @@ jobs:
           echo "Built on: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $FORGEJO_OUTPUT
           echo "EOF" >> $FORGEJO_OUTPUT
 
-        # this is super ugly - produces:
-        # dist/hister_cgo_windows_amd64.exe from dist/build_cgo_windows_amd64_v1/hister.exe
-        # dist/hister_cgo_darwin_arm64 from dist/hister_cgo_darwin_arm64_v8.0/hister
-        # and so on..
-      - name: Clean-up dist dir
-        run: |
-          for i in dist/*/hister*; do mv $i `echo "$i" | sed "s/build/hister/" | sed "s/_v[0-9].\+hister//"`; done
-          rm dist/metadata.json dist/artifacts.json dist/config.yaml
-
       - name: Update Latest Release
         uses: softprops/action-gh-release@v3.0.0
         with:
           tag_name: rolling
-          name: 'Hister (Dev Build)'
+          name: 'Nogon (Dev Build)'
           body: ${{ steps.release_body.outputs.body }}
           prerelease: true
           make_latest: true
           files: |
-            dist/*
+            dist/nogon_cgo_*
+            dist/hister_cgo_*
         env:
           FORGEJO_TOKEN: ${{ secrets.FORGEJO_TOKEN }}

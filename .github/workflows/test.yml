@@ -35,7 +35,7 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
-          if git diff --quiet "$BASE_SHA" HEAD -- '*.go' 'cmd/testdata/zim/**' 'go.mod' 'go.sum' 'webui/**' 'package.json' 'package-lock.json' '.github/workflows/test.yml'; then
+          if git diff --quiet "$BASE_SHA" HEAD -- '*.go' 'cmd/testdata/zim/**' 'go.mod' 'go.sum' '.goreleaser*.yml' '.github/workflows/*.yml' '.forgejo/workflows/*.yml' 'webui/**' 'package.json' 'package-lock.json' '.github/workflows/test.yml'; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"

@@ -280,6 +280,28 @@ changes. CI rejects focused browser tests such as `test.only` and runs one brows
 worker. Failed browser runs upload an `app-browser-failures` artifact containing
 the HTML report, traces, and screenshots, retained for seven days.
 
+## Release Binary Compatibility
+
+Tagged releases provide standalone binaries with both `nogon_VERSION_OS_ARCH`
+and `hister_VERSION_OS_ARCH` download names, with `.exe` on Windows. Both names
+refer to the same build. The checksum file keeps its existing
+`hister_VERSION_checksums.txt` name. GoReleaser applies
+[binary archive names](https://goreleaser.com/customization/package/archives/#do-not-archive)
+when uploading; local paths remain under the build directory.
+
+Rolling builds use `.goreleaser-rolling.yml` and copy each executable to both
+`dist/nogon_cgo_OS_ARCH` and `dist/hister_cgo_OS_ARCH`. The upload step selects
+these copies and leaves build metadata out of the release. WinGet continues
+to use the existing `asciimoo.hister` package and Hister installer names.
+
+Run `go test .` to check release filenames, rolling copies, upload selection,
+and WinGet compatibility. To build a local rolling snapshot without publishing:
+
+```bash
+goreleaser check -f .goreleaser-rolling.yml
+goreleaser build --snapshot --single-target --clean -f .goreleaser-rolling.yml
+```
+
 ## ZIM Import Development
 
 `cmd/zim.go` implements `hister import zim` with the pure Go [stazelabs/gozim](https://github.com/stazelabs/gozim) reader, pinned in `go.mod`. It supports uncompressed, XZ, and Zstd content without an external executable. The importer checks header and pointer table bounds before opening the archive, disables memory mapping, and caches one cluster. It reads selected metadata and uses error returning directory lookups so damaged entries cannot silently disappear.
