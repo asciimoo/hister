@@ -43,7 +43,7 @@ The Nogon browser extension is the primary way to automatically index your brows
 ## Installation
 
 - **Chrome / Chromium / Edge**: [Install from Chrome Web Store](https://chromewebstore.google.com/detail/hister/cciilamhchpmbdnniabclekddabkifhb)
-- **Firefox**: [Install from Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/hister/) (also works on Firefox for Android)
+- **Firefox**: [Install from Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/nogon/) (also works on Firefox for Android)
 - **qutebrowser**: Use the built in `nogon companion qutebrowser` command as described below.
 
 > The extension only communicates with your Nogon server, it never contacts any third-party services or the websites you visit (except for downloading the page's favicon while collecting page data).

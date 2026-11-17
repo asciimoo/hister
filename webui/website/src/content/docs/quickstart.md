@@ -38,7 +38,7 @@ To change storage, logging, interface, database, or authentication settings, rev
 Install one or more of the following extensions to index any pages you _newly_ visit:
 
 - **Chrome**: [Install from Chrome Web Store](https://chromewebstore.google.com/detail/hister/cciilamhchpmbdnniabclekddabkifhb)
-- **Firefox**: [Install from Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/hister/) (also available on Firefox Mobile!)
+- **Firefox**: [Install from Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/nogon/) (also available on Firefox Mobile!)
 
 The extension defaults to `http://127.0.0.1:4433`. Change the server URL if Nogon runs elsewhere.
 

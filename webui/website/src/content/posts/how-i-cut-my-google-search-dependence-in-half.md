@@ -161,7 +161,7 @@ If you're a developer, researcher, or knowledge worker who constantly re-searche
 To get started with Hister check out the following links:
 
 - [Download Hister](https://github.com/asciimoo/hister/releases)
-- [Download Firefox Extension](https://addons.mozilla.org/en-US/firefox/addon/hister/)
+- [Download Firefox Extension](https://addons.mozilla.org/en-US/firefox/addon/nogon/)
 - [Download Chrome Extension](https://chromewebstore.google.com/detail/hister/cciilamhchpmbdnniabclekddabkifhb)
 
 ---

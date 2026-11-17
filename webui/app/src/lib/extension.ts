@@ -3,7 +3,7 @@ export type ExtensionBrowser = 'firefox' | 'chrome';
 export const extensionStores: Record<ExtensionBrowser, { label: string; href: string }> = {
   firefox: {
     label: 'Firefox extension',
-    href: 'https://addons.mozilla.org/en-US/firefox/addon/hister/',
+    href: 'https://addons.mozilla.org/en-US/firefox/addon/nogon/',
   },
   chrome: {
     label: 'Chrome extension',

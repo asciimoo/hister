@@ -134,7 +134,7 @@
       </li>
       <li>
         <a
-          href="https://addons.mozilla.org/en-US/firefox/addon/hister/"
+          href="https://addons.mozilla.org/en-US/firefox/addon/nogon/"
           target="_blank"
           rel="noopener noreferrer"
           class="docs-link"

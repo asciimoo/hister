@@ -27,7 +27,7 @@
           label: 'Chrome',
           href: 'https://chromewebstore.google.com/detail/hister/cciilamhchpmbdnniabclekddabkifhb',
         },
-        { label: 'Firefox', href: 'https://addons.mozilla.org/en-US/firefox/addon/hister/' },
+        { label: 'Firefox', href: 'https://addons.mozilla.org/en-US/firefox/addon/nogon/' },
       ],
     },
     {

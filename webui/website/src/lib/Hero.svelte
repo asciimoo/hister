@@ -10,7 +10,7 @@
 
   const chromeExtensionURL =
     'https://chromewebstore.google.com/detail/hister/cciilamhchpmbdnniabclekddabkifhb';
-  const firefoxExtensionURL = 'https://addons.mozilla.org/en-US/firefox/addon/hister/';
+  const firefoxExtensionURL = 'https://addons.mozilla.org/en-US/firefox/addon/nogon/';
 
   let extensionDownloadURL = chromeExtensionURL;
 
