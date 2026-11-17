@@ -387,7 +387,11 @@ func init() {
 }
 
 func initialize(cmd *cobra.Command) {
-	if ll := os.Getenv("HISTER__APP__LOG_LEVEL"); ll != "debug" {
+	ll, present := os.LookupEnv("NOGON__APP__LOG_LEVEL")
+	if !present {
+		ll = os.Getenv("HISTER__APP__LOG_LEVEL")
+	}
+	if ll != "debug" {
 		zerolog.SetGlobalLevel(zerolog.InfoLevel)
 	} else {
 		zerolog.SetGlobalLevel(zerolog.DebugLevel)

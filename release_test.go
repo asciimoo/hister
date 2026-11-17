@@ -103,6 +103,113 @@ func packagingEnvironment() []string {
 	})
 }
 
+func TestDatasetScriptCommandAliases(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("dataset scripts require a POSIX shell")
+	}
+	shell, err := exec.LookPath("sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dirname, err := exec.LookPath("dirname")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script, err := os.ReadFile("scripts/fetch_dataset.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name, nogon, hister, want string
+		files                     []string
+		repoConfig, fails         bool
+	}{
+		{name: "Nogon override wins", nogon: "custom/new command", hister: "custom/old command", want: "custom/new command", files: []string{"custom/new command", "custom/old command", "work/nogon"}},
+		{name: "legacy override", hister: "custom/old command", want: "custom/old command", files: []string{"custom/old command", "work/nogon"}},
+		{name: "current Nogon wins", want: "work/nogon", files: []string{"work/nogon", "work/hister", "repo/nogon", "bin/nogon"}},
+		{name: "current legacy wins over repository", want: "work/hister", files: []string{"work/hister", "repo/nogon"}},
+		{name: "repository Nogon wins", want: "repo/nogon", files: []string{"repo/nogon", "repo/hister", "bin/nogon"}},
+		{name: "repository legacy", want: "repo/hister", files: []string{"repo/hister", "bin/nogon"}},
+		{name: "PATH Nogon wins", want: "bin/nogon", files: []string{"bin/nogon", "bin/hister"}},
+		{name: "PATH legacy", want: "bin/hister", files: []string{"bin/hister"}},
+		{name: "repository config selects repository", want: "repo/nogon", repoConfig: true, files: []string{"work/nogon", "repo/nogon"}},
+		{name: "invalid override does not fall back", nogon: "custom/missing", hister: "custom/old command", fails: true, files: []string{"custom/old command", "work/nogon"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := filepath.Join(t.TempDir(), "dataset fixture")
+			for _, name := range []string{"repo/scripts", "work", "bin", "custom"} {
+				if err := os.MkdirAll(filepath.Join(dir, name), 0o755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			filename := filepath.Join(dir, "repo/scripts/fetch_dataset.sh")
+			if err := os.WriteFile(filename, script, 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(dirname, filepath.Join(dir, "bin/dirname")); err != nil {
+				t.Fatal(err)
+			}
+			for _, name := range tc.files {
+				if err := os.WriteFile(filepath.Join(dir, name), []byte("#!/bin/sh\nprintf '%s\\000' \"$PWD\" \"$0\" \"$@\"\nprintf '\\n'\n"), 0o755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			workingDir := filepath.Join(dir, "work")
+			if tc.repoConfig {
+				workingDir = filepath.Join(dir, "repo")
+				if err := os.WriteFile(filepath.Join(workingDir, "config.yml"), nil, 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			cmd := exec.Command(shell, filename, "mdn-css")
+			cmd.Dir = filepath.Join(dir, "work")
+			cmd.Env = append(packagingEnvironment(), "PATH="+filepath.Join(dir, "bin"))
+			for key, value := range map[string]string{"NOGON": tc.nogon, "HISTER": tc.hister} {
+				if value != "" {
+					value = filepath.Join(dir, value)
+				}
+				cmd.Env = append(cmd.Env, key+"="+value)
+			}
+			var stdout, stderr bytes.Buffer
+			cmd.Stdout, cmd.Stderr = &stdout, &stderr
+			err := cmd.Run()
+			if tc.fails {
+				if err == nil || stdout.Len() != 0 {
+					t.Fatalf("invalid override ran another executable: %s (%v)", stdout.String(), err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("dataset command failed: %v\n%s", err, stderr.String())
+			}
+			calls := strings.Split(strings.TrimSuffix(stdout.String(), "\n"), "\n")
+			if len(calls) != 2 {
+				t.Fatalf("expected index and export calls, got %q", stdout.String())
+			}
+			for i, call := range calls {
+				args := strings.Split(strings.TrimSuffix(call, "\x00"), "\x00")
+				if len(args) < 3 {
+					t.Fatalf("invalid captured command: %q", call)
+				}
+				executable := args[1]
+				if !filepath.IsAbs(executable) {
+					executable = filepath.Join(args[0], executable)
+				}
+				if args[0] != workingDir || filepath.Clean(executable) != filepath.Join(dir, tc.want) {
+					t.Errorf("command used directory %q and executable %q, want %q and %q", args[0], executable, workingDir, filepath.Join(dir, tc.want))
+				}
+				if i == 0 {
+					if args[2] != "index" || args[len(args)-1] != "https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/" {
+						t.Errorf("incorrect index arguments: %q", args[2:])
+					}
+				} else if !slices.Equal(args[2:], []string{"export", "mdn-css.json", "label:css"}) {
+					t.Errorf("incorrect export arguments: %q", args[2:])
+				}
+			}
+		})
+	}
+}
+
 func TestSystemdServiceAliasInstallation(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("systemd installation requires Linux")

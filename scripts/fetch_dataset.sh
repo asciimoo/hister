@@ -10,14 +10,21 @@ if [ -f "$SCRIPT_DIR/../config.yml" ]; then
   cd "$SCRIPT_DIR/.."
 fi
 
-if [ -n "${HISTER:-}" ]; then
+NOGON_BIN=${NOGON:-${HISTER:-}}
+if [ -n "$NOGON_BIN" ]; then
   :
+elif [ -x ./nogon ]; then
+  NOGON_BIN=./nogon
 elif [ -x ./hister ]; then
-  HISTER=./hister
+  NOGON_BIN=./hister
+elif [ -x "$SCRIPT_DIR/../nogon" ]; then
+  NOGON_BIN=$SCRIPT_DIR/../nogon
 elif [ -x "$SCRIPT_DIR/../hister" ]; then
-  HISTER=$SCRIPT_DIR/../hister
+  NOGON_BIN=$SCRIPT_DIR/../hister
+elif command -v nogon >/dev/null 2>&1; then
+  NOGON_BIN=nogon
 else
-  HISTER=hister
+  NOGON_BIN=hister
 fi
 
 print_options() {
@@ -33,13 +40,13 @@ export_dataset() {
   dataset=$1
   label=$2
 
-  "$HISTER" export "$dataset.json" "label:$label"
+  "$NOGON_BIN" export "$dataset.json" "label:$label"
 }
 
 fetch_go_stdlib() {
   label=golang
 
-  "$HISTER" index --recursive \
+  "$NOGON_BIN" index --recursive \
     --allowed-pattern="^https://pkg\.go\.dev/.+@go1\.26\.4$" \
     --exclude-pattern="/internal/" \
     --label="$label" \
@@ -52,7 +59,7 @@ fetch_go_stdlib() {
 fetch_mdn_css() {
   label=css
 
-  "$HISTER" index --recursive \
+  "$NOGON_BIN" index --recursive \
     --allowed-domain=developer.mozilla.org \
     --allowed-pattern="https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/.*" \
     --exclude-pattern="contributors.txt" \
@@ -64,7 +71,7 @@ fetch_mdn_css() {
 fetch_mdn_html() {
   label=html
 
-  "$HISTER" index --recursive \
+  "$NOGON_BIN" index --recursive \
     --allowed-domain=developer.mozilla.org \
     --allowed-pattern="https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/.*" \
     --exclude-pattern="contributors.txt" \
@@ -76,7 +83,7 @@ fetch_mdn_html() {
 fetch_mdn_js() {
   label=javascript
 
-  "$HISTER" index --recursive \
+  "$NOGON_BIN" index --recursive \
     --allowed-domain=developer.mozilla.org \
     --allowed-pattern="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/.*" \
     --exclude-pattern="contributors.txt" \
@@ -88,7 +95,7 @@ fetch_mdn_js() {
 fetch_powershell() {
   label=powershell
 
-  "$HISTER" index --recursive \
+  "$NOGON_BIN" index --recursive \
     --allowed-domain=learn.microsoft.com \
     --allowed-pattern="https://learn.microsoft.com/en-us/powershell/.*(powershell-7\.6|windowsserver2025-ps)$" \
     --label="$label" \
@@ -100,7 +107,7 @@ fetch_powershell() {
 fetch_python_docs() {
   label=python
 
-  "$HISTER" index --recursive \
+  "$NOGON_BIN" index --recursive \
     --allowed-domain=docs.python.org \
     --allowed-pattern="^https://docs\.python\.org/3/library/.*" \
     --label="$label" \
@@ -113,14 +120,14 @@ fetch_python_docs() {
 fetch_rust_docs() {
   label=rust
 
-  "$HISTER" index --recursive \
+  "$NOGON_BIN" index --recursive \
     --allowed-domain=doc.rust-lang.org \
     --allowed-pattern="^https://doc\.rust-lang\.org/std/.*" \
     --label="$label" \
     --delay=1 \
     --allow-sensitive \
     "https://doc.rust-lang.org/std/"
-  "$HISTER" index --recursive \
+  "$NOGON_BIN" index --recursive \
     --allowed-domain=doc.rust-lang.org \
     --allowed-pattern="^https://doc\.rust-lang\.org/book/.*" \
     --label="$label" \
@@ -133,7 +140,7 @@ fetch_rust_docs() {
 fetch_nodejs_api() {
   label=nodejs
 
-  "$HISTER" index --recursive \
+  "$NOGON_BIN" index --recursive \
     --allowed-domain=nodejs.org \
     --allowed-pattern="^https://nodejs\.org/api/.*" \
     --exclude-pattern=".+\.json$" \
@@ -147,14 +154,14 @@ fetch_nodejs_api() {
 fetch_typescript_docs() {
   label=typescript
 
-  "$HISTER" index --recursive \
+  "$NOGON_BIN" index --recursive \
     --allowed-domain=www.typescriptlang.org \
     --allowed-pattern="^https://www\.typescriptlang\.org/docs/.*" \
     --label="$label" \
     --delay=1 \
     --allow-sensitive \
     "https://www.typescriptlang.org/docs/"
-  "$HISTER" index --recursive \
+  "$NOGON_BIN" index --recursive \
     --allowed-domain=www.typescriptlang.org \
     --allowed-pattern="^https://www\.typescriptlang\.org/tsconfig/.*" \
     --label="$label" \
@@ -167,14 +174,14 @@ fetch_typescript_docs() {
 fetch_react_docs() {
   label=react
 
-  "$HISTER" index --recursive \
+  "$NOGON_BIN" index --recursive \
     --allowed-domain=react.dev \
     --allowed-pattern="^https://react\.dev/learn.*" \
     --label="$label" \
     --delay=1 \
     --allow-sensitive \
     "https://react.dev/learn"
-  "$HISTER" index --recursive \
+  "$NOGON_BIN" index --recursive \
     --allowed-domain=react.dev \
     --allowed-pattern="^https://react\.dev/reference/.*" \
     --label="$label" \
@@ -187,7 +194,7 @@ fetch_react_docs() {
 fetch_django_docs() {
   label=django
 
-  "$HISTER" index --recursive \
+  "$NOGON_BIN" index --recursive \
     --allowed-domain=docs.djangoproject.com \
     --allowed-pattern="^https://docs\.djangoproject\.com/en/stable/.*" \
     --label="$label" \
@@ -200,7 +207,7 @@ fetch_django_docs() {
 fetch_postgresql_docs() {
   label=postgresql
 
-  "$HISTER" index --recursive \
+  "$NOGON_BIN" index --recursive \
     --allowed-domain=www.postgresql.org \
     --allowed-pattern="^https://www\.postgresql\.org/docs/current/.*" \
     --label="$label" \
@@ -213,7 +220,7 @@ fetch_postgresql_docs() {
 fetch_kubernetes_docs() {
   label=kubernetes
 
-  "$HISTER" index --recursive \
+  "$NOGON_BIN" index --recursive \
     --allowed-domain=kubernetes.io \
     --allowed-pattern="^https://kubernetes\.io/docs/.*" \
     --exclude-pattern="^https://kubernetes\.io/docs/reference/generated/" \
@@ -227,7 +234,7 @@ fetch_kubernetes_docs() {
 fetch_owasp_cheatsheets() {
   label=owasp
 
-  "$HISTER" index --recursive \
+  "$NOGON_BIN" index --recursive \
     --allowed-domain=cheatsheetseries.owasp.org \
     --allowed-pattern="^https://cheatsheetseries\.owasp\.org/cheatsheets/.*" \
     --label="$label" \

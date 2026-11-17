@@ -90,6 +90,26 @@ good first issues. Coding agents should also follow the repository
 The Go module is `github.com/asciimoo/hister`. The root npm workspace includes
 the web application, website, shared components, and browser extension.
 
+### Dataset utilities
+
+Run `sh scripts/fetch_dataset.sh` to list available datasets. For crawled
+datasets, the script indexes pages into the configured server and exports JSON
+to its working directory. If the repository contains `config.yml`, it uses the
+repository as its working directory.
+
+Set `NOGON` to select an executable, for example:
+
+```bash
+NOGON=/path/to/nogon sh scripts/fetch_dataset.sh mdn-css
+```
+
+A nonempty `NOGON` overrides the legacy `HISTER` variable. Without either
+override, the script searches its working directory, the repository, then `PATH`,
+preferring `nogon` over `hister` within each location. An invalid explicit path
+fails without selecting another executable. Paths containing spaces are supported.
+Run `go test . -run '^TestDatasetScriptCommandAliases$'` to check selection and
+argument handling without crawling or indexing content.
+
 ### Configuration loading
 
 `config.ResolvePath` selects a main file. Pass the selected path to `config.Load`, or an empty
@@ -99,6 +119,10 @@ order. Resolve the data directory from authoritative sources before loading mana
 the managed file cannot change its own location. `LoadForInspection` and `Config.Reload`
 share candidate decoding without creating runtime files. Reload retains the original main file
 selection, independently of the TUI preferences path.
+
+Set `NOGON__APP__LOG_LEVEL=debug` to trace configuration loading before normal
+logging is configured. The legacy `HISTER__APP__LOG_LEVEL` also works. The Nogon
+variable takes precedence when present, including an explicitly empty value.
 
 `Config.Source(path)` reports a setting's origin and source lock without retaining its value.
 Explicit empty and default valued settings remain distinguishable from omitted settings.
