@@ -19,7 +19,7 @@ permissions:
 
 jobs:
   update-hashes:
-    if: github.repository == 'asciimoo/hister'
+    if: github.repository == 'asciimoo/nogon'
     runs-on: ubuntu-latest
 
     steps:

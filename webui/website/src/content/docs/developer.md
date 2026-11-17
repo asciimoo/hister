@@ -9,15 +9,15 @@ This page is for people who contribute changes, add extractors, or integrate
 directly with Nogon HTTP and MCP interfaces.
 
 The primary source repository is on
-[GitHub](https://github.com/asciimoo/hister). It is also mirrored on
-[Codeberg](https://codeberg.org/asciimoo/hister).
+[GitHub](https://github.com/asciimoo/nogon). It is also mirrored on
+[Codeberg](https://codeberg.org/asciimoo/nogon).
 
 <span id="contributing-to-hister"></span>
 
 ## Contributing to Nogon
 
 Read the complete
-[contribution guide](https://github.com/asciimoo/hister/blob/main/CONTRIBUTING.md)
+[contribution guide](https://github.com/asciimoo/nogon/blob/master/CONTRIBUTING.md)
 before starting work. Keep each pull request focused on one concern, explain
 why the change is needed, and make sure relevant tests and checks pass. Open an
 issue before implementing a large architectural change, broad refactor, or
@@ -44,30 +44,30 @@ flags, configuration, query syntax, or public interfaces change. Keep release
 notes for the release process.
 
 **Licensing.** Contributions are accepted under the project
-[AGPLv3 license](https://github.com/asciimoo/hister/blob/main/LICENSE).
+[AGPLv3 license](https://github.com/asciimoo/nogon/blob/master/LICENSE).
 
 **AI use.** The contribution guide requires disclosure of every AI tool and the
 extent of its use. The human contributor must understand the complete change
 and remain its main author. Issue descriptions, pull request descriptions, and
 discussion comments must be written by a human. AI tools must not be used for
-good first issues. Coding agents should also follow the repository
-[agent reference](https://github.com/asciimoo/hister/blob/main/AGENTS.md).
+good first issues. Coding agents should also follow the local `AGENTS.md`
+instructions.
 
 ### Useful Development Links
 
-| Resource                                                                                                           | Purpose                                                        |
-| ------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------- |
-| [Contribution guide](https://github.com/asciimoo/hister/blob/main/CONTRIBUTING.md)                                 | Submission standards, code style, and AI policy                |
-| [`manage.sh`](https://github.com/asciimoo/hister/blob/main/manage.sh)                                              | Common dependency, test, build, and artifact commands          |
-| [Go module](https://github.com/asciimoo/hister/blob/main/go.mod)                                                   | Go version, module path, and backend dependencies              |
-| [Go lint configuration](https://github.com/asciimoo/hister/blob/main/.golangci.toml)                               | Enabled Go formatters and linters                              |
-| [Frontend workspace](https://github.com/asciimoo/hister/blob/main/package.json)                                    | npm workspaces, formatting, and frontend checks                |
-| [Frontend notes](https://github.com/asciimoo/hister/blob/main/webui/README.md)                                     | Web project structure, builds, previews, and shared components |
-| [`webui/build.sh`](https://github.com/asciimoo/hister/blob/main/webui/build.sh)                                    | Embedded web application build process                         |
-| [API route registry](https://github.com/asciimoo/hister/blob/main/server/api.go)                                   | HTTP endpoint declarations and generated API documentation     |
-| [Extractor template](https://github.com/asciimoo/hister/tree/main/server/extractor/extractors/_extractor_template) | Starting point for a new extractor                             |
-| [Issue tracker](https://github.com/asciimoo/hister/issues)                                                         | Bug reports, proposals, and feature discussions                |
-| [Security policy](https://github.com/asciimoo/hister/blob/main/SECURITY.md)                                        | Private security reporting guidance                            |
+| Resource                                                                                                            | Purpose                                                        |
+| ------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| [Contribution guide](https://github.com/asciimoo/nogon/blob/master/CONTRIBUTING.md)                                 | Submission standards, code style, and AI policy                |
+| [`manage.sh`](https://github.com/asciimoo/nogon/blob/master/manage.sh)                                              | Common dependency, test, build, and artifact commands          |
+| [Go module](https://github.com/asciimoo/nogon/blob/master/go.mod)                                                   | Go version, module path, and backend dependencies              |
+| [Go lint configuration](https://github.com/asciimoo/nogon/blob/master/.golangci.toml)                               | Enabled Go formatters and linters                              |
+| [Frontend workspace](https://github.com/asciimoo/nogon/blob/master/package.json)                                    | npm workspaces, formatting, and frontend checks                |
+| [Frontend notes](https://github.com/asciimoo/nogon/blob/master/webui/README.md)                                     | Web project structure, builds, previews, and shared components |
+| [`webui/build.sh`](https://github.com/asciimoo/nogon/blob/master/webui/build.sh)                                    | Embedded web application build process                         |
+| [API route registry](https://github.com/asciimoo/nogon/blob/master/server/api.go)                                   | HTTP endpoint declarations and generated API documentation     |
+| [Extractor template](https://github.com/asciimoo/nogon/tree/master/server/extractor/extractors/_extractor_template) | Starting point for a new extractor                             |
+| [Issue tracker](https://github.com/asciimoo/nogon/issues)                                                           | Bug reports, proposals, and feature discussions                |
+| [Security policy](https://github.com/asciimoo/nogon/blob/master/SECURITY.md)                                        | Private security reporting guidance                            |
 
 ## Source Layout
 
@@ -95,15 +95,15 @@ the web application, website, shared components, and browser extension.
 Nogon retains identifiers used by existing installations and integrations.
 Preserve these when changing visible branding:
 
-| Surface                       | Retained identifiers                                                                                 | Purpose                                                                      |
-| ----------------------------- | ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| HTTP clients and sessions     | `hister` cookie, `hister://` origin, `X-Hister-Public`, `X-Hister-Target-User-ID`                    | Keep existing authentication and client requests working.                    |
-| Browser state                 | `hister*` app preferences and extension storage keys, extension IDs and Chrome key                   | Preserve settings, server connections, and extension upgrades.               |
-| Search indexes                | `hister_keep_stopwords`, `hister_snippet`, `hister.*` index metadata                                 | Reopen existing indexes without changing their stored definitions.           |
-| Monitoring                    | `hister_*` metric names                                                                              | Preserve queries and dashboards.                                             |
-| Configuration and services    | Legacy environment aliases, config and data paths, service identities, container volumes             | Reuse existing configuration, permissions, and data.                         |
-| Distribution and repositories | Legacy executable and download aliases, Go module, repository and registry URLs, package identifiers | Keep existing consumers working while publication is coordinated separately. |
-| Published content             | Post slugs, old heading anchors, RSS GUIDs, historical examples and fixtures                         | Preserve links, subscriptions, and regression coverage.                      |
+| Surface                    | Retained identifiers                                                                     | Purpose                                                                      |
+| -------------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| HTTP clients and sessions  | `hister` cookie, `hister://` origin, `X-Hister-Public`, `X-Hister-Target-User-ID`        | Keep existing authentication and client requests working.                    |
+| Browser state              | `hister*` app preferences and extension storage keys, extension IDs and Chrome key       | Preserve settings, server connections, and extension upgrades.               |
+| Search indexes             | `hister_keep_stopwords`, `hister_snippet`, `hister.*` index metadata                     | Reopen existing indexes without changing their stored definitions.           |
+| Monitoring                 | `hister_*` metric names                                                                  | Preserve queries and dashboards.                                             |
+| Configuration and services | Legacy environment aliases, config and data paths, service identities, container volumes | Reuse existing configuration, permissions, and data.                         |
+| Distribution and Go module | Legacy executable and download aliases, Go module, registry URLs, package identifiers    | Keep existing consumers working while publication is coordinated separately. |
+| Published content          | Post slugs, old heading anchors, RSS GUIDs, historical examples and fixtures             | Preserve links, subscriptions, and regression coverage.                      |
 
 Internal helper symbols, temporary file prefixes, cache names, and test controls
 can retain their existing spellings. The live extractor and optional ZIM fixture
@@ -876,7 +876,7 @@ If no extractor succeeds, `ErrNoExtractor` is returned.
 ### Extractor Interface
 
 A custom extractor can depend on the focused
-[`server/extractor/sdk`](https://github.com/asciimoo/hister/tree/main/server/extractor/sdk)
+[`server/extractor/sdk`](https://github.com/asciimoo/nogon/tree/master/server/extractor/sdk)
 package instead of importing Nogon configuration, document, and result
 packages separately. It must implement this interface:
 
@@ -953,7 +953,7 @@ ambiguous result.
 #### `Document`
 
 `sdk.Document` aliases the complete
-[`document.Document`](https://github.com/asciimoo/hister/blob/main/server/document/document.go)
+[`document.Document`](https://github.com/asciimoo/nogon/blob/master/server/document/document.go)
 type. It is passed to `Match`, `Extract`, and `Preview`.
 
 #### `PreviewResponse`
@@ -970,7 +970,7 @@ type PreviewResponse struct {
 ### Register an Extractor
 
 Built in extractors are constructed by `DefaultExtractors` in
-[`server/extractor/registry.go`](https://github.com/asciimoo/hister/blob/main/server/extractor/registry.go).
+[`server/extractor/registry.go`](https://github.com/asciimoo/nogon/blob/master/server/extractor/registry.go).
 Add an instance there before the generic fallbacks so it takes priority for
 the pages it targets.
 
@@ -992,7 +992,7 @@ The package level extraction functions remain available and use
 ### Write a New Extractor
 
 A ready to use starting point lives at
-[`server/extractor/extractors/_extractor_template/extractor.go`](https://github.com/asciimoo/hister/blob/main/server/extractor/extractors/_extractor_template/extractor.go).
+[`server/extractor/extractors/_extractor_template/extractor.go`](https://github.com/asciimoo/nogon/blob/master/server/extractor/extractors/_extractor_template/extractor.go).
 The directory begins with `_` so the Go toolchain ignores it during normal
 builds, but the file itself is valid and fully commented Go.
 
@@ -1080,7 +1080,7 @@ in the saved page.
 ### Test Extractors Against Live Websites
 
 Live extractor cases are declared in
-[`server/extractor/live_cases.yaml`](https://github.com/asciimoo/hister/blob/main/server/extractor/live_cases.yaml).
+[`server/extractor/live_cases.yaml`](https://github.com/asciimoo/nogon/blob/master/server/extractor/live_cases.yaml).
 Each case identifies a public URL, crawler backend, extractor, and a set of
 stable content or metadata expectations. Prefer semantic invariants such as the
 page type, a durable title fragment, and minimum content length over exact page

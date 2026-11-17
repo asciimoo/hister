@@ -8,7 +8,7 @@ permissions:
 
 jobs:
   publish:
-    if: forgejo.repository == 'asciimoo/hister'
+    if: forgejo.repository == 'asciimoo/nogon'
     name: Publish to WinGet
     runs-on: runner_name
     steps:

@@ -99,7 +99,7 @@ buildGoModule (finalAttrs: {
 
   meta = {
     description = "Web history on steroids - blazing fast, content-based search for visited websites";
-    homepage = "https://github.com/asciimoo/hister";
+    homepage = "https://github.com/asciimoo/nogon";
     license = lib.licenses.agpl3Plus;
     maintainers = [ lib.maintainers._4evy ];
     mainProgram = "nogon";

@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   update-hashes:
-    if: forgejo.repository == 'asciimoo/hister'
+    if: forgejo.repository == 'asciimoo/nogon'
     runs-on: runner_name
 
     steps:

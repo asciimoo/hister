@@ -8,7 +8,7 @@ permissions:
 
 jobs:
   build:
-    if: forgejo.repository == 'asciimoo/hister'
+    if: forgejo.repository == 'asciimoo/nogon'
     name: GoReleaser rolling build
     runs-on: runner_name
     container:

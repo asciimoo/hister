@@ -84,7 +84,7 @@
       </div>
 
       <a
-        href="https://github.com/asciimoo/hister"
+        href="https://github.com/asciimoo/nogon"
         target="_blank"
         rel="noopener noreferrer"
         class="font-fira mt-6 inline-flex items-center gap-2 text-xs font-semibold text-[var(--text-secondary)] underline decoration-2 underline-offset-4 transition-colors hover:text-[var(--text-primary)]"

@@ -179,7 +179,7 @@ cases:
       min_preview_length: 500
 
   - name: github_hister_issue_http
-    url: https://github.com/asciimoo/hister/issues/1
+    url: https://github.com/asciimoo/nogon/issues/1
     backend: http
     extractor: GitHub
     timeout: 20
@@ -195,7 +195,7 @@ cases:
       min_preview_length: 100
       metadata:
         type: Issue
-        repo: asciimoo/hister
+        repo: asciimoo/nogon
 
   - name: hackernews_item_archive_http
     url: https://web.archive.org/web/20260821112419/https://news.ycombinator.com/item?id=8863

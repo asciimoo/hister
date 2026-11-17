@@ -556,7 +556,7 @@
       <!-- Body -->
       <div class="flex flex-col gap-6 px-6 py-6">
         <a
-          href="https://github.com/asciimoo/hister"
+          href="https://github.com/asciimoo/nogon"
           target="_blank"
           rel="noopener noreferrer"
           class="font-space border-brutal-border brutal-press flex w-full items-center justify-center gap-2 self-start border-[2px] bg-(--nogon-indigo) px-5 py-2.5 text-[12px] font-bold tracking-[1px] text-white uppercase no-underline"
@@ -570,10 +570,10 @@
         >
           To add your dataset to this page, open a pull request on
           <a
-            href="https://github.com/asciimoo/hister"
+            href="https://github.com/asciimoo/nogon"
             target="_blank"
             rel="noopener noreferrer"
-            class="text-(--text-primary) underline">github.com/asciimoo/hister</a
+            class="text-(--text-primary) underline">github.com/asciimoo/nogon</a
           >
           and add a JSON file at
           <code class="bg-(--muted-surface) px-1 py-0.5 text-[12px] text-(--text-primary)"

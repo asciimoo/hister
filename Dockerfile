@@ -80,7 +80,7 @@ FROM alpine:3.24@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5
 
 LABEL org.opencontainers.image.title="Nogon" \
       org.opencontainers.image.description="Self-hosted browser history search engine" \
-      org.opencontainers.image.source="https://github.com/asciimoo/hister" \
+      org.opencontainers.image.source="https://github.com/asciimoo/nogon" \
       org.opencontainers.image.licenses="AGPL-3.0"
 
 WORKDIR /hister/data

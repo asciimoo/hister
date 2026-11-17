@@ -14,8 +14,8 @@ import (
 )
 
 const (
-	latestReleaseAPIURL = "https://api.github.com/repos/asciimoo/hister/releases/latest"
-	releasesURL         = "https://github.com/asciimoo/hister/releases"
+	latestReleaseAPIURL = "https://api.github.com/repos/asciimoo/nogon/releases/latest"
+	releasesURL         = "https://github.com/asciimoo/nogon/releases"
 )
 
 type releaseHTTPClient interface {

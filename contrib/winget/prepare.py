@@ -31,7 +31,7 @@ def prepare(archive, output):
                     raise ValueError("nogon.exe and hister.exe must be identical")
 
     identifier = "asciimoo.hister"
-    repository = "https://github.com/asciimoo/hister"
+    repository = "https://github.com/asciimoo/nogon"
     manifests = {
         "version": ("", "DefaultLocale: en-US\n"),
         "installer": (".installer", f"""InstallerType: zip

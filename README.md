@@ -6,13 +6,13 @@ Nogon was formerly known as Hister. Some downloads, packages, and public links s
 
 Nogon is a private search engine for the pages you visit and the files you keep. It indexes their full contents so you can find information again from the web interface, terminal, or an AI assistant connected through MCP.
 
-[Try the demo](https://demo.nogon.eu/) · [Download Nogon](https://github.com/asciimoo/hister/releases/latest) · [Read the quickstart](https://nogon.eu/docs/quickstart) · [Documentation](https://nogon.eu/docs) · [Support the development](https://nogon.eu/support)
+[Try the demo](https://demo.nogon.eu/) · [Download Nogon](https://github.com/asciimoo/nogon/releases/latest) · [Read the quickstart](https://nogon.eu/docs/quickstart) · [Documentation](https://nogon.eu/docs) · [Support the development](https://nogon.eu/support)
 
 ![Nogon web interface](webui/website/src/lib/assets/screenshot.png)
 
 ## Quickstart
 
-1. Download the binary for your platform from the [latest release](https://github.com/asciimoo/hister/releases/latest), then rename it to `nogon` (`nogon.exe` on Windows).
+1. Download the binary for your platform from the [latest release](https://github.com/asciimoo/nogon/releases/latest), then rename it to `nogon` (`nogon.exe` on Windows).
 
 2. On Linux or macOS, make it executable:
 
@@ -70,8 +70,8 @@ Unlike traditional search engines, Nogon builds a personal search index from the
 Requirements are Go 1.26, npm, and a C compiler for CGO dependencies.
 
 ```bash
-git clone https://github.com/asciimoo/hister.git
-cd hister
+git clone https://github.com/asciimoo/nogon.git
+cd nogon
 ./manage.sh build
 ```
 
@@ -87,7 +87,7 @@ This starts a Vite development server and the Go backend with automatic rebuilds
 
 Join us on IRCNet in `#hister` or on [Discord](https://discord.gg/beEyuHxRSs).
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md) before submitting a change. Bugs and suggestions belong in the [issue tracker](https://github.com/asciimoo/hister/issues). For security reports, see [SECURITY.md](SECURITY.md).
+Read [CONTRIBUTING.md](CONTRIBUTING.md) before submitting a change. Bugs and suggestions belong in the [issue tracker](https://github.com/asciimoo/nogon/issues). For security reports, see [SECURITY.md](SECURITY.md).
 
 ## Sponsors
 

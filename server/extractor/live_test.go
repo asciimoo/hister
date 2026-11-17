@@ -21,7 +21,7 @@ import (
 	"github.com/asciimoo/hister/server/extractor/sdk"
 )
 
-const liveUserAgent = "HisterLiveExtractorTest/1.0 (+https://github.com/asciimoo/hister)"
+const liveUserAgent = "HisterLiveExtractorTest/1.0 (+https://github.com/asciimoo/nogon)"
 
 func TestLiveExtractors(t *testing.T) {
 	manifest, err := loadLiveManifest()

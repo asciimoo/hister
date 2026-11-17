@@ -82,7 +82,7 @@
 
       <div class="mt-9 flex flex-col flex-wrap justify-center gap-4 sm:flex-row">
         <Button
-          href="https://github.com/asciimoo/hister/releases/latest"
+          href="https://github.com/asciimoo/nogon/releases/latest"
           target="_blank"
           rel="noopener noreferrer"
           class="font-space brutal-press-lg border-brutal-border h-auto justify-center rounded-none border-[3px] bg-[var(--text-primary)] px-8 py-4 text-[15px] font-bold tracking-[1.3px] text-white uppercase no-underline"

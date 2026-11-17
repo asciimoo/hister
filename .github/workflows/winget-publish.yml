@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   publish:
-    if: github.repository == 'asciimoo/hister'
+    if: github.repository == 'asciimoo/nogon'
     name: Publish to WinGet
     runs-on: ubuntu-slim
     steps:

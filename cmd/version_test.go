@@ -121,3 +121,21 @@ func TestCheckUpdateCommandRegistration(t *testing.T) {
 		t.Fatalf("check-update command = %q, want registered command", command.Name())
 	}
 }
+
+func TestCheckUpdateCommandRepository(t *testing.T) {
+	client := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		if want := "https://api.github.com/repos/asciimoo/nogon/releases/latest"; r.URL.String() != want {
+			t.Errorf("release request = %q, want %q", r.URL, want)
+		}
+		return jsonHTTPResponse(r, http.StatusOK, `{"tag_name":"v0.21.0"}`), nil
+	})}
+	command := newCheckUpdateCmd(client, latestReleaseAPIURL, "v0.20.0")
+	var output bytes.Buffer
+	command.SetOut(&output)
+	if err := command.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(output.String(), "Release: https://github.com/asciimoo/nogon/releases\n") {
+		t.Fatalf("release URL missing from API response must fall back to the Nogon repository: %s", output.String())
+	}
+}

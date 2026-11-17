@@ -155,7 +155,7 @@
         </div>
         <div class="mt-auto">
           <Button
-            href="https://github.com/asciimoo/hister"
+            href="https://github.com/asciimoo/nogon"
             target="_blank"
             rel="noopener noreferrer"
             class="bg-nogon-indigo font-space border-brutal-border brutal-press h-auto rounded-none border-[3px] px-7 py-3.5 text-[14px] font-bold tracking-[1.5px] text-white uppercase no-underline"

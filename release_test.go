@@ -460,7 +460,7 @@ func TestWinGetManifestPreparation(t *testing.T) {
 						t.Fatalf("invalid version manifest: %v", manifest)
 					}
 				case ".locale.en-US":
-					if manifest["PackageName"] != "Nogon" || manifest["PackageUrl"] != "https://github.com/asciimoo/hister" || manifest["ManifestType"] != "defaultLocale" {
+					if manifest["PackageName"] != "Nogon" || manifest["PackageUrl"] != "https://github.com/asciimoo/nogon" || manifest["ManifestType"] != "defaultLocale" {
 						t.Fatalf("invalid locale manifest: %v", manifest)
 					}
 				case ".installer":
@@ -482,7 +482,7 @@ func TestWinGetManifestPreparation(t *testing.T) {
 						t.Fatalf("want one installer, got %v", installers)
 					}
 					installer := installers[0].(map[string]any)
-					if installer["Architecture"] != "x64" || installer["InstallerUrl"] != "https://github.com/asciimoo/hister/releases/download/v0.99.0/"+tc.archive || installer["InstallerSha256"] != fmt.Sprintf("%X", sha256.Sum256(content.Bytes())) {
+					if installer["Architecture"] != "x64" || installer["InstallerUrl"] != "https://github.com/asciimoo/nogon/releases/download/v0.99.0/"+tc.archive || installer["InstallerSha256"] != fmt.Sprintf("%X", sha256.Sum256(content.Bytes())) {
 						t.Fatalf("installer does not describe the input archive: %v", installer)
 					}
 				}
@@ -535,6 +535,24 @@ func TestRollingReleaseCopies(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestReleaseWorkflowRepositoryGuards(t *testing.T) {
+	for _, provider := range []string{"github", "forgejo"} {
+		for workflow, job := range map[string]string{
+			"release": "build", "rolling": "build", "winget-publish": "publish", "update-nix-vendor-hash": "update-hashes",
+		} {
+			t.Run(provider+"/"+workflow, func(t *testing.T) {
+				var cfg struct {
+					Jobs map[string]struct{ If string }
+				}
+				readReleaseYAML(t, filepath.Join("."+provider, "workflows", workflow+".yml"), &cfg)
+				if got, want := cfg.Jobs[job].If, provider+".repository == 'asciimoo/nogon'"; got != want {
+					t.Errorf("publishing job must allow only the Nogon repository: got %q, want %q", got, want)
+				}
+			})
+		}
 	}
 }
 

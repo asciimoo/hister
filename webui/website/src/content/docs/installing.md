@@ -13,7 +13,7 @@ If someone else already operates the Nogon server you use and you only search th
 
 ## Prebuilt binary
 
-1. Open the [latest stable release](https://github.com/asciimoo/hister/releases/latest).
+1. Open the [latest stable release](https://github.com/asciimoo/nogon/releases/latest).
 
 2. Download the file that matches your system:
 
@@ -43,7 +43,7 @@ If someone else already operates the Nogon server you use and you only search th
 
 6. Open <http://127.0.0.1:4433> in your browser, then continue with the [quickstart](quickstart) to install the browser extension and begin indexing.
 
-Release pages also contain a checksums file that can be used to verify the download. Development snapshots are available from the [rolling release](https://github.com/asciimoo/hister/releases/tag/rolling), but stable releases are recommended for new users.
+Release pages also contain a checksums file that can be used to verify the download. Development snapshots are available from the [rolling release](https://github.com/asciimoo/nogon/releases/tag/rolling), but stable releases are recommended for new users.
 
 You may optionally move the binary to a directory on your `PATH`, such as `/usr/local/bin` or `~/.local/bin`.
 
@@ -93,12 +93,12 @@ the available commands depend on the package version you install.
 Building Nogon requires Go 1.26, npm, and a C compiler for CGO dependencies.
 
 ```bash
-git clone https://github.com/asciimoo/hister.git
-cd hister
+git clone https://github.com/asciimoo/nogon.git
+cd nogon
 ./manage.sh build
 ```
 
-The build produces a `hister` binary in the repository root. Source is also mirrored on [Codeberg](https://codeberg.org/asciimoo/hister).
+The build produces a `hister` binary in the repository root. Source is also mirrored on [Codeberg](https://codeberg.org/asciimoo/nogon).
 
 ## Homebrew
 
@@ -112,7 +112,7 @@ The formula currently installs the `hister` command. Start the server with `hist
 
 ## Docker
 
-The official container is published at [GitHub Container Registry](https://github.com/asciimoo/hister/pkgs/container/hister). See the [Docker guide](docker) for a complete Compose setup, persistent storage, and reverse proxy examples.
+The official container is published at [GitHub Container Registry](https://github.com/asciimoo/nogon/pkgs/container/hister). See the [Docker guide](docker) for a complete Compose setup, persistent storage, and reverse proxy examples.
 
 ## Systemd
 
@@ -146,24 +146,23 @@ installed filename `hister.service` to preserve existing service overrides.
 Run the Nogon server directly from the repository:
 
 ```nix
-nix run github:asciimoo/hister -- listen
+nix run github:asciimoo/nogon -- listen
 ```
 
 Add Nogon to the current shell:
 
 ```nix
-nix shell github:asciimoo/hister
+nix shell github:asciimoo/nogon
 ```
 
 Install it into your user profile:
 
 ```nix
-nix profile install github:asciimoo/hister
+nix profile install github:asciimoo/nogon
 ```
 
 The package provides both `nogon` and the compatible `hister` command. The
 `default`, `nogon`, and `hister` package names select the same installation.
-The repository address remains `github:asciimoo/hister`.
 
 ### Flake setup
 
@@ -171,7 +170,7 @@ Add the input to `flake.nix`:
 
 ```nix
 {
-  inputs.nogon.url = "github:asciimoo/hister";
+  inputs.nogon.url = "github:asciimoo/nogon";
 
   outputs = { self, nixpkgs, nogon, ... }: {
     nixosConfigurations.yourHostname = nixpkgs.lib.nixosSystem {

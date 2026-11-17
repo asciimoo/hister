@@ -73,7 +73,7 @@
         Support
       </Button>
       <Button
-        href="https://github.com/asciimoo/hister"
+        href="https://github.com/asciimoo/nogon"
         target="_blank"
         rel="noopener noreferrer"
         class="bg-nogon-indigo font-space border-brutal-border h-auto rounded-none border-[3px] px-5 py-2.5 text-[13px] font-semibold tracking-[1px] text-white uppercase no-underline shadow-[3px_3px_0_rgba(0,0,0,0.25)] transition-all hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[1px_1px_0_rgba(0,0,0,0.25)]"
@@ -132,7 +132,7 @@
       </li>
       <li>
         <Button
-          href="https://github.com/asciimoo/hister"
+          href="https://github.com/asciimoo/nogon"
           target="_blank"
           rel="noopener noreferrer"
           class="bg-nogon-indigo font-space border-brutal-border h-auto w-fit rounded-none border-[3px] px-5 py-2.5 text-[13px] font-semibold tracking-[1px] text-white uppercase no-underline shadow-[3px_3px_0_rgba(0,0,0,0.25)]"

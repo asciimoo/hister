@@ -36,7 +36,7 @@
     { label: 'API', href: 'api-docs', color: 'var(--nogon-coral)' },
     {
       label: 'GitHub',
-      href: 'https://github.com/asciimoo/hister/',
+      href: 'https://github.com/asciimoo/nogon/',
       color: 'var(--nogon-amber)',
       external: true,
     },

@@ -79,9 +79,9 @@
 
   const communityLinks = [
     { label: 'Website', href: 'https://nogon.eu/' },
-    { label: 'GitHub', href: 'https://github.com/asciimoo/hister' },
-    { label: 'Codeberg', href: 'https://codeberg.org/asciimoo/hister' },
-    { label: 'Report an issue', href: 'https://github.com/asciimoo/hister/issues' },
+    { label: 'GitHub', href: 'https://github.com/asciimoo/nogon' },
+    { label: 'Codeberg', href: 'https://codeberg.org/asciimoo/nogon' },
+    { label: 'Report an issue', href: 'https://github.com/asciimoo/nogon/issues' },
     { label: 'Discord', href: 'https://discord.gg/beEyuHxRSs' },
   ];
 </script>
