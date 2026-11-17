@@ -16,7 +16,7 @@ jobs:
       - name: Check for Go/frontend changes
         id: changes
         run: |
-          FILES=$(git diff --name-only origin/${{ forgejo.base_ref }}...HEAD -- '*.go' 'go.mod' 'go.sum' '.goreleaser*.yml' '.github/workflows/*.yml' '.forgejo/workflows/*.yml' 'webui/**' 'package.json' 'package-lock.json')
+          FILES=$(git diff --name-only origin/${{ forgejo.base_ref }}...HEAD -- '*.go' 'go.mod' 'go.sum' '.goreleaser*.yml' 'Dockerfile' 'compose.yml' '.github/workflows/*.yml' '.forgejo/workflows/*.yml' 'webui/**' 'package.json' 'package-lock.json')
           if [ -z "$FILES" ]; then
             echo "skip=true" >> "$FORGEJO_OUTPUT"
           else

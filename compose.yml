@@ -1,6 +1,6 @@
 services:
   hister:
-    image: ${HISTER_IMAGE:-ghcr.io/asciimoo/hister:latest}
+    image: ${NOGON_IMAGE:-${HISTER_IMAGE:-ghcr.io/asciimoo/hister:latest}}
     # Prefer the published image for `compose up`; `compose build` still uses
     # the source below and can reuse layers from the published image.
     pull_policy: missing
@@ -8,8 +8,8 @@ services:
       context: .
       target: release
       cache_from:
-        - ${HISTER_IMAGE:-ghcr.io/asciimoo/hister:latest}
-        - type=registry,ref=${HISTER_CACHE_IMAGE:-ghcr.io/asciimoo/hister:buildcache}
+        - ${NOGON_IMAGE:-${HISTER_IMAGE:-ghcr.io/asciimoo/hister:latest}}
+        - type=registry,ref=${NOGON_CACHE_IMAGE:-${HISTER_CACHE_IMAGE:-ghcr.io/asciimoo/hister:buildcache}}
     container_name: hister
     init: true
     restart: unless-stopped

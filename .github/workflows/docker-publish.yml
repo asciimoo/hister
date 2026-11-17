@@ -148,12 +148,22 @@ jobs:
             release.output=type=docker
             release.cache-to=type=gha,mode=max,scope=${{ env.CACHE_SCOPE }},ignore-error=true
 
-      - name: Verify Docker configuration discovery
+      - name: Verify Docker command and configuration compatibility
         if: github.event_name == 'pull_request'
         env:
           HISTER_IMAGE: hister:ci
         run: |
+          version="$(docker run --rm --network none "$HISTER_IMAGE" --version)"
+          for command in nogon hister /hister/hister; do
+            test "$(docker run --rm --network none --entrypoint "$command" "$HISTER_IMAGE" --version)" = "$version"
+          done
+          test "$(docker run --rm --network none --entrypoint id "$HISTER_IMAGE" -u)" = '65532'
           test "$(docker run --rm --network none "$HISTER_IMAGE" config path)" = '(defaults)'
+
+          output="$(docker run --rm --network none -e HISTER_DATA_DIR=/legacy-data "$HISTER_IMAGE" config show)"
+          printf '%s\n' "$output" | grep -Fx '  directory: /legacy-data'
+          output="$(docker run --rm --network none -e HISTER_DATA_DIR=/legacy-data -e NOGON_DATA_DIR=/new-data "$HISTER_IMAGE" config show)"
+          printf '%s\n' "$output" | grep -Fx '  directory: /new-data'
 
           config_dir="$(mktemp -d)"
           trap 'rm -rf "$config_dir"' EXIT

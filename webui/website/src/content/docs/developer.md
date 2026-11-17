@@ -302,6 +302,21 @@ goreleaser check -f .goreleaser-rolling.yml
 goreleaser build --snapshot --single-target --clean -f .goreleaser-rolling.yml
 ```
 
+## Container Compatibility Checks
+
+`go test .` runs the Dockerfile healthcheck with both environment variable
+spellings. When Docker Compose is installed, it also resolves `compose.yml` to
+check image overrides and the existing project volume identity. These tests do
+not need the Docker daemon. The Docker pull request workflow builds the image
+and checks command aliases, configuration paths, data directory overrides, and
+startup through Compose.
+
+The image keeps `HISTER_DATA_DIR=/hister/data` as its default so existing runtime
+overrides still apply. The executable is `/usr/local/bin/nogon`, with aliases at
+`/usr/local/bin/hister` and `/hister/hister`. Compose retains its service, container,
+and volume names. Registry addresses remain unchanged until replacement images
+are published.
+
 ## ZIM Import Development
 
 `cmd/zim.go` implements `hister import zim` with the pure Go [stazelabs/gozim](https://github.com/stazelabs/gozim) reader, pinned in `go.mod`. It supports uncompressed, XZ, and Zstd content without an external executable. The importer checks header and pointer table bounds before opening the archive, disables memory mapping, and caches one cluster. It reads selected metadata and uses error returning directory lookups so damaged entries cannot silently disappear.

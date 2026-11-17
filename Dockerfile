@@ -46,7 +46,7 @@ RUN --mount=type=cache,id=hister-go-mod,target=/go/pkg/mod,sharing=locked \
       -linkmode external -extldflags '-static' -s -w \
       -X 'github.com/asciimoo/hister/config.DefaultServerAddress=$LISTEN_ADDRESS' \
       -X 'github.com/asciimoo/hister/config.DefaultServerBaseURL=$BASE_URL'" \
-    -o /out/hister .
+    -o /out/nogon .
 
 # Fetch a versioned, architecture-specific yt-dlp binary and verify it against
 # the checksums published with that release.
@@ -78,7 +78,7 @@ RUN set -eux; \
 # reuse the same immutable layers in the registry and on container hosts.
 FROM alpine:3.24@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf AS runtime
 
-LABEL org.opencontainers.image.title="Hister" \
+LABEL org.opencontainers.image.title="Nogon" \
       org.opencontainers.image.description="Self-hosted browser history search engine" \
       org.opencontainers.image.source="https://github.com/asciimoo/hister" \
       org.opencontainers.image.licenses="AGPL-3.0"
@@ -90,16 +90,20 @@ RUN adduser -D -u 65532 hister \
     && chown 65532:65532 /hister/data
 
 COPY --link --from=ytdlp /usr/local/bin/yt-dlp /usr/local/bin/yt-dlp
-COPY --link --from=builder /out/hister /hister/hister
+COPY --link --from=builder /out/nogon /usr/local/bin/nogon
 
+RUN ln -s /usr/local/bin/nogon /usr/local/bin/hister \
+    && ln -s /usr/local/bin/nogon /hister/hister
+
+# Keep this default under the legacy name so existing environment overrides work.
 ENV HISTER_DATA_DIR=/hister/data
 
 EXPOSE 4433
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD ["sh", "-c", "port=\"${HISTER_PORT:-${HISTER__SERVER__ADDRESS##*:}}\"; exec wget -qO /dev/null \"http://localhost:${port:-4433}/health\""]
+    CMD ["sh", "-c", "address=\"${NOGON__SERVER__ADDRESS-${HISTER__SERVER__ADDRESS:-:4433}}\"; port=\"${NOGON_PORT-${HISTER_PORT:-}}\"; port=\"${port:-${address##*:}}\"; exec wget -qO /dev/null \"http://localhost:${port:-4433}/health\""]
 
-ENTRYPOINT ["/hister/hister"]
+ENTRYPOINT ["/usr/local/bin/nogon"]
 CMD ["listen"]
 
 # latest and vx.x.x
