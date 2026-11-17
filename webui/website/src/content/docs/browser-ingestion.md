@@ -9,14 +9,14 @@ The browser extension captures pages as you visit them. Browser imports read URL
 
 ## Choose the Right Method
 
-| Goal                                        | Use                                                                     | Why                                                                      |
-| ------------------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| Index pages from now on                     | [Browser extension](browser-extension)                                  | It captures rendered page content automatically while you browse         |
-| Capture pages behind a login                | [Browser extension](browser-extension)                                  | It sees the page already rendered in your signed in browser tab          |
-| Bring in existing browser history           | [`hister import browser`](import#importing-browser-history)             | It reads qualifying URLs from the browser history database               |
-| Bring in saved browser bookmarks            | [`hister import browser bookmarks`](import#importing-browser-bookmarks) | It reads saved URLs, including bookmarks you have never visited          |
-| Index an entire public site                 | [Website crawler](crawler)                                              | It follows permitted links instead of relying on your visit history      |
-| Keep browser data continuously synchronized | No direct option                                                        | History and bookmark imports run explicitly and do not continuously sync |
+| Goal                                        | Use                                                                     | Why                                                                                                                                                                                        |
+| ------------------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Index pages from now on                     | [Browser extension](browser-extension)                                  | It captures rendered page content automatically while you browse                                                                                                                           |
+| Capture pages behind a login                | [Browser extension](browser-extension)                                  | It sees the page already rendered in your signed in browser tab                                                                                                                            |
+| Bring in existing browser history           | [`hister import browser`](import#importing-browser-history)             | It reads qualifying URLs from the browser history database                                                                                                                                 |
+| Bring in saved browser bookmarks            | [`hister import browser bookmarks`](import#importing-browser-bookmarks) | It reads saved URLs, including bookmarks you have never visited                                                                                                                            |
+| Index an entire public site                 | [Website crawler](crawler)                                              | It follows permitted links instead of relying on your visit history                                                                                                                        |
+| Keep browser data continuously synchronized | No direct option, except Safari                                         | History and bookmark imports run explicitly and do not continuously sync. `hister companion safari` follows Safari's history database, but indexes fetched pages rather than captured ones |
 
 ## Browser Extension Capture
 
