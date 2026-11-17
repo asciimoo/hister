@@ -5,7 +5,7 @@ title: 'File Types'
 description: 'Review supported local files, directory filters, document formats, and archive import behavior.'
 ---
 
-Hister can index local files from configured directories and from explicit imports. Directory indexing is controlled by the `indexer.directories` configuration. After you configure a directory, restart the Hister server. It automatically scans the directory at startup and watches it for later changes. You do not need to run `hister import file` for this automatic tracking.
+Nogon can index local files from configured directories and from explicit imports. Directory indexing is controlled by the `indexer.directories` configuration. After you configure a directory, restart the Nogon server. It automatically scans the directory at startup and watches it for later changes. You do not need to run `nogon import file` for this automatic tracking.
 
 ## Local File Indexing
 
@@ -22,11 +22,11 @@ Files that do not match a specialized handler are treated as plain text. Binary 
 
 Org files that read other files through `#+INCLUDE` or `#+SETUPFILE` are rejected. Include the needed content directly in the Org file before indexing it.
 
-For directories watched by the server, symbolic links are indexed only when their targets remain inside the configured directory. The configured directory itself may be a symbolic link. Run `hister reindex` after upgrading to remove previously indexed files reached through links outside those directories.
+For directories watched by the server, symbolic links are indexed only when their targets remain inside the configured directory. The configured directory itself may be a symbolic link. Run `nogon reindex` after upgrading to remove previously indexed files reached through links outside those directories.
 
-PDF previews preserve extracted line breaks, indentation, and paragraph spacing. Pages appear separately when page boundaries are available. Previews show saved text, so original images, fonts, and column layouts are not reproduced. Older PDFs gain the improved text layout immediately; import or submit them again to recover page boundaries, or use `hister reindex` for watched local PDFs.
+PDF previews preserve extracted line breaks, indentation, and paragraph spacing. Pages appear separately when page boundaries are available. Previews show saved text, so original images, fonts, and column layouts are not reproduced. Older PDFs gain the improved text layout immediately; import or submit them again to recover page boundaries, or use `nogon reindex` for watched local PDFs.
 
-DOCX previews preserve paragraphs, standard headings, and directly applied bold, italic, and underline formatting. Images, tables, list numbering, and original page layouts are not reproduced. Older DOCX files gain paragraph spacing immediately; import them again to recover formatting, or use `hister reindex` for watched local files.
+DOCX previews preserve paragraphs, standard headings, and directly applied bold, italic, and underline formatting. Images, tables, list numbering, and original page layouts are not reproduced. Older DOCX files gain paragraph spacing immediately; import them again to recover formatting, or use `nogon reindex` for watched local files.
 
 Plain text previews preserve line breaks, blank lines, and indentation. Long lines wrap to fit the preview panel.
 
@@ -34,13 +34,13 @@ Code language overrides are remembered per document in your browser. Preview pre
 are also stored in the browser. Large files and very long lines use plain text without
 highlighting or line numbers. Copying preserves the original whitespace and excludes line numbers.
 
-Watched HTML files use the same extractor chain as browser submissions, including Readability and structured metadata extraction, before language detection. Their original HTML is kept for previews, and their file identity is preserved even when the page contains a canonical URL. Run `hister reindex` after upgrading to extract text and correct language detection for previously indexed local HTML files. Existing remote HTML snapshots must be imported again from the source files.
+Watched HTML files use the same extractor chain as browser submissions, including Readability and structured metadata extraction, before language detection. Their original HTML is kept for previews, and their file identity is preserved even when the page contains a canonical URL. Run `nogon reindex` after upgrading to extract text and correct language detection for previously indexed local HTML files. Existing remote HTML snapshots must be imported again from the source files.
 
-The same handlers process snapshots created with `hister import file`. These imports are stored as remote file documents. The client sends prepared text, metadata, and any HTML preview content to the server.
+The same handlers process snapshots created with `nogon import file`. These imports are stored as remote file documents. The client sends prepared text, metadata, and any HTML preview content to the server.
 
 ## External PDF Parser
 
-Hister uses its built in PDF reader by default. To replace it with a local command, install Poppler so `pdftotext` is available, then add this to your configuration:
+Nogon uses its built in PDF reader by default. To replace it with a local command, install Poppler so `pdftotext` is available, then add this to your configuration:
 
 ```yaml
 indexer:
@@ -54,11 +54,11 @@ In this example, `-enc UTF-8` selects the text encoding. The first `-` reads the
 
 The command must read PDF bytes from standard input and write plain UTF 8 text to standard output. It runs directly, with each `args` entry passed literally. Use an executable wrapper script for parsers that need a filename or produce a different output format.
 
-Install the command where parsing runs: on the server for browser uploads and watched directories, and on the client for `hister import file`, including `--watch`. For a container deployment, the command must be installed inside that container. Run `hister reload` or restart the server after changing its configuration. Restart a running `hister import file --watch` command to apply client configuration changes.
+Install the command where parsing runs: on the server for browser uploads and watched directories, and on the client for `nogon import file`, including `--watch`. For a container deployment, the command must be installed inside that container. Run `nogon reload` or restart the server after changing its configuration. Restart a running `nogon import file --watch` command to apply client configuration changes.
 
-`timeout` is a positive number of seconds and defaults to 30. Failed commands, empty text, invalid UTF 8, and output larger than 32 MiB reject the PDF. Hister does not retry with its built in reader. Standard error is discarded because it can contain document text.
+`timeout` is a positive number of seconds and defaults to 30. Failed commands, empty text, invalid UTF 8, and output larger than 32 MiB reject the PDF. Nogon does not retry with its built in reader. Standard error is discarded because it can contain document text.
 
-Leave `command` empty and `args` empty to restore the built in reader. Previously stored PDFs need to be imported or submitted again; use `hister reindex` for watched local PDFs.
+Leave `command` empty and `args` empty to restore the built in reader. Previously stored PDFs need to be imported or submitted again; use `nogon reindex` for watched local PDFs.
 
 ## Directory Filters
 
@@ -72,7 +72,7 @@ indexer:
       filetypes: ['pdf', 'docx', 'md', 'txt']
 ```
 
-If `filetypes` is omitted, Hister considers every file that passes the other directory rules. Specialized handlers run first, then valid UTF 8 text files are indexed as plain text.
+If `filetypes` is omitted, Nogon considers every file that passes the other directory rules. Specialized handlers run first, then valid UTF 8 text files are indexed as plain text.
 
 Other directory rules still apply:
 
@@ -91,15 +91,15 @@ For watched files and imported snapshots, each extracted text, title, and HTML p
 
 ## Import Formats
 
-The `hister import file` command accepts these file formats:
+The `nogon import file` command accepts these file formats:
 
 | File type           | Extensions                 | Behavior                                                     |
 | ------------------- | -------------------------- | ------------------------------------------------------------ |
-| Hister JSON export  | `.json`                    | Imports documents previously written by `hister export`.     |
-| 7z archive          | `.7z`                      | Imports a compressed Hister JSON export.                     |
+| Nogon JSON export   | `.json`                    | Imports documents previously written by `nogon export`.      |
+| 7z archive          | `.7z`                      | Imports a compressed Nogon JSON export.                      |
 | Saved HTML page     | `.html`, `.htm`            | Extracts the original page URL when present.                 |
 | Local file snapshot | Any supported local format | Extracts content locally and submits a remote file document. |
 
-When importing a directory, Hister reads matching files recursively. With no input path, it uses every configured watched directory and applies its filters. This creates remote file snapshots and is intended for directories that the command line client can access but the server cannot. Add `--watch` to keep importing new and changed snapshots while the command runs. Watch mode skips Hister exports, 7z archives, and HTML with source URL metadata. Source removals retain the indexed snapshots. See [Importing Documents](import) for watch mode details.
+When importing a directory, Nogon reads matching files recursively. With no input path, it uses every configured watched directory and applies its filters. This creates remote file snapshots and is intended for directories that the command line client can access but the server cannot. Add `--watch` to keep importing new and changed snapshots while the command runs. Watch mode skips Nogon exports, 7z archives, and HTML with source URL metadata. Source removals retain the indexed snapshots. See [Importing Documents](import) for watch mode details.
 
-Use `hister import file` to create snapshots of the PDF, DOCX, Markdown, Org mode, HTML without a source URL, and plain text formats listed under local file indexing. Extraction occurs on the client, so this also works when the server cannot access the filesystem.
+Use `nogon import file` to create snapshots of the PDF, DOCX, Markdown, Org mode, HTML without a source URL, and plain text formats listed under local file indexing. Extraction occurs on the client, so this also works when the server cannot access the filesystem.

@@ -5,17 +5,17 @@ title: 'Query Language Guide'
 description: 'Build precise searches with fields, phrases, Boolean groups, dates, wildcards, negation, and sorting.'
 ---
 
-Hister provides a query language that allows you to search through your content with precision. This guide explains the different query types and search techniques available.
+Nogon provides a query language that allows you to search through your content with precision. This guide explains the different query types and search techniques available.
 
 ## Basic Search
 
 Simply type any word to search across all fields:
 
 ```textplain
-hister
+nogon
 ```
 
-This searches for "hister" in the title, text content, URL, and domain of all indexed pages.
+This searches for "nogon" in the title, text content, URL, and domain of all indexed pages.
 
 ## Quoted Phrases
 
@@ -173,7 +173,7 @@ Finds watched files that remain accessible to the server filesystem.
 type:remote
 ```
 
-Finds remote file snapshots created with `hister import file` or submitted as prepared documents through `/api/add`.
+Finds remote file snapshots created with `nogon import file` or submitted as prepared documents through `/api/add`.
 
 ```textplain
 type:web
@@ -347,7 +347,7 @@ Both examples exclude pages mentioning either Facebook or Twitter.
 
 ```textplain
 security -domain:facebook.com
-title:hister -url:*/issues/*
+title:nogon -url:*/issues/*
 privacy -"social media"
 -language:en
 -type:file
@@ -448,7 +448,7 @@ This finds pages where:
 **Documentation searches:**
 
 ```textplain
-title:(setup|installation|configuration) domain:(*.io|*.dev) hister
+title:(setup|installation|configuration) domain:(*.io|*.dev) nogon
 ```
 
 **Local code documentation:**
@@ -547,7 +547,7 @@ for deletion scope and command line examples.
 ### Finding Documentation
 
 ```textplain
-title:(docs|documentation|guide) domain:*.io hister
+title:(docs|documentation|guide) domain:*.io nogon
 ```
 
 ### Research Topic

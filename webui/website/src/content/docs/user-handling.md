@@ -5,7 +5,7 @@ title: 'User Handling'
 description: 'Configure multiple users, authentication, access tokens, document ownership, and public access.'
 ---
 
-User handling enables multiple independent users to share a single Hister instance. Each user has their own credentials, document collection, scoped search results, and access token for API clients. The server uses shared index files and enforces ownership during searches. User handling is disabled by default, making Hister fully backward compatible. Existing single user setups require no changes.
+User handling enables multiple independent users to share a single Nogon instance. Each user has their own credentials, document collection, scoped search results, and access token for API clients. The server uses shared index files and enforces ownership during searches. User handling is disabled by default, making Nogon fully backward compatible. Existing single user setups require no changes.
 
 ## Activation
 
@@ -16,7 +16,7 @@ app:
   user_handling: true
 ```
 
-> **Note**: When `user_handling` is active, `access_token` is used only to authenticate users by comparing it to the user's access token. This can be useful when the Hister admin sets `app.access_token` in the configuration file to their personal access token in order to execute command-line Hister commands as the admin user.
+> **Note**: When `user_handling` is active, `access_token` is used only to authenticate users by comparing it to the user's access token. This can be useful when the Nogon admin sets `app.access_token` in the configuration file to their personal access token in order to execute command-line Nogon commands as the admin user.
 
 After enabling user handling, create your first administrator with
 [`user create --offline --admin`](#user-create) while the server is stopped, then
@@ -41,9 +41,9 @@ The cookie uses `SameSite=Lax`. Its `Secure` attribute is enabled when `server.b
 
 ### OAuth Login
 
-Hister supports signing in via GitHub, Google, or any OpenID Connect provider when `server.oauth` is configured. No password is required for OAuth accounts.
+Nogon supports signing in via GitHub, Google, or any OpenID Connect provider when `server.oauth` is configured. No password is required for OAuth accounts.
 
-When a user signs in via OAuth for the first time, Hister automatically creates a local account linked to their provider identity. The initial Hister username comes from the GitHub login name, the Google account name with the full email address as a fallback, or OIDC's `preferred_username` with the full email address as a fallback. Subsequent logins with the same provider identity reuse the same account. GitHub account links use a permanent account ID, so changing a GitHub username preserves access and does not rename the Hister account.
+When a user signs in via OAuth for the first time, Nogon automatically creates a local account linked to their provider identity. The initial Nogon username comes from the GitHub login name, the Google account name with the full email address as a fallback, or OIDC's `preferred_username` with the full email address as a fallback. Subsequent logins with the same provider identity reuse the same account. GitHub account links use a permanent account ID, so changing a GitHub username preserves access and does not rename the Nogon account.
 
 OAuth accounts work identically to password accounts: they have scoped documents and search results, a personal access token, rules, and aliases. An OAuth user can generate a personal access token from their profile page to use with the CLI or browser extension.
 
@@ -61,11 +61,11 @@ See the [OAuth-Only Mode section of the configuration docs](/docs/configuration#
 
 ### Reverse Proxy Authentication
 
-Hister can use a username supplied by a trusted authentication proxy through `server.proxy_auth_header`, such as `Remote-User`. This automatically enables user handling. Existing usernames reuse their accounts and permissions; new usernames receive accounts without a password or administrator privileges.
+Nogon can use a username supplied by a trusted authentication proxy through `server.proxy_auth_header`, such as `Remote-User`. This automatically enables user handling. Existing usernames reuse their accounts and permissions; new usernames receive accounts without a password or administrator privileges.
 
-> **Security warning: Never enable `server.proxy_auth_header` without an authentication proxy in front of Hister.** The proxy must authenticate requests, discard client supplied identity headers, and set the configured header from the verified identity. Block direct access to Hister from untrusted clients. Otherwise, anyone who can supply the header can impersonate users, including administrators. A proxy that only provides HTTPS is insufficient.
+> **Security warning: Never enable `server.proxy_auth_header` without an authentication proxy in front of Nogon.** The proxy must authenticate requests, discard client supplied identity headers, and set the configured header from the verified identity. Block direct access to Nogon from untrusted clients. Otherwise, anyone who can supply the header can impersonate users, including administrators. A proxy that only provides HTTPS is insufficient.
 
-Personal access tokens and existing sessions still work when the proxy header is absent. Hister's **Logout** action does not end the proxy session; sign out through the authentication proxy to stop automatic authentication.
+Personal access tokens and existing sessions still work when the proxy header is absent. Nogon's **Logout** action does not end the proxy session; sign out through the authentication proxy to stop automatic authentication.
 
 See [Reverse Proxy Authentication](/docs/configuration#reverse-proxy-authentication) for configuration, account matching, and deployment requirements.
 
@@ -77,21 +77,21 @@ See [Browser Extension Authentication](/docs/browser-extension#authentication).
 
 ### API / Command-Line Client
 
-The `hister` CLI and any API client can authenticate using the personal access token via the `X-Access-Token` header:
+The `nogon` CLI and any API client can authenticate using the personal access token via the `X-Access-Token` header:
 
 ```bash
 curl -H "X-Access-Token: <your-token>" http://localhost:4433/api/stats
 ```
 
-When using the `hister` CLI with user handling, pass your token with the `-t` flag:
+When using the `nogon` CLI with user handling, pass your token with the `-t` flag:
 
 ```bash
-hister -t <your-token> search "query"
+nogon -t <your-token> search "query"
 ```
 
 ## User Management Commands
 
-Use `hister user --help` to list account management commands.
+Use `nogon user --help` to list account management commands.
 
 `user create`, `user show`, `user update`, and `user delete` use the configured
 running server and require an administrator's personal access token.
@@ -106,10 +106,10 @@ prompts for a password twice. Passwords must contain 8 to 72 UTF-8 bytes; a
 Unicode character may occupy multiple bytes.
 
 ```bash
-hister user create USERNAME [--admin] [--offline]
+nogon user create USERNAME [--admin] [--offline]
 
 # Create an account on a remote server
-hister --server-url https://hister.example --token YOUR_ADMIN_TOKEN user create alice
+nogon --server-url https://hister.example --token YOUR_ADMIN_TOKEN user create alice
 ```
 
 | Flag        | Description                                                                         |
@@ -121,7 +121,7 @@ To create the first administrator or recover access, stop the server and use its
 configuration and data directory:
 
 ```bash
-hister --config /path/to/config.yml user create admin --offline --admin
+nogon --config /path/to/config.yml user create admin --offline --admin
 ```
 
 Choose an unused username. Offline creation with `--admin` prints the new account's
@@ -140,10 +140,10 @@ Soft delete a user account on the configured server. That server must have `user
 If the user owns indexed documents, the command refuses to continue unless `--purge` is supplied. Purging removes that user's current indexed documents before deleting the account and reports the number removed. If checking or purging documents fails, the account remains; a failed purge may already have removed some documents. If account deletion is rejected after a purge, documents already removed are not restored. This is not complete data erasure, as explained in [Data Lifecycle and Retention](data-lifecycle#multi-user-ownership).
 
 ```bash
-hister user delete USERNAME [--purge]
+nogon user delete USERNAME [--purge]
 
 # Delete an account and its indexed documents on a remote server
-hister --server-url https://hister.example --token YOUR_ADMIN_TOKEN user delete alice --purge
+nogon --server-url https://hister.example --token YOUR_ADMIN_TOKEN user delete alice --purge
 ```
 
 | Flag      | Description                                                      |
@@ -157,13 +157,13 @@ The server must support remote user deletion. If an older server rejects the req
 Display information about a user account on the configured running server. The server must have user handling enabled, and the request requires an administrator's personal access token. Local user handling does not need to be enabled.
 
 ```bash
-hister user show USERNAME [--show-token]
+nogon user show USERNAME [--show-token]
 
 # Inspect a user on a remote server
-hister --server-url https://hister.example --token YOUR_ADMIN_TOKEN user show alice
+nogon --server-url https://hister.example --token YOUR_ADMIN_TOKEN user show alice
 
 # Also retrieve the user's existing access token
-hister --server-url https://hister.example --token YOUR_ADMIN_TOKEN user show alice --show-token
+nogon --server-url https://hister.example --token YOUR_ADMIN_TOKEN user show alice --show-token
 ```
 
 | Flag           | Description                                                         |
@@ -196,10 +196,10 @@ access token. Local user handling does not need to be enabled. At least one
 change must be requested.
 
 ```bash
-hister user update USERNAME [--username NEW] [--password] [--regen-token] [--toggle-admin]
+nogon user update USERNAME [--username NEW] [--password] [--regen-token] [--toggle-admin]
 
 # Rename an account and change its password together on a remote server
-hister --server-url https://hister.example --token YOUR_ADMIN_TOKEN user update alice --username alice-new --password
+nogon --server-url https://hister.example --token YOUR_ADMIN_TOKEN user update alice --username alice-new --password
 ```
 
 | Flag             | Description                                                        |
@@ -296,13 +296,13 @@ Grant or revoke admin status using `user create --admin` (at creation time) or `
 
 ## Single User Compatibility
 
-Hister reserves user ID `0` for unauthenticated use. Documents indexed without user handling enabled are stored under user ID `0` and remain visible to all authenticated users after the feature is turned on. This means you can enable user handling on an existing instance without losing access to previously indexed content.
+Nogon reserves user ID `0` for unauthenticated use. Documents indexed without user handling enabled are stored under user ID `0` and remain visible to all authenticated users after the feature is turned on. This means you can enable user handling on an existing instance without losing access to previously indexed content.
 
 To make existing global documents private to one user, find the numeric user ID with
-`hister user show USERNAME`, then run the query update as an administrator:
+`nogon user show USERNAME`, then run the query update as an administrator:
 
 ```bash
-hister update 'user_id:0' --user-id USER_ID
+nogon update 'user_id:0' --user-id USER_ID
 ```
 
 Preview the affected count with `--dry`. Ownership conflicts are skipped when that user already
@@ -330,7 +330,7 @@ Authenticated users can still add, delete, label, manage their own content, and 
 
 Every user account has a personal access token used for API authentication. Tokens are random and stored in the database.
 
-- Generate a new token from the web UI (Profile → Generate Token) or via `hister user update USERNAME --regen-token`.
+- Generate a new token from the web UI (Profile → Generate Token) or via `nogon user update USERNAME --regen-token`.
 - Generating a new token immediately invalidates the previous one. Update any clients (browser extension, scripts) accordingly.
 - Tokens are not retrieved or displayed in `user show` output by default; use `--show-token` to reveal them.
 
@@ -341,6 +341,6 @@ Every user account has a personal access token used for API authentication. Toke
 - Personal access tokens bypass session cookies and can be used in scripts. Keep them secret and regenerate them if compromised.
 - OAuth state tokens are single use random values stored in the server side session. They prevent cross site request forgery during the OAuth redirect flow.
 - OAuth logins use S256 PKCE by default. A private verifier binds the authorization request to its token exchange and is stored with the state and provider in the server side session. See [PKCE and compatibility](/docs/configuration#pkce-and-compatibility) for older provider settings and upgrade behavior.
-- OAuth accounts are created without a password. An administrator can assign one with `hister user update USERNAME --password`. If you need to disable an OAuth user's access, use `hister user delete` or remove the provider from the configuration.
+- OAuth accounts are created without a password. An administrator can assign one with `nogon user update USERNAME --password`. If you need to disable an OAuth user's access, use `nogon user delete` or remove the provider from the configuration.
 - Enable `server.oauth_only: true` to enforce OAuth login and prevent password authentication. Personal access tokens remain valid for API and CLI access. In multiple user mode, `app.access_token` must contain a user's personal token.
-- User handling is intended for a trusted group of users on a shared instance (family, team). For public-facing deployments, place Hister behind a reverse proxy with HTTPS and only index content that may be shown publicly.
+- User handling is intended for a trusted group of users on a shared instance (family, team). For public-facing deployments, place Nogon behind a reverse proxy with HTTPS and only index content that may be shown publicly.

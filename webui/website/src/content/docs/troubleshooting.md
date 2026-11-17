@@ -12,42 +12,42 @@ If you still need help, use the Community links in this page's footer.
 ## Run Diagnostics First
 
 ```bash
-hister doctor
+nogon doctor
 ```
 
 Doctor checks configuration, required extractor programs, server connectivity, authentication, and index compatibility. It reports problems without repairing data. The server must be running for the server checks to complete.
 
 Read the message beside each result:
 
-| Status    | What to do                                                                             |
-| --------- | -------------------------------------------------------------------------------------- |
-| `ok`      | This check passed. Continue to any warnings or errors.                                 |
-| `warning` | Review the message for checks that could not be completed.                             |
-| `error`   | Follow the suggested action, then run `hister doctor` again to check whether it helps. |
+| Status    | What to do                                                                            |
+| --------- | ------------------------------------------------------------------------------------- |
+| `ok`      | This check passed. Continue to any warnings or errors.                                |
+| `warning` | Review the message for checks that could not be completed.                            |
+| `error`   | Follow the suggested action, then run `nogon doctor` again to check whether it helps. |
 
 Use the same `--config`, `--server-url`, and authentication settings as the command you are troubleshooting. In multi user mode, checking the server's index and extractor programs requires an admin token. Older servers may report that diagnostics are unavailable; updating the server enables those checks.
 
 ### Locate and Validate Configuration
 
-If the server will not start, or you suspect Hister is using different settings than expected, run:
+If the server will not start, or you suspect Nogon is using different settings than expected, run:
 
 ```bash
-hister config path
-hister config validate
+nogon config path
+nogon config validate
 ```
 
 `config path` prints the selected main configuration file, even if its YAML is invalid. If it prints
 `(defaults)`, no main file was found. Saved web selections, environment variables, and command line
-options can still override the built in defaults. Use `hister config show` to inspect effective
+options can still override the built in defaults. Use `nogon config show` to inspect effective
 settings with credentials hidden.
 
 `config validate` checks configuration without needing a running server. A successful check prints `Configuration valid:` followed by the selected path or `(defaults)`. If it reports an error, correct the named setting and run the command again. A valid configuration does not confirm that the server is reachable or required programs are installed; use `doctor` for those checks.
 
-These commands inspect configuration on the computer where you run them. To check a remote server's configuration file, run them on that server. For a custom file, use the same path you pass when starting Hister:
+These commands inspect configuration on the computer where you run them. To check a remote server's configuration file, run them on that server. For a custom file, use the same path you pass when starting Nogon:
 
 ```bash
-hister --config /path/to/config.yml config path
-hister --config /path/to/config.yml config validate
+nogon --config /path/to/config.yml config path
+nogon --config /path/to/config.yml config validate
 ```
 
 See [Configuration and Diagnostics](/docs/terminal-client#configuration-and-diagnostics) for more options and output formats.
@@ -57,9 +57,9 @@ See [Configuration and Diagnostics](/docs/terminal-client#configuration-and-diag
 ### Server won't start
 
 - Check if port 4433 (or whatever was configured instead) is already in use
-- Run `hister config validate` and correct any reported settings
+- Run `nogon config validate` and correct any reported settings
 - For errors involving `config.web.yml` or inaccessible saved settings, follow
-  [Recovering Saved Settings](/docs/configuration#recovering-saved-settings) with Hister stopped.
+  [Recovering Saved Settings](/docs/configuration#recovering-saved-settings) with Nogon stopped.
 
 ### Web interface loads, but looks broken
 
@@ -68,24 +68,24 @@ If the main text loads, but seems jumbled up, and (most) images don't load, chec
 
 ### Extension not connecting
 
-- Ensure your Hister server is running and up to date
+- Ensure your Nogon server is running and up to date
 - Verify the extension is configured with the correct server URL (should be the same as `base_url` in the server's config)
 - Check browser console for errors (also, see below for debugging the extension itself)
 - Check firewall settings
 
 ### Browser import fails
 
-- Ensure your Hister server is running and up to date
+- Ensure your Nogon server is running and up to date
 
 ### Reindex reports an embedding dimension mismatch
 
-`semantic_search.dimensions` must match an output size supported by your embedding model. For example, `expected 2000, got 768` means the endpoint returned 768 values while Hister expected 2000. Set the server's dimensions to 768, restart Hister, and run `hister reindex` again. Changing this value alone cannot make a model produce a different size.
+`semantic_search.dimensions` must match an output size supported by your embedding model. For example, `expected 2000, got 768` means the endpoint returned 768 values while Nogon expected 2000. Set the server's dimensions to 768, restart Nogon, and run `nogon reindex` again. Changing this value alone cannot make a model produce a different size.
 
-Reindexing checks the embedding endpoint before clearing existing vectors. If embedding fails later during the rebuild, correct the reported problem and rerun reindexing. `hister config validate` checks configuration values without contacting the embedding endpoint.
+Reindexing checks the embedding endpoint before clearing existing vectors. If embedding fails later during the rebuild, correct the reported problem and rerun reindexing. `nogon config validate` checks configuration values without contacting the embedding endpoint.
 
 ## Memory Management
 
-If Hister is consuming too much memory, especially with large browsing histories or many indexed documents, you can reduce memory usage by disabling language detection.
+If Nogon is consuming too much memory, especially with large browsing histories or many indexed documents, you can reduce memory usage by disabling language detection.
 
 ### Reducing Memory Usage
 
@@ -96,15 +96,15 @@ indexer:
   detect_languages: false
 ```
 
-Restart Hister after changing this setting to release language detection models already loaded in memory. Newly processed documents use the default analyzer, which can reduce search accuracy because it does not apply language specific stemming. Existing documents remain searchable with their stored language labels and analyzers.
+Restart Nogon after changing this setting to release language detection models already loaded in memory. Newly processed documents use the default analyzer, which can reduce search accuracy because it does not apply language specific stemming. Existing documents remain searchable with their stored language labels and analyzers.
 
 To also consolidate existing documents into the default index and release the resources used by separate language indexes, run a full reindex:
 
 ```bash
-hister reindex
+nogon reindex
 ```
 
-The reindex operation rebuilds all indexes according to the new setting, while preserving manually pinned languages and their analyzers. Clear those pins with `hister update QUERY --language auto` if you want those documents to use the default analyzer too. Reindexing is optional if you only want to disable detection for newly processed documents. See [Language Settings and Detection](/docs/language-detection) for other ways to balance accuracy and memory use.
+The reindex operation rebuilds all indexes according to the new setting, while preserving manually pinned languages and their analyzers. Clear those pins with `nogon update QUERY --language auto` if you want those documents to use the default analyzer too. Reindexing is optional if you only want to disable detection for newly processed documents. See [Language Settings and Detection](/docs/language-detection) for other ways to balance accuracy and memory use.
 
 ## Debugging the Web Extension
 
@@ -114,4 +114,4 @@ Instead:
 ### Firefox
 
 1. Go to `about:debugging#/runtime/this-firefox`
-2. Press the "Inspect" button to the right of "Hister".
+2. Press the "Inspect" button to the right of "Nogon".

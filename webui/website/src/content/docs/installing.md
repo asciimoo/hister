@@ -47,6 +47,47 @@ Release pages also contain a checksums file that can be used to verify the downl
 
 You may optionally move the binary to a directory on your `PATH`, such as `/usr/local/bin` or `~/.local/bin`.
 
+## Upgrading from Hister
+
+Nogon reuses your existing Hister configuration and data. The rename itself does
+not require moving directories, exporting and importing documents, or reindexing.
+
+1. Stop the existing server and make a [complete backup](data-lifecycle#backups-and-exports).
+   Keep the configuration, data directory, service settings, and database connection
+   you already use.
+2. Install the Nogon build using your usual installation method. If you replace a
+   downloaded executable, update your launcher to its installed filename. Packages
+   may still provide `hister`; use that command when `nogon` is unavailable.
+3. Before starting the new server, run `nogon config path` and `nogon config show`
+   with the same `--config` option and environment as your server. Check the selected
+   config file and `app.directory`. If multiple data directories are found, set
+   `app.directory` or `NOGON_DATA_DIR` to the existing directory you want to use.
+4. Start the server and check that your documents and settings are present. Keep
+   the same server URL and credentials in the extension and other clients. Follow
+   any separate index compatibility instructions reported by the installed release.
+
+Existing `HISTER__*` configuration variables, `HISTER_CONFIG`, `HISTER_DATA_DIR`,
+and `HISTER_PORT` remain supported. You can keep them unchanged. If both spellings
+are present, the corresponding Nogon variable takes precedence, even when empty;
+see [environment variables](configuration#environment-variables) for details.
+Import credentials still use the `HISTER_IMPORT_*` names shown in the
+[import guide](import).
+
+Existing Hister config and data locations remain supported. Nogon config locations
+are searched first, so creating a second config file can change which file is
+selected. Keep your existing file or select it explicitly with `--config`.
+See [configuration locations](configuration#default-config-locations).
+
+For managed installations, keep existing service identities and storage paths.
+Follow the [Docker upgrade instructions](docker#upgrading-an-existing-container),
+[Systemd](#systemd), or [Nix](#nix) instructions for your setup. Existing repository,
+download, and extension store links may still contain `hister`.
+
+Older Hister releases do not gain Nogon configuration options when you rename their
+executable. Keep their `HISTER_` settings until you install a build that supports
+the rename. Homebrew and WinGet compatibility changes are prepared for publication;
+the available commands depend on the package version you install.
+
 ## Building from source
 
 Building Nogon requires Go 1.26, npm, and a C compiler for CGO dependencies.

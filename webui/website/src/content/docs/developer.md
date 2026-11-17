@@ -2,17 +2,19 @@
 date: '2026-08-22T00:00:00+02:00'
 draft: false
 title: 'Developer Documentation'
-description: 'Understand the source tree, test Hister, extend extractors, and inspect its HTTP and MCP interfaces.'
+description: 'Understand the source tree, test Nogon, extend extractors, and inspect its HTTP and MCP interfaces.'
 ---
 
 This page is for people who contribute changes, add extractors, or integrate
-directly with Hister HTTP and MCP interfaces.
+directly with Nogon HTTP and MCP interfaces.
 
 The primary source repository is on
 [GitHub](https://github.com/asciimoo/hister). It is also mirrored on
 [Codeberg](https://codeberg.org/asciimoo/hister).
 
-## Contributing to Hister
+<span id="contributing-to-hister"></span>
+
+## Contributing to Nogon
 
 Read the complete
 [contribution guide](https://github.com/asciimoo/hister/blob/main/CONTRIBUTING.md)
@@ -22,7 +24,7 @@ issue before implementing a large architectural change, broad refactor, or
 development tooling change so the approach can be discussed first.
 
 Ask questions when requirements or existing behavior are unclear. Review
-feedback concerns the work and the shared goal of improving Hister. A useful
+feedback concerns the work and the shared goal of improving Nogon. A useful
 contribution should provide more value to the project than the time required to
 review and maintain it.
 
@@ -242,7 +244,7 @@ Use these commands for common work:
 | Run app browser tests                 | `npm run test:browser -w @nogon/app` |
 | Run browser extension tests           | `npm test -w @nogon/ext`             |
 | Rebuild embedded frontend assets      | `go generate`                        |
-| Build the complete Hister binary      | `./manage.sh build`                  |
+| Build the complete Nogon binary       | `./manage.sh build`                  |
 | Build the web application             | `npm run build -w @nogon/app`        |
 | Build this documentation website      | `npm run build -w @nogon/website`    |
 | Build the browser extension           | `npm run build -w @nogon/ext`        |
@@ -415,7 +417,7 @@ for how these names resolve to one unit.
 
 ## ZIM Import Development
 
-`cmd/zim.go` implements `hister import zim` with the pure Go [stazelabs/gozim](https://github.com/stazelabs/gozim) reader, pinned in `go.mod`. It supports uncompressed, XZ, and Zstd content without an external executable. The importer checks header and pointer table bounds before opening the archive, disables memory mapping, and caches one cluster. It reads selected metadata and uses error returning directory lookups so damaged entries cannot silently disappear.
+`cmd/zim.go` implements `nogon import zim` with the pure Go [stazelabs/gozim](https://github.com/stazelabs/gozim) reader, pinned in `go.mod`. It supports uncompressed, XZ, and Zstd content without an external executable. The importer checks header and pointer table bounds before opening the archive, disables memory mapping, and caches one cluster. It reads selected metadata and uses error returning directory lookups so damaged entries cannot silently disappear.
 
 The reader decompresses complete clusters before checking individual article sizes. Its limits are 4 GiB of encoded cluster data and 1 GiB of decoded compressed data; the article limit is not a total memory limit. This is a newer library than libzim, so verify real archives and malformed input tests before changing the pin.
 
@@ -831,7 +833,7 @@ If no extractor succeeds, `ErrNoExtractor` is returned.
 
 A custom extractor can depend on the focused
 [`server/extractor/sdk`](https://github.com/asciimoo/hister/tree/main/server/extractor/sdk)
-package instead of importing Hister configuration, document, and result
+package instead of importing Nogon configuration, document, and result
 packages separately. It must implement this interface:
 
 ```go
@@ -1052,7 +1054,7 @@ Pass a case name fragment to run a subset:
 ./manage.sh run_extractor_tests discourse
 ```
 
-The runner fetches each page through the configured Hister crawler backend and
+The runner fetches each page through the configured Nogon crawler backend and
 respects its robots rules. It checks the selected extractor directly, checks the
 complete extractor chain unless `run_chain` is false, and checks previews when
 preview expectations are present. Identical fetches are reused within a test
@@ -1074,7 +1076,7 @@ distinguish a website structure change from a transient fetch failure.
 The MCP endpoint uses Streamable HTTP at `POST /mcp`. Every interaction is a
 `POST` request with a JSON RPC 2.0 body. The server responds with a JSON object.
 The authorization header is required only when authentication is enabled in
-the Hister configuration.
+the Nogon configuration.
 
 ### Initialize
 

@@ -2,33 +2,33 @@
 date: '2026-08-01T00:00:00+02:00'
 draft: false
 title: 'Data Storage and Lifecycle'
-description: 'Learn where Hister stores data and how updates, previews, deletion, cleanup, and backups behave.'
+description: 'Learn where Nogon stores data and how updates, previews, deletion, cleanup, and backups behave.'
 ---
 
 On average, storing one page requires around 100 KB of disk space.
 
-Hister keeps current searchable documents until you replace or delete them. It does not apply an automatic expiry period, a maximum document count, or a total disk quota. Some related SQL records can remain after current document deletion. The server operator is responsible for monitoring storage, creating backups, and applying any required deletion schedule.
+Nogon keeps current searchable documents until you replace or delete them. It does not apply an automatic expiry period, a maximum document count, or a total disk quota. Some related SQL records can remain after current document deletion. The server operator is responsible for monitoring storage, creating backups, and applying any required deletion schedule.
 
 ## Lifecycle at a Glance
 
 | Event                                                    | Result                                                                                                          |
 | -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| A new URL is submitted                                   | Hister creates a searchable document for that URL and owner                                                     |
-| The same normalized URL is submitted again               | Hister replaces the current document content and increases its submission count                                 |
-| A versioning rule matches a changed page                 | Hister also stores a difference record in the SQL database                                                      |
-| A watched file changes                                   | Hister updates its searchable document                                                                          |
-| A watched file is removed                                | Hister keeps the document unless `delete_on_remove: true` is configured                                         |
-| A remote file snapshot is imported again                 | Hister replaces the document with the same source and absolute path                                             |
-| `hister update` changes document attributes              | Hister updates matching current records and moves identity state when ownership changes                         |
-| The source of a remote file snapshot changes             | An active `hister import file --watch` updates it; otherwise it changes on the next import                      |
+| A new URL is submitted                                   | Nogon creates a searchable document for that URL and owner                                                      |
+| The same normalized URL is submitted again               | Nogon replaces the current document content and increases its submission count                                  |
+| A versioning rule matches a changed page                 | Nogon also stores a difference record in the SQL database                                                       |
+| A watched file changes                                   | Nogon updates its searchable document                                                                           |
+| A watched file is removed                                | Nogon keeps the document unless `delete_on_remove: true` is configured                                          |
+| A remote file snapshot is imported again                 | Nogon replaces the document with the same source and absolute path                                              |
+| `nogon update` changes document attributes               | Nogon updates matching current records and moves identity state when ownership changes                          |
+| The source of a remote file snapshot changes             | An active `nogon import file --watch` updates it; otherwise it changes on the next import                       |
 | The source of a remote file snapshot moves or is removed | The old snapshot remains; watch mode imports a new path if it is inside a watched directory                     |
-| A source bookmark or browser history entry is removed    | No change occurs in Hister                                                                                      |
-| A document is deleted in Hister                          | The current index record and associated current assets are removed                                              |
-| `hister cleanup` is run                                  | Local documents that no longer match configured directories and unreferenced HTML and favicon files are removed |
+| A source bookmark or browser history entry is removed    | No change occurs in Nogon                                                                                       |
+| A document is deleted in Nogon                           | The current index record and associated current assets are removed                                              |
+| `nogon cleanup` is run                                   | Local documents that no longer match configured directories and unreferenced HTML and favicon files are removed |
 
 ## Where Data Lives
 
-The `app.directory` setting is the main Hister data directory. A default SQLite deployment stores these items there:
+The `app.directory` setting is the main Nogon data directory. A default SQLite deployment stores these items there:
 
 | Location                       | Contents                                                                                                |
 | ------------------------------ | ------------------------------------------------------------------------------------------------------- |
@@ -50,7 +50,7 @@ Configuration files can live outside `app.directory`. Source files in watched di
 
 ## Storage Limits
 
-Hister does not enforce a total storage limit. Available disk space and the selected database backend are the practical limits.
+Nogon does not enforce a total storage limit. Available disk space and the selected database backend are the practical limits.
 
 Two settings are easy to mistake for quotas:
 
@@ -70,11 +70,11 @@ To reduce growth:
 
 ## Updates and Versioning
 
-The document identity is its normalized URL plus its owner. Hister removes URL fragments and common `utm` tracking parameters during normalization. Several submissions can therefore resolve to one current document.
+The document identity is its normalized URL plus its owner. Nogon removes URL fragments and common `utm` tracking parameters during normalization. Several submissions can therefore resolve to one current document.
 
-On a normal revisit, the new title, text, HTML preview, metadata, and update time replace the prior current values. If the previous HTML or favicon file is no longer referenced by another document, Hister removes that file.
+On a normal revisit, the new title, text, HTML preview, metadata, and update time replace the prior current values. If the previous HTML or favicon file is no longer referenced by another document, Nogon removes that file.
 
-Versioning is separate. When a URL matches a versioning rule and content changes, Hister stores text and HTML differences in the SQL database. These records let the preview interface reconstruct earlier content. Version records have no automatic age or count limit.
+Versioning is separate. When a URL matches a versioning rule and content changes, Nogon stores text and HTML differences in the SQL database. These records let the preview interface reconstruct earlier content. Version records have no automatic age or count limit.
 
 Disabling a versioning rule stops future differences from being recorded. Use [purge](#purging-retained-data) to remove old differences already stored.
 
@@ -87,7 +87,7 @@ app:
   disable_previews: true
 ```
 
-Restart Hister after changing the setting. Running `hister reindex` while previews are disabled removes previously stored HTML files and rebuilds the search indexes without preview content. Extracted plain text remains searchable. Favicons are not affected.
+Restart Nogon after changing the setting. Running `nogon reindex` while previews are disabled removes previously stored HTML files and rebuilds the search indexes without preview content. Extracted plain text remains searchable. Favicons are not affected.
 
 See [Disable Previews](configuration#disable-previews) for configuration details.
 
@@ -95,19 +95,19 @@ See [Disable Previews](configuration#disable-previews) for configuration details
 
 Delete one result from the web or terminal interface, or prune every document matching a search query from the search web UI or command line client.
 
-Bulk deletion in the web interface has the same scope as `hister delete`: it removes every
+Bulk deletion in the web interface has the same scope as `nogon delete`: it removes every
 document matching the query, including matches beyond the currently displayed results.
 
 To delete matching documents from the command line:
 
 ```bash
-hister delete 'domain:example.com'
+nogon delete 'domain:example.com'
 ```
 
 Always preview a broad deletion query first:
 
 ```bash
-hister delete --dry --verbose 'updated:>90d'
+nogon delete --dry --verbose 'updated:>90d'
 ```
 
 Relative time filters describe elapsed age, so `updated:>90d` matches documents not updated for more than 90 days. The command asks for confirmation unless `--yes` is supplied.
@@ -129,7 +129,7 @@ Document deletion does not remove:
 - Server logs, exported JSON files, filesystem snapshots, or backups.
 - Search history records that are unrelated to the deleted URL.
 
-If a complete erasure is required, the server operator must also address version records, job metadata, logs, exports, and backups according to the deployment. Hister does not currently provide one command that erases every related copy.
+If a complete erasure is required, the server operator must also address version records, job metadata, logs, exports, and backups according to the deployment. Nogon does not currently provide one command that erases every related copy.
 
 ### Avoiding Automatic Reappearance
 
@@ -139,10 +139,10 @@ For watched files, `delete_on_remove: true` makes future file removal delete the
 
 ## Cleanup And Local Files
 
-`hister cleanup` reconciles indexed local document paths with the current directory configuration, then scans stored HTML and favicon files and removes files that no current indexed document references:
+`nogon cleanup` reconciles indexed local document paths with the current directory configuration, then scans stored HTML and favicon files and removes files that no current indexed document references:
 
 ```bash
-hister cleanup
+nogon cleanup
 ```
 
 During local document reconciliation, cleanup removes indexed documents that are outside the configured directories, no longer match their `filetypes`, `patterns`, `excludes`, or hidden path settings, or have a different configured owner. It evaluates fields already stored in the index and does not walk, stat, or read local files. Cleanup therefore does not discover new files, update changed files, or detect missing source files. Startup directory indexing and the file watcher handle those operations. Cleanup reports how many indexed local documents it checked, skipped, and removed.
@@ -151,13 +151,13 @@ Normal updates and deletions already attempt to remove unreferenced assets. The 
 
 ## Purging Retained Data
 
-Use `hister purge` to permanently remove selected retained data from the running server. It applies across all users and requires administrator access in multi user mode. Current searchable documents and their previews remain intact.
+Use `nogon purge` to permanently remove selected retained data from the running server. It applies across all users and requires administrator access in multi user mode. Current searchable documents and their previews remain intact.
 
 Choose at least one category and an explicit cutoff:
 
 ```bash
-hister purge --versions --history --crawl-jobs --before 2026-01-01 --dry
-hister purge --versions --history --crawl-jobs --before 2026-01-01
+nogon purge --versions --history --crawl-jobs --before 2026-01-01 --dry
+nogon purge --versions --history --crawl-jobs --before 2026-01-01
 ```
 
 | Flag           | Records removed                                                                                                                 |
@@ -168,7 +168,7 @@ hister purge --versions --history --crawl-jobs --before 2026-01-01
 
 Pinned history, running or interrupted crawl jobs, and jobs with pending URLs remain. Removing version differences makes those earlier versions unavailable. Removing crawl records does not delete the documents they indexed.
 
-`--before` accepts a date at midnight UTC or an RFC3339 timestamp with a timezone. Records exactly at the cutoff remain. The command previews counts before asking for confirmation; `--dry` stops after the preview and `--yes` skips confirmation. Counts can change between preview and deletion if other work modifies the data. If a database error interrupts deletion, Hister rolls back the purge.
+`--before` accepts a date at midnight UTC or an RFC3339 timestamp with a timezone. Records exactly at the cutoff remain. The command previews counts before asking for confirmation; `--dry` stops after the preview and `--yes` skips confirmation. Counts can change between preview and deletion if other work modifies the data. If a database error interrupts deletion, Nogon rolls back the purge.
 
 Purging does not erase source files, browser history, logs, exports, or backups, and does not guarantee immediate disk space reclamation. It does not configure automatic expiry.
 
@@ -179,8 +179,8 @@ Persistent crawls and browser imports keep queue state in the SQL database so th
 List and remove them explicitly:
 
 ```bash
-hister crawl list
-hister crawl delete JOB_ID
+nogon crawl list
+nogon crawl delete JOB_ID
 ```
 
 Deleting a crawl job removes its queue and status records. It does not delete documents that the job already indexed.
@@ -191,18 +191,18 @@ All users share the server storage and search index files, but each current docu
 
 A regular user can delete only their own current documents. An administrator deletion request has no automatic owner restriction and can affect other users. The command line `--dry` count includes those documents. On a shared server, constrain an administrator deletion query with `user_id:ID` to select one owner's documents.
 
-Use `hister update QUERY --user-id ID` to change ownership without exporting and importing current
+Use `nogon update QUERY --user-id ID` to change ownership without exporting and importing current
 documents. The operation preserves current indexed content and stored version records. It skips a
 move when the destination owner already has the same URL. Search history remains associated with
 the user who created it. A regular user can update labels, titles, and languages only on their own
 documents, while ownership changes require an administrator.
 
-Deleting a user with `hister user delete USERNAME --purge` removes the named user's current indexed documents and then soft deletes the account on the same server. This requires an administrator token. Stop imports and crawls for that user first because deletion does not block work already in progress. Verify the result because this is not complete data erasure; stored versions, crawl records, backups, and other retained data can remain. See [`user delete`](user-handling#user-delete) for details.
+Deleting a user with `nogon user delete USERNAME --purge` removes the named user's current indexed documents and then soft deletes the account on the same server. This requires an administrator token. Stop imports and crawls for that user first because deletion does not block work already in progress. Verify the result because this is not complete data erasure; stored versions, crawl records, backups, and other retained data can remain. See [`user delete`](user-handling#user-delete) for details.
 
 ## Backups and Exports
 
-For a complete server backup, stop Hister and back up the entire `app.directory`, plus any configuration and `tui.yaml` files stored elsewhere. PostgreSQL deployments also require a database backup. Watched source files need their own backup plan. Remember that exports, filesystem snapshots, container volume backups, and remote database backups create additional retained copies.
+For a complete server backup, stop Nogon and back up the entire `app.directory`, plus any configuration and `tui.yaml` files stored elsewhere. PostgreSQL deployments also require a database backup. Watched source files need their own backup plan. Remember that exports, filesystem snapshots, container volume backups, and remote database backups create additional retained copies.
 
-`hister export` exports current indexed documents and any current preview content available to the caller. It is useful for migration, but it is not a complete server backup. It does not preserve user accounts, search result history, crawl jobs, stored version differences, rules, sessions, or all server configuration.
+`nogon export` exports current indexed documents and any current preview content available to the caller. It is useful for migration, but it is not a complete server backup. It does not preserve user accounts, search result history, crawl jobs, stored version differences, rules, sessions, or all server configuration.
 
 Protect backups as carefully as the live server because they can contain full page text, private previews, local file content, and credentials accidentally captured from pages.

@@ -1,6 +1,6 @@
 ## Structure
 
-`app/` contains all the resources required to build the hister web UI
+`app/` contains all the resources required to build the Nogon web UI
 `website/` contains all the static site resources required to build hister.org and the documentation
 `components/` contains all the reusable components used by either the `app/` or the `website/`
 `ext/` contains the browser extension

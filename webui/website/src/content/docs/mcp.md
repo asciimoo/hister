@@ -2,13 +2,13 @@
 date: '2026-04-20T00:00:00+00:00'
 draft: false
 title: 'MCP Integration'
-description: 'Connect assistants to Hister search, previews, and history through the authenticated MCP endpoint.'
+description: 'Connect assistants to Nogon search, previews, and history through the authenticated MCP endpoint.'
 ---
 
-Hister exposes a [Model Context Protocol](https://modelcontextprotocol.io) (MCP)
-endpoint that lets AI assistants read from your Hister index directly. Once
+Nogon exposes a [Model Context Protocol](https://modelcontextprotocol.io) (MCP)
+endpoint that lets AI assistants read from your Nogon index directly. Once
 connected, the assistant can search indexed pages, explore search counts,
-retrieve stored previews, and inspect Hister history through MCP tools.
+retrieve stored previews, and inspect Nogon history through MCP tools.
 
 ## Endpoint
 
@@ -18,7 +18,7 @@ POST /mcp
 
 Configure MCP clients to use this URL with the Streamable HTTP transport.
 
-MCP applies Hister's usual origin checks when a client sends an `Origin` header.
+MCP applies Nogon's usual origin checks when a client sends an `Origin` header.
 The `hister://` origin is supported, and `localhost` and `127.0.0.1` are
 interchangeable for local configurations with the same scheme and port. Requests
 from unrelated origins receive HTTP 403, even with a valid access token or login
@@ -41,7 +41,7 @@ and `trust_scope: "all values in fields"`. A security instruction identifies
 the exact untrusted path. The required text content block contains the same
 structured JSON after a security notice.
 
-Hister removes invisible control characters. HTML is returned only when
+Nogon removes invisible control characters. HTML is returned only when
 explicitly requested by `search`, or as a rendered preview from `get_preview`.
 It remains inside the untrusted structured record. These controls reduce risk
 but cannot guarantee that every consuming model will resist prompt injection.
@@ -51,10 +51,10 @@ using file, shell, browser, email, or network tools.
 
 ## Authentication
 
-The default Hister configuration does not require authentication. Authentication
-is required only when Hister is configured with `app.access_token` or
+The default Nogon configuration does not require authentication. Authentication
+is required only when Nogon is configured with `app.access_token` or
 `app.user_handling`. The MCP endpoint uses the same token authentication as the
-rest of the Hister API.
+rest of the Nogon API.
 
 ### Static access token
 
@@ -71,7 +71,7 @@ Alternatively, use the `X-Access-Token` header with the same value.
 Generate a personal token on the profile page (`/profile`) or via:
 
 ```bash
-hister user update <username> --regen-token
+nogon user update <username> --regen-token
 ```
 
 Then pass it the same way:
@@ -113,7 +113,7 @@ between requests. Continue until `next_page_key` is absent, even if a page has
 fewer results than the requested limit. A final request can return an empty page.
 Results can shift if documents or opened history change between requests.
 
-Semantic search is used only when it is enabled and available on the Hister
+Semantic search is used only when it is enabled and available on the Nogon
 server. If the server does not have semantic search configured, `"semantic":
 true` falls back to normal keyword search.
 
@@ -219,7 +219,7 @@ between calls, restart from offset zero to read a consistent copy.
 
 ### `get_history`
 
-Retrieve items from the Hister history views. This tool is available only when
+Retrieve items from the Nogon history views. This tool is available only when
 public mode is disabled or the caller is authenticated.
 
 | Argument          | Type    | Required | Default   | Description                                                                             |
@@ -283,9 +283,12 @@ To continue opened history using the cursor from the previous response:
 
 ## Client Configuration
 
+The examples use `nogon` as the connection name. Existing connections named
+`hister` continue to work with the same endpoint and credentials.
+
 ### Claude Desktop
 
-Add a `hister` entry to your Claude Desktop configuration file.
+Add a `nogon` entry to your Claude Desktop configuration file.
 
 **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`  
 **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`  
@@ -294,7 +297,7 @@ Add a `hister` entry to your Claude Desktop configuration file.
 ```json
 {
   "mcpServers": {
-    "hister": {
+    "nogon": {
       "url": "http://127.0.0.1:4433/mcp",
       "headers": {
         "Authorization": "Bearer <your-access-token>"
@@ -315,7 +318,7 @@ Open **Settings** and locate the MCP servers section, or edit
 ```json
 {
   "mcpServers": {
-    "hister": {
+    "nogon": {
       "url": "http://127.0.0.1:4433/mcp",
       "headers": {
         "Authorization": "Bearer <your-access-token>"
@@ -328,7 +331,7 @@ Open **Settings** and locate the MCP servers section, or edit
 ### Remote or self-hosted server
 
 Replace `http://127.0.0.1:4433` with your server's `base_url`. If you run
-Hister behind a reverse proxy under a subpath (e.g. `https://example.com/hister`),
+Nogon behind a reverse proxy under a subpath (e.g. `https://example.com/hister`),
 the endpoint is `https://example.com/hister/mcp`.
 
 ## Example Interaction

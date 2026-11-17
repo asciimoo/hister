@@ -9,18 +9,18 @@ The browser extension captures pages as you visit them. Browser imports read URL
 
 ## Choose the Right Method
 
-| Goal                                        | Use                                                                     | Why                                                                      |
-| ------------------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| Index pages from now on                     | [Browser extension](browser-extension)                                  | It captures rendered page content automatically while you browse         |
-| Capture pages behind a login                | [Browser extension](browser-extension)                                  | It sees the page already rendered in your signed in browser tab          |
-| Bring in existing browser history           | [`hister import browser`](import#importing-browser-history)             | It reads qualifying URLs from the browser history database               |
-| Bring in saved browser bookmarks            | [`hister import browser bookmarks`](import#importing-browser-bookmarks) | It reads saved URLs, including bookmarks you have never visited          |
-| Index an entire public site                 | [Website crawler](crawler)                                              | It follows permitted links instead of relying on your visit history      |
-| Keep browser data continuously synchronized | No direct option                                                        | History and bookmark imports run explicitly and do not continuously sync |
+| Goal                                        | Use                                                                    | Why                                                                      |
+| ------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| Index pages from now on                     | [Browser extension](browser-extension)                                 | It captures rendered page content automatically while you browse         |
+| Capture pages behind a login                | [Browser extension](browser-extension)                                 | It sees the page already rendered in your signed in browser tab          |
+| Bring in existing browser history           | [`nogon import browser`](import#importing-browser-history)             | It reads qualifying URLs from the browser history database               |
+| Bring in saved browser bookmarks            | [`nogon import browser bookmarks`](import#importing-browser-bookmarks) | It reads saved URLs, including bookmarks you have never visited          |
+| Index an entire public site                 | [Website crawler](crawler)                                             | It follows permitted links instead of relying on your visit history      |
+| Keep browser data continuously synchronized | No direct option                                                       | History and bookmark imports run explicitly and do not continuously sync |
 
 ## Browser Extension Capture
 
-The extension reads the current tab after the page loads. It submits the URL, title, extracted text, rendered HTML, and favicon to your configured Hister server. It also watches for content changes made by applications that update a page without a full navigation.
+The extension reads the current tab after the page loads. It submits the URL, title, extracted text, rendered HTML, and favicon to your configured Nogon server. It also watches for content changes made by applications that update a page without a full navigation.
 
 This means the extension can index content that a normal crawler cannot see, including pages rendered with JavaScript and pages available through your signed in browser session. It also means private account pages can be submitted. Configure skip rules for sites or paths that should never be stored, and review the [sensitive content patterns](configuration#sensitive_content_patterns-section).
 
@@ -33,20 +33,20 @@ For installation, authentication, controls, and shortcuts, see [Browser Extensio
 Browser history databases contain URLs, titles, visit counts, and timestamps. They normally do not contain complete historical page contents. When you run:
 
 ```bash
-hister import browser
+nogon import browser
 ```
 
-Hister detects a supported browser database, reads qualifying URLs, and asks its crawler to fetch the pages that exist now. The resulting indexed content can differ from what you originally saw. A page may have changed, disappeared, moved, or started requiring authentication.
+Nogon detects a supported browser database, reads qualifying URLs, and asks its crawler to fetch the pages that exist now. The resulting indexed content can differ from what you originally saw. A page may have changed, disappeared, moved, or started requiring authentication.
 
 The `--min-visit` option can use the browser's visit count to choose URLs. The
 `--start-date` option selects URLs whose most recent recorded browser visit is
 on or after the given date. These filters do not recreate the browser's
-original visit timeline or preserve every historical visit as a Hister record.
+original visit timeline or preserve every historical visit as a Nogon record.
 The indexed document timestamps describe the imported page fetch.
 
 The import does not inherit the browser session. Sites that need login cookies may return a login page or reject the request. You can select a browser based crawler backend and provide cookies explicitly when appropriate. Treat exported cookies as secrets.
 
-Browser imports use persistent crawl jobs so an interrupted import can resume. The job records remain in the Hister database until you remove the job with `hister crawl delete JOB_ID`.
+Browser imports use persistent crawl jobs so an interrupted import can resume. The job records remain in the Nogon database until you remove the job with `nogon crawl delete JOB_ID`.
 
 See [Importing Browser History](import#importing-browser-history) for supported browsers, filtering, backends, cookies, and resume commands.
 
@@ -55,11 +55,11 @@ See [Importing Browser History](import#importing-browser-history) for supported 
 Import saved bookmarks from Firefox based browsers, Chromium based browsers, or Ladybird:
 
 ```bash
-hister import browser bookmarks
-hister import browser bookmarks --browser firefox
+nogon import browser bookmarks
+nogon import browser bookmarks --browser firefox
 ```
 
-Hister reads saved URLs, including bookmarks you have never visited, then fetches and indexes the current pages. Use `--browser` to select a browser or `--db` to select a bookmark store. Documents receive the `bookmarks` label by default; `--label LABEL` overrides it.
+Nogon reads saved URLs, including bookmarks you have never visited, then fetches and indexes the current pages. Use `--browser` to select a browser or `--db` to select a bookmark store. Documents receive the `bookmarks` label by default; `--label LABEL` overrides it.
 
 Like history imports, bookmark imports use persistent crawl jobs and do not inherit your signed in browser session. They apply allow and skip rules and support the same crawler backends and request options. The history filters `--min-visit` and `--start-date` do not apply to bookmarks.
 
@@ -67,17 +67,17 @@ See [Importing Browser Bookmarks](import#importing-browser-bookmarks) for suppor
 
 ## How Repeated Visits Behave
 
-Hister stores one current document for each normalized URL and owner. If the extension submits that URL again, the current document is updated and its Hister submission count increases. Hister does not keep a complete snapshot for every visit.
+Nogon stores one current document for each normalized URL and owner. If the extension submits that URL again, the current document is updated and its Nogon submission count increases. Nogon does not keep a complete snapshot for every visit.
 
-If the URL matches a versioning rule and its content changes, Hister stores a difference record that can reconstruct earlier content. Version tracking is optional and has no automatic expiry. See [Data Storage and Lifecycle](data-lifecycle#updates-and-versioning).
+If the URL matches a versioning rule and its content changes, Nogon stores a difference record that can reconstruct earlier content. Version tracking is optional and has no automatic expiry. See [Data Storage and Lifecycle](data-lifecycle#updates-and-versioning).
 
 ## What Deleting at the Source Does
 
 Browser ingestion is not bidirectional sync.
 
-- Clearing browser history does not delete Hister documents.
-- Removing a bookmark does not delete an imported Hister document.
+- Clearing browser history does not delete Nogon documents.
+- Removing a bookmark does not delete an imported Nogon document.
 - Disabling or uninstalling the extension stops future capture but does not delete data already on the server.
-- Deleting a Hister document does not change browser history, bookmarks, or source websites.
+- Deleting a Nogon document does not change browser history, bookmarks, or source websites.
 
-Use Hister deletion controls separately. See [Deleting Documents](data-lifecycle#deleting-documents).
+Use Nogon deletion controls separately. See [Deleting Documents](data-lifecycle#deleting-documents).

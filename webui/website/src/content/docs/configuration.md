@@ -14,12 +14,12 @@ description: 'Explore every configuration section, option, default value, enviro
       type: 'string',
       defaultValue: 'platform default',
       scopes: ['server', 'client'],
-      description: 'Directory where Hister stores its data, including the index, rules, and secret key.',
+      description: 'Directory where Nogon stores its data, including the index, rules, and secret key.',
     },
     {
       name: 'title',
       type: 'string',
-      defaultValue: 'Hister',
+      defaultValue: 'Nogon',
       scopes: ['server'],
       description: 'Main title shown on the web UI home page.',
     },
@@ -91,7 +91,7 @@ description: 'Explore every configuration section, option, default value, enviro
       type: 'string',
       defaultValue: '(none)',
       scopes: ['server', 'client'],
-      description: 'Path to a log file. Hister creates or appends to this file instead of writing logs to standard error.',
+      description: 'Path to a log file. Nogon creates or appends to this file instead of writing logs to standard error.',
     },
     {
       name: 'debug_sql',
@@ -119,7 +119,7 @@ description: 'Explore every configuration section, option, default value, enviro
       type: 'bool',
       defaultValue: 'true',
       scopes: ['server'],
-      description: 'Redirects to the configured search_url when a query returns no results. Disable it to remain within Hister.',
+      description: 'Redirects to the configured search_url when a query returns no results. Disable it to remain within Nogon.',
     },
     {
       name: 'display_extractor_config',
@@ -156,7 +156,7 @@ description: 'Explore every configuration section, option, default value, enviro
       type: 'string',
       defaultValue: 'derived from address',
       scopes: ['server', 'client'],
-      description: 'Public URL of the Hister instance. Required when listening on all interfaces or a Unix socket. It must match how you access Hister.',
+      description: 'Public URL of the Nogon instance. Required when listening on all interfaces or a Unix socket. It must match how you access Nogon.',
     },
     {
       name: 'database',
@@ -180,7 +180,7 @@ description: 'Explore every configuration section, option, default value, enviro
       name: 'expose_version',
       type: 'bool',
       defaultValue: 'false',
-      description: 'Includes the running Hister version in the public /api/config response without authentication. Disabled by default. See Monitoring for setup.',
+      description: 'Includes the running Nogon version in the public /api/config response without authentication. Disabled by default. See Monitoring for setup.',
     },
     {
       name: 'proxy_auth_header',
@@ -219,7 +219,7 @@ description: 'Explore every configuration section, option, default value, enviro
       name: 'color_scheme',
       type: 'string',
       defaultValue: 'terminal',
-      description: 'Appearance mode. Terminal inherits your terminal background, foreground, and ANSI palette. Use auto to choose the configured dark or light Hister theme, or select dark or light explicitly.',
+      description: 'Appearance mode. Terminal inherits your terminal background, foreground, and ANSI palette. Use auto to choose the configured dark or light Nogon theme, or select dark or light explicitly.',
     },
     {
       name: 'themes_dir',
@@ -389,7 +389,7 @@ description: 'Explore every configuration section, option, default value, enviro
       type: 'string',
       defaultValue: 'email',
       requirement: 'Optional',
-      description: 'OIDC only. UserInfo claim used to match a Hister account, such as sub. Empty uses email for compatibility. See OIDC Account Identity before changing this for existing accounts.',
+      description: 'OIDC only. UserInfo claim used to match a Nogon account, such as sub. Empty uses email for compatibility. See OIDC Account Identity before changing this for existing accounts.',
     },
     {
       name: 'admin_groups',
@@ -576,7 +576,7 @@ description: 'Explore every configuration section, option, default value, enviro
       name: 'dimensions',
       type: 'int',
       defaultValue: '2000',
-      description: 'Requested vector dimensionality. The selected embedding model and endpoint must support this output size. Hister limits PostgreSQL vector storage to 2000 dimensions.',
+      description: 'Requested vector dimensionality. The selected embedding model and endpoint must support this output size. Nogon limits PostgreSQL vector storage to 2000 dimensions.',
     },
   ];
 
@@ -585,7 +585,7 @@ description: 'Explore every configuration section, option, default value, enviro
       name: 'max_context_length',
       type: 'int',
       defaultValue: '512',
-      description: 'Approximate token budget for each embedding input. Hister reserves five percent as headroom, giving the default a budget of 486 tokens, and also splits unusually long unbroken text. Models count tokens differently; endpoint rejections trigger another retry with smaller chunks.',
+      description: 'Approximate token budget for each embedding input. Nogon reserves five percent as headroom, giving the default a budget of 486 tokens, and also splits unusually long unbroken text. Models count tokens differently; endpoint rejections trigger another retry with smaller chunks.',
     },
     {
       name: 'chunk_overlap',
@@ -662,15 +662,15 @@ description: 'Explore every configuration section, option, default value, enviro
   ];
 </script>
 
-Use **Settings** in the web interface to configure Hister, or manage selected settings in a YAML
-file. A main configuration file is optional. Hister selects a primary config path using this precedence:
+Use **Settings** in the web interface to configure Nogon, or manage selected settings in a YAML
+file. A main configuration file is optional. Nogon selects a primary config path using this precedence:
 
 1. The path supplied with `--config`.
 2. The path in `NOGON_CONFIG`, or `HISTER_CONFIG` when `NOGON_CONFIG` is unset.
 3. `./config.yml` in the current working directory.
 
 An explicit path from `--config` or an environment variable must exist. An empty
-`NOGON_CONFIG` is an error. Without an explicit selection, Hister searches
+`NOGON_CONFIG` is an error. Without an explicit selection, Nogon searches
 `./config.yml`, then the platform paths below, and uses the first file it finds.
 
 ## Default Config Locations
@@ -734,22 +734,22 @@ including explicit `false`, zero, empty values, and values equal to a default. C
 do not lock settings. Removing an overriding value exposes any saved web selection underneath it.
 
 The managed file contains only web selections and can contain credentials. Keep it and its backups
-private. Hister never rewrites the main file when saving web settings. Changing the data directory
+private. Nogon never rewrites the main file when saving web settings. Changing the data directory
 selects the managed file in the new directory; it does not move the previous file or its selections.
 Remote CLI clients use their own local configuration and do not inherit the server's web selections.
 
 ## Creating a Config File
 
-Use `hister config path` to locate the selected main config, `hister config show` to inspect
-effective YAML with credentials redacted, and `hister config validate` to check configuration
-without creating runtime files. `hister doctor` also checks connectivity, authentication, index
+Use `nogon config path` to locate the selected main config, `nogon config show` to inspect
+effective YAML with credentials redacted, and `nogon config validate` to check configuration
+without creating runtime files. `nogon doctor` also checks connectivity, authentication, index
 compatibility, and extractor dependencies. See [Terminal Client](terminal-client) for examples,
 output formats, and exit statuses.
 
 Generate a commented reference containing all default settings:
 
 ```bash
-hister config create ~/.config/nogon/config.yml
+nogon config create ~/.config/nogon/config.yml
 ```
 
 Every YAML line is commented, including the listen address for your installed build. Comments
@@ -758,23 +758,23 @@ enclosing section, preserving indentation. Leave unrelated settings commented. F
 
 ```yaml
 app:
-  title: My Hister
+  title: My Nogon
 #   subtitle: Your own search engine
 ```
 
 The examples reflect your installed version. Defaults can change after an upgrade. Existing
 active configuration files keep their meaning. To hand an editable setting to the web editor,
-comment out or remove that key and reload Hister. A stored web selection then takes effect,
+comment out or remove that key and reload Nogon. A stored web selection then takes effect,
 or the default if no web selection exists. Environment variables and startup flags still take precedence.
 
 Use `--full` to write all defaults as active YAML values:
 
 ```bash
-hister config create --full /path/to/config.yml
+nogon config create --full /path/to/config.yml
 ```
 
 These active values lock their settings in the editor, even when they match the defaults.
-Hister does not automatically remove or comment out existing active values.
+Nogon does not automatically remove or comment out existing active values.
 
 Omit the filename to print YAML to standard output. New files have private permissions, and
 existing files are never overwritten.
@@ -785,19 +785,19 @@ Or use your platform's recommended location:
 
 ```bash
 # Linux
-hister config create ~/.config/nogon/config.yml
+nogon config create ~/.config/nogon/config.yml
 
 # macOS
-hister config create ~/Library/Preferences/nogon/config.yml
+nogon config create ~/Library/Preferences/nogon/config.yml
 
 # Windows
-hister config create %LOCALAPPDATA%\nogon\config.yml
+nogon config create %LOCALAPPDATA%\nogon\config.yml
 ```
 
 You can also specify a custom config location using the `--config` flag:
 
 ```bash
-hister listen --config /path/to/my/config.yml
+nogon listen --config /path/to/my/config.yml
 ```
 
 ## Settings in the Web Interface
@@ -872,7 +872,7 @@ Executable paths, arbitrary arguments, and options without supported controls re
 Changes apply to future extraction; fetch documents again to update previously extracted content.
 
 After enabling semantic search or changing its endpoint, model, dimensions, document prefix,
-context length, or overlap, run `hister reindex` to rebuild embeddings for existing documents.
+context length, or overlap, run `nogon reindex` to rebuild embeddings for existing documents.
 Ranking, query, credential, and request limit changes do not need reindexing. Saving does not
 contact the embedding service to test it or start reindexing. Dimensions must match the model;
 PostgreSQL supports at most 2000. Chunk overlap must be less than the context length.
@@ -928,9 +928,9 @@ other work already performed while the temporary settings were active.
 
 ## Recovering Saved Settings
 
-If Settings is unavailable or Hister cannot load its configuration:
+If Settings is unavailable or Nogon cannot load its configuration:
 
-1. Stop Hister and locate `config.web.yml` in the instance's data directory. Use the same main
+1. Stop Nogon and locate `config.web.yml` in the instance's data directory. Use the same main
    configuration, environment, and startup flags as the service.
 2. Back up the managed file privately before editing it. Correct or remove the affected selection,
    or move the whole file to a backup location to discard all web selections. A missing managed
@@ -939,17 +939,17 @@ If Settings is unavailable or Hister cannot load its configuration:
 3. To override a valid but unwanted web selection, set that value in the main file instead.
    Environment and startup flags still take precedence. The web selection stays stored and becomes
    active again if the overriding value is later removed.
-4. Run `hister config validate` and inspect `hister config show` with the service's configuration.
+4. Run `nogon config validate` and inspect `nogon config show` with the service's configuration.
    Check the resulting address and authentication before restarting, especially after removing
-   all web selections. Restart Hister and reconnect using those settings.
+   all web selections. Restart Nogon and reconnect using those settings.
 
 Changing the data directory is not a recovery shortcut: it selects different data and web settings.
-If Hister reports failed recovery, preserve the managed file and any recovery copies before
+If Nogon reports failed recovery, preserve the managed file and any recovery copies before
 restarting and inspect them to choose the intended configuration.
 
 Configuration recovery does not restore passwords, administrator roles, or user accounts.
 For account recovery, stop the server and use
-[`hister user create --offline --admin USERNAME`](/docs/user-handling#user-create) with the same
+[`nogon user create --offline --admin USERNAME`](/docs/user-handling#user-create) with the same
 database and data directory and user handling enabled. Keep the new account's token if password
 login is disabled. Do not disable user handling merely to recover an administrator account.
 
@@ -958,11 +958,11 @@ login is disabled. Do not disable user handling merely to recover an administrat
 After editing the main configuration or `rules.json`, run:
 
 ```bash
-hister reload
+nogon reload
 ```
 
-This applies updated settings without manually restarting Hister. Expect a brief interruption,
-then refresh any open Hister web pages. Restart terminal clients separately to apply changes to
+This applies updated settings without manually restarting Nogon. Expect a brief interruption,
+then refresh any open Nogon web pages. Restart terminal clients separately to apply changes to
 their own settings.
 
 Edit the configuration file used to start the server. Settings supplied through startup flags or
@@ -976,13 +976,13 @@ to another one.
 Logging changes take effect on reload, including `app.log_file`, `app.log_format`, and
 `app.log_level`. You can also reload after renaming a log file for rotation. Clearing
 `app.log_file` sends logs back to the terminal or service logs. If the new log file cannot be
-opened, Hister keeps the previous settings.
+opened, Nogon keeps the previous settings.
 
-Invalid settings are rejected. If applying new settings fails, Hister tries to continue with the
+Invalid settings are rejected. If applying new settings fails, Nogon tries to continue with the
 previous settings. If it cannot recover, restart the server.
 
 Changing the database or data directory does not copy or move your existing data. Some search
-setting changes also require `hister reindex`; Hister reports when this is needed.
+setting changes also require `nogon reindex`; Nogon reports when this is needed.
 
 The command waits for reload to finish. Use `--client-timeout N` to limit the wait to N seconds.
 Update the server URL or credentials in your clients if you changed them.
@@ -990,7 +990,7 @@ Update the server URL or credentials in your clients if you changed them.
 Use the running server's current URL and token if you have edited connection settings locally:
 
 ```bash
-hister reload --server-url http://127.0.0.1:4433 --token CURRENT_TOKEN
+nogon reload --server-url http://127.0.0.1:4433 --token CURRENT_TOKEN
 ```
 
 ## Environment Variables
@@ -1029,19 +1029,19 @@ for fresh installation defaults and existing data discovery.
 
 ## Full Configuration
 
-Use the configuration generated by your installed Hister version instead of copying a static example. Print all current default values as comments:
+Use the configuration generated by your installed Nogon version instead of copying a static example. Print all current default values as comments:
 
 ```bash
-hister config create
+nogon config create
 ```
 
 To write all defaults as active YAML values, add `--full` and a destination path:
 
 ```bash
-hister config create --full /path/to/config.yml
+nogon config create --full /path/to/config.yml
 ```
 
-Each option below has one or both scope tags. The `server` tag marks settings used by the Hister server, its index, or the web interface it serves. The `client` tag marks settings used by command line operations or the terminal interface on the machine where they run. If your client and server use separate configuration files, add a setting to each tagged side where you need its behavior.
+Each option below has one or both scope tags. The `server` tag marks settings used by the Nogon server, its index, or the web interface it serves. The `client` tag marks settings used by command line operations or the terminal interface on the machine where they run. If your client and server use separate configuration files, add a setting to each tagged side where you need its behavior.
 
 ## `app` Section
 
@@ -1057,7 +1057,7 @@ For Unix socket permissions and reverse proxy examples, see [Unix sockets](serve
 
 ## Database Backends
 
-Hister supports **SQLite** (default) and **PostgreSQL**.
+Nogon supports **SQLite** (default) and **PostgreSQL**.
 
 The `server.database` value determines which backend is used:
 
@@ -1078,11 +1078,11 @@ server:
   database: 'host=localhost user=hister password=hister dbname=hister port=5432 sslmode=disable TimeZone=Europe/Budapest'
 ```
 
-Hister uses the standard PostgreSQL DSN key=value format. Adjust `host`, `user`, `password`, `dbname`, `port`, `sslmode`, and `TimeZone` to match your setup.
+Nogon uses the standard PostgreSQL DSN key=value format. Adjust `host`, `user`, `password`, `dbname`, `port`, `sslmode`, and `TimeZone` to match your setup.
 
 ## Semantic Search
 
-Hister can augment keyword search with vector similarity search. When enabled, each indexed document gets a metadata vector containing its title, URL, specific extractor type when available, language, author, description, and topic metadata. Document text is split into overlapping structural chunks with compact title and language context, and each chunk is converted to a floating point vector by an external embedding model. The vectors are stored alongside the main index. At search time the query is also embedded and the closest chunks are retrieved, then merged with keyword results and reranked.
+Nogon can augment keyword search with vector similarity search. When enabled, each indexed document gets a metadata vector containing its title, URL, specific extractor type when available, language, author, description, and topic metadata. Document text is split into overlapping structural chunks with compact title and language context, and each chunk is converted to a floating point vector by an external embedding model. The vectors are stored alongside the main index. At search time the query is also embedded and the closest chunks are retrieved, then merged with keyword results and reranked.
 
 Semantic search is **opt-in** and disabled by default. It requires an OpenAI-compatible embeddings endpoint such as [Ollama](https://ollama.com), a local [llama.cpp](https://github.com/ggml-org/llama.cpp) server, or the OpenAI API itself.
 
@@ -1107,11 +1107,11 @@ Semantic search is **opt-in** and disabled by default. It requires an OpenAI-com
 The vector store backend is chosen automatically based on `server.database`:
 
 - **SQLite** (default) stores vectors in a separate `vectors.sqlite3` file in the same directory as the main database, using the [sqlite-vec](https://github.com/asg017/sqlite-vec) extension. No extra setup required. It supports at most 8192 embedding dimensions and a `semantic_search.result_limit` of at most 1024.
-- **PostgreSQL** stores vectors in the same database as the main data using the [pgvector](https://github.com/pgvector/pgvector) extension. Hister uses an HNSW index with the `vector` type, which supports at most 2000 dimensions. Make sure `pgvector` is installed and enabled (`CREATE EXTENSION vector;`) before starting Hister.
+- **PostgreSQL** stores vectors in the same database as the main data using the [pgvector](https://github.com/pgvector/pgvector) extension. Nogon uses an HNSW index with the `vector` type, which supports at most 2000 dimensions. Make sure `pgvector` is installed and enabled (`CREATE EXTENSION vector;`) before starting Nogon.
 
-Use `HISTER__SEMANTIC_SEARCH__QUERY_EMBEDDING_TIMEOUT` and `HISTER__SEMANTIC_SEARCH__MAX_QUERY_EMBEDDING_CONCURRENCY` to override the query deadline and concurrency through environment variables. Changing these settings does not require reindexing.
+Use `NOGON__SEMANTIC_SEARCH__QUERY_EMBEDDING_TIMEOUT` and `NOGON__SEMANTIC_SEARCH__MAX_QUERY_EMBEDDING_CONCURRENCY` to override the query deadline and concurrency through environment variables. Changing these settings does not require reindexing.
 
-Set `semantic_search.dimensions` to the output size supported by your embedding endpoint. If the endpoint returns a different size, Hister rejects the embeddings. After changing dimensions with SQLite, restart Hister and run `hister reindex` to rebuild the vector table and regenerate embeddings. Reindexing checks the endpoint before clearing existing vectors and stops if that check fails. Startup logs report when the stored dimensions differ from the configuration.
+Set `semantic_search.dimensions` to the output size supported by your embedding endpoint. If the endpoint returns a different size, Nogon rejects the embeddings. After changing dimensions with SQLite, restart Nogon and run `nogon reindex` to rebuild the vector table and regenerate embeddings. Reindexing checks the endpoint before clearing existing vectors and stops if that check fails. Startup logs report when the stored dimensions differ from the configuration.
 
 ### Example
 
@@ -1141,7 +1141,7 @@ The example above uses [nomic-embed-text](https://ollama.com/library/nomic-embed
 
 ## TUI Settings
 
-TUI settings are configured in a separate `tui.yaml` file located in the same directory as your main config file. This file is automatically created with default values when you first run `hister search`.
+TUI settings are configured in a separate `tui.yaml` file located in the same directory as your main config file. This file is automatically created with default values when you first run `nogon search`.
 
 ### Theme Settings
 
@@ -1153,7 +1153,7 @@ TUI settings are configured in a separate `tui.yaml` file located in the same di
 
 <ConfigReference items={indexerOptions} scopes={['server', 'client']} />
 
-See [External PDF Parser](file-types#external-pdf-parser) to use a command such as `pdftotext`. Environment overrides include `HISTER__INDEXER__PDF_PARSER__COMMAND=pdftotext`, `HISTER__INDEXER__PDF_PARSER__ARGS=-enc,UTF-8,-,-`, and `HISTER__INDEXER__PDF_PARSER__TIMEOUT=30`. Environment arguments are separated by commas; use YAML when an argument contains a comma.
+See [External PDF Parser](file-types#external-pdf-parser) to use a command such as `pdftotext`. Environment overrides include `NOGON__INDEXER__PDF_PARSER__COMMAND=pdftotext`, `NOGON__INDEXER__PDF_PARSER__ARGS=-enc,UTF-8,-,-`, and `NOGON__INDEXER__PDF_PARSER__TIMEOUT=30`. Environment arguments are separated by commas; use YAML when an argument contains a comma.
 
 ### Directory Entry
 
@@ -1165,7 +1165,7 @@ When multiple filters are specified, they are applied in order: excludes first, 
 
 ## Local Directory Indexing
 
-The `indexer.directories` option lets you index local files so they appear alongside your browser history in search results. You do not need to run `hister import file` for configured directories that the server can access. After editing the configuration file, reload or restart the Hister server. Changes saved in Settings apply immediately. Hister scans the directories, then a file watcher monitors them so new and modified files are indexed automatically.
+The `indexer.directories` option lets you index local files so they appear alongside your browser history in search results. You do not need to run `nogon import file` for configured directories that the server can access. After editing the configuration file, reload or restart the Nogon server. Changes saved in Settings apply immediately. Nogon scans the directories, then a file watcher monitors them so new and modified files are indexed automatically.
 
 ```yaml
 indexer:
@@ -1215,22 +1215,22 @@ Files are indexed recursively, with the following rules:
 - Files larger than `indexer.max_file_size_mb` (default: 1 MB) are skipped
 - Files matching `sensitive_content_patterns` are skipped with a warning that includes the path but no matched content
 
-`hister list-files` lists files matching the configured directory watch rules. It does not check file contents or report indexing status, so it also lists files rejected by sensitive content, size, or format checks. Rejected files remain watched and are checked again when they change.
+`nogon list-files` lists files matching the configured directory watch rules. It does not check file contents or report indexing status, so it also lists files rejected by sensitive content, size, or format checks. Rejected files remain watched and are checked again when they change.
 
-Changes to indexed directories are picked up automatically by the file watcher, no server restart is needed. On server start, only files that have been modified since they were last indexed are re-processed. File results appear with the domain `local` and are served through the Hister web interface directly.
+Changes to indexed directories are picked up automatically by the file watcher, no server restart is needed. On server start, only files that have been modified since they were last indexed are re-processed. File results appear with the domain `local` and are served through the Nogon web interface directly.
 
-When a configured directory is available to the command line client but not to the server, run `hister import file` with no path arguments. It applies these directory rules locally, extracts matching content, and creates remote file snapshots through the normal add API. The original bytes are not sent. Add `--watch` to keep importing new and changed snapshots until interrupted. Watch mode skips exports, archives, and saved HTML with source URL metadata. Remote snapshots are never removed automatically, even with `delete_on_remove: true`. See [Importing Documents](import) for details.
+When a configured directory is available to the command line client but not to the server, run `nogon import file` with no path arguments. It applies these directory rules locally, extracts matching content, and creates remote file snapshots through the normal add API. The original bytes are not sent. Add `--watch` to keep importing new and changed snapshots until interrupted. Watch mode skips exports, archives, and saved HTML with source URL metadata. Remote snapshots are never removed automatically, even with `delete_on_remove: true`. See [Importing Documents](import) for details.
 
 For directories watched by the server, `delete_on_remove: true` makes deleting or renaming a file on the filesystem remove it from the index automatically. This is optional and disabled by default. It does not apply to remote snapshots imported by the client.
 
-No reindex is required when adding or removing files. Files are detected and indexed automatically. After making directory filters more restrictive, run `hister cleanup` to remove indexed local documents that no longer match the configuration. Cleanup compares indexed paths with the configuration and does not scan or read the filesystem.
+No reindex is required when adding or removing files. Files are detected and indexed automatically. After making directory filters more restrictive, run `nogon cleanup` to remove indexed local documents that no longer match the configuration. Cleanup compares indexed paths with the configuration and does not scan or read the filesystem.
 
 ## Disable Previews
 
-By default, Hister stores the full HTML content of every indexed page on disk and makes it available in a split-pane preview panel in the search and history UI. Setting `disable_previews: true` turns this off completely:
+By default, Nogon stores the full HTML content of every indexed page on disk and makes it available in a split-pane preview panel in the search and history UI. Setting `disable_previews: true` turns this off completely:
 
 - HTML content is **never written to disk** during indexing or re-indexing. Only the extracted plain text, title, URL, domain, language, and favicon are kept.
-- Running `hister reindex` with this option enabled will delete all previously stored HTML files, reclaiming disk space.
+- Running `nogon reindex` with this option enabled will delete all previously stored HTML files, reclaiming disk space.
 
 This is useful when disk space is limited or when you prefer not to retain full page snapshots.
 
@@ -1243,7 +1243,7 @@ app:
 
 ## Access Token
 
-The `app.access_token` setting provides a simple authentication mechanism to secure your Hister instance. When configured, clients must include the token in API requests using the `X-Access-Token` header or the `Authorization: Bearer TOKEN` header. This is particularly useful when exposing Hister to the network or internet, preventing unauthorized access to your browsing history and search index.
+The `app.access_token` setting provides a simple authentication mechanism to secure your Nogon instance. When configured, clients must include the token in API requests using the `X-Access-Token` header or the `Authorization: Bearer TOKEN` header. This is particularly useful when exposing Nogon to the network or internet, preventing unauthorized access to your browsing history and search index.
 
 To use the access token, set it in your configuration file:
 
@@ -1256,9 +1256,9 @@ The web UI prompts for the access token and exchanges it for an opaque browser s
 
 ## Public Mode
 
-Public mode lets anonymous visitors search the shared index while write access remains authenticated. Enable it with `app.public: true` or by starting the server with `hister listen --public`. A public instance must also configure either `app.access_token` or `app.user_handling`, otherwise Hister refuses to start.
+Public mode lets anonymous visitors search the shared index while write access remains authenticated. Enable it with `app.public: true` or by starting the server with `nogon listen --public`. A public instance must also configure either `app.access_token` or `app.user_handling`, otherwise Nogon refuses to start.
 
-Use `hister listen --public=false` to override public mode enabled in the file or environment.
+Use `nogon listen --public=false` to override public mode enabled in the file or environment.
 This explicit choice also remains in effect after reload.
 
 ```yaml
@@ -1288,15 +1288,15 @@ For command-line usage with `curl` or similar tools, include the header in your 
 curl -H "X-Access-Token: your-secret-token-here" http://localhost:4433/api/config
 ```
 
-**Security note**: API clients transmit the access token in plain text with each request, and the web UI transmits it during login. When exposing Hister over the network, always use HTTPS through a reverse proxy to encrypt credentials and sessions in transit. The token provides basic access control but does not replace proper authentication systems for multiple user scenarios.
+**Security note**: API clients transmit the access token in plain text with each request, and the web UI transmits it during login. When exposing Nogon over the network, always use HTTPS through a reverse proxy to encrypt credentials and sessions in transit. The token provides basic access control but does not replace proper authentication systems for multiple user scenarios.
 
 ## Reverse Proxy Authentication
 
-> **Security warning: Do not enable `server.proxy_auth_header` without a trusted authentication proxy in front of Hister.** Hister trusts the configured header as proof of identity and does not verify that the sender is your proxy. Anyone who can supply that header can impersonate an existing user, including an administrator, or create a new account. HTTPS or a reverse proxy that only forwards traffic does not make this safe.
+> **Security warning: Do not enable `server.proxy_auth_header` without a trusted authentication proxy in front of Nogon.** Nogon trusts the configured header as proof of identity and does not verify that the sender is your proxy. Anyone who can supply that header can impersonate an existing user, including an administrator, or create a new account. HTTPS or a reverse proxy that only forwards traffic does not make this safe.
 
-Before enabling this feature, configure your proxy to authenticate requests, discard any client supplied value of the configured header, and set it from the verified user's identity. Prevent untrusted clients from reaching Hister directly and bypassing the proxy. Use a loopback listener when the proxy runs on the same host, a Unix socket with restricted permissions, or network rules that restrict backend access to the trusted proxy. Do not expose Hister's backend port publicly, including through container port publishing.
+Before enabling this feature, configure your proxy to authenticate requests, discard any client supplied value of the configured header, and set it from the verified user's identity. Prevent untrusted clients from reaching Nogon directly and bypassing the proxy. Use a loopback listener when the proxy runs on the same host, a Unix socket with restricted permissions, or network rules that restrict backend access to the trusted proxy. Do not expose Nogon's backend port publicly, including through container port publishing.
 
-Once these protections are in place, set the header name in your Hister configuration. This example assumes the authentication proxy runs on the same host and sets `Remote-User`:
+Once these protections are in place, set the header name in your Nogon configuration. This example assumes the authentication proxy runs on the same host and sets `Remote-User`:
 
 ```yaml
 server:
@@ -1305,24 +1305,24 @@ server:
   proxy_auth_header: 'Remote-User'
 ```
 
-The equivalent environment variable is `HISTER__SERVER__PROXY_AUTH_HEADER=Remote-User`. Use the header name configured in your proxy, such as `Remote-User` or `X-Forwarded-User`. Leaving the setting empty disables proxy authentication.
+The equivalent environment variable is `NOGON__SERVER__PROXY_AUTH_HEADER=Remote-User`. Use the header name configured in your proxy, such as `Remote-User` or `X-Forwarded-User`. Leaving the setting empty disables proxy authentication.
 
 When enabled:
 
-- Hister automatically enables `app.user_handling`.
-- The header value, with surrounding whitespace removed, identifies the Hister username. An existing account keeps its documents, rules, token, and permissions, including administrator privileges. Use unique identities controlled by the authentication service; users must not be able to choose another Hister user's name.
+- Nogon automatically enables `app.user_handling`.
+- The header value, with surrounding whitespace removed, identifies the Nogon username. An existing account keeps its documents, rules, token, and permissions, including administrator privileges. Use unique identities controlled by the authentication service; users must not be able to choose another Nogon user's name.
 - A username without an existing account is automatically created on its first request. New accounts have no administrator privileges and no password, so password login is unavailable unless an administrator assigns one.
 - A successfully authenticated proxy identity takes precedence over session cookies and API tokens. Missing or empty headers fall back to normal session and personal access token authentication. Enabling this option does not disable existing password or OAuth login.
 
-CLI, browser extension, and MCP clients can still use a personal access token through `X-Access-Token` or `Authorization: Bearer TOKEN` when the proxy header is absent. They must also satisfy your proxy's access policy. Do not expose the backend to bypass that policy. In multiple user mode, a token must belong to a Hister user; a standalone `app.access_token` does not grant access.
+CLI, browser extension, and MCP clients can still use a personal access token through `X-Access-Token` or `Authorization: Bearer TOKEN` when the proxy header is absent. They must also satisfy your proxy's access policy. Do not expose the backend to bypass that policy. In multiple user mode, a token must belong to a Nogon user; a standalone `app.access_token` does not grant access.
 
-Hister's **Logout** action only clears its own session. It does not sign you out of the authentication proxy, so subsequent requests carrying the identity header remain authenticated. Sign out through your authentication proxy to end that access.
+Nogon's **Logout** action only clears its own session. It does not sign you out of the authentication proxy, so subsequent requests carrying the identity header remain authenticated. Sign out through your authentication proxy to end that access.
 
 See [User Handling](/docs/user-handling) for account management and document ownership, and [Server Setup](/docs/server-setup) for listener and reverse proxy configuration.
 
 ## OAuth
 
-When [user handling](/docs/user-handling) is enabled, Hister supports delegating authentication to external OAuth 2.0 / OpenID Connect providers. Users can then sign in with their existing accounts instead of a Hister-local password.
+When [user handling](/docs/user-handling) is enabled, Nogon supports delegating authentication to external OAuth 2.0 / OpenID Connect providers. Users can then sign in with their existing accounts instead of a Nogon-local password.
 
 The `server.oauth` key is a map where each key is a provider name and the value is its configuration. Three providers are built in:
 
@@ -1348,7 +1348,7 @@ server:
       client_secret: 'your-github-client-secret'
 ```
 
-GitHub sign in identifies your account by its permanent account ID. A GitHub username change keeps the same Hister account.
+GitHub sign in identifies your account by its permanent account ID. A GitHub username change keeps the same Nogon account.
 
 ### Google Example
 
@@ -1388,7 +1388,7 @@ server:
 
 ### OIDC Account Identity
 
-Set `identity_claim: 'sub'` to identify an OIDC account by its subject, so changing the user's email address does not create a new Hister account. The [OIDC specification](https://openid.net/specs/openid-connect-core-1_0.html#ClaimStability) defines `sub` as stable and unique within its issuer. Keep the same issuer when using existing account links.
+Set `identity_claim: 'sub'` to identify an OIDC account by its subject, so changing the user's email address does not create a new Nogon account. The [OIDC specification](https://openid.net/specs/openid-connect-core-1_0.html#ClaimStability) defines `sub` as stable and unique within its issuer. Keep the same issuer when using existing account links.
 
 ```yaml
 server:
@@ -1400,13 +1400,13 @@ server:
       identity_claim: 'sub'
 ```
 
-The equivalent environment variable is `HISTER__SERVER__OAUTH__OIDC__IDENTITY_CLAIM=sub`. This works with discovery or manually configured endpoints. The option selects an exact, case sensitive field in the UserInfo response. Custom claim names, including URI names, are supported; dots do not select nested fields. Choose a unique, immutable identifier controlled by the provider. Fields users can edit, such as `preferred_username`, are unsuitable for account matching.
+The equivalent environment variable is `NOGON__SERVER__OAUTH__OIDC__IDENTITY_CLAIM=sub`. This works with discovery or manually configured endpoints. The option selects an exact, case sensitive field in the UserInfo response. Custom claim names, including URI names, are supported; dots do not select nested fields. Choose a unique, immutable identifier controlled by the provider. Fields users can edit, such as `preferred_username`, are unsuitable for account matching.
 
 The selected claim must be a nonempty JSON string containing more than whitespace. If it is missing or invalid, login fails without falling back to email. An email address is optional when another claim identifies the account. New usernames use `preferred_username`, then email, then the OAuth identity if neither is available. Existing usernames are preserved on subsequent logins.
 
 Omitting `identity_claim`, leaving it empty, or setting it to `email` preserves existing `oidc-<email>` account links. Other claims use `oidc:<escaped claim name>:<claim value>`, for example `oidc:sub:abc123`. The claim name uses URL query escaping. This separates identities from different claims and from legacy email identities.
 
-Before switching an existing deployment, back up the database and explicitly relink each affected user's `o_auth_id` to the new identity using a verified mapping from the provider. Hister does not automatically link accounts by matching email addresses or usernames. Without relinking, a successful login with the new claim creates a separate account, and the old account retains its documents and history. Changing the issuer also requires a verified mapping because subjects are unique only within an issuer.
+Before switching an existing deployment, back up the database and explicitly relink each affected user's `o_auth_id` to the new identity using a verified mapping from the provider. Nogon does not automatically link accounts by matching email addresses or usernames. Without relinking, a successful login with the new claim creates a separate account, and the old account retains its documents and history. Changing the issuer also requires a verified mapping because subjects are unique only within an issuer.
 
 ### OIDC Administrator Groups
 
@@ -1428,15 +1428,15 @@ Configure your provider to include group memberships in its UserInfo response as
 
 Each successful OIDC login synchronizes the user's role. Missing, null, or empty groups remove administrator access. Invalid group values prevent login. Manual role changes are replaced at the next OIDC login.
 
-Hister starts and reloads without a local recovery administrator, but logs a warning. If OIDC login becomes unavailable or all administrator roles are revoked, recovery may require creating an account while the server is stopped. For independent recovery, create a [local recovery administrator](/docs/user-handling#user-create) and keep its personal access token, which works when `oauth_only` disables password login. Hister prevents removing or demoting the last usable local recovery administrator. Provider role revocations still take effect.
+Nogon starts and reloads without a local recovery administrator, but logs a warning. If OIDC login becomes unavailable or all administrator roles are revoked, recovery may require creating an account while the server is stopped. For independent recovery, create a [local recovery administrator](/docs/user-handling#user-create) and keep its personal access token, which works when `oauth_only` disables password login. Nogon prevents removing or demoting the last usable local recovery administrator. Provider role revocations still take effect.
 
-Group changes take effect at the next OIDC login, then apply to the user's existing sessions and API token. Hister does not check group membership between logins. Omitting `admin_groups` or leaving it empty preserves manually managed roles. Local accounts and other OAuth providers are unaffected.
+Group changes take effect at the next OIDC login, then apply to the user's existing sessions and API token. Nogon does not check group membership between logins. Omitting `admin_groups` or leaving it empty preserves manually managed roles. Local accounts and other OAuth providers are unaffected.
 
-Environment equivalents are `HISTER__SERVER__OAUTH__OIDC__ADMIN_GROUPS=hister-admins,operators` and `HISTER__SERVER__OAUTH__OIDC__GROUPS_CLAIM=groups`.
+Environment equivalents are `NOGON__SERVER__OAUTH__OIDC__ADMIN_GROUPS=hister-admins,operators` and `NOGON__SERVER__OAUTH__OIDC__GROUPS_CLAIM=groups`.
 
 ### PKCE and Compatibility
 
-Hister uses PKCE with the S256 challenge method for GitHub, Google, and OIDC logins by default. Each login generates a fresh private verifier stored in the server side session. The authorization request includes its SHA256 challenge, and the token exchange sends the original verifier. This supports providers such as Kanidm with PKCE enforcement enabled, including when OIDC discovery does not advertise PKCE support.
+Nogon uses PKCE with the S256 challenge method for GitHub, Google, and OIDC logins by default. Each login generates a fresh private verifier stored in the server side session. The authorization request includes its SHA256 challenge, and the token exchange sends the original verifier. This supports providers such as Kanidm with PKCE enforcement enabled, including when OIDC discovery does not advertise PKCE support.
 
 Existing client IDs, client secrets, scopes, callback URLs, and linked accounts continue to work. Client secrets are still required. No database migration or reindexing is needed, and existing authenticated sessions remain valid.
 
@@ -1452,12 +1452,12 @@ server:
       disable_pkce: true
 ```
 
-The equivalent environment variable is `HISTER__SERVER__OAUTH__OIDC__DISABLE_PKCE=true`. Disabling PKCE removes the protection it provides against authorization code interception. Hister does not automatically retry without PKCE after a provider error.
+The equivalent environment variable is `NOGON__SERVER__OAUTH__OIDC__DISABLE_PKCE=true`. Disabling PKCE removes the protection it provides against authorization code interception. Nogon does not automatically retry without PKCE after a provider error.
 
 Logins started before upgrading must be restarted because their sessions lack the verifier and provider binding. A callback consumes its matching login state before exchanging the code, so failed or denied logins must also be restarted. GitHub token exchanges now use a form POST to keep credentials and the verifier out of the URL; custom GitHub token endpoints or proxies must accept POST.
 
 OAuth login requires `app.user_handling: true` and at least one configured provider.
-If no local account is linked to the provider identity, Hister creates one automatically.
+If no local account is linked to the provider identity, Nogon creates one automatically.
 GitHub uses the login name, Google uses the account name with the full email address as a
 fallback, and OIDC uses `preferred_username`, then the full email address, then the OAuth
 identity as the username.
@@ -1492,13 +1492,13 @@ The default is 300 characters. The value must be a positive integer. Highlightin
 
 The web app shows up to three lines of each snippet. Select **Show more** to expand a clipped snippet or **Show less** to collapse it. To expand snippets by default, enable **Always expand snippets** in **Actions**. This preference is remembered in your browser.
 
-You can also set `HISTER__APP__SNIPPET_LENGTH=800`. Web changes apply immediately; reload or restart
+You can also set `NOGON__APP__SNIPPET_LENGTH=800`. Web changes apply immediately; reload or restart
 after editing the file, and restart after changing the service's environment. Existing documents
 use the new length without reindexing.
 
 ## Language Detection
 
-Hister identifies document languages locally to help searches match related word forms. The defaults consider all supported languages with reduced memory use:
+Nogon identifies document languages locally to help searches match related word forms. The defaults consider all supported languages with reduced memory use:
 
 ```yaml
 indexer:
@@ -1545,7 +1545,7 @@ Terminal shortcuts remain in `tui.yaml`.
 
 ## TUI Configuration
 
-TUI-specific settings are stored in a separate `tui.yaml` file in the same directory as your main config. This file is automatically created with defaults the first time you run `hister search`.
+TUI-specific settings are stored in a separate `tui.yaml` file in the same directory as your main config. This file is automatically created with defaults the first time you run `nogon search`.
 
 Without a main config file, existing `tui.yaml` preferences are discovered in the
 Nogon and legacy Hister config locations. New preferences use the first Nogon
@@ -1586,7 +1586,7 @@ hotkeys:
 The default `terminal` mode does not paint a terminal-wide foreground or
 background. Normal text inherits your terminal colors, while semantic accents
 use its configurable ANSI palette. Set `color_scheme` to `auto`, `dark`, or
-`light` to opt into Hister's full built-in themes. The Settings overlay
+`light` to opt into Nogon's full built-in themes. The Settings overlay
 (`ctrl+s`) exposes this as **Appearance — Terminal (pass-through)**; press Enter
 to cycle modes, or use `ctrl+t` for the full theme picker.
 
@@ -1617,7 +1617,7 @@ TUI keyboard shortcuts are configured in `tui.yaml` under the `hotkeys` section.
 
 ## `crawler` Section
 
-The `crawler` section configures the web crawler used by `hister index`, `hister index --recursive`,
+The `crawler` section configures the web crawler used by `nogon index`, `nogon index --recursive`,
 browser imports, and service imports that need to download bookmark content. These commands share
 the same backend and request settings.
 Every recursive crawl runs as a persistent job so it can be interrupted and resumed
@@ -1635,11 +1635,11 @@ crawler:
 ```
 
 Proxy URLs with embedded credentials are rejected because browser backends cannot apply them
-consistently. You can also set the proxy with `HISTER__CRAWLER__PROXY` or the `--proxy` flag.
+consistently. You can also set the proxy with `NOGON__CRAWLER__PROXY` or the `--proxy` flag.
 
 For BiDi, a configured proxy requires the remote browser to accept `session.new` with the proxy
 capability. Initialization fails if the endpoint already owns a session or rejects that capability,
-so Hister never continues while silently ignoring the proxy.
+so Nogon never continues while silently ignoring the proxy.
 
 ### Crawler Backend Options
 
@@ -1649,9 +1649,9 @@ The `backend_options` map passes configuration to the selected backend. Each bac
 
 **`chromedp` backend**:
 
-Launches Chrome or Chromium on the machine running `hister index`. Install the browser there and
+Launches Chrome or Chromium on the machine running `nogon index`. Install the browser there and
 use `exec_path` if it is not found automatically. This backend launches its own browser process;
-Hister does not currently expose an option to connect it to a remote CDP socket.
+Nogon does not currently expose an option to connect it to a remote CDP socket.
 
 <ConfigReference items={chromedpOptions} scopes={['client']} />
 
@@ -1667,12 +1667,12 @@ crawler:
 **`bidi` backend** (WebDriver BiDi):
 
 Connects to an already running browser that exposes a
-[WebDriver BiDi](https://w3c.github.io/webdriver-bidi/) WebSocket endpoint. Hister opens the supplied
+[WebDriver BiDi](https://w3c.github.io/webdriver-bidi/) WebSocket endpoint. Nogon opens the supplied
 WebSocket and sends `session.new`; it does not launch a browser or create a session through a
 WebDriver HTTP server. Firefox supports this direct connection at `/session`.
 
 Chrome and Chromium's `--remote-debugging-port` exposes the Chrome DevTools Protocol (CDP).
-That socket cannot be used as a BiDi endpoint. Use Hister's `chromedp` backend for a local Chrome
+That socket cannot be used as a BiDi endpoint. Use Nogon's `chromedp` backend for a local Chrome
 or Chromium installation.
 
 See [Firefox with BiDi](crawler#firefox-with-bidi) for browser startup and indexing commands, or
@@ -1711,7 +1711,7 @@ subscription, the status stays unknown and the page is indexed as before.
 
 Firefox only allows a single WebDriver session per browser instance. If another
 client (an IDE integration, a test runner, Selenium, …) already holds the
-session, Hister cannot create one and every command fails with
+session, Nogon cannot create one and every command fails with
 `invalid session id`. Start a dedicated browser instance with its own profile
 and port for crawling.
 
@@ -1729,7 +1729,7 @@ crawler:
   proxy: 'http://127.0.0.1:8080'
   timeout: 10
   delay: 2
-  user_agent: 'Hister'
+  user_agent: 'Nogon'
   headers:
     Accept-Language: 'en-US,en;q=0.9'
   cookies:
@@ -1741,7 +1741,7 @@ crawler:
 
 ## `sensitive_content_patterns` Section
 
-A map of named [Go regular expression](https://pkg.go.dev/regexp/syntax) patterns. Hister rejects a web page or local file when its HTML or extracted text matches any pattern. The content is not redacted or indexed. Indexing commands that support `--allow-sensitive` can explicitly bypass this check.
+A map of named [Go regular expression](https://pkg.go.dev/regexp/syntax) patterns. Nogon rejects a web page or local file when its HTML or extracted text matches any pattern. The content is not redacted or indexed. Indexing commands that support `--allow-sensitive` can explicitly bypass this check.
 
 ```yaml
 sensitive_content_patterns:

@@ -5,7 +5,7 @@ title: 'Language Settings and Detection'
 description: 'Choose language detection settings, balance accuracy and memory use, preserve stop words, and apply changes to existing documents.'
 ---
 
-Hister detects document languages to help searches match related word forms in your content. You can choose which languages to consider, adjust memory use, and correct a document's language when needed.
+Nogon detects document languages to help searches match related word forms in your content. You can choose which languages to consider, adjust memory use, and correct a document's language when needed.
 
 The defaults suit most collections. Start with them unless short text, memory use, or phrase searches give you a reason to change a setting.
 
@@ -32,9 +32,9 @@ Configure these settings on the server and on any machine where you run service 
 
 ## How Detection Affects Search
 
-Hister identifies a document's language from its text, without sending that text to an external service. For web pages with very little text, it also considers the title. A page's declared language can add regional information, such as American English, when it agrees with the text. Your manual language choice always takes precedence.
+Nogon identifies a document's language from its text, without sending that text to an external service. For web pages with very little text, it also considers the title. A page's declared language can add regional information, such as American English, when it agrees with the text. Your manual language choice always takes precedence.
 
-You can search across all languages without selecting one first. When Hister cannot identify a language reliably, it labels the document `unknown`. The document remains searchable, though searches may not match different forms of the same word.
+You can search across all languages without selecting one first. When Nogon cannot identify a language reliably, it labels the document `unknown`. The document remains searchable, though searches may not match different forms of the same word.
 
 Each document has one language label. Mixed language pages, code, names, and very short snippets can be difficult to identify correctly. Support for matching related word forms also varies by language, even when the language is identified correctly.
 
@@ -52,7 +52,7 @@ You can use either accuracy mode with all supported languages or a restricted li
 
 ## Accuracy and Memory
 
-Use `low`, the default, to reduce memory use. Choose `high` if Hister often misidentifies short documents in your collection:
+Use `low`, the default, to reduce memory use. Choose `high` if Nogon often misidentifies short documents in your collection:
 
 ```yaml
 indexer:
@@ -63,7 +63,7 @@ indexer:
 
 High accuracy can help with short text, but it does not guarantee a correct language for every document. Very short text may remain `unknown` in either mode.
 
-Memory use depends on the content you process and the languages you allow. Limiting the language list can reduce it further. Restart Hister after changing settings; memory use may not fall until you restart.
+Memory use depends on the content you process and the languages you allow. Limiting the language list can reduce it further. Restart Nogon after changing settings; memory use may not fall until you restart.
 
 ## Restricting Languages
 
@@ -82,13 +82,13 @@ This list controls automatic detection. It does not exclude documents from your 
 
 ### Confidence and Unknown Results
 
-Hister uses `unknown` when there is too little text or the language is unclear. This is more likely for short names, snippets, or mixed language content. A useful web page title can help when the body has too little text.
+Nogon uses `unknown` when there is too little text or the language is unclear. This is more likely for short names, snippets, or mixed language content. A useful web page title can help when the body has too little text.
 
-A restricted list makes Hister more cautious about assigning a language, but documents in an excluded language can still receive the wrong label. Leave `languages` empty if your browsing spans unpredictable languages. Even listing every supported language explicitly can give different results from leaving the list empty.
+A restricted list makes Nogon more cautious about assigning a language, but documents in an excluded language can still receive the wrong label. Leave `languages` empty if your browsing spans unpredictable languages. Even listing every supported language explicitly can give different results from leaving the list empty.
 
 ### Supported Codes
 
-Hister can automatically detect these 30 languages. Use the code in the first column for new configuration; aliases are also accepted.
+Nogon can automatically detect these 30 languages. Use the code in the first column for new configuration; aliases are also accepted.
 
 | Code | Language         | Aliases |
 | ---- | ---------------- | ------- |
@@ -131,7 +131,7 @@ Manual pins also accept `iw` for Hebrew (`he`) and `ji` for Yiddish (`yi`). Thes
 
 ## Stop Words and Phrase Searches
 
-Stop words are common words such as `for` and `your`. Hister may omit them from searches by default. To keep them searchable:
+Stop words are common words such as `for` and `your`. Nogon may omit them from searches by default. To keep them searchable:
 
 ```yaml
 indexer:
@@ -148,13 +148,13 @@ Preserving common words can increase storage use. Reindex existing documents aft
 Environment variables override the corresponding YAML values. Separate languages with commas:
 
 ```bash
-export HISTER__INDEXER__DETECT_LANGUAGES=true
-export HISTER__INDEXER__LANGUAGES=en,de,nl,id
-export HISTER__INDEXER__LANGUAGE_DETECTION_ACCURACY=low
-export HISTER__INDEXER__KEEP_STOPWORDS=false
+export NOGON__INDEXER__DETECT_LANGUAGES=true
+export NOGON__INDEXER__LANGUAGES=en,de,nl,id
+export NOGON__INDEXER__LANGUAGE_DETECTION_ACCURACY=low
+export NOGON__INDEXER__KEEP_STOPWORDS=false
 ```
 
-To consider all supported languages again, set `languages: []` in YAML and remove any `HISTER__INDEXER__LANGUAGES` override. See [Environment Variables](/docs/configuration#environment-variables) for configuration precedence.
+To consider all supported languages again, set `languages: []` in YAML and remove any `NOGON__INDEXER__LANGUAGES` or legacy `HISTER__INDEXER__LANGUAGES` override. See [Environment Variables](/docs/configuration#environment-variables) for configuration precedence.
 
 ## Applying Changes to Existing Documents
 
@@ -170,14 +170,14 @@ Restart the server after editing its configuration. Changes to detection setting
 After restarting with the desired settings, leave the server running and run:
 
 ```bash
-hister reindex
+nogon reindex
 ```
 
-Use the same `detect_languages` setting for this command and the server. If you use a custom configuration file, pass it with `hister --config /path/to/config.yml reindex`.
+Use the same `detect_languages` setting for this command and the server. If you use a custom configuration file, pass it with `nogon --config /path/to/config.yml reindex`.
 
 Turning off detection leaves existing documents searchable with their current language labels. Newly processed documents receive `unknown` unless you have pinned their language. Reindexing with detection disabled also changes unpinned documents to `unknown`. Manual pins are preserved.
 
-Hister may remind you to reindex after a configuration change, but it does not warn about every language setting. Use the table above to decide when to reindex. See [Data Storage and Lifecycle](/docs/data-lifecycle) for the other effects of reindexing.
+Nogon may remind you to reindex after a configuration change, but it does not warn about every language setting. Use the table above to decide when to reindex. See [Data Storage and Lifecycle](/docs/data-lifecycle) for the other effects of reindexing.
 
 ## Checking and Correcting Languages
 
@@ -197,8 +197,8 @@ Filters ignore letter case. `language:en` includes `en-US` and `en-GB`, while `l
 You can pin a document's language even when detection is disabled. For example, to mark documents from a known English site as English:
 
 ```bash
-hister update 'domain:english.example.com' --language en --dry
-hister update 'domain:english.example.com' --language en
+nogon update 'domain:english.example.com' --language en --dry
+nogon update 'domain:english.example.com' --language en
 ```
 
 The first command previews how many documents would change. The second asks for confirmation and applies the change. Use a regional code such as `--language en-US` when you know that distinction.
@@ -208,8 +208,8 @@ A pin takes effect without a full reindex and survives restarts, reindexing, imp
 Use `--language unknown` to keep a document without an identified language. To clear a pin and identify the language again using the server's current settings:
 
 ```bash
-hister update 'domain:english.example.com' --language auto --dry
-hister update 'domain:english.example.com' --language auto
+nogon update 'domain:english.example.com' --language auto --dry
+nogon update 'domain:english.example.com' --language auto
 ```
 
 With detection disabled, `auto` clears the pin and sets the language to `unknown`. This command uses the saved content without downloading the page or rereading the source file. A dry run leaves documents unchanged.

@@ -93,7 +93,7 @@ about the content being processed, so that search results and the document
 preview are as useful as possible for the source in question.
 
 When a page is fetched by the browser extension, the CLI, or the crawler,
-Hister processes its raw HTML or file contents into searchable text and a
+Nogon processes its raw HTML or file contents into searchable text and a
 preview.
 
 ## Configuration
@@ -341,7 +341,7 @@ including their common web and mobile hostnames.
 
 Extracts the title and rendered block content of Notion pages and produces a
 sanitized preview. Notion renders content in the browser, so indexing requires
-the `chromedp` or `bidi` crawler backend. Hister does not index the empty
+the `chromedp` or `bidi` crawler backend. Nogon does not index the empty
 application shell when the rendered block content is missing.
 
 **Matches:** nonroot pages on `notion.so`, `www.notion.so`, and any

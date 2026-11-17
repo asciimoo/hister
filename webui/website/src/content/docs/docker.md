@@ -16,7 +16,7 @@ The `latest` image runs as the nonroot user with UID and GID `65532`. The exampl
 Nogon can be fully [configured using environment variables](configuration#environment-variables).
 This is the **recommended approach for containerized environments** (Docker, Kubernetes, etc.) as it avoids the need to manage configuration files inside the container or mounted volumes.
 
-The container loads `/hister/data/config.yml` if it exists. Without that file, it uses defaults and environment variables. Relative paths resolve from `/hister/data`. To require a specific config file, set `NOGON_CONFIG` or pass `--config`; a missing file then prevents startup.
+The container loads `/hister/data/config.yml` if it exists. Without that file, it uses defaults and environment variables. Relative paths resolve from `/hister/data`. To require a specific config file, set `NOGON_CONFIG` (`HISTER_CONFIG` on older images) or pass `--config`; a missing file then prevents startup.
 
 If you prefer using a configuration file instead of environment variables, generate a commented reference using Docker:
 
@@ -57,9 +57,11 @@ volume or bind mount when updating. If you move or rename the checkout directory
 keep the original Compose project name with `docker compose -p ORIGINAL_PROJECT`
 so Compose selects the same volume. Do not use `down --volumes` during an upgrade.
 
-The image provides `nogon` and the compatible `hister` command. Existing
+Images that include the rename provide `nogon` and the compatible `hister` command. Existing
 `/hister/hister` entrypoint overrides also work. Both `NOGON_` and `HISTER_`
 configuration variables are accepted; see [environment variable precedence](configuration#environment-variables).
+Older Hister images still require their existing command and environment names.
+Keep those settings until you install an image that includes the rename.
 
 With the repository's `compose.yml`, set `NOGON_IMAGE` to select an image and
 `NOGON_CACHE_IMAGE` to select a build cache. The existing `HISTER_IMAGE` and

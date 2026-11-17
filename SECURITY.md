@@ -1,6 +1,6 @@
 # Security Policy
 
-We love responsible reports of (potential) security issues in Hister.
+We love responsible reports of (potential) security issues in Nogon.
 
 You can contact us at asciimoo@proton.me.
 

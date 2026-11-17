@@ -5,7 +5,7 @@ title: 'Rules'
 description: 'Control indexing and ranking with allow, skip, priority, versioning, and query alias rules.'
 ---
 
-Rules let you control how Hister indexes and surfaces documents. They live in
+Rules let you control how Nogon indexes and surfaces documents. They live in
 `{data_directory}/rules.json` in single-user mode, or per-user in the database
 when [user handling](user-handling) is enabled. The **Rules** tab in the web
 interface (and the TUI) is the easiest way to manage them.
@@ -34,7 +34,7 @@ paths on the documentation site.
 
 Allow rules apply to API submissions and browser imports as well as automatic
 browser capture. Editing rules does not immediately remove saved documents.
-Running `hister reindex` removes documents excluded by the current allow or skip
+Running `nogon reindex` removes documents excluded by the current allow or skip
 rules, except documents carrying an explicit manual override. In multiple user
 mode, reindexing uses each document owner's rules; public documents use the
 instance rules.
@@ -42,16 +42,16 @@ instance rules.
 ### Skip rules
 
 Skip rules prevent matching URLs from being added to the index. When a URL
-matches any pattern in the skip list, Hister silently discards the document
-during indexing and during `hister reindex`.
+matches any pattern in the skip list, Nogon silently discards the document
+during indexing and during `nogon reindex`.
 
 Manual indexing in the browser extension overrides allow and skip rules for that submission
 and saves the choice with the document, so the
-page survives `hister reindex`. Automatic submissions still respect the rules.
+page survives `nogon reindex`. Automatic submissions still respect the rules.
 
-From the command line, use `--ignore-rules` with `hister index` or any `hister import`
+From the command line, use `--ignore-rules` with `nogon index` or any `nogon import`
 subcommand to save the same explicit override with each submitted document. For an
-already indexed URL, combine `hister index --ignore-rules` with `--force` so that the
+already indexed URL, combine `nogon index --ignore-rules` with `--force` so that the
 document is submitted again. The override does not bypass sensitive content checks,
 robots rules, or crawl and file selection filters.
 
@@ -62,7 +62,7 @@ The override is stored with the document and preserved in exported documents.
 
 The override applies only to URL allow and skip rules. The metadata field keeps its
 existing name for compatibility. Authentication, ownership, sensitive
-content checks, and the exclusion of Hister's own URLs still apply. Accepted
+content checks, and the exclusion of Nogon's own URLs still apply. Accepted
 updates preserve an existing override unless they explicitly submit
 `metadata.ignore_skip_rules: false`. Explicit deletion still removes the document.
 
@@ -78,7 +78,7 @@ site you never want in your search results.
 ### Priority rules
 
 Priority rules push matching documents to the top of search results regardless
-of their relevance score. Hister applies a large score boost to any document
+of their relevance score. Nogon applies a large score boost to any document
 whose URL matches a priority pattern.
 
 **Use cases**: always surface your personal wiki, your company's internal
@@ -91,9 +91,9 @@ documentation, or a trusted source before other results.
 
 ### Versioning rules
 
-Versioning rules tell Hister to **track changes** to a document every time it
+Versioning rules tell Nogon to **track changes** to a document every time it
 is re-indexed. When a URL matches a versioning pattern and the document content
-differs from the previously indexed version, Hister stores diff match patch
+differs from the previously indexed version, Nogon stores diff match patch
 records for the HTML and text changes in the database.
 
 **Use cases**: monitor pages for edits (privacy policies, documentation, news
@@ -108,11 +108,11 @@ trusted resource last changed.
 #### Viewing stored versions
 
 Stored differences can reconstruct earlier document versions. Version history is available
-only after Hister has recorded at least one change for that document.
+only after Nogon has recorded at least one change for that document.
 
 ### Aliases
 
-Aliases are query-time shortcuts: before Hister executes a search, it replaces
+Aliases are query-time shortcuts: before Nogon executes a search, it replaces
 any alias keyword with its expanded form.
 
 ```json

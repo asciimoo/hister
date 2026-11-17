@@ -1,6 +1,6 @@
 # How-to contribute
 
-Thanks for your interest in contributing to Hister! This document outlines the guidelines for contributing to this project.
+Thanks for your interest in contributing to Nogon! This document outlines the guidelines for contributing to this project.
 
 ## Development
 
@@ -35,7 +35,7 @@ Thanks for your interest in contributing to Hister! This document outlines the g
 - Write clear commit messages explaining the "why" behind your changes
 - Keep pull requests focused on a single concern
 
-Do not take criticism personally. When you get feedback, it is about your work, not your character or personality. Keep in mind we all want to make Hister better.
+Do not take criticism personally. When you get feedback, it is about your work, not your character or personality. Keep in mind we all want to make Nogon better.
 
 When something is not clear, please ask questions to clear things up.
 
@@ -43,7 +43,7 @@ If you would like to introduce a big architectural change or do a refactor, eith
 
 ## License
 
-By contributing to Hister, you agree that your contributions will be licensed under the [AGPLv3 License](LICENSE).
+By contributing to Nogon, you agree that your contributions will be licensed under the [AGPLv3 License](LICENSE).
 
 ## AI Policy
 
