@@ -91,8 +91,8 @@
             <img
               src={screenshot}
               alt="Nogon search results with a stored document preview open"
-              width="1052"
-              height="710"
+              width="1024"
+              height="640"
               loading="lazy"
               decoding="async"
               class="block h-auto w-full"
