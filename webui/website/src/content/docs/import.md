@@ -7,8 +7,11 @@ description: 'Import files, sitemaps, browser history, bookmarks, archives, and 
 
 The `nogon import` command collects related import tools under one command. Every import sends documents to a running Nogon server.
 
-Import credential variables retain their `HISTER_IMPORT_*` names. Use the exact
-names shown below; these credentials do not have `NOGON_IMPORT_*` aliases.
+Service imports accept `NOGON_IMPORT_*` credentials and the corresponding legacy
+`HISTER_IMPORT_*` names. `--api-token` takes precedence, followed by the Nogon
+variable, then the Hister variable. An explicitly empty or blank value is treated
+as a missing credential and does not fall back. These source credentials are
+separate from the global `--token` used for the destination Nogon server.
 
 > Hister v0.16.0 uses the standalone `hister import-browser` command. To import
 > browser history with that release, replace `nogon import browser` in the
@@ -356,7 +359,7 @@ Automated requests can be rejected by bot protection, expired sessions, removed 
 Copy the API token from the Linkding settings page, then store it in the environment before running the import:
 
 ```bash
-export HISTER_IMPORT_LINKDING_TOKEN='your-linkding-token'
+export NOGON_IMPORT_LINKDING_TOKEN='your-linkding-token'
 nogon import linkding https://linkding.example.com
 ```
 
@@ -392,7 +395,7 @@ Consult the [Linkding API documentation](https://linkding.link/api/) when troubl
 Create an API token in Linkwarden, then store it in the environment before running the import:
 
 ```bash
-export HISTER_IMPORT_LINKWARDEN_TOKEN='your-linkwarden-token'
+export NOGON_IMPORT_LINKWARDEN_TOKEN='your-linkwarden-token'
 nogon import linkwarden https://links.example.com
 ```
 
@@ -424,7 +427,7 @@ If a Linkwarden URL record has no extracted text content, Nogon downloads the pa
 Karakeep was formerly named Hoarder. Create an API key in Karakeep, then store it in the environment before running the import:
 
 ```bash
-export HISTER_IMPORT_KARAKEEP_TOKEN='your-karakeep-token'
+export NOGON_IMPORT_KARAKEEP_TOKEN='your-karakeep-token'
 nogon import karakeep https://karakeep.example.com
 ```
 
@@ -459,7 +462,7 @@ Consult the [Karakeep API documentation](https://docs.karakeep.app/api) when tro
 Create an API token in the Readeck profile settings, then store it in the environment before running the import:
 
 ```bash
-export HISTER_IMPORT_READECK_TOKEN='your-readeck-token'
+export NOGON_IMPORT_READECK_TOKEN='your-readeck-token'
 nogon import readeck https://readeck.example.com
 ```
 
@@ -495,7 +498,7 @@ Consult the API reference on the `/api` route of your Readeck instance or the [R
 Copy the API secret from the Shaarli administration page, then store it in the environment before running the import:
 
 ```bash
-export HISTER_IMPORT_SHAARLI_SECRET='your-shaarli-api-secret'
+export NOGON_IMPORT_SHAARLI_SECRET='your-shaarli-api-secret'
 nogon import shaarli https://shaarli.example.com
 ```
 
@@ -527,7 +530,7 @@ Pagination and batch submission are automatic. Consult the [Shaarli API document
 Obtain an OAuth access token from wallabag, then store it in the environment before running the import:
 
 ```bash
-export HISTER_IMPORT_WALLABAG_TOKEN='your-wallabag-access-token'
+export NOGON_IMPORT_WALLABAG_TOKEN='your-wallabag-access-token'
 nogon import wallabag https://wallabag.example.com
 ```
 
@@ -559,7 +562,7 @@ Consult the [wallabag OAuth documentation](https://doc.wallabag.org/developer/ap
 Create an application in [Raindrop's integration settings](https://app.raindrop.io/settings/integrations), open its settings, and copy its **Test token**. Raindrop supports this token for accessing your own account without implementing an OAuth flow. See the [Raindrop authentication documentation](https://developer.raindrop.io/v1/authentication/token).
 
 ```bash
-export HISTER_IMPORT_RAINDROP_TOKEN='your-raindrop-token'
+export NOGON_IMPORT_RAINDROP_TOKEN='your-raindrop-token'
 nogon import raindrop
 ```
 
@@ -616,7 +619,7 @@ CSV imports need no Raindrop API credential. The `--input` option cannot be comb
 Get an access token from [Readwise](https://readwise.io/access_token), then run:
 
 ```bash
-export HISTER_IMPORT_READWISE_TOKEN='your-readwise-token'
+export NOGON_IMPORT_READWISE_TOKEN='your-readwise-token'
 nogon import readwise
 ```
 

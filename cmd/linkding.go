@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	linkdingTokenEnv            = "HISTER_IMPORT_LINKDING_TOKEN"
+	linkdingTokenEnv            = "NOGON_IMPORT_LINKDING_TOKEN"
 	linkdingSourceMetadataValue = "linkding"
 	linkdingPageSize            = 100
 )
@@ -60,11 +60,14 @@ var importLinkdingCmd = &cobra.Command{
 	Short: "Import bookmarks from Linkding",
 	Long: `Import bookmarks, notes, and searchable page content from a Linkding instance.
 
-Set the Linkding API token with HISTER_IMPORT_LINKDING_TOKEN or --api-token.
+Set the Linkding API token with NOGON_IMPORT_LINKDING_TOKEN or --api-token.
 
 Linkding stores bookmark metadata rather than complete page content. Nogon
 downloads linked pages using the configured crawler backend. Override the
 backend with --backend and --backend-option.
+
+The legacy HISTER_IMPORT_LINKDING_TOKEN variable is also supported. The Nogon
+variable takes precedence, even when empty.
 
 The global --token flag remains the access token for the destination Nogon server.`,
 	Args: cobra.ExactArgs(1),

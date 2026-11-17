@@ -33,9 +33,9 @@ func TestReadwiseImportCommand(t *testing.T) {
 	if command.Annotations[executionScopeAnnotation] != string(executionScopeRemote) {
 		t.Error("Readwise import must use the remote execution scope")
 	}
-	t.Setenv("HISTER_IMPORT_READWISE_TOKEN", "")
+	t.Setenv("NOGON_IMPORT_READWISE_TOKEN", "")
 	err = command.RunE(command, nil)
-	if err == nil || !strings.Contains(err.Error(), "HISTER_IMPORT_READWISE_TOKEN") {
+	if err == nil || !strings.Contains(err.Error(), "NOGON_IMPORT_READWISE_TOKEN") {
 		t.Fatalf("missing credential error = %v", err)
 	}
 }
@@ -274,7 +274,7 @@ func TestReadwiseAuthenticationAndRateLimits(t *testing.T) {
 				if !errors.Is(err, context.Canceled) {
 					t.Errorf("canceled retry = %v", err)
 				}
-			} else if requests != 1 || strings.Contains(err.Error(), "readwise-secret") || !strings.Contains(err.Error(), "HISTER_IMPORT_READWISE_TOKEN") {
+			} else if requests != 1 || strings.Contains(err.Error(), "readwise-secret") || !strings.Contains(err.Error(), "NOGON_IMPORT_READWISE_TOKEN") {
 				t.Errorf("requests = %d, authentication error = %v", requests, err)
 			}
 		})

@@ -3,10 +3,12 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"slices"
 	"strings"
 	"testing"
@@ -26,15 +28,25 @@ func TestServiceImportCommands(t *testing.T) {
 		env, authScheme, response      string
 		updatedParameter, updatedValue string
 	}{
-		{importLinkdingCmd, linkdingTokenEnv, "Token", `{"results":[],"next":null}`, "modified_since", "2024-01-02T00:00:00Z"},
-		{importLinkwardenCmd, linkwardenTokenEnv, "Bearer", `{"data":{"links":[],"nextCursor":null}}`, "searchQueryString", "after:2024-01-02"},
-		{importKarakeepCmd, karakeepTokenEnv, "Bearer", `{"bookmarks":[],"nextCursor":null}`, "q", "after:2024-01-02"},
-		{importReadeckCmd, readeckTokenEnv, "Bearer", `[]`, "since", "2024-01-02T00:00:00Z"},
-		{importWallabagCmd, wallabagTokenEnv, "Bearer", `{"_embedded":{"items":[]},"page":1,"pages":1}`, "since", "1704153600"},
-		{importShaarliCmd, shaarliSecretEnv, "JWT", `[]`, "since", "2024-01-02T00:00:00Z"},
-		{importReadwiseCmd, readwiseTokenEnv, "Token", `{"results":[],"nextPageCursor":""}`, "", ""},
+		{importLinkdingCmd, "NOGON_IMPORT_LINKDING_TOKEN", "Token", `{"results":[],"next":null}`, "modified_since", "2024-01-02T00:00:00Z"},
+		{importLinkwardenCmd, "NOGON_IMPORT_LINKWARDEN_TOKEN", "Bearer", `{"data":{"links":[],"nextCursor":null}}`, "searchQueryString", "after:2024-01-02"},
+		{importKarakeepCmd, "NOGON_IMPORT_KARAKEEP_TOKEN", "Bearer", `{"bookmarks":[],"nextCursor":null}`, "q", "after:2024-01-02"},
+		{importReadeckCmd, "NOGON_IMPORT_READECK_TOKEN", "Bearer", `[]`, "since", "2024-01-02T00:00:00Z"},
+		{importWallabagCmd, "NOGON_IMPORT_WALLABAG_TOKEN", "Bearer", `{"_embedded":{"items":[]},"page":1,"pages":1}`, "since", "1704153600"},
+		{importShaarliCmd, "NOGON_IMPORT_SHAARLI_SECRET", "JWT", `[]`, "since", "2024-01-02T00:00:00Z"},
+		{importReadwiseCmd, "NOGON_IMPORT_READWISE_TOKEN", "Token", `{"results":[],"nextPageCursor":""}`, "", ""},
+		{importRaindropCmd, "NOGON_IMPORT_RAINDROP_TOKEN", "Bearer", `{"result":true,"items":[]}`, "", ""},
 	} {
-		for _, scenario := range []string{"environment token", "flag token", "missing token", "empty flag", "invalid batch", "invalid instance", "lookup failure", "source failure"} {
+		legacyEnv := strings.Replace(source.env, "NOGON_", "HISTER_", 1)
+		t.Run(source.command.Name()+"/credential help", func(t *testing.T) {
+			if !strings.Contains(source.command.Long, source.env) || !strings.Contains(source.command.Long, legacyEnv) {
+				t.Errorf("command help must name both %s and %s", source.env, legacyEnv)
+			}
+			if !strings.Contains(source.command.Flags().Lookup("api-token").Usage, source.env) {
+				t.Errorf("flag help must name %s", source.env)
+			}
+		})
+		for _, scenario := range []string{"environment token", "Nogon token only", "legacy token only", "flag token", "missing token", "empty environment", "blank environment", "empty flag", "invalid batch", "invalid instance", "lookup failure", "source failure"} {
 			if (scenario == "lookup failure" || scenario == "invalid instance") && source.updatedParameter == "" {
 				continue
 			}
@@ -46,6 +58,7 @@ func TestServiceImportCommands(t *testing.T) {
 				cfg.Server.BaseURL = "https://hister.example/base"
 				cfg.App.AccessToken = "destination-token"
 				t.Setenv(source.env, " environment-token ")
+				t.Setenv(legacyEnv, " legacy-token ")
 				command := &cobra.Command{Use: source.command.Use}
 				command.SetContext(context.Background())
 				addServiceImportFlags(command, source.command.Name(), source.env)
@@ -54,13 +67,27 @@ func TestServiceImportCommands(t *testing.T) {
 				}
 				wantToken := "environment-token"
 				switch scenario {
+				case "Nogon token only":
+					if err := os.Unsetenv(legacyEnv); err != nil {
+						t.Fatal(err)
+					}
+				case "legacy token only":
+					wantToken = "legacy-token"
+					if err := os.Unsetenv(source.env); err != nil {
+						t.Fatal(err)
+					}
 				case "flag token":
 					wantToken = "flag-token"
 					if err := command.Flags().Set("api-token", " flag-token "); err != nil {
 						t.Fatal(err)
 					}
 				case "missing token":
+					t.Setenv(legacyEnv, "")
 					t.Setenv(source.env, "")
+				case "empty environment":
+					t.Setenv(source.env, "")
+				case "blank environment":
+					t.Setenv(source.env, " \t ")
 				case "empty flag":
 					if err := command.Flags().Set("api-token", ""); err != nil {
 						t.Fatal(err)
@@ -91,17 +118,32 @@ func TestServiceImportCommands(t *testing.T) {
 					}
 					sourceRequests++
 					wantHost := "source.example"
-					if source.command == importReadwiseCmd {
+					switch source.command {
+					case importReadwiseCmd:
 						wantHost = "readwise.io"
+					case importRaindropCmd:
+						wantHost = "api.raindrop.io"
 					}
 					if req.Method != http.MethodGet || req.URL.Host != wantHost || req.Header.Get("X-Access-Token") != "" {
 						t.Errorf("unexpected source request: %s %s, headers %v", req.Method, req.URL, req.Header)
 					}
 					authorization := req.Header.Get("Authorization")
 					if source.authScheme == "JWT" {
-						if !strings.HasPrefix(authorization, "Bearer ") || strings.Contains(authorization, wantToken) {
-							t.Errorf("expected a JWT without the source secret, got %q", authorization)
+						parts := strings.Split(strings.TrimPrefix(authorization, "Bearer "), ".")
+						if len(parts) != 3 {
+							t.Fatalf("expected a JWT, got %q", authorization)
 						}
+						payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+						if err != nil {
+							t.Fatal(err)
+						}
+						var claims struct {
+							IssuedAt int64 `json:"iat"`
+						}
+						if err := json.Unmarshal(payload, &claims); err != nil {
+							t.Fatal(err)
+						}
+						assertShaarliAuthorization(t, req, wantToken, claims.IssuedAt)
 					} else if authorization != source.authScheme+" "+wantToken {
 						t.Errorf("source authorization = %q", authorization)
 					}
@@ -109,7 +151,7 @@ func TestServiceImportCommands(t *testing.T) {
 						t.Errorf("incremental request = %s, want %s=%s", req.URL, source.updatedParameter, source.updatedValue)
 					}
 					if scenario == "source failure" {
-						return jsonHTTPResponse(req, http.StatusUnauthorized, "denied"), nil
+						return jsonHTTPResponse(req, http.StatusUnauthorized, "denied: environment-token legacy-token destination-token"), nil
 					}
 					return jsonHTTPResponse(req, http.StatusOK, source.response), nil
 				})
@@ -119,16 +161,21 @@ func TestServiceImportCommands(t *testing.T) {
 				if scenario == "invalid instance" {
 					args[0] = "file:///private/data"
 				}
-				if source.command == importReadwiseCmd {
+				if source.command == importReadwiseCmd || source.command == importRaindropCmd {
 					args = nil
 				}
 				err := source.command.RunE(command, args)
+				for _, secret := range []string{"environment-token", "legacy-token", "flag-token", "destination-token"} {
+					if strings.Contains(output.String(), secret) || (err != nil && strings.Contains(err.Error(), secret)) {
+						t.Errorf("import output or error disclosed %s", secret)
+					}
+				}
 				if !command.SilenceUsage {
 					t.Error("execution errors should not print usage")
 				}
 				wantLookups, wantSourceRequests := 0, 0
 				switch scenario {
-				case "missing token", "empty flag":
+				case "missing token", "empty environment", "blank environment", "empty flag":
 					if err == nil || !strings.Contains(err.Error(), source.env) || !strings.Contains(err.Error(), "--api-token") {
 						t.Errorf("credential error = %v", err)
 					}
@@ -151,15 +198,18 @@ func TestServiceImportCommands(t *testing.T) {
 					}
 					wantSourceRequests = 1
 					if scenario == "source failure" {
-						if err == nil || !strings.Contains(err.Error(), "import") || !strings.Contains(err.Error(), "authentication failed") {
+						if err == nil || !strings.Contains(err.Error(), "import") || !strings.Contains(err.Error(), "authentication failed") || !strings.Contains(err.Error(), source.env) {
 							t.Errorf("source error = %v", err)
 						}
 					} else {
 						if err != nil {
 							t.Fatal(err)
 						}
-						if source.command == importLinkdingCmd {
+						switch source.command {
+						case importLinkdingCmd:
 							wantSourceRequests = 2 // Active and archived bookmarks.
+						case importRaindropCmd:
+							wantSourceRequests = 3 // Root collections, child collections, and bookmarks.
 						}
 					}
 					var summaries []map[string]int

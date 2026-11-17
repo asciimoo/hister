@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	wallabagTokenEnv            = "HISTER_IMPORT_WALLABAG_TOKEN"
+	wallabagTokenEnv            = "NOGON_IMPORT_WALLABAG_TOKEN"
 	wallabagSourceMetadataValue = "wallabag"
 	wallabagPageSize            = 100
 )
@@ -114,11 +114,14 @@ var importWallabagCmd = &cobra.Command{
 	Short: "Import saved entries from wallabag",
 	Long: `Import saved entries and their searchable content from a wallabag instance.
 
-Set the wallabag API access token with HISTER_IMPORT_WALLABAG_TOKEN or
+Set the wallabag API access token with NOGON_IMPORT_WALLABAG_TOKEN or
 --api-token.
 
 Nogon extracts the content stored by wallabag. If an entry has no usable
 stored content, Nogon downloads it using the configured crawler backend.
+
+The legacy HISTER_IMPORT_WALLABAG_TOKEN variable is also supported. The Nogon
+variable takes precedence, even when empty.
 
 The global --token flag remains the access token for the destination Nogon server.`,
 	Args: cobra.ExactArgs(1),

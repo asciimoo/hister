@@ -23,7 +23,7 @@ import (
 )
 
 const (
-	readeckTokenEnv            = "HISTER_IMPORT_READECK_TOKEN"
+	readeckTokenEnv            = "NOGON_IMPORT_READECK_TOKEN"
 	readeckSourceMetadataValue = "readeck"
 	readeckSyncEndpoint        = "/api/bookmarks/sync"
 )
@@ -99,10 +99,13 @@ var importReadeckCmd = &cobra.Command{
 	Short: "Import bookmarks from Readeck",
 	Long: `Import bookmarks and their stored article content from a Readeck instance.
 
-Set the Readeck API token with HISTER_IMPORT_READECK_TOKEN or --api-token.
+Set the Readeck API token with NOGON_IMPORT_READECK_TOKEN or --api-token.
 
 Nogon uses the article HTML stored by Readeck. If a bookmark has no usable
 stored article, Nogon downloads it using the configured crawler backend.
+
+The legacy HISTER_IMPORT_READECK_TOKEN variable is also supported. The Nogon
+variable takes precedence, even when empty.
 
 The global --token flag remains the access token for the destination Nogon server.`,
 	Args: cobra.ExactArgs(1),

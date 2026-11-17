@@ -16,7 +16,7 @@ import (
 
 const (
 	raindropSourceMetadataValue = "raindrop"
-	raindropTokenEnv            = "HISTER_IMPORT_RAINDROP_TOKEN"
+	raindropTokenEnv            = "NOGON_IMPORT_RAINDROP_TOKEN"
 )
 
 type raindropBookmark struct {
@@ -39,7 +39,7 @@ var importRaindropCmd = &cobra.Command{
 	Long: `Import bookmarks, notes, highlights, and searchable page content from a
 Raindrop.io account through its API.
 
-Set the Raindrop API token with HISTER_IMPORT_RAINDROP_TOKEN or --api-token.
+Set the Raindrop API token with NOGON_IMPORT_RAINDROP_TOKEN or --api-token.
 Each run reads all bookmarks. Use --skip-existing to keep documents already
 in the destination Nogon index.
 
@@ -49,6 +49,9 @@ CSV input requires a url column and does not need a Raindrop API token.
 Nogon downloads linked pages using the configured crawler backend. Override
 the backend with --backend and --backend-option. If a page cannot be downloaded,
 its bookmark details are still imported and the failure is reported.
+
+The legacy HISTER_IMPORT_RAINDROP_TOKEN variable is also supported. The Nogon
+variable takes precedence, even when empty.
 
 The global --token flag remains the access token for the destination Nogon server.`,
 	Args: cobra.NoArgs,

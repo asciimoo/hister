@@ -18,7 +18,7 @@ import (
 
 const (
 	readwiseAPIURL              = "https://readwise.io"
-	readwiseTokenEnv            = "HISTER_IMPORT_READWISE_TOKEN"
+	readwiseTokenEnv            = "NOGON_IMPORT_READWISE_TOKEN"
 	readwiseSourceMetadataValue = "readwise"
 )
 
@@ -62,7 +62,7 @@ var importReadwiseCmd = &cobra.Command{
 	Short: "Import documents from Readwise Reader",
 	Long: `Import saved documents and their searchable content from Readwise Reader.
 
-Set the Readwise access token with HISTER_IMPORT_READWISE_TOKEN or --api-token.
+Set the Readwise access token with NOGON_IMPORT_READWISE_TOKEN or --api-token.
 Get a token from https://readwise.io/access_token.
 
 Nogon uses stored HTML when available and downloads missing content from the
@@ -71,6 +71,9 @@ without a source URL use their Reader URL and stored content.
 
 Each run scans the library again. Use --skip-existing to keep existing documents.
 Separate highlight and note records are skipped; document notes are preserved.
+
+The legacy HISTER_IMPORT_READWISE_TOKEN variable is also supported. The Nogon
+variable takes precedence, even when empty.
 
 The global --token flag remains the access token for the destination Nogon server.`,
 	Args: cobra.NoArgs,

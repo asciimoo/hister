@@ -630,7 +630,11 @@ func serviceAPIToken(cmd *cobra.Command, envName string) string {
 		token, _ := cmd.Flags().GetString("api-token")
 		return strings.TrimSpace(token)
 	}
-	return strings.TrimSpace(os.Getenv(envName))
+	if token, present := os.LookupEnv(envName); present {
+		return strings.TrimSpace(token)
+	}
+	legacyEnv := strings.Replace(envName, "NOGON_IMPORT_", "HISTER_IMPORT_", 1)
+	return strings.TrimSpace(os.Getenv(legacyEnv))
 }
 
 func serviceArticleDocument(title, article string) string {

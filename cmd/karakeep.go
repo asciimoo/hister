@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	karakeepTokenEnv            = "HISTER_IMPORT_KARAKEEP_TOKEN"
+	karakeepTokenEnv            = "NOGON_IMPORT_KARAKEEP_TOKEN"
 	karakeepSourceMetadataValue = "karakeep"
 	karakeepPageSize            = 100
 )
@@ -101,11 +101,14 @@ var importKarakeepCmd = &cobra.Command{
 	Long: `Import bookmarks and their searchable content from a Karakeep instance.
 
 Karakeep was previously named Hoarder. Set its API token with
-HISTER_IMPORT_KARAKEEP_TOKEN or --api-token.
+NOGON_IMPORT_KARAKEEP_TOKEN or --api-token.
 
 Stored HTML is used when available. When a link bookmark has no stored HTML,
 Nogon downloads it using the configured crawler backend. Override the backend
 with --backend and --backend-option.
+
+The legacy HISTER_IMPORT_KARAKEEP_TOKEN variable is also supported. The Nogon
+variable takes precedence, even when empty.
 
 The global --token flag remains the access token for the destination Nogon server.`,
 	Args: cobra.ExactArgs(1),

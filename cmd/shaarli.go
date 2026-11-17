@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	shaarliSecretEnv           = "HISTER_IMPORT_SHAARLI_SECRET"
+	shaarliSecretEnv           = "NOGON_IMPORT_SHAARLI_SECRET"
 	shaarliSourceMetadataValue = "shaarli"
 	shaarliPageSize            = 100
 )
@@ -59,12 +59,15 @@ var importShaarliCmd = &cobra.Command{
 	Long: `Import bookmarks, notes, and searchable page content from a Shaarli instance.
 
 Set the API secret from the Shaarli administration page with
-HISTER_IMPORT_SHAARLI_SECRET or --api-token. Nogon generates a short lived
+NOGON_IMPORT_SHAARLI_SECRET or --api-token. Nogon generates a short lived
 HS512 JWT for every API request. The API secret itself is never sent.
 
 Shaarli stores bookmark descriptions rather than complete page content. Nogon
 downloads linked pages using the configured crawler backend. Override the
 backend with --backend and --backend-option.
+
+The legacy HISTER_IMPORT_SHAARLI_SECRET variable is also supported. The Nogon
+variable takes precedence, even when empty.
 
 The global --token flag remains the access token for the destination Nogon server.`,
 	Args: cobra.ExactArgs(1),

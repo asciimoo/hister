@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	linkwardenTokenEnv            = "HISTER_IMPORT_LINKWARDEN_TOKEN"
+	linkwardenTokenEnv            = "NOGON_IMPORT_LINKWARDEN_TOKEN"
 	linkwardenSourceMetadataValue = "linkwarden"
 )
 
@@ -67,10 +67,13 @@ var importLinkwardenCmd = &cobra.Command{
 	Short: "Import bookmarks from Linkwarden",
 	Long: `Import bookmarks and their searchable content from a Linkwarden instance.
 
-Set the Linkwarden API token with HISTER_IMPORT_LINKWARDEN_TOKEN or --api-token.
+Set the Linkwarden API token with NOGON_IMPORT_LINKWARDEN_TOKEN or --api-token.
 
 When a URL record has no extracted text, Nogon downloads it using the configured
 crawler backend. Override the backend with --backend and --backend-option.
+
+The legacy HISTER_IMPORT_LINKWARDEN_TOKEN variable is also supported. The Nogon
+variable takes precedence, even when empty.
 
 The global --token flag remains the access token for the destination Nogon server.`,
 	Args: cobra.ExactArgs(1),

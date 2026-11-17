@@ -70,8 +70,8 @@ Existing `HISTER__*` configuration variables, `HISTER_CONFIG`, `HISTER_DATA_DIR`
 and `HISTER_PORT` remain supported. You can keep them unchanged. If both spellings
 are present, the corresponding Nogon variable takes precedence, even when empty;
 see [environment variables](configuration#environment-variables) for details.
-Import credentials still use the `HISTER_IMPORT_*` names shown in the
-[import guide](import).
+Service imports also accept `NOGON_IMPORT_*` credentials while preserving the
+legacy `HISTER_IMPORT_*` names. See the [import guide](import) for precedence.
 
 Existing Hister config and data locations remain supported. Nogon config locations
 are searched first, so creating a second config file can change which file is
