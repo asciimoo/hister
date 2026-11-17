@@ -302,6 +302,58 @@ goreleaser check -f .goreleaser-rolling.yml
 goreleaser build --snapshot --single-target --clean -f .goreleaser-rolling.yml
 ```
 
+## Package Manager Rename Handoff
+
+The package definitions were checked on 2026-11-17. Keep the current package
+identities for the first Nogon release so existing installations can upgrade.
+
+### Homebrew
+
+`contrib/homebrew/hister.patch` prepares the
+[upstream Hister formula](https://github.com/Homebrew/homebrew-core/blob/0327e6fbacec9c84b5768d01850823da396d2d4f/Formula/h/hister.rb)
+for the first Nogon source release. It uses `@nogon/app`, installs `nogon` with
+a `hister` alias, and preserves completions for both commands. Its tests use
+`config create --full` and exercise both names. The formula name, service command,
+`HISTER_DATA_DIR`, working directory, and log paths stay unchanged.
+
+Apply the patch in a Homebrew core checkout together with the new source version,
+checksum, and bottle updates. The existing v0.21.0 source lacks the renamed
+workspace and current config command, so the patch is not a standalone update
+to that release. Check it against the current formula before applying:
+
+```bash
+git apply --check /path/to/nogon/contrib/homebrew/hister.patch
+git apply /path/to/nogon/contrib/homebrew/hister.patch
+```
+
+After updating release metadata, build with Homebrew, run `brew audit --strict
+hister` and `brew test hister`, and verify an existing `brew services` installation
+keeps its data and service identity. Ruby syntax and the formula's test block
+have been checked locally against the current native executable; a full Homebrew
+build and service upgrade still need verification.
+
+A later formula rename also requires Homebrew's
+[rename mapping and migration checks](https://docs.brew.sh/Rename-A-Formula).
+Do not introduce a second independent formula or service for this compatibility
+release.
+
+### WinGet
+
+The [current installer manifest](https://github.com/microsoft/winget-pkgs/blob/master/manifests/a/asciimoo/hister/0.21.0/asciimoo.hister.installer.yaml)
+uses `asciimoo.hister`, a standalone portable executable, and the `hister`
+command. Both publishing workflows retain that identifier and select only the
+legacy executable download. The package display name can change to Nogon in
+the next version's locale manifest while keeping its identifier and working URLs.
+
+WinGet's [portable installation code](https://github.com/microsoft/winget-cli/blob/master/src/AppInstallerCLICore/Workflows/PortableFlow.cpp)
+uses only the first `Commands` entry for a standalone executable. Adding `nogon`
+to that list does not install a second alias. Providing both commands requires
+an archive with portable entries and explicit `PortableCommandAlias` values.
+Prepare that artifact and manifest together, then verify fresh installation,
+upgrade from `asciimoo.hister`, both commands, and uninstall on Windows before
+changing the workflow's download selection. This archive migration is still
+pending; the existing workflow preserves the Hister command.
+
 ## Container Compatibility Checks
 
 `go test .` runs the Dockerfile healthcheck with both environment variable

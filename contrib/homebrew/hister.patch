@@ -1,0 +1,67 @@
+Subject: Prepare the Hister formula for the first Nogon source release
+Base: Homebrew/homebrew-core 0327e6fbacec9c84b5768d01850823da396d2d4f
+File: Formula/h/hister.rb
+
+Keep the formula and service identity while providing both command names.
+Apply together with the first Nogon source release's version, checksum, and
+bottle updates. The existing v0.21.0 source does not contain the renamed
+workspace or current config command. Do not publish this patch by itself.
+
+diff --git a/Formula/h/hister.rb b/Formula/h/hister.rb
+--- a/Formula/h/hister.rb
++++ b/Formula/h/hister.rb
+@@ -25,13 +25,23 @@
+   end
+
+   def install
+-    system "npm", "--offline", "run", "build", "--workspace=@hister/app"
++    system "npm", "--offline", "run", "build", "--workspace=@nogon/app"
+     (buildpath/"server/static/app").install Dir["webui/app/build/*"]
+
+     ENV["CGO_ENABLED"] = "1" if OS.linux?
+     ENV["GOPROXY"] = "off"
+-    system "go", "build", *std_go_args
+-    generate_completions_from_executable(bin/"hister", "completion")
++    system "go", "build", *std_go_args(output: bin/"nogon")
++    bin.install_symlink "nogon" => "hister"
++    generate_completions_from_executable(bin/"nogon", "completion")
++
++    # Keep completion support for the existing command alias.
++    {
++      bash_completion/"nogon" => bash_completion/"hister",
++      zsh_completion/"_nogon" => zsh_completion/"_hister",
++      fish_completion/"nogon.fish" => fish_completion/"hister.fish",
++    }.each do |source, target|
++      target.write source.read.gsub("nogon", "hister")
++    end
+   end
+
+   service do
+@@ -47,10 +57,17 @@
+     require "yaml"
+
+     ENV["HISTER_DATA_DIR"] = testpath/"data"
+-    assert_match version.to_s, shell_output("#{bin}/hister --version")
++    assert_match version.to_s, shell_output("#{bin}/nogon --version")
++    assert_equal shell_output("#{bin}/nogon --version"), shell_output("#{bin}/hister --version")
++
++    %w[nogon hister].each do |command|
++      assert_match "__start_#{command} #{command}", (bash_completion/command).read
++      assert_match "#compdef #{command}", (zsh_completion/"_#{command}").read
++      assert_match "complete -c #{command}", (fish_completion/"#{command}.fish").read
++    end
+
+     config = testpath/"hister.yml"
+-    system bin/"hister", "create-config", config
++    system bin/"nogon", "config", "create", "--full", config
+     assert_match "app:", config.read
+
+     documents = testpath/"documents"
+@@ -62,6 +79,7 @@
+     config_data["indexer"]["directories"] = [{ "path" => documents.to_s, "filetypes" => ["md"] }]
+     config.atomic_write config_data.to_yaml
+
++    assert_equal "note.md\n", shell_output("#{bin}/nogon --config #{config} list-files --relative")
+     assert_equal "note.md\n", shell_output("#{bin}/hister --config #{config} list-files --relative")
+   end
+ end
