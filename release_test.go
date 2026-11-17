@@ -571,6 +571,78 @@ func TestReleaseWorkflowRepositoryGuards(t *testing.T) {
 	}
 }
 
+func TestDockerPublishingImages(t *testing.T) {
+	for _, tc := range []struct {
+		provider string
+		workflow string
+		registry string
+		steps    int
+	}{
+		{"github", "docker-publish", "ghcr.io", 3},
+		{"github", "docker-release", "ghcr.io", 3},
+		{"forgejo", "docker-publish", "codeberg.org", 1},
+	} {
+		t.Run(tc.provider+"/"+tc.workflow, func(t *testing.T) {
+			var cfg struct {
+				Env  map[string]string
+				Jobs map[string]struct {
+					Steps []struct {
+						Uses string
+						With map[string]string
+					}
+				}
+			}
+			readReleaseYAML(t, filepath.Join("."+tc.provider, "workflows", tc.workflow+".yml"), &cfg)
+			metadataSteps := 0
+			for _, job := range cfg.Jobs {
+				for _, step := range job.Steps {
+					if !strings.HasPrefix(step.Uses, "docker/metadata-action@") {
+						continue
+					}
+					metadataSteps++
+					for _, owner := range []string{"asciimoo", "another-owner"} {
+						// Resolve the workflow's image inputs for canonical and fork repositories.
+						images := step.With["images"]
+						for name, value := range cfg.Env {
+							images = strings.ReplaceAll(images, "${{ env."+name+" }}", value)
+						}
+						images = strings.NewReplacer(
+							"${{ "+tc.provider+".repository_owner }}", owner,
+							"${{ "+tc.provider+".repository }}", owner+"/nogon",
+						).Replace(images)
+						got := strings.Fields(images)
+						slices.Sort(got)
+						want := []string{tc.registry + "/" + owner + "/hister", tc.registry + "/" + owner + "/nogon"}
+						if !slices.Equal(got, want) {
+							t.Errorf("%s must publish both image names under %s: got %v, want %v", step.With["bake-target"], owner, got, want)
+						}
+					}
+				}
+			}
+			if metadataSteps != tc.steps {
+				t.Errorf("metadata steps = %d, want %d", metadataSteps, tc.steps)
+			}
+		})
+	}
+}
+
+func TestForgejoDockerBuildTargets(t *testing.T) {
+	type variant struct{ Target, Suffix string }
+	var cfg struct {
+		Jobs map[string]struct {
+			Strategy struct {
+				Matrix struct{ Include []variant }
+			}
+		}
+	}
+	readReleaseYAML(t, ".forgejo/workflows/docker-publish.yml", &cfg)
+	got := cfg.Jobs["build-and-push"].Strategy.Matrix.Include
+	want := []variant{{"release", ""}, {"root", "-root"}, {"debug", "-debug"}}
+	if !slices.Equal(got, want) {
+		t.Errorf("each container variant needs its own build target and tag suffix: got %v, want %v", got, want)
+	}
+}
+
 func TestReleaseWorkflowDownloads(t *testing.T) {
 	for _, provider := range []string{".github", ".forgejo"} {
 		t.Run(provider, func(t *testing.T) {

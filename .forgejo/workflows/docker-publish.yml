@@ -7,7 +7,8 @@ on:
 
 env:
   REGISTRY: codeberg.org
-  IMAGE_NAME: ${{ forgejo.repository }} # Auto-uses your GitHub username/org
+  IMAGE_NAME: ${{ forgejo.repository_owner }}/nogon
+  LEGACY_IMAGE_NAME: ${{ forgejo.repository_owner }}/hister
 
 jobs:
   build-and-push:
@@ -16,8 +17,12 @@ jobs:
     strategy:
       matrix:
         include:
-          - target: [release, root, debug]
-            suffix: ['', '-root', '-debug']
+          - target: release
+            suffix: ''
+          - target: root
+            suffix: '-root'
+          - target: debug
+            suffix: '-debug'
     steps:
       - name: Checkout Code
         uses: actions/checkout@v6
@@ -38,7 +43,9 @@ jobs:
         id: meta
         uses: docker/metadata-action@v6
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+            ${{ env.REGISTRY }}/${{ env.LEGACY_IMAGE_NAME }}
           flavor: |
             latest=false
             suffix=${{ matrix.suffix }},onlatest=true
