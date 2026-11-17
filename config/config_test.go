@@ -500,6 +500,99 @@ extractors:
 	}
 }
 
+func TestNogonEnvironmentPrecedence(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		env          [][2]string
+		want, source string
+	}{
+		{"legacy", [][2]string{{"HISTER__APP__TITLE", "Legacy"}}, "Legacy", "HISTER__APP__TITLE"},
+		{"nogon", [][2]string{{"NOGON__APP__TITLE", "New"}}, "New", "NOGON__APP__TITLE"},
+		{"nogon first", [][2]string{{"NOGON__APP__TITLE", "New"}, {"HISTER__APP__TITLE", "Legacy"}}, "New", "NOGON__APP__TITLE"},
+		{"nogon last", [][2]string{{"HISTER__APP__TITLE", "Legacy"}, {"NOGON__APP__TITLE", "New"}}, "New", "NOGON__APP__TITLE"},
+		{"explicit empty", [][2]string{{"NOGON__APP__TITLE", ""}, {"HISTER__APP__TITLE", "Legacy"}}, "", "NOGON__APP__TITLE"},
+		{"older spelling", [][2]string{{"HISTER_APP__TITLE", "Older"}}, "Older", "HISTER_APP__TITLE"},
+		{"older spelling overridden", [][2]string{{"HISTER_APP__TITLE", "Older"}, {"NOGON__APP__TITLE", "New"}}, "New", "NOGON__APP__TITLE"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			t.Setenv("HISTER_DATA_DIR", dir)
+			filename := filepath.Join(dir, "config.yml")
+			if err := os.WriteFile(filename, []byte("app:\n  title: File\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			for _, env := range tc.env {
+				t.Setenv(env[0], env[1])
+			}
+			c, _, err := LoadForInspection(filename, true)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if source := c.Source("app.title"); c.App.Title != tc.want || source.Name != tc.source || !source.Locked {
+				t.Fatalf("title = %q, source = %+v; want %q from %s", c.App.Title, source, tc.want, tc.source)
+			}
+		})
+	}
+}
+
+func TestNogonSpecialEnvironmentPrecedence(t *testing.T) {
+	for _, tc := range []struct {
+		name, port          string
+		empty, flag, socket bool
+	}{
+		{name: "new overrides old", port: "6655"},
+		{name: "empty special values ignored", empty: true},
+		{name: "flags override environment", port: "6655", flag: true},
+		{name: "port ignored for socket", port: "6655", socket: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			t.Setenv("HISTER_DATA_DIR", filepath.Join(dir, "legacy"))
+			t.Setenv("HISTER_PORT", "5544")
+			data := filepath.Join(dir, "nogon")
+			if tc.empty {
+				data = ""
+			}
+			t.Setenv("NOGON_DATA_DIR", data)
+			t.Setenv("NOGON_PORT", tc.port)
+			t.Setenv("NOGON__APP__DIRECTORY", dir)
+			t.Setenv("NOGON__SERVER__ADDRESS", "127.0.0.1:4433")
+			wantDir, wantAddress := data, "127.0.0.1:6655"
+			dirSource, addressSource := "NOGON_DATA_DIR", "NOGON_PORT"
+			if tc.empty {
+				wantDir, wantAddress = dir, "127.0.0.1:4433"
+				dirSource, addressSource = "NOGON__APP__DIRECTORY", "NOGON__SERVER__ADDRESS"
+			}
+			if tc.socket {
+				wantAddress = "unix:" + filepath.Join(dir, "server.sock")
+				addressSource = "NOGON__SERVER__ADDRESS"
+				t.Setenv("NOGON__SERVER__ADDRESS", wantAddress)
+				t.Setenv("NOGON__SERVER__BASE_URL", "http://localhost")
+			}
+			var overrides []Override
+			if tc.flag {
+				wantDir, wantAddress = filepath.Join(dir, "flag"), "127.0.0.1:7788"
+				dirSource, addressSource = "--directory", "--address"
+				overrides = []Override{
+					{Path: "app.directory", Value: wantDir, Source: ValueSource{Kind: "flag", Name: dirSource}},
+					{Path: "server.address", Value: wantAddress, Source: ValueSource{Kind: "flag", Name: addressSource}},
+				}
+			}
+			filename := filepath.Join(dir, "config.yml")
+			if err := os.WriteFile(filename, []byte("# defaults\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			c, _, err := LoadForInspection(filename, true, overrides...)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if c.App.Directory != wantDir || c.Server.Address != wantAddress || c.Source("app.directory").Name != dirSource || c.Source("server.address").Name != addressSource {
+				t.Fatalf("directory = %q (%+v), address = %q (%+v)", c.App.Directory, c.Source("app.directory"), c.Server.Address, c.Source("server.address"))
+			}
+		})
+	}
+}
+
 func TestConfigurationSourcesEnvironmentAndNormalization(t *testing.T) {
 	dir := t.TempDir()
 	filename := filepath.Join(dir, "config.yml")

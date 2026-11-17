@@ -766,7 +766,7 @@ func loadInputs(rawConfig []byte, name string) (*configInputs, error) {
 			}
 		}
 	}
-	// HISTER__ bindings have higher precedence, including explicit empty values.
+	// Double underscore bindings have higher precedence, including empty values.
 	if err := bindEnvironment(inputs); err != nil {
 		return nil, err
 	}
@@ -775,24 +775,29 @@ func loadInputs(rawConfig []byte, name string) (*configInputs, error) {
 }
 
 func bindEnvironment(inputs *configInputs) error {
-	for _, env := range os.Environ() {
-		if !strings.HasPrefix(env, "HISTER__") {
-			continue
+	environment := os.Environ()
+	slices.Sort(environment)
+	// Apply Nogon last, independently of the process environment's order.
+	for _, prefix := range []string{"HISTER__", "NOGON__"} {
+		for _, env := range environment {
+			if !strings.HasPrefix(env, prefix) {
+				continue
+			}
+			name, value, ok := strings.Cut(env, "=")
+			if !ok {
+				continue
+			}
+			key := strings.TrimPrefix(name, prefix)
+			normalizedKey := strings.ToLower(strings.ReplaceAll(key, "__", "."))
+			var val any = value
+			if isUntypedOptionKey(normalizedKey) {
+				val = parseEnvValue(value)
+			}
+			if err := inputs.apply(Override{Path: normalizedKey, Value: val, Source: ValueSource{Kind: "environment", Name: name}}); err != nil {
+				return err
+			}
+			log.Debug().Str("env", name).Str("key", normalizedKey).Msg("Loaded configuration from environment variable")
 		}
-		parts := strings.SplitN(env, "=", 2)
-		if len(parts) != 2 {
-			continue
-		}
-		key := strings.TrimPrefix(parts[0], "HISTER__")
-		normalizedKey := strings.ToLower(strings.ReplaceAll(key, "__", "."))
-		var val any = parts[1]
-		if isUntypedOptionKey(normalizedKey) {
-			val = parseEnvValue(parts[1])
-		}
-		if err := inputs.apply(Override{Path: normalizedKey, Value: val, Source: ValueSource{Kind: "environment", Name: parts[0]}}); err != nil {
-			return err
-		}
-		log.Debug().Str("env", parts[0]).Str("key", normalizedKey).Msg("Loaded configuration from environment variable")
 	}
 	return nil
 }
@@ -959,18 +964,30 @@ func (c *Config) validateBasic() error {
 	return nil
 }
 
+// specialEnvironment selects a spelling by presence before interpreting its
+// value. An empty Nogon value suppresses the corresponding legacy override.
+func specialEnvironment(suffix string) (value, name string) {
+	for _, prefix := range []string{"NOGON_", "HISTER_"} {
+		name := prefix + suffix
+		if value, ok := os.LookupEnv(name); ok {
+			return value, name
+		}
+	}
+	return "", ""
+}
+
 func (c *Config) environmentOverrides() []Override {
 	var overrides []Override
-	if dataDir := os.Getenv("HISTER_DATA_DIR"); dataDir != "" {
-		overrides = append(overrides, Override{Path: "app.directory", Value: dataDir, Source: ValueSource{Kind: "environment", Name: "HISTER_DATA_DIR"}})
+	if dataDir, name := specialEnvironment("DATA_DIR"); dataDir != "" {
+		overrides = append(overrides, Override{Path: "app.directory", Value: dataDir, Source: ValueSource{Kind: "environment", Name: name}})
 	}
 
-	if envPort := os.Getenv("HISTER_PORT"); envPort != "" && !strings.HasPrefix(c.Server.Address, "unix:") {
+	if envPort, name := specialEnvironment("PORT"); envPort != "" && !strings.HasPrefix(c.Server.Address, "unix:") {
 		host, _, err := net.SplitHostPort(c.Server.Address)
 		if err != nil {
 			host = c.Server.Address
 		}
-		overrides = append(overrides, Override{Path: "server.address", Value: net.JoinHostPort(host, envPort), Source: ValueSource{Kind: "environment", Name: "HISTER_PORT"}})
+		overrides = append(overrides, Override{Path: "server.address", Value: net.JoinHostPort(host, envPort), Source: ValueSource{Kind: "environment", Name: name}})
 	}
 	return overrides
 }

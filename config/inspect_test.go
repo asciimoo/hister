@@ -1684,6 +1684,63 @@ func TestValidationRejectsIndividuallyInvalidSensitivePatterns(t *testing.T) {
 	}
 }
 
+func TestNogonEnvironmentInspection(t *testing.T) {
+	dir := t.TempDir()
+	filename := filepath.Join(dir, "config.yml")
+	if err := os.WriteFile(filename, []byte("# defaults\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for key, value := range map[string]string{
+		"NOGON_DATA_DIR":                                 filepath.Join(dir, "data"),
+		"NOGON__APP__ACCESS_TOKEN":                       "private-token",
+		"NOGON__APP__SHOW_SUGGESTIONS":                   "false",
+		"NOGON__CRAWLER__DELAY":                          "0",
+		"NOGON__CRAWLER__BACKEND":                        "chromedp",
+		"HISTER__EXTRACTORS__YTDLP__OPTIONS__TIMEOUT":    "10",
+		"NOGON__EXTRACTORS__ytdlp__OPTIONS__TIMEOUT":     "20",
+		"NOGON__EXTRACTORS__YTDLP__ENABLE":               "false",
+		"HISTER__CRAWLER__HEADERS__AUTHORIZATION":        "legacy-credential",
+		"NOGON__CRAWLER__HEADERS__Authorization":         "new-credential",
+		"NOGON__CRAWLER__BACKEND_OPTIONS__CAPTURE_DELAY": "0.25",
+	} {
+		t.Setenv(key, value)
+	}
+	c, _, err := LoadForInspection(filename, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if c.Crawler.Delay != 0 || c.App.ShowSuggestions || c.Extractors["ytdlp"].Enabled(true) || c.Extractors["ytdlp"].Options["timeout"] != 20 || c.Crawler.BackendOptions["capture_delay"] != 0.25 {
+		t.Fatal("Nogon environment values were not decoded into their expected types")
+	}
+	if c.Crawler.Headers["authorization"] != "new-credential" || c.Source("crawler.headers").Name != "NOGON__CRAWLER__HEADERS__Authorization" {
+		t.Fatal("Nogon did not override the legacy mixed case dictionary key")
+	}
+	redacted, err := c.Redacted()
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(redacted)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, secret := range []string{"private-token", "legacy-credential", "new-credential"} {
+		if strings.Contains(string(raw), secret) {
+			t.Fatalf("inspection exposed %q", secret)
+		}
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("inspection created runtime files: %v, %v", entries, err)
+	}
+	t.Setenv("NOGON__APP__USER_HANDLIG", "true")
+	if _, _, err := LoadForInspection(filename, true); err == nil || !strings.Contains(err.Error(), "app.user_handlig") {
+		t.Fatalf("unknown Nogon environment setting was accepted: %v", err)
+	}
+}
+
 func TestInspectionUsesEnvironmentWithoutCreatingRuntimeFiles(t *testing.T) {
 	dir := t.TempDir()
 	filename := filepath.Join(dir, "config.yml")

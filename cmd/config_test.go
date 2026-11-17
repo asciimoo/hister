@@ -17,6 +17,54 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+func TestNogonConfigSelection(t *testing.T) {
+	for _, command := range []string{"path", "show", "validate"} {
+		for _, selection := range []string{"nogon", "missing", "invalid", "empty", "flag"} {
+			t.Run(command+"/"+selection, func(t *testing.T) {
+				dir := t.TempDir()
+				legacy := filepath.Join(dir, "legacy.yml")
+				current := filepath.Join(dir, "nogon.yml")
+				for _, filename := range []string{legacy, current} {
+					content := fmt.Sprintf("app:\n  title: %q\n", filepath.Base(filename))
+					if err := os.WriteFile(filename, []byte(content), 0o600); err != nil {
+						t.Fatal(err)
+					}
+				}
+				t.Setenv("HISTER_CONFIG", legacy)
+				t.Setenv("NOGON_DATA_DIR", filepath.Join(dir, "data"))
+				switch selection {
+				case "missing":
+					current = filepath.Join(dir, "missing.yml")
+				case "invalid":
+					if err := os.WriteFile(current, []byte("["), 0o600); err != nil {
+						t.Fatal(err)
+					}
+				case "empty":
+					current = ""
+				}
+				t.Setenv("NOGON_CONFIG", current)
+				args := []string{"config", command}
+				if selection == "flag" {
+					args = append(args, "--config", legacy)
+					current = legacy
+				}
+				out, err := executeInspection(t, args...)
+				wantError := selection == "missing" || selection == "empty" || (selection == "invalid" && command != "path")
+				if (err != nil) != wantError {
+					t.Fatalf("error = %v, want error %v; output = %q", err, wantError, out)
+				}
+				if !wantError && !strings.Contains(out, filepath.Base(current)) {
+					t.Fatalf("output did not select %q: %s", current, out)
+				}
+				entries, err := os.ReadDir(dir)
+				if err != nil || len(entries) != 2 {
+					t.Fatalf("inspection created runtime files: %v, %v", entries, err)
+				}
+			})
+		}
+	}
+}
+
 func TestConfigFlagsCaptureRegisteredPathsGenerically(t *testing.T) {
 	flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
 	flags.String("heading", "", "")

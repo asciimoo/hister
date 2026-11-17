@@ -126,6 +126,9 @@ func inspectionConfigSource() (string, bool) {
 	if rootCmd.PersistentFlags().Changed("config") {
 		return cfgFile, true
 	}
+	if name, ok := os.LookupEnv("NOGON_CONFIG"); ok {
+		return name, true
+	}
 	if name := os.Getenv("HISTER_CONFIG"); name != "" {
 		return name, true
 	}

@@ -666,10 +666,12 @@ Use **Settings** in the web interface to configure Hister, or manage selected se
 file. A main configuration file is optional. Hister selects a primary config path using this precedence:
 
 1. The path supplied with `--config`.
-2. The path in `HISTER_CONFIG`, when `--config` is not supplied.
+2. The path in `NOGON_CONFIG`, or `HISTER_CONFIG` when `NOGON_CONFIG` is unset.
 3. `./config.yml` in the current working directory.
 
-If the selected primary path does not exist, Hister searches the platform paths below and uses the first config file it finds.
+An explicit path from `--config` or an environment variable must exist. An empty
+`NOGON_CONFIG` is an error. Without an explicit selection, Hister searches
+`./config.yml`, then the platform paths below, and uses the first file it finds.
 
 ## Default Config Locations
 
@@ -700,7 +702,7 @@ If you have a legacy `~/.histerrc` file and Hister finds it, you'll see a deprec
 For each setting, the highest priority source wins:
 
 1. Explicit startup flags.
-2. Environment variables, including `HISTER_DATA_DIR` and `HISTER_PORT`.
+2. Environment variables, including `NOGON_DATA_DIR` and `NOGON_PORT` and their Hister equivalents.
 3. Explicit values in the main configuration file.
 4. Saved web selections in `<app.directory>/config.web.yml`.
 5. Built in defaults for the installed version.
@@ -971,26 +973,36 @@ hister reload --server-url http://127.0.0.1:4433 --token CURRENT_TOKEN
 
 ## Environment Variables
 
-You can override configuration values using environment variables. The naming convention is:
+You can override configuration values using the Nogon naming convention:
 
 ```textplain
-HISTER__<SECTION>__<KEY>=value
+NOGON__<SECTION>__<KEY>=value
 ```
 
 For example:
 
-- `HISTER__APP__LOG_LEVEL=debug` overrides `app.log_level`
-- `HISTER__APP__LOG_FORMAT=json` overrides `app.log_format`
-- `HISTER__APP__LOG_FILE=/var/log/hister.log` overrides `app.log_file`
-- `HISTER__SERVER__ADDRESS=0.0.0.0:8080` overrides `server.address`
+- `NOGON__APP__LOG_LEVEL=debug` overrides `app.log_level`
+- `NOGON__APP__LOG_FORMAT=json` overrides `app.log_format`
+- `NOGON__APP__LOG_FILE=/var/log/nogon.log` overrides `app.log_file`
+- `NOGON__SERVER__ADDRESS=0.0.0.0:8080` overrides `server.address`
+
+Existing `HISTER__*` variables still work. If both spellings set the same setting,
+the Nogon spelling wins, including explicit empty values where supported.
+The older `HISTER_<SECTION>__<KEY>` spelling remains supported for keys present
+in the main file, with lower priority than either double underscore prefix.
 
 Three special purpose variables are also supported:
 
-| Variable          | Description                                                                                   |
-| ----------------- | --------------------------------------------------------------------------------------------- |
-| `HISTER_CONFIG`   | Select a config file when `--config` is not supplied                                          |
-| `HISTER_PORT`     | Override the TCP port while keeping the host from `server.address`. Ignored for Unix sockets. |
-| `HISTER_DATA_DIR` | Override `app.directory`                                                                      |
+| Variable         | Legacy spelling   | Description                                                                                   |
+| ---------------- | ----------------- | --------------------------------------------------------------------------------------------- |
+| `NOGON_CONFIG`   | `HISTER_CONFIG`   | Select a config file when `--config` is not supplied.                                         |
+| `NOGON_PORT`     | `HISTER_PORT`     | Override the TCP port while keeping the host from `server.address`. Ignored for Unix sockets. |
+| `NOGON_DATA_DIR` | `HISTER_DATA_DIR` | Override `app.directory`.                                                                     |
+
+For these variables, a present Nogon spelling suppresses its legacy equivalent.
+Empty `NOGON_PORT` and `NOGON_DATA_DIR` values leave the underlying setting in
+effect. Nonempty values override ordinary environment settings; explicit flags
+still take precedence. Existing configuration and data locations remain unchanged.
 
 ## Full Configuration
 

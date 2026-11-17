@@ -12,6 +12,62 @@ import (
 	"testing"
 )
 
+func TestNogonEnvironmentReloadPreservesManagedSettings(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	t.Setenv("LOCALAPPDATA", dir)
+	t.Setenv("NOGON_DATA_DIR", dir)
+	t.Setenv("NOGON_PORT", "6655")
+	const managed = "app:\n  title: Saved title\n  subtitle: Saved subtitle\n"
+	managedPath := filepath.Join(dir, "config.web.yml")
+	if err := os.WriteFile(managedPath, []byte(managed), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HISTER__APP__TITLE", "Legacy environment")
+	t.Setenv("NOGON__APP__TITLE", "Nogon environment")
+	c, err := Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.App.Title != "Nogon environment" || c.App.Subtitle != "Saved subtitle" || c.Server.Address != "127.0.0.1:6655" {
+		t.Fatalf("startup lost environment or managed settings: %+v", c.App)
+	}
+	if source := c.Source("app.title"); source.Name != "NOGON__APP__TITLE" || !source.Locked || !source.WebSelected {
+		t.Fatalf("incorrect startup source: %+v", source)
+	}
+	if !c.SourcesUnchanged() {
+		t.Fatal("unchanged environment immediately invalidated loaded settings")
+	}
+	t.Setenv("NOGON__APP__TITLE", "")
+	t.Setenv("NOGON_PORT", "7788")
+	if c.SourcesUnchanged() {
+		t.Fatal("changed Nogon environment did not invalidate loaded settings")
+	}
+	pending, err := c.PendingConfiguration()
+	if err != nil || pending == nil || pending.App.Title != "" || pending.Server.Address != "127.0.0.1:7788" {
+		t.Fatalf("pending configuration ignored Nogon environment: %+v, %v", pending, err)
+	}
+	next, err := c.Reload()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if next.App.Title != "" || next.App.Subtitle != "Saved subtitle" || next.Server.Address != "127.0.0.1:7788" {
+		t.Fatal("reload lost empty environment selection or managed settings")
+	}
+	if next.Source("app.title").Name != "NOGON__APP__TITLE" || next.Source("server.address").Name != "NOGON_PORT" {
+		t.Fatal("reload lost environment source names")
+	}
+	if c.App.Title != "Nogon environment" || c.Server.Address != "127.0.0.1:6655" {
+		t.Fatal("reload mutated the active configuration")
+	}
+	if !bytes.Equal(next.secretKey, c.secretKey) || next.Rules == nil {
+		t.Fatal("reload lost runtime state")
+	}
+	if raw, err := os.ReadFile(managedPath); err != nil || string(raw) != managed {
+		t.Fatalf("environment overrides rewrote managed settings: %q, %v", raw, err)
+	}
+}
+
 func TestManagedPersistenceRoundTrip(t *testing.T) {
 	for _, existing := range []bool{false, true} {
 		for _, longPath := range []bool{false, true} {
