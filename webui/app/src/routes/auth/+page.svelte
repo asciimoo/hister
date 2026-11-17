@@ -112,7 +112,7 @@
 </script>
 
 <svelte:head>
-  <title>Authentication - Hister</title>
+  <title>Authentication - Nogon</title>
 </svelte:head>
 
 <div class="bg-brutal-bg h-full overflow-y-auto">

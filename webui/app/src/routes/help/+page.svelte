@@ -116,10 +116,10 @@
 </script>
 
 <svelte:head>
-  <title>Hister · Help</title>
+  <title>Nogon · Help</title>
   <meta
     name="description"
-    content="Search syntax, field filters, date ranges, keyboard shortcuts, and troubleshooting for the Hister web interface."
+    content="Search syntax, field filters, date ranges, keyboard shortcuts, and troubleshooting for the Nogon web interface."
   />
 </svelte:head>
 
@@ -173,7 +173,7 @@
         </h1>
         <p class="text-text-brand-secondary mt-4 max-w-xl text-base leading-relaxed">
           Search syntax, keyboard shortcuts, and common tasks in the web interface. Searches run
-          against documents indexed by this Hister server.
+          against documents indexed by this Nogon server.
         </p>
         <div class="mt-6 flex flex-wrap items-center gap-4">
           <Button
@@ -186,7 +186,7 @@
         </div>
         <p class="text-text-brand-secondary mt-5 text-sm">
           For setup and indexing instructions, see <a class="text-link" href={resolve('/about')}
-            >About Hister</a
+            >About Nogon</a
           >.
         </p>
       </div>
@@ -422,7 +422,7 @@
             Remove filters and try a single keyword. Search for <a
               class="query-link"
               href={`${resolve('/')}?q=*`}><code>*</code></a
-            > to check which documents are available. Hister searches its index, not the live web.
+            > to check which documents are available. Nogon searches its index, not the live web.
           </p>
           <div class="mt-4">
             {@render docLink('query-language#troubleshooting-queries', 'Search troubleshooting')}

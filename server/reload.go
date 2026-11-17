@@ -226,7 +226,7 @@ func checkConfigurationReviewAdministrator(candidate *config.Config) error {
 		return errors.New("cannot verify administrator availability; check database access before reviewing this change")
 	}
 	if warning != "" {
-		return errors.New("a usable administrator is required, including an independent local administrator when OIDC manages roles; stop the server and use hister user create --offline --admin USERNAME to create a recovery administrator")
+		return errors.New("a usable administrator is required, including an independent local administrator when OIDC manages roles; stop the server and use nogon user create --offline --admin USERNAME to create a recovery administrator")
 	}
 	return nil
 }

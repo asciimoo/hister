@@ -1068,7 +1068,7 @@ func serveHistory(c *webContext) {
 					PubDate: time.Unix(d.Added, 0).UTC().Format(time.RFC1123Z),
 				})
 			}
-			serveRSS(c, "Hister - visited pages", c.Config.BaseURL("/"), rssItems)
+			serveRSS(c, "Nogon - visited pages", c.Config.BaseURL("/"), rssItems)
 			return
 		}
 		c.JSON(&openedResponse{Documents: docs, LastID: nextLastID, LastUpdatedAt: nextLastUpdatedAt})
@@ -1092,7 +1092,7 @@ func serveHistory(c *webContext) {
 				})
 			}
 		}
-		serveRSS(c, "Hister - indexed pages", c.Config.BaseURL("/"), rssItems)
+		serveRSS(c, "Nogon - indexed pages", c.Config.BaseURL("/"), rssItems)
 		return
 	}
 	c.JSON(ds)
@@ -1808,8 +1808,8 @@ func serveOpensearch(c *webContext) {
 	baseURL := strings.TrimSuffix(c.Config.BaseURL("/"), "/")
 	xml := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <OpenSearchDescription xmlns="http://a9.com/-/spec/opensearch/1.1/">
-  <ShortName>Hister</ShortName>
-  <Description>Search your history with Hister</Description>
+  <ShortName>Nogon</ShortName>
+  <Description>Search your history with Nogon</Description>
   <Url type="text/html" template="%s/?q={searchTerms}"/>
   <Url type="application/x-suggestions+json" template="%s/suggest?q={searchTerms}"/>
 </OpenSearchDescription>`, baseURL, baseURL)

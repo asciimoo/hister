@@ -23,7 +23,7 @@
 </script>
 
 <svelte:head>
-  <title>Hister - Extractors</title>
+  <title>Nogon - Extractors</title>
 </svelte:head>
 
 {#snippet capabilityBadge(enabled: boolean, label: string, colorClass: string)}

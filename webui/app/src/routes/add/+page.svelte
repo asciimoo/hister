@@ -110,7 +110,7 @@
 </script>
 
 <svelte:head>
-  <title>Hister - Add</title>
+  <title>Nogon - Add</title>
 </svelte:head>
 
 <div class="min-h-0 flex-1 overflow-y-auto">

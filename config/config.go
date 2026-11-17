@@ -142,7 +142,7 @@ func (s Server) validateMaxBatchBodySize() error {
 func (s Server) ListenEndpoint() (network, address string, err error) {
 	if address, ok := strings.CutPrefix(s.Address, "unix:"); ok {
 		if !filepath.IsAbs(address) || strings.ContainsRune(address, '\x00') {
-			return "", "", errors.New("server.address: Unix sockets require an absolute path, such as unix:/run/hister/hister.sock")
+			return "", "", errors.New("server.address: Unix sockets require an absolute path, such as unix:/run/nogon/nogon.sock")
 		}
 		return "unix", address, nil
 	}
@@ -908,7 +908,7 @@ func CreateDefaultConfig() *Config {
 		App: App{
 			SearchURL:              "https://google.com/search?q={query}",
 			Directory:              getDefaultDataDir(),
-			Title:                  "Hister",
+			Title:                  "Nogon",
 			Subtitle:               "Your own search engine",
 			ColorScheme:            "automatic",
 			SnippetLength:          300,

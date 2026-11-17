@@ -59,7 +59,7 @@
     },
     {
       title: 'MCP integration',
-      description: "Connect AI assistants to Hister's search, preview, and history tools.",
+      description: "Connect AI assistants to Nogon's search, preview, and history tools.",
       path: 'mcp',
       icon: Waypoints,
     },
@@ -87,10 +87,10 @@
 </script>
 
 <svelte:head>
-  <title>Hister · About</title>
+  <title>Nogon · About</title>
   <meta
     name="description"
-    content="Hister setup, indexing methods, search syntax, and links to configuration and usage documentation."
+    content="Nogon setup, indexing methods, search syntax, and links to configuration and usage documentation."
   />
 </svelte:head>
 
@@ -116,11 +116,11 @@
           id="about-title"
           class="font-outfit text-4xl leading-tight font-bold tracking-tight sm:text-5xl"
         >
-          About Hister
+          About Nogon
         </h1>
         <p class="text-text-brand-secondary mt-5 max-w-xl text-base leading-relaxed">
-          Hister indexes web pages and files for full text search. It runs locally or on a server
-          you manage, with a web interface and a command line client.
+          Nogon indexes web pages and files for full text search. It runs locally or on a server you
+          manage, with a web interface and a command line client.
         </p>
         <div class="mt-7 flex flex-wrap items-center gap-4">
           <Button
@@ -133,7 +133,7 @@
         </div>
         <p class="text-text-brand-secondary mt-6 flex items-center gap-2 text-xs leading-relaxed">
           <Database class="text-hister-teal size-4 shrink-0" aria-hidden="true" />
-          Indexed content is stored on the Hister server.
+          Indexed content is stored on the Nogon server.
         </p>
       </div>
 
@@ -196,7 +196,7 @@
           <span class="step-number" aria-hidden="true">01</span>
           <h3 class="card-title">Connect the browser extension</h3>
           <p class="card-copy">
-            Install the extension to save pages as you browse. In its settings, enter your Hister
+            Install the extension to save pages as you browse. In its settings, enter your Nogon
             server URL and access token if required.
           </p>
           <div class="mt-4 flex flex-wrap gap-x-4 gap-y-2">
@@ -208,7 +208,7 @@
             {/each}
           </div>
           <p class="card-copy mt-4">
-            The Hister server must be running for the extension to submit pages.
+            The Nogon server must be running for the extension to submit pages.
           </p>
           <div class="mt-auto pt-5">{@render docLink('browser-extension', 'Extension setup')}</div>
         </li>
@@ -366,7 +366,7 @@
       <div class="max-w-md">
         <h2 class="font-outfit text-xl font-bold">Project and license</h2>
         <p class="text-text-brand-secondary mt-2 text-sm leading-relaxed">
-          Hister is free software built with Go and Bleve, licensed under AGPLv3 or any later
+          Nogon is free software built with Go and Bleve, licensed under AGPLv3 or any later
           version. Source code and issue tracking are linked here.
         </p>
       </div>

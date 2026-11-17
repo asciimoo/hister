@@ -162,7 +162,7 @@
     Confirm working access
   </h3>
   <p class="text-sm">
-    These settings are temporary until you confirm that you can still administer Hister.
+    These settings are temporary until you confirm that you can still administer Nogon.
   </p>
   {#if confirmationToken}
     <p class="text-sm">

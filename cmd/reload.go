@@ -12,7 +12,7 @@ import (
 var reloadCmd = &cobra.Command{
 	Use:              "reload",
 	Short:            "Reload the running server's configuration and rules",
-	Long:             "Apply updated settings to the running server, including rules and logging. You can also reload after rotating a log file. Expect a brief interruption and refresh open Hister web pages afterwards. Requires an admin token in multi user mode.",
+	Long:             "Apply updated settings to the running server, including rules and logging. You can also reload after rotating a log file. Expect a brief interruption and refresh open Nogon web pages afterwards. Requires an admin token in multi user mode.",
 	Args:             cobra.NoArgs,
 	PersistentPreRun: skipRuntimeInitialization,
 	RunE: func(cmd *cobra.Command, _ []string) error {

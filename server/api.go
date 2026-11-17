@@ -121,7 +121,7 @@ func init() {
 			NoAuth:       true,
 			Public:       true,
 			Handler:      serveConfig,
-			Description:  "Return public configuration, search capabilities, authentication mode, CSRF state, and canConfigure for settings navigation. Includes the running Hister version in the version field only when server.expose_version is enabled.",
+			Description:  "Return public configuration, search capabilities, authentication mode, CSRF state, and canConfigure for settings navigation. Includes the running Nogon version in the version field only when server.expose_version is enabled.",
 		},
 		{
 			Name:        "Settings",

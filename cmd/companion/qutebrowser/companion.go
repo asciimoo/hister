@@ -541,9 +541,9 @@ func (m *monitor) handleExtractionResult(result extractionResult) {
 	case result.unchanged:
 		log.Debug().Str("url", result.url).Msg("Browser page content is unchanged")
 	case result.statusCode == http.StatusNotAcceptable:
-		log.Info().Str("url", result.url).Msg("Hister skip rules rejected browser page")
+		log.Info().Str("url", result.url).Msg("Nogon skip rules rejected browser page")
 	case result.statusCode == http.StatusUnprocessableEntity:
-		log.Info().Str("url", result.url).Msg("Hister sensitive content checks rejected browser page")
+		log.Info().Str("url", result.url).Msg("Nogon sensitive content checks rejected browser page")
 	default:
 		log.Info().Str("url", result.url).Msg("Indexed browser page")
 	}

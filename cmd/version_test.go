@@ -55,19 +55,19 @@ func TestCheckUpdateCommand(t *testing.T) {
 			name:           "update available",
 			currentVersion: "v0.17.0 (abcdef0)",
 			latestVersion:  "v0.18.0",
-			want:           []string{"A new Hister version is available: v0.18.0", "Current version: v0.17.0 (abcdef0)", "Release: https://example.com/v0.18.0"},
+			want:           []string{"A new Nogon version is available: v0.18.0", "Current version: v0.17.0 (abcdef0)", "Release: https://example.com/v0.18.0"},
 		},
 		{
 			name:           "up to date",
 			currentVersion: "v0.18.0",
 			latestVersion:  "v0.18.0",
-			want:           []string{"Hister v0.18.0 is up to date."},
+			want:           []string{"Nogon v0.18.0 is up to date."},
 		},
 		{
 			name:           "development version",
 			currentVersion: "v0.19.0",
 			latestVersion:  "v0.18.0",
-			want:           []string{"Hister v0.19.0 is newer than the latest release v0.18.0."},
+			want:           []string{"Nogon v0.19.0 is newer than the latest release v0.18.0."},
 		},
 	}
 	for _, test := range tests {

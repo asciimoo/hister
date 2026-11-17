@@ -45,7 +45,7 @@ import (
 
 var Version = 8
 
-// Indexer owns the search indexes and related document storage for one Hister
+// Indexer owns the search indexes and related document storage for one Nogon
 // data directory.
 type Indexer struct {
 	indexState
@@ -528,7 +528,7 @@ func openIndexState(basePath string, opts indexOptions, embeddingFingerprint str
 	idx, err := bleve.OpenUsing(idxPath, bleveRuntimeConfig())
 	if err != nil {
 		if err.Error() == "timeout" {
-			return nil, errors.New("cannot open index: index is already opened - close other Hister instances and try again")
+			return nil, errors.New("cannot open index: index is already opened - close other Nogon instances and try again")
 		}
 		mapping := createMapping("default", keepStopwords)
 		idx, err = bleve.NewUsing(idxPath, mapping, bleve.Config.DefaultIndexType, bleve.Config.DefaultMemKVStore, bleveRuntimeConfig())

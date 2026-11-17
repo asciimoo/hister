@@ -69,7 +69,7 @@ type indexMetadataReader interface {
 func Index(c *config.Config, idx indexMetadataReader) []types.DiagnosticCheck {
 	version, analyzer, err := idx.GetMetadata()
 	if err != nil {
-		return []types.DiagnosticCheck{{Name: "index.metadata", Status: "error", Message: "Cannot read consistent index metadata; inspect server logs and rebuild with hister reindex"}}
+		return []types.DiagnosticCheck{{Name: "index.metadata", Status: "error", Message: "Cannot read consistent index metadata; inspect server logs and rebuild with nogon reindex"}}
 	}
 	checks := []types.DiagnosticCheck{
 		{Name: "index.version", Status: "ok", Message: fmt.Sprintf("Index version %d matches the server", version)},
@@ -77,18 +77,18 @@ func Index(c *config.Config, idx indexMetadataReader) []types.DiagnosticCheck {
 	}
 	if version != indexer.Version {
 		checks[0].Status = "error"
-		checks[0].Message = fmt.Sprintf("Index version %d differs from server version %d; run hister reindex", version, indexer.Version)
+		checks[0].Message = fmt.Sprintf("Index version %d differs from server version %d; run nogon reindex", version, indexer.Version)
 	}
 	if analyzer != indexer.AnalyzerFingerprint(c.Indexer.DetectLanguages, c.Indexer.KeepStopwords) {
 		checks[1].Status = "error"
-		checks[1].Message = "Analyzer settings differ or metadata is missing; run hister reindex"
+		checks[1].Message = "Analyzer settings differ or metadata is missing; run nogon reindex"
 	}
 	if c.SemanticSearch.Enable {
 		check := types.DiagnosticCheck{Name: "index.embeddings", Status: "ok", Message: "Embedding settings match the stored index"}
 		fingerprint, err := idx.GetEmbeddingFingerprint()
 		if err != nil || fingerprint != c.SemanticSearch.EmbeddingFingerprint() {
 			check.Status = "error"
-			check.Message = "Embedding settings differ or metadata is missing; run hister reindex"
+			check.Message = "Embedding settings differ or metadata is missing; run nogon reindex"
 		}
 		checks = append(checks, check)
 	}

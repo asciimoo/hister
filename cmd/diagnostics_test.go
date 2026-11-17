@@ -95,7 +95,7 @@ func TestDoctorReportsFailuresAndClosesJSON(t *testing.T) {
 		{"old server", true, false, 200, "", "Server does not support diagnostics", 0},
 		{"index mismatch", true, true, 200, `[{"name":"index.analyzer","status":"error","message":"Run hister reindex"}]`, "Run hister reindex", 1},
 		{"admin required", true, true, 403, "private-credential", "admin token", 1},
-		{"bad server response", true, true, 200, "private-credential", "Cannot read a Hister response", 1},
+		{"bad server response", true, true, 200, "private-credential", "Cannot read a Nogon response", 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

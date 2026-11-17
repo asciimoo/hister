@@ -124,7 +124,7 @@
 </script>
 
 <svelte:head>
-  <title>Hister - API</title>
+  <title>Nogon - API</title>
 </svelte:head>
 
 <div class="mx-auto flex h-full max-w-[90em] flex-col overflow-hidden md:flex-row">
@@ -175,7 +175,7 @@
       <div class="space-y-1 pt-4 md:mb-5 md:pt-0">
         <PageHeader color="hister-teal" size="sm">API Documentation</PageHeader>
         <p class="font-inter text-text-brand-secondary pb-2 text-xs md:pb-0 md:text-sm">
-          Available HTTP endpoints for integrating with Hister
+          Available HTTP endpoints for integrating with Nogon
         </p>
       </div>
 

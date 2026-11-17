@@ -250,7 +250,7 @@
     } catch {
       requireRefresh();
       message = '';
-      problem = `${result} Reopen Hister at ${outcome === 'confirmed' ? 'the confirmed' : 'the original'} address and sign in to read the active settings.`;
+      problem = `${result} Reopen Nogon at ${outcome === 'confirmed' ? 'the confirmed' : 'the original'} address and sign in to read the active settings.`;
     } finally {
       finish();
     }
@@ -326,7 +326,7 @@
       if (denied) return;
       if (reloaded) {
         problem =
-          'Configuration was reloaded, but active settings could not be refreshed. Refresh settings before saving. If the server address or sign-in settings changed, reopen Hister using the new connection settings.';
+          'Configuration was reloaded, but active settings could not be refreshed. Refresh settings before saving. If the server address or sign-in settings changed, reopen Nogon using the new connection settings.';
       } else {
         if (!(error instanceof SettingsError)) {
           problem =
@@ -340,7 +340,7 @@
             handleError(readError);
           else
             problem +=
-              ' Active settings could not be read. If the server address or sign-in settings changed, reopen Hister using the new connection settings.';
+              ' Active settings could not be read. If the server address or sign-in settings changed, reopen Nogon using the new connection settings.';
         }
       }
     } finally {
@@ -603,7 +603,7 @@
   }
 </script>
 
-<svelte:head><title>Settings | Hister</title></svelte:head>
+<svelte:head><title>Settings | Nogon</title></svelte:head>
 <svelte:window onbeforeunload={beforeUnload} />
 
 <div class="bg-page-bg text-text-brand flex min-h-0 flex-1 flex-col">
@@ -743,7 +743,7 @@
                       <p>
                         {settings.pending.status === 'unreadable'
                           ? 'The configuration file cannot be read.'
-                          : 'The configuration file contains invalid settings.'} Hister is still using
+                          : 'The configuration file contains invalid settings.'} Nogon is still using
                         the previously loaded settings. Fix the file, then refresh settings.
                       </p>
                     {/if}
@@ -759,7 +759,7 @@
                 {#if category === 'semantic_search'}
                   <p class="text-text-brand-muted text-sm">
                     Saving does not start reindexing or test the embedding endpoint. Run <code
-                      >hister reindex</code
+                      >nogon reindex</code
                     > to rebuild existing embeddings when needed. Ranking and query settings apply without
                     reindexing.
                   </p>

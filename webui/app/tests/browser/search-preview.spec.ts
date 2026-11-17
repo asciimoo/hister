@@ -877,7 +877,7 @@ test('connection failures remain visible and retry restores search without routi
   disconnected = true;
   socket!.close();
   const notice = page.getByRole('alert');
-  await expect(notice).toContainText('Cannot connect to Hister');
+  await expect(notice).toContainText('Cannot connect to Nogon');
   await expect(notice).toContainText('Showing the last loaded results');
   await expect(page.locator('[data-result]')).toHaveCount(1);
   disconnected = false;
@@ -1514,3 +1514,19 @@ test('a delayed preview failure does not replace a newly selected document', asy
   await expect(page.getByRole('alert')).toHaveCount(0);
   await expect(page.getByText('Saved article content', { exact: true })).toBeVisible();
 });
+
+for (const title of [undefined, 'Nogon', 'Hister', 'My archive', '']) {
+  test(`branding preserves configured title ${JSON.stringify(title)}`, async ({ page }) => {
+    await mockAPI(page, { config: { title } });
+    await page.goto('/');
+    const expected = title ?? 'Nogon';
+    await expect(page.locator('h1.home-title')).toHaveText(expected);
+    await expect(page.locator('link[rel="search"]')).toHaveAttribute('title', 'Nogon');
+    await page.goto('/about');
+    await expect(page).toHaveTitle('Nogon · About');
+    await expect(page.getByRole('heading', { name: 'About Nogon' })).toBeVisible();
+    await expect(
+      page.getByRole('link', { name: `${expected} logo ${expected}`.trim(), exact: true }),
+    ).toBeVisible();
+  });
+}

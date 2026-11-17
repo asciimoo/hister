@@ -65,14 +65,14 @@ var importReadwiseCmd = &cobra.Command{
 Set the Readwise access token with HISTER_IMPORT_READWISE_TOKEN or --api-token.
 Get a token from https://readwise.io/access_token.
 
-Hister uses stored HTML when available and downloads missing content from the
+Nogon uses stored HTML when available and downloads missing content from the
 original source URL with the configured crawler backend. Uploaded documents
 without a source URL use their Reader URL and stored content.
 
 Each run scans the library again. Use --skip-existing to keep existing documents.
 Separate highlight and note records are skipped; document notes are preserved.
 
-The global --token flag remains the access token for the destination Hister server.`,
+The global --token flag remains the access token for the destination Nogon server.`,
 	Args: cobra.NoArgs,
 	PreRun: func(_ *cobra.Command, _ []string) {
 		initExtractor()

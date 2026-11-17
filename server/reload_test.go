@@ -194,7 +194,7 @@ func TestPrepareConfigurationDraftValidatesFreshExtractors(t *testing.T) {
 			if err != nil || string(after) != string(before) {
 				t.Fatal("draft validation changed the active extractor chain")
 			}
-			if c.App.Title != "Hister" {
+			if c.App.Title != "Nogon" {
 				t.Fatal("draft validation mutated the active configuration")
 			}
 			entries, err := os.ReadDir(dir)
@@ -289,7 +289,7 @@ func TestSettingsAccessReviewRequiresAcknowledgment(t *testing.T) {
 		t.Fatalf("missing acknowledgment was not rejected: %d %s", response.Code, response.Body)
 	}
 	activeRevision, values := readConfigurationState(t, handler, headers)
-	if activeRevision != revision || values["app.user_handling"].Value != true || values["server.address"].Value != "127.0.0.1:0" || values["app.title"].Value != "Hister" {
+	if activeRevision != revision || values["app.user_handling"].Value != true || values["server.address"].Value != "127.0.0.1:0" || values["app.title"].Value != "Nogon" {
 		t.Fatal("review or rejected apply changed the running configuration")
 	}
 	for filename, original := range before {
@@ -1581,7 +1581,7 @@ func TestConfigurationDraftValidation(t *testing.T) {
 						t.Fatal("candidate title missing")
 					}
 				case "reset title":
-					if values["app.title"] != "Hister" {
+					if values["app.title"] != "Nogon" {
 						t.Fatal("reset did not expose default")
 					}
 				case "false":
@@ -2035,7 +2035,7 @@ func TestConfigurationCatalogKeepsUnsupportedCategoriesReadOnly(t *testing.T) {
 	for _, field := range fields {
 		switch field.Path {
 		case "app.title":
-			app = field.ReadOnlyReason == "" && field.Default == "Hister"
+			app = field.ReadOnlyReason == "" && field.Default == "Nogon"
 		case "extractors.ytdlp.enable":
 			enable = field.ReadOnlyReason == "" && field.Default == false
 		case "extractors.ytdlp.options.binary":
@@ -2131,7 +2131,7 @@ func TestReloadAppliesConfigurationAndRules(t *testing.T) {
 		t.Fatalf("second reload status = %d", status)
 	}
 	rec = testutil.ServeHTTP(t, handler, http.MethodGet, "/hister/api/config", nil, nil)
-	if !strings.Contains(rec.Body.String(), `"title":"Hister"`) {
+	if !strings.Contains(rec.Body.String(), `"title":"Nogon"`) {
 		t.Fatalf("removed settings did not revert to defaults: %s", rec.Body)
 	}
 	rec = testutil.ServeHTTP(t, handler, http.MethodGet, "/hister/api/rules", nil, headers)

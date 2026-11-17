@@ -117,10 +117,10 @@ var importWallabagCmd = &cobra.Command{
 Set the wallabag API access token with HISTER_IMPORT_WALLABAG_TOKEN or
 --api-token.
 
-Hister extracts the content stored by wallabag. If an entry has no usable
-stored content, Hister downloads it using the configured crawler backend.
+Nogon extracts the content stored by wallabag. If an entry has no usable
+stored content, Nogon downloads it using the configured crawler backend.
 
-The global --token flag remains the access token for the destination Hister server.`,
+The global --token flag remains the access token for the destination Nogon server.`,
 	Args: cobra.ExactArgs(1),
 	PreRun: func(_ *cobra.Command, _ []string) {
 		initExtractor()

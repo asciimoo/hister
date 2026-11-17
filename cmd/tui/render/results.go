@@ -25,7 +25,7 @@ func Results(m *model.Model) string {
 		}
 		query := sanitizeTerminalLine(m.TextInput.Value())
 		if !m.WsReady {
-			return emptyState(m, "Search is offline", "Hister is reconnecting automatically. Your query will stay here.")
+			return emptyState(m, "Search is offline", "Nogon is reconnecting automatically. Your query will stay here.")
 		}
 		if m.Results != nil && m.Results.Error != "" {
 			detail := sanitizeTerminalLine(m.Results.Error)

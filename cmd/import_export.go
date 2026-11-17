@@ -76,7 +76,7 @@ Use '-' as OUTPUT_FILE to write to stdout.`,
 			return err
 		}
 		if !strings.EqualFold(filepath.Ext(outputFile), ".json") {
-			log.Warn().Str("file", outputFile).Msg("Export format is JSON. Use a .json extension so hister import file recognizes this export")
+			log.Warn().Str("file", outputFile).Msg("Export format is JSON. Use a .json extension so nogon import file recognizes this export")
 		}
 		count, err := writeExportFile(outputFile, c, query)
 		if err != nil {
@@ -193,10 +193,10 @@ var importCmd = &cobra.Command{
 
 Use one of the available subcommands to select the import source.
 
-Execution scopes describe access to Hister state. Remote commands use the
-configured Hister HTTP server without opening the local Hister database or
-search index. Hybrid commands access local files or Hister state and also use
-the configured Hister HTTP server.
+Execution scopes describe access to Nogon state. Remote commands use the
+configured Nogon HTTP server without opening the local Nogon database or
+search index. Hybrid commands access local files or Nogon state and also use
+the configured Nogon HTTP server.
 
 The file importer reads and prepares local files before submitting documents
 to the server. The browser importers read local history or bookmarks, keep
@@ -217,13 +217,13 @@ skipped unless --force is specified. The default label is rss.
 Crawler settings and robots rules apply. The feed is always fetched over HTTP;
 --backend selects how articles are fetched. This command imports once and exits.
 
-Articles are queued in a persistent crawl job in the local Hister database
+Articles are queued in a persistent crawl job in the local Nogon database
 and submitted to the configured server. Resume an interrupted article import
-with hister index --job-id ID, using the job ID printed when indexing starts.
+with nogon index --job-id ID, using the job ID printed when indexing starts.
 
 Examples:
-  hister import rss https://example.com/feed.xml
-  hister import rss https://example.com/atom.xml --label news`,
+  nogon import rss https://example.com/feed.xml
+  nogon import rss https://example.com/atom.xml --label news`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) (resultErr error) {
 		cmd.SilenceUsage = true
@@ -338,10 +338,10 @@ document and submitted to the running server without reprocessing its stored
 content. Array brackets and separating commas must be on their own lines.
 Compact or indented export layouts are not supported. Each line must be smaller
 than 64 MiB; indexer.max_file_size_mb does not change this export limit.
-JSON files that do not have the Hister export array shape are imported as file
+JSON files that do not have the Nogon export array shape are imported as file
 snapshots.
 
-A Hister JSON export may be read directly or from a 7z compressed archive
+A Nogon JSON export may be read directly or from a 7z compressed archive
 (.7z) containing a single JSON file.
 
 HTML files (.html or .htm) can also be imported: the URL is extracted from

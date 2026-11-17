@@ -139,7 +139,7 @@ func (s *sqliteVectorStore) initEmbeddingsTable(tx *sql.Tx) (int64, error) {
 		// Keep existing vectors until the user requests a reindex. Initialization
 		// must still succeed so the live indexer can rebuild this store.
 		log.Warn().Int("stored_dimensions", storedDimensions).Int("configured_dimensions", s.dimensions).
-			Msg("vector store dimensions differ from semantic_search.dimensions. Run `hister reindex` to rebuild embeddings")
+			Msg("vector store dimensions differ from semantic_search.dimensions. Run `nogon reindex` to rebuild embeddings")
 	}
 	if strings.Contains(normalizedSchema, "distance_metric=cosine") {
 		return -1, nil

@@ -22,13 +22,13 @@ var importBookmarksCmd = &cobra.Command{
 	Long: `Import bookmarks from a supported browser.
 
 Usage:
-  hister import browser bookmarks
-  hister import browser bookmarks --browser firefox
-  hister import browser bookmarks --browser chrome
-  hister import browser bookmarks --db ~/.mozilla/firefox/example.default/places.sqlite
-  hister import browser bookmarks --db ~/.config/google-chrome/Default/Bookmarks
-  hister import browser bookmarks --db ~/.config/Ladybird/Bookmarks.json
-  hister import browser bookmarks --db ~/.config/Ladybird/Profiles/default/Bookmarks.json
+  nogon import browser bookmarks
+  nogon import browser bookmarks --browser firefox
+  nogon import browser bookmarks --browser chrome
+  nogon import browser bookmarks --db ~/.mozilla/firefox/example.default/places.sqlite
+  nogon import browser bookmarks --db ~/.config/google-chrome/Default/Bookmarks
+  nogon import browser bookmarks --db ~/.config/Ladybird/Bookmarks.json
+  nogon import browser bookmarks --db ~/.config/Ladybird/Profiles/default/Bookmarks.json
 
 --browser limits autodetection to a supported browser.
 --db imports a specific bookmark store.

@@ -531,7 +531,7 @@
 </script>
 
 <svelte:head>
-  <title>Hister - Rules</title>
+  <title>Nogon - Rules</title>
 </svelte:head>
 
 <div class="flex flex-1 flex-col gap-8 overflow-y-auto px-6 py-8 md:gap-10 md:px-12 md:py-12">

@@ -83,7 +83,7 @@ func (r *jsonExportReader) nextLine() ([]byte, error) {
 		case jsonExportEnd:
 			return nil, errors.New("unexpected content after the end of the export array")
 		}
-		return nil, errors.New("unsupported JSON export layout: each document must be on one line starting with '{', with array brackets and separating commas on their own lines. Use the original file produced by hister export")
+		return nil, errors.New("unsupported JSON export layout: each document must be on one line starting with '{', with array brackets and separating commas on their own lines. Use the original file produced by nogon export")
 	}
 	if err := r.scanner.Err(); err != nil {
 		r.line++

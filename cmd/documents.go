@@ -101,11 +101,11 @@ var deleteCmd = &cobra.Command{
 The QUERY syntax is the same as the search queries.
 
 Examples:
-  hister delete "url:https://example.com/page"
-  hister delete "url:file:///home/user/file.pdf"
-  hister delete "domain:example.com"
-  hister delete "language:en domain:example.com"
-  hister delete --dry "updated:>90d"
+  nogon delete "url:https://example.com/page"
+  nogon delete "url:file:///home/user/file.pdf"
+  nogon delete "domain:example.com"
+  nogon delete "language:en domain:example.com"
+  nogon delete --dry "updated:>90d"
 
 Non-admin users are restricted to their own documents by the server.
 Dry runs and confirmation counts use the server's deletion scope. Administrators

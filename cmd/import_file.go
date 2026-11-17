@@ -287,8 +287,8 @@ func fileSnapshotImportError(path string, err error) error {
 	if ext != "" {
 		reason = fmt.Sprintf("This file has a %q extension", ext)
 	}
-	return fmt.Errorf("%w. %s, so Hister treated it as a file snapshot. "+
-		"If this is a Hister JSON export, rename it to %q and retry the import",
+	return fmt.Errorf("%w. %s, so Nogon treated it as a file snapshot. "+
+		"If this is a Nogon JSON export, rename it to %q and retry the import",
 		err, reason, strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))+".json")
 }
 

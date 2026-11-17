@@ -125,7 +125,7 @@
 </script>
 
 <svelte:head>
-  <title>Profile - Hister</title>
+  <title>Profile - Nogon</title>
 </svelte:head>
 
 <div class="flex-1 overflow-y-auto px-4 py-6 md:px-12 md:py-10">

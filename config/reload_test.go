@@ -340,7 +340,7 @@ func TestManagedConfigurationSourcesAndReset(t *testing.T) {
 	for _, tc := range []struct{ main, web, title, source string }{
 		{"app:\n  title: Hister\n", web, "Hister", "file"},
 		{"# no authoritative title\n", web, "Web title", "web"},
-		{"# no authoritative title\n", "{}\n", "Hister", "default"},
+		{"# no authoritative title\n", "{}\n", "Nogon", "default"},
 	} {
 		if err := os.WriteFile(filename, []byte(tc.main), 0o600); err != nil {
 			t.Fatal(err)
@@ -407,7 +407,7 @@ func TestManagedConfigurationReloadWithoutMainFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if restarted.App.Title != "Saved" || restarted.Crawler.Headers["x-test"] != "original" || c.App.Title != "Hister" {
+	if restarted.App.Title != "Saved" || restarted.Crawler.Headers["x-test"] != "original" || c.App.Title != "Nogon" {
 		t.Fatal("candidates share state or managed selections were not retained")
 	}
 	if err := os.WriteFile(managed, []byte("app: [invalid"), 0o600); err != nil {
@@ -426,7 +426,7 @@ func TestManagedConfigurationReloadWithoutMainFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if reset.App.Title != "Hister" || reset.Source("app.title").Kind != "default" {
+	if reset.App.Title != "Nogon" || reset.Source("app.title").Kind != "default" {
 		t.Fatal("removing managed file did not restore inherited values")
 	}
 }
@@ -576,7 +576,7 @@ func TestReloadWithoutMainConfiguration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if next.Filename() != "*Default Config*" || next.App.Title != "Hister" || next.App.Subtitle != "Updated environment" {
+	if next.Filename() != "*Default Config*" || next.App.Title != "Nogon" || next.App.Subtitle != "Updated environment" {
 		t.Fatalf("reload did not retain defaults and environment without a selected file: %q, %+v", next.Filename(), next.App)
 	}
 }
@@ -604,7 +604,7 @@ func TestReloadRefreshesSourcesAndDetachesCandidates(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if next.App.Title != "Hister" || next.Source("app.title").Locked || next.Source("crawler.headers").Kind != "file" {
+	if next.App.Title != "Nogon" || next.Source("app.title").Locked || next.Source("crawler.headers").Kind != "file" {
 		t.Fatal("reload retained a removed file selection")
 	}
 	next.Crawler.Headers["x-test"] = "candidate"

@@ -51,7 +51,7 @@ func runDoctor(cmd *cobra.Command, _ []string) error {
 		registry, err := diagnostics.Extractors(c)
 		local := []types.DiagnosticCheck{}
 		if err != nil {
-			local = append(local, types.DiagnosticCheck{Name: "extractors", Status: "error", Message: "Invalid extractor configuration; run hister config validate"})
+			local = append(local, types.DiagnosticCheck{Name: "extractors", Status: "error", Message: "Invalid extractor configuration; run nogon config validate"})
 		} else {
 			local = diagnostics.Dependencies(registry)
 		}
@@ -80,9 +80,9 @@ func diagnoseServer(ctx context.Context, cl *client.Client, report func(types.Di
 		return report(types.DiagnosticCheck{Name: "server.connection", Status: "error", Message: diagnosticRequestError(err)})
 	}
 	if serverConfig.AuthMode != "none" && serverConfig.AuthMode != "token" && serverConfig.AuthMode != "user" {
-		return report(types.DiagnosticCheck{Name: "server.connection", Status: "error", Message: "Response is not a supported Hister configuration; check --server-url"})
+		return report(types.DiagnosticCheck{Name: "server.connection", Status: "error", Message: "Response is not a supported Nogon configuration; check --server-url"})
 	}
-	if err := report(types.DiagnosticCheck{Name: "server.connection", Status: "ok", Message: "Hister server is reachable"}); err != nil {
+	if err := report(types.DiagnosticCheck{Name: "server.connection", Status: "ok", Message: "Nogon server is reachable"}); err != nil {
 		return err
 	}
 	auth := types.DiagnosticCheck{Name: "server.authentication", Status: "ok", Message: "Server authentication succeeded"}
@@ -141,5 +141,5 @@ func diagnosticRequestError(err error) string {
 	if errors.Is(err, context.DeadlineExceeded) {
 		return "Request timed out; check the server or increase --client-timeout"
 	}
-	return "Cannot read a Hister response; check --server-url, network access, TLS certificates, and server logs"
+	return "Cannot read a Nogon response; check --server-url, network access, TLS certificates, and server logs"
 }

@@ -141,7 +141,7 @@
 
   let config: Config = $state({
     wsUrl: '',
-    title: 'Hister',
+    title: 'Nogon',
     subtitle: 'Your own search engine',
     searchUrl: '',
     openResultsOnNewTab: false,
@@ -911,7 +911,7 @@
     }
     const data = await res.json();
     if (!data.deleted) {
-      setDeleteError('Document not found in index. Run "hister reindex" to fix stale entries.');
+      setDeleteError('Document not found in index. Run "nogon reindex" to fix stale entries.');
       return;
     }
     removeResult(url);
@@ -965,7 +965,7 @@
     const data = await res.json();
     if (!data.deleted) {
       setDeleteError(
-        'No matching documents found in index. Run "hister reindex" if results appear stale.',
+        'No matching documents found in index. Run "nogon reindex" if results appear stale.',
       );
       return;
     }
@@ -1058,7 +1058,7 @@
     removeMatchingResults((doc) => doc.domain === domain);
   }
 
-  // Convert file document URLs to browser viewable Hister URLs.
+  // Convert file document URLs to browser viewable Nogon URLs.
   function fileResultUrl(url: string, documentID?: string, title = ''): string {
     if (url.startsWith('file://') || url.startsWith('remote-file://'))
       return buildPreviewUrl(url, title, undefined, documentID);
@@ -1586,7 +1586,7 @@
       const wsUrl = new URL(appConfig.wsUrl);
       config = {
         wsUrl: `${wsProto}//${location.host}${wsUrl.pathname}`,
-        title: appConfig.title ?? 'Hister',
+        title: appConfig.title ?? 'Nogon',
         subtitle: appConfig.subtitle ?? 'Your own search engine',
         searchUrl: appConfig.searchUrl,
         openResultsOnNewTab: appConfig.openResultsOnNewTab,
@@ -1776,7 +1776,7 @@
     >
       <WifiOff class="text-hister-rose size-5 shrink-0" />
       <div class="min-w-0 flex-1">
-        <p class="font-outfit text-hister-rose font-bold">Cannot connect to Hister</p>
+        <p class="font-outfit text-hister-rose font-bold">Cannot connect to Nogon</p>
         <p class="font-inter text-text-brand-secondary text-sm">
           {hasResults
             ? 'Showing the last loaded results while automatic reconnection continues.'

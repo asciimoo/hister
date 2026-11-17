@@ -69,6 +69,11 @@ func TestOpenSearchContentType(t *testing.T) {
 	if got := rec.Header().Get("Content-Type"); got != "application/opensearchdescription+xml" {
 		t.Fatalf("Content-Type = %q, want application/opensearchdescription+xml", got)
 	}
+	for _, want := range []string{"<ShortName>Nogon</ShortName>", "<Description>Search your history with Nogon</Description>"} {
+		if !strings.Contains(rec.Body.String(), want) {
+			t.Errorf("OpenSearch metadata missing %q: %s", want, rec.Body.String())
+		}
+	}
 }
 
 func TestPublicModeConfigResponse(t *testing.T) {
@@ -92,8 +97,8 @@ func TestPublicModeConfigResponse(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}
-	if body.Title != "Hister" {
-		t.Fatalf("title = %q, want %q", body.Title, "Hister")
+	if body.Title != "Nogon" {
+		t.Fatalf("title = %q, want %q", body.Title, "Nogon")
 	}
 	if body.Subtitle != "Your own search engine" {
 		t.Fatalf("subtitle = %q, want %q", body.Subtitle, "Your own search engine")
@@ -509,5 +514,25 @@ func TestTokenAuthStillProtectsPublicRoutesWhenPublicModeDisabled(t *testing.T) 
 
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("GET /search status = %d, want %d", rec.Code, http.StatusForbidden)
+	}
+}
+
+func TestServeConfigPreservesCustomTitles(t *testing.T) {
+	cfg, handler := newPublicTokenTestServer(t)
+	for _, title := range []string{"Hister", "My archive", ""} {
+		cfg.App.Title = title
+		rec := testutil.ServeHTTP(t, handler, http.MethodGet, "/api/config", nil, nil)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("config status = %d", rec.Code)
+		}
+		var body struct {
+			Title string `json:"title"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+			t.Fatal(err)
+		}
+		if body.Title != title {
+			t.Fatalf("configured title %q returned as %q", title, body.Title)
+		}
 	}
 }

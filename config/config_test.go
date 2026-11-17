@@ -626,7 +626,7 @@ func TestManagedConfigurationFileAvailability(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if c.App.Title != "Hister" || c.Source("app.title").Kind != "default" || c.Source("extractors.ytdlp.enable").Locked {
+			if c.App.Title != "Nogon" || c.Source("app.title").Kind != "default" || c.Source("extractors.ytdlp.enable").Locked {
 				t.Fatal("empty managed file selected settings")
 			}
 			if kind == "missing" {
@@ -1878,8 +1878,8 @@ func TestCrawlerProxyConfigAndEnvironment(t *testing.T) {
 
 func TestAppTitleDefaultsAndOverrides(t *testing.T) {
 	cfg := CreateDefaultConfig()
-	if cfg.App.Title != "Hister" {
-		t.Fatalf("default app title=%q, want %q", cfg.App.Title, "Hister")
+	if cfg.App.Title != "Nogon" {
+		t.Fatalf("default app title=%q, want %q", cfg.App.Title, "Nogon")
 	}
 	if cfg.App.Subtitle != "Your own search engine" {
 		t.Fatalf("default app subtitle=%q, want %q", cfg.App.Subtitle, "Your own search engine")
@@ -1894,6 +1894,12 @@ func TestAppTitleDefaultsAndOverrides(t *testing.T) {
 	}
 	if cfg.App.Subtitle != "Internal search" {
 		t.Fatalf("app subtitle=%q, want %q", cfg.App.Subtitle, "Internal search")
+	}
+	for _, title := range []string{"Hister", ""} {
+		cfg, err := parseConfig(fmt.Appendf(nil, "app:\n  title: %q\n", title))
+		if err != nil || cfg.App.Title != title {
+			t.Fatalf("saved title %q was replaced: %v", title, err)
+		}
 	}
 }
 

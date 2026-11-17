@@ -104,7 +104,7 @@ func TestFieldCatalogPreservesEditorContract(t *testing.T) {
 		t.Fatal("embedding endpoint must expose its default as an ordinary URL field")
 	}
 	title := fields["app.title"]
-	if title.Label != "Title" || title.Default != "Hister" || title.Schema.MaxLength != 256 {
+	if title.Label != "Title" || title.Default != "Nogon" || title.Schema.MaxLength != 256 {
 		t.Fatal("lost the title's description, default, or length limit")
 	}
 	snippet := fields["app.snippet_length"]
@@ -1480,7 +1480,7 @@ func TestPrepareDraftUsesDetachedLoadedSources(t *testing.T) {
 	if len(fields) != 0 || reset == nil {
 		t.Fatalf("reset rejected: %v", fields)
 	}
-	if reset.App.Title != "Hister" || reset.Source("app.title").WebSelected || next.App.Title != "Draft title" {
+	if reset.App.Title != "Nogon" || reset.Source("app.title").WebSelected || next.App.Title != "Draft title" {
 		t.Fatal("reset did not expose inherited defaults independently")
 	}
 	got, err := os.ReadFile(managed)

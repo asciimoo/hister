@@ -435,7 +435,7 @@ func indexURL(ctx context.Context, cr crawler.Crawler, u string, label string, c
 	d.Label = label
 	c := newClient(clientOpts...)
 	if err := c.AddDocumentJSON(clientDocument(d)); err != nil {
-		return fmt.Errorf("failed to send page to hister: %w", err)
+		return fmt.Errorf("failed to send page to Nogon: %w", err)
 	}
 	return nil
 }

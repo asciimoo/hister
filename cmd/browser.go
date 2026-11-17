@@ -31,21 +31,21 @@ var importBrowserCmd = &cobra.Command{
 	Short: "Import browsing history or bookmarks from a supported browser",
 	Long: `Import browsing history from a supported browser.
 
-Use ` + "`hister import browser history`" + ` or ` + "`hister import browser bookmarks`" + ` for named-flag imports.
-The bare ` + "`hister import browser`" + ` command still imports visit history.
+Use ` + "`nogon import browser history`" + ` or ` + "`nogon import browser bookmarks`" + ` for named-flag imports.
+The bare ` + "`nogon import browser`" + ` command still imports visit history.
 
 Usage:
-  hister import browser                        auto-detect all installed browsers
-  hister import browser BROWSER_TYPE           auto-detect database path
-  hister import browser DB_PATH                auto-detect browser type
-  hister import browser BROWSER_TYPE DB_PATH   import a browser type with a specific database path
+  nogon import browser                        auto-detect all installed browsers
+  nogon import browser BROWSER_TYPE           auto-detect database path
+  nogon import browser DB_PATH                auto-detect browser type
+  nogon import browser BROWSER_TYPE DB_PATH   import a browser type with a specific database path
 
 Browser types supported for automatic detection: firefox, chrome, chromium, brave, edge, vivaldi, opera, zen, waterfox, ladybird, safari
 
 The Firefox URL database is usually located at ~/.mozilla/firefox/*.default/places.sqlite
 The Chrome/Chromium URL database is usually located at ~/.config/chromium/Default/History
 The Safari URL database is located at ~/Library/Safari/History.db (macOS only), and reading it
-requires Full Disk Access for the terminal or application running hister
+requires Full Disk Access for the terminal or application running nogon
 
 Use --start-date (format: YYYY-MM-DD) to only import URLs whose most recent
 recorded visit is on or after the given date.
@@ -570,7 +570,7 @@ func browserHistoryReadable(path string) error {
 	if runtime.GOOS == "darwin" && errors.Is(err, os.ErrPermission) && isSafariHistoryPath(path) {
 		return fmt.Errorf(
 			"%w: reading Safari's history requires Full Disk Access for the terminal or "+
-				"application running hister (System Settings > Privacy & Security > Full Disk Access)",
+				"application running nogon (System Settings > Privacy & Security > Full Disk Access)",
 			err,
 		)
 	}

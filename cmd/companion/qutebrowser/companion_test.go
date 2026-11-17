@@ -390,3 +390,9 @@ type roundTripFunc func(*http.Request) (*http.Response, error)
 func (f roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
 	return f(request)
 }
+
+func TestDefaultUserAgent(t *testing.T) {
+	if got := DefaultOptions().UserAgent; got != "Nogon qutebrowser companion" {
+		t.Fatalf("user agent = %q", got)
+	}
+}

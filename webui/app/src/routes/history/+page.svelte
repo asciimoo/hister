@@ -613,8 +613,8 @@
 <svelte:window onkeydown={handleKeydown} onpopstate={handlePopState} />
 
 <svelte:head>
-  <title>Hister - History</title>
-  <link rel="alternate" type="application/rss+xml" title="Hister History" href={rssUrl} />
+  <title>Nogon - History</title>
+  <link rel="alternate" type="application/rss+xml" title="Nogon History" href={rssUrl} />
 </svelte:head>
 
 <header class="border-brutal-border bg-card-surface shrink-0 border-b-[3px] px-3 py-3 md:px-6">

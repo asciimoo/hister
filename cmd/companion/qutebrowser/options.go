@@ -17,7 +17,7 @@ const (
 	defaultHisterURL   = "http://127.0.0.1:4433/"
 )
 
-// DocumentSubmitter sends an extracted page to Hister.
+// DocumentSubmitter sends an extracted page to Nogon.
 type DocumentSubmitter interface {
 	AddDocumentJSON(*client.Document) error
 }
@@ -66,7 +66,7 @@ func DefaultOptions() Options {
 		CommandTimeout:  10 * time.Second,
 		RequestTimeout:  30 * time.Second,
 		MaxFaviconBytes: 1024 * 1024,
-		UserAgent:       "Hister qutebrowser companion",
+		UserAgent:       "Nogon qutebrowser companion",
 	}
 }
 
@@ -83,7 +83,7 @@ func normalizeOptions(input Options) (normalizedOptions, error) {
 			"the DevTools endpoint must use localhost or a loopback IP address",
 		)
 	}
-	normalized.histerURL, err = parseHTTPURL("Hister", input.HisterURL)
+	normalized.histerURL, err = parseHTTPURL("Nogon", input.HisterURL)
 	if err != nil {
 		return normalizedOptions{}, err
 	}

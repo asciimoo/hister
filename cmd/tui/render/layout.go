@@ -34,7 +34,7 @@ var overlayDefs = map[model.ViewState]overlayDef{
 
 func View(m *model.Model) string {
 	if !m.Ready {
-		return "Starting Hister…"
+		return "Starting Nogon…"
 	}
 	if m.Width < 20 || m.Height < 14 {
 		return fmt.Sprintf("Terminal too small\nNeed at least 20×14; current size is %d×%d.", m.Width, m.Height)
@@ -222,7 +222,7 @@ func Header(m *model.Model) string {
 	m.TabTargets = nil
 	prefix := " "
 	if !compact {
-		prefix += m.Styles.Brand.Render("hister") + "  "
+		prefix += m.Styles.Brand.Render("nogon") + "  "
 	}
 	x := lipgloss.Width(prefix)
 	for _, definition := range model.Tabs {

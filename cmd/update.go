@@ -29,11 +29,11 @@ destination user already owns a document with the same URL. Local file moves
 also require the configured watched directory owner to match the destination.
 
 Examples:
-  hister update "user_id:0" --user-id 2
-  hister update "domain:example.com" --label research
-  hister update "language:unknown" --language en
-  hister update "domain:example.com" --language auto
-  hister update "label:old" --label ""`,
+  nogon update "user_id:0" --user-id 2
+  nogon update "domain:example.com" --label research
+  nogon update "language:unknown" --language en
+  nogon update "domain:example.com" --language auto
+  nogon update "label:old" --label ""`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		changes := documentChangesFromFlags(cmd)

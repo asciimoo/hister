@@ -51,6 +51,9 @@ func TestSessionCookieSecurityFollowsBaseURL(t *testing.T) {
 func TestTokenSessionRotationAndLogoutRevokeSession(t *testing.T) {
 	_, handler := newTokenTestServer(t, false)
 	firstCookie := tokenLoginCookie(t, handler, nil)
+	if firstCookie.Name != "hister" {
+		t.Fatalf("legacy session cookie renamed to %q", firstCookie.Name)
+	}
 	secondCookie := tokenLoginCookie(t, handler, firstCookie)
 	if firstCookie.Value == secondCookie.Value {
 		t.Fatal("token login did not rotate the session identifier")

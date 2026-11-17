@@ -346,7 +346,7 @@ func TestComfortableHeaderEstablishesBrandAndWorkspaceHierarchy(t *testing.T) {
 	m := renderModel()
 	header := ansi.Strip(Header(m))
 
-	if !strings.HasPrefix(header, " hister  [Search]") {
+	if !strings.HasPrefix(header, " nogon  [Search]") {
 		t.Fatalf("comfortable header lacks brand/workspace hierarchy: %q", header)
 	}
 	if len(m.TabTargets) == 0 || m.TabTargets[0].X0 <= model.TabBarLeftPad {
@@ -379,7 +379,7 @@ func TestOfflineSearchStateExplainsRecovery(t *testing.T) {
 	m.TextInput.SetValue("kept query")
 	prepareSearchRender(m)
 	content := ansi.Strip(m.Viewport.View())
-	if !strings.Contains(content, "Search is offline") || !strings.Contains(content, "reconnecting automatically") {
+	if !strings.Contains(content, "Search is offline") || !strings.Contains(content, "Nogon is reconnecting automatically") {
 		t.Fatalf("offline state is misleading:\n%s", content)
 	}
 }
@@ -452,5 +452,11 @@ func TestLongOverlaysFitShortTerminal(t *testing.T) {
 	themes := renderOverlayBox(ThemePicker(m), m.Styles.ThemeBorder, m.Width-5)
 	if got := lipgloss.Height(themes); got > m.Height {
 		t.Fatalf("theme overlay height = %d, terminal height = %d", got, m.Height)
+	}
+}
+
+func TestStartupBranding(t *testing.T) {
+	if got := View(renderModel()); got != "Starting Nogon…" {
+		t.Fatalf("startup = %q", got)
 	}
 }

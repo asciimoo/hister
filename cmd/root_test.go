@@ -350,7 +350,7 @@ func TestUserCommandHelp(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			for _, want := range append(tc.flags, "hister "+strings.Join(args, " ")+" USERNAME", "--server-url", "--token", "--client-timeout") {
+			for _, want := range append(tc.flags, "nogon "+strings.Join(args, " ")+" USERNAME", "--server-url", "--token", "--client-timeout") {
 				if !strings.Contains(out, want) {
 					t.Errorf("help missing %q: %s", want, out)
 				}
@@ -1103,7 +1103,7 @@ func TestEmbeddingConfigWarning(t *testing.T) {
 			name:   "changed configuration",
 			stored: "stored",
 			active: "active",
-			want:   "The semantic search embedding configuration differs from the indexed configuration. Run `hister reindex` to update your embeddings.",
+			want:   "The semantic search embedding configuration differs from the indexed configuration. Run `nogon reindex` to update your embeddings.",
 		},
 	}
 
@@ -1366,5 +1366,25 @@ func TestUpdateUserToggleUsesRemotePrivileges(t *testing.T) {
 	}
 	if calls != 2 || model.DB != nil || !strings.Contains(ansi.Strip(output.String()), "Admin enabled for alice") || strings.Contains(strings.ToLower(output.String()), "token") {
 		t.Fatalf("requests = %d, output = %q, opened database = %t", calls, output.String(), model.DB != nil)
+	}
+}
+
+func TestCommandBranding(t *testing.T) {
+	for _, tc := range []struct{ argument, want string }{
+		{"--help", "Nogon, your own search engine"},
+		{"--version", "nogon version " + Version},
+	} {
+		t.Run(tc.argument, func(t *testing.T) {
+			out, _, err := executeUserCommandForTest(t, tc.argument)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(out, tc.want) {
+				t.Fatalf("output = %q, want %q", out, tc.want)
+			}
+		})
+	}
+	if !strings.Contains(UserAgent, "Nogon/"+Version) {
+		t.Fatalf("crawler user agent = %q", UserAgent)
 	}
 }

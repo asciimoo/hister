@@ -1129,6 +1129,9 @@ func TestMCPInitializeAdvertisesStructuredContentProtocol(t *testing.T) {
 	cfg, handler := newTokenTestServer(t, false)
 	session := newMCPTestSessionVersion(t, cfg, handler, "secret", "2024-11-05")
 	initResult := session.InitializeResult()
+	if initResult.ServerInfo.Name != "nogon" {
+		t.Fatalf("server identity = %q", initResult.ServerInfo.Name)
+	}
 	if initResult.ProtocolVersion != mcpProtocolVersion {
 		t.Fatalf("protocol version = %q, want %q", initResult.ProtocolVersion, mcpProtocolVersion)
 	}
@@ -1212,6 +1215,7 @@ func TestMCPOriginValidation(t *testing.T) {
 		{name: "malformed", origins: []string{"http://["}},
 		{name: "relative", origins: []string{"//127.0.0.1:4433"}},
 		{name: "CLI scheme", origins: []string{"hister://"}, allowed: true},
+		{name: "renamed product does not add a trusted scheme", origins: []string{"nogon://"}},
 		{name: "extension scheme", origins: []string{chromeExtensionOrigin}},
 		{name: "multiple origins", origins: []string{"http://127.0.0.1:4433 https://untrusted.example"}},
 		{name: "duplicate headers", origins: []string{"http://127.0.0.1:4433", "https://untrusted.example"}},

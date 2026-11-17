@@ -172,7 +172,7 @@ func (i *fileImporter) importWatchedFile(ctx context.Context, input importFileIn
 		return false, err
 	}
 	if ext == ".json" && isHisterJSONExportReader(bytes.NewReader(content)) {
-		log.Warn().Str("file", input.Path).Msg("Watch mode skips Hister exports")
+		log.Warn().Str("file", input.Path).Msg("Watch mode skips Nogon exports")
 		return true, nil
 	}
 	if ext == ".html" || ext == ".htm" {

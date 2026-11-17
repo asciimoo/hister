@@ -17,10 +17,10 @@ var importBrowserHistoryCmd = &cobra.Command{
 	Long: `Import browsing history from a supported browser.
 
 Usage:
-  hister import browser history
-  hister import browser history --browser firefox
-  hister import browser history --db ~/.mozilla/firefox/example.default/places.sqlite
-  hister import browser history --browser chrome --db ~/.config/google-chrome/Default/History
+  nogon import browser history
+  nogon import browser history --browser firefox
+  nogon import browser history --db ~/.mozilla/firefox/example.default/places.sqlite
+  nogon import browser history --browser chrome --db ~/.config/google-chrome/Default/History
 
 --browser limits autodetection to a supported browser name.
 --db imports a specific history database (places.sqlite, History, or History.db).

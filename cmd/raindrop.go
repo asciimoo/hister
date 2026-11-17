@@ -41,16 +41,16 @@ Raindrop.io account through its API.
 
 Set the Raindrop API token with HISTER_IMPORT_RAINDROP_TOKEN or --api-token.
 Each run reads all bookmarks. Use --skip-existing to keep documents already
-in the destination Hister index.
+in the destination Nogon index.
 
 To import a CSV export instead, use --input FILE.csv, or --input - for stdin.
 CSV input requires a url column and does not need a Raindrop API token.
 
-Hister downloads linked pages using the configured crawler backend. Override
+Nogon downloads linked pages using the configured crawler backend. Override
 the backend with --backend and --backend-option. If a page cannot be downloaded,
 its bookmark details are still imported and the failure is reported.
 
-The global --token flag remains the access token for the destination Hister server.`,
+The global --token flag remains the access token for the destination Nogon server.`,
 	Args: cobra.NoArgs,
 	PreRun: func(_ *cobra.Command, _ []string) {
 		initExtractor()

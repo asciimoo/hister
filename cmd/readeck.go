@@ -101,10 +101,10 @@ var importReadeckCmd = &cobra.Command{
 
 Set the Readeck API token with HISTER_IMPORT_READECK_TOKEN or --api-token.
 
-Hister uses the article HTML stored by Readeck. If a bookmark has no usable
-stored article, Hister downloads it using the configured crawler backend.
+Nogon uses the article HTML stored by Readeck. If a bookmark has no usable
+stored article, Nogon downloads it using the configured crawler backend.
 
-The global --token flag remains the access token for the destination Hister server.`,
+The global --token flag remains the access token for the destination Nogon server.`,
 	Args: cobra.ExactArgs(1),
 	PreRun: func(_ *cobra.Command, _ []string) {
 		initExtractor()

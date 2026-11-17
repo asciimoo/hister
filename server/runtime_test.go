@@ -613,7 +613,7 @@ func TestSettingsOrdinaryAppAndServerApply(t *testing.T) {
 				for _, path := range []string{"/metrics", "/debug/pprof/"} {
 					response := testutil.ServeHTTP(t, handler, http.MethodGet, "/hister"+path, nil, headers)
 					if action == "enable" {
-						if response.Code != http.StatusOK || strings.Contains(response.Body.String(), "<title>Hister") {
+						if response.Code != http.StatusOK || strings.Contains(response.Body.String(), "<title>Nogon") {
 							t.Fatalf("monitoring unavailable: %s %d", path, response.Code)
 						}
 						for _, denied := range []string{"", ordinaryToken} {
@@ -1129,7 +1129,7 @@ func TestSettingsSavePersistsAndResets(t *testing.T) {
 		revision = fresh
 	}
 	_, values := readConfigurationState(t, handler, headers)
-	if values["app.title"].Value != "Hister" || values["app.title"].Source.WebSelected {
+	if values["app.title"].Value != "Nogon" || values["app.title"].Source.WebSelected {
 		t.Fatalf("reset did not expose inherited title: %+v", values["app.title"])
 	}
 	mainAfter, err := os.ReadFile(mainPath)
@@ -1433,7 +1433,7 @@ func TestRuntimeWarnsAboutUnavailableAdministration(t *testing.T) {
 				t.Fatalf("missing administration must not prevent startup: %v", err)
 			}
 			if tc.warning != "" {
-				for _, want := range []string{`"level":"warn"`, tc.warning, "hister user create --offline --admin USERNAME", "API token"} {
+				for _, want := range []string{`"level":"warn"`, tc.warning, "nogon user create --offline --admin USERNAME", "API token"} {
 					if !strings.Contains(logs.String(), want) {
 						t.Errorf("startup log missing %q: %s", want, &logs)
 					}

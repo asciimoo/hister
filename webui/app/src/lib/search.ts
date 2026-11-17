@@ -173,7 +173,7 @@ export function exportRSS(results: SearchResults, query: string): void {
     `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0">
   <channel>
-    <title>Hister search: ${escapeXML(query)}</title>
+    <title>Nogon search: ${escapeXML(query)}</title>
     ${results.documents.map((d) => `<item><title>${escapeXML(d.title || '')}</title><link>${escapeXML(d.url || '')}</link></item>`).join('')}
   </channel>
 </rss>`,

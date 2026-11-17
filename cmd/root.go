@@ -57,7 +57,7 @@ var (
 var (
 	cfgFile   string
 	cfg       *config.Config
-	UserAgent = fmt.Sprintf("Mozilla/5.0 (compatible; Hister/%s; +https://hister.org/)", Version)
+	UserAgent = fmt.Sprintf("Mozilla/5.0 (compatible; Nogon/%s; +https://hister.org/)", Version)
 )
 
 // stringToAnyMap converts map[string]string to map[string]any, used when
@@ -159,9 +159,9 @@ func targetUserIDClientOptions(cmd *cobra.Command, global bool) []client.Option 
 }
 
 var rootCmd = &cobra.Command{
-	Use:     "hister",
+	Use:     "nogon",
 	Short:   "Your own search engine",
-	Long:    "Hister - your own search engine",
+	Long:    "Nogon, your own search engine",
 	Version: Version,
 	//Run: func(_ *cobra.Command, _ []string) {
 	//},
@@ -169,8 +169,8 @@ var rootCmd = &cobra.Command{
 
 var listenCmd = &cobra.Command{
 	Use:   "listen",
-	Short: "Start the Hister HTTP server",
-	Long:  `Start the Hister HTTP server and watch configured directories for file changes.`,
+	Short: "Start the Nogon HTTP server",
+	Long:  `Start the Nogon HTTP server and watch configured directories for file changes.`,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		idx := initIndex(model.ReadWrite)
 		if (cfg.App.AccessToken != "" || cfg.App.UserHandling) && strings.HasPrefix(cfg.BaseURL(""), "http://") {
@@ -235,7 +235,7 @@ func init() {
 	bindConfigFlag(rootCmd.PersistentFlags(), "log-level", "app.log_level")
 	rootCmd.PersistentFlags().StringP("search-url", "s", dcfg.App.SearchURL, "set default search engine url")
 	bindConfigFlag(rootCmd.PersistentFlags(), "search-url", "app.search_url")
-	rootCmd.PersistentFlags().StringP("server-url", "u", dcfg.Server.BaseURL, "hister server URL")
+	rootCmd.PersistentFlags().StringP("server-url", "u", dcfg.Server.BaseURL, "Nogon server URL")
 	bindConfigFlag(rootCmd.PersistentFlags(), "server-url", "server.base_url")
 	rootCmd.PersistentFlags().StringP("token", "t", "", "access token (overrides config access_token)")
 	bindConfigFlag(rootCmd.PersistentFlags(), "token", "app.access_token")
@@ -482,7 +482,7 @@ func embeddingConfigWarning(storedFingerprint, activeFingerprint string) string 
 	if activeFingerprint == "" || storedFingerprint == "" || storedFingerprint == activeFingerprint {
 		return ""
 	}
-	return "The semantic search embedding configuration differs from the indexed configuration. Run `hister reindex` to update your embeddings."
+	return "The semantic search embedding configuration differs from the indexed configuration. Run `nogon reindex` to update your embeddings."
 }
 
 func initIndex(accessMode model.AccessMode) *indexer.Indexer {
@@ -536,10 +536,10 @@ func initIndex(accessMode model.AccessMode) *indexer.Indexer {
 		}
 	}
 	if indexer.Version > v {
-		log.Warn().Msg("There is a new indexer version. Run `hister reindex` to update your index.")
+		log.Warn().Msg("There is a new indexer version. Run `nogon reindex` to update your index.")
 	}
 	if storedFingerprint != activeFingerprint {
-		log.Warn().Msg("The analyzer configuration differs from the indexed configuration. Run `hister reindex` to update your index.")
+		log.Warn().Msg("The analyzer configuration differs from the indexed configuration. Run `nogon reindex` to update your index.")
 	}
 	activeEmbeddingFingerprint := cfg.SemanticSearch.EmbeddingFingerprint()
 	if warning := embeddingConfigWarning(storedEmbeddingFingerprint, activeEmbeddingFingerprint); warning != "" {

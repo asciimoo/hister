@@ -137,11 +137,11 @@ func setCommandScope(cmd *cobra.Command, scope executionScope, extraGlobalFlags 
 func executionScopeDescription(scope executionScope) string {
 	switch scope {
 	case executionScopeLocal:
-		return "Local. Runs against configured files and local Hister data without contacting the Hister HTTP server."
+		return "Local. Runs against configured files and local Nogon data without contacting the Nogon HTTP server."
 	case executionScopeRemote:
-		return "Remote. Uses the configured Hister HTTP server without opening the local Hister database or search index."
+		return "Remote. Uses the configured Nogon HTTP server without opening the local Nogon database or search index."
 	case executionScopeHybrid:
-		return "Hybrid. Uses or can use both local Hister state and the configured Hister HTTP server."
+		return "Hybrid. Uses or can use both local Nogon state and the configured Nogon HTTP server."
 	default:
 		return ""
 	}

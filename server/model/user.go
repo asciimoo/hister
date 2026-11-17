@@ -54,9 +54,9 @@ func CheckAdministratorAvailability(c *config.Config) (string, error) {
 	if err := usableAdministrators(DB, policy, false).Count(&count).Error; err != nil {
 		return "", errors.New("cannot verify administrator availability: database query failed")
 	}
-	const recovery = "To create a recovery account, stop the server and run hister user create --offline --admin USERNAME with this instance's configuration and data directory. Keep its API token for recovery when password login is disabled."
+	const recovery = "To create a recovery account, stop the server and run nogon user create --offline --admin USERNAME with this instance's configuration and data directory. Keep its API token for recovery when password login is disabled."
 	if count == 0 {
-		warning := "No usable administrator is available. Hister will continue running, but administrative actions are unavailable. "
+		warning := "No usable administrator is available. Nogon will continue running, but administrative actions are unavailable. "
 		if policy.localRecovery {
 			warning += "An OIDC login with a configured administrator group can restore administrator access. "
 		}
@@ -67,7 +67,7 @@ func CheckAdministratorAvailability(c *config.Config) (string, error) {
 			return "", errors.New("cannot verify recovery administrator availability: database query failed")
 		}
 		if count == 0 {
-			return "No independent local recovery administrator is available. Hister will continue using OIDC login. If OIDC login is unavailable or all administrator roles are revoked, recovering administrator access may require offline account creation. " + recovery, nil
+			return "No independent local recovery administrator is available. Nogon will continue using OIDC login. If OIDC login is unavailable or all administrator roles are revoked, recovering administrator access may require offline account creation. " + recovery, nil
 		}
 	}
 	return "", nil

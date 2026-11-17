@@ -104,10 +104,10 @@ Karakeep was previously named Hoarder. Set its API token with
 HISTER_IMPORT_KARAKEEP_TOKEN or --api-token.
 
 Stored HTML is used when available. When a link bookmark has no stored HTML,
-Hister downloads it using the configured crawler backend. Override the backend
+Nogon downloads it using the configured crawler backend. Override the backend
 with --backend and --backend-option.
 
-The global --token flag remains the access token for the destination Hister server.`,
+The global --token flag remains the access token for the destination Nogon server.`,
 	Args: cobra.ExactArgs(1),
 	PreRun: func(_ *cobra.Command, _ []string) {
 		initExtractor()

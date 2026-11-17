@@ -76,7 +76,7 @@
   const showProfile = $derived(
     config?.authMode === 'user' && !!config.authenticated && !!config.username,
   );
-  const appTitle = $derived(config?.title ?? 'Hister');
+  const appTitle = $derived(config?.title ?? 'Nogon');
 </script>
 
 <header

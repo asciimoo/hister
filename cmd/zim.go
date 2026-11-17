@@ -49,8 +49,8 @@ indexer.max_file_size_mb, with a maximum of 32 MiB. Date filters use the archive
 publication date. Rerun with --skip-existing to keep already imported URLs.
 
 Examples:
-  hister import zim collection.zim --label reference
-  hister import zim collection.zim --base-url https://example.org/docs/`,
+  nogon import zim collection.zim --label reference
+  nogon import zim collection.zim --base-url https://example.org/docs/`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cmd.SilenceUsage = true
@@ -235,7 +235,7 @@ func (r *zimURLResolver) rewriteLinks(entry zimRecord, sourceURL string) (string
 			}
 		}
 		if resolved == "" {
-			// Do not leave archive paths pointing into Hister's own routes.
+			// Do not leave archive paths pointing into Nogon's own routes.
 			node.RemoveAttr("href")
 		} else {
 			node.SetAttr("href", resolved)
@@ -258,7 +258,7 @@ func (r *zimURLResolver) rewriteLinks(entry zimRecord, sourceURL string) (string
 			}
 		}
 	})
-	// An archive's base must not affect the Hister preview.
+	// An archive's base must not affect the Nogon preview.
 	html.Find("base").Remove()
 	return html.Html()
 }

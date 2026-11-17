@@ -31,15 +31,15 @@ followed. Existing documents are skipped unless --force is specified. Robots
 rules and crawler settings apply. Sitemap XML is always fetched over HTTP;
 --backend selects how the listed pages are fetched.
 
-The pages are queued in a persistent crawl job in the local Hister database
+The pages are queued in a persistent crawl job in the local Nogon database
 and submitted to the configured server. Resume an interrupted page import with
-hister index --job-id ID, using the job ID printed when indexing starts.
+nogon index --job-id ID, using the job ID printed when indexing starts.
 Sitemap discovery finishes before the job is created.
 
 Examples:
-  hister import sitemap https://example.com/sitemap.xml
-  hister import sitemap sitemap.xml.gz --label reference
-  hister import sitemap - < sitemap.xml`,
+  nogon import sitemap https://example.com/sitemap.xml
+  nogon import sitemap sitemap.xml.gz --label reference
+  nogon import sitemap - < sitemap.xml`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) (resultErr error) {
 		cmd.SilenceUsage = true

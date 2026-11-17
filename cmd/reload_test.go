@@ -57,7 +57,7 @@ func TestReloadCommandHelp(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"Remote. Uses the configured Hister HTTP server", "--client-timeout", "--server-url", "--token"} {
+	for _, want := range []string{"Remote. Uses the configured Nogon HTTP server", "--client-timeout", "--server-url", "--token"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("reload help missing %q", want)
 		}

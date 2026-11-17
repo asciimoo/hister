@@ -110,7 +110,7 @@ func compareStableVersions(first, second string) (int, error) {
 func newCheckUpdateCmd(client releaseHTTPClient, endpoint, currentVersion string) *cobra.Command {
 	return &cobra.Command{
 		Use:   "check-update",
-		Short: "Check whether a new Hister version is available",
+		Short: "Check whether a new Nogon version is available",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			release, err := fetchLatestRelease(cmd.Context(), client, endpoint)
@@ -119,21 +119,21 @@ func newCheckUpdateCmd(client releaseHTTPClient, endpoint, currentVersion string
 			}
 			comparison, err := compareStableVersions(currentVersion, release.TagName)
 			if err != nil {
-				return fmt.Errorf("compare Hister versions: %w", err)
+				return fmt.Errorf("compare Nogon versions: %w", err)
 			}
 			var message string
 			switch comparison {
 			case -1:
 				message = fmt.Sprintf(
-					"A new Hister version is available: %s\nCurrent version: %s\nRelease: %s\n",
+					"A new Nogon version is available: %s\nCurrent version: %s\nRelease: %s\n",
 					release.TagName,
 					currentVersion,
 					release.HTMLURL,
 				)
 			case 0:
-				message = fmt.Sprintf("Hister %s is up to date.\n", currentVersion)
+				message = fmt.Sprintf("Nogon %s is up to date.\n", currentVersion)
 			case 1:
-				message = fmt.Sprintf("Hister %s is newer than the latest release %s.\n", currentVersion, release.TagName)
+				message = fmt.Sprintf("Nogon %s is newer than the latest release %s.\n", currentVersion, release.TagName)
 			}
 			if _, err := fmt.Fprint(cmd.OutOrStdout(), message); err != nil {
 				return fmt.Errorf("write update status: %w", err)

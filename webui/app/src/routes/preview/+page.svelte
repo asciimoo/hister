@@ -29,7 +29,7 @@
 <svelte:window onpopstate={readParams} />
 
 <svelte:head>
-  <title>{docTitle ? `${docTitle} - Hister Preview` : 'Hister Preview'}</title>
+  <title>{docTitle ? `${docTitle} - Nogon Preview` : 'Nogon Preview'}</title>
 </svelte:head>
 
 <div class="flex min-h-0 flex-1 flex-col overflow-hidden">

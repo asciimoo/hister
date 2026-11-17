@@ -21,7 +21,7 @@ var companionQutebrowserCmd = &cobra.Command{
 	Short: "Index rendered qutebrowser pages through DevTools",
 	Long: `Watch qutebrowser tabs through a local Qt WebEngine DevTools endpoint.
 
-The command submits rendered page content to the configured Hister server.
+The command submits rendered page content to the configured Nogon server.
 Destination settings come from the global --server-url, --token, and
 --client-timeout options.`,
 	Args: cobra.NoArgs,
@@ -66,7 +66,7 @@ func addQutebrowserCompanionFlags(cmd *cobra.Command) {
 	cmd.Flags().Duration(
 		"retry-delay",
 		defaults.RetryDelay,
-		"delay before retrying a failed Hister submission, zero disables retries",
+		"delay before retrying a failed Nogon submission, zero disables retries",
 	)
 	cmd.Flags().Duration(
 		"reconnect-delay",

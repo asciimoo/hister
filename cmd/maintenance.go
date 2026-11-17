@@ -129,7 +129,7 @@ func runMaintenance(cmd *cobra.Command, name, activity string, operation func() 
 	if err != nil {
 		wrapped := fmt.Errorf("%s error: %w", name, err)
 		if isConnectionError(err) {
-			return fmt.Errorf("%w\n  Make sure the Hister server is running before executing %s", wrapped, cmd.Name())
+			return fmt.Errorf("%w\n  Make sure the Nogon server is running before executing %s", wrapped, cmd.Name())
 		}
 		return wrapped
 	}

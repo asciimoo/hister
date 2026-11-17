@@ -45,7 +45,7 @@ type DimensionMismatchError struct {
 }
 
 func (e *DimensionMismatchError) Error() string {
-	return fmt.Sprintf("embedding dimension mismatch: expected %d, got %d; set semantic_search.dimensions to the output size supported by the embedding model and restart Hister before reindexing", e.Expected, e.Got)
+	return fmt.Sprintf("embedding dimension mismatch: expected %d, got %d; set semantic_search.dimensions to the output size supported by the embedding model and restart Nogon before reindexing", e.Expected, e.Got)
 }
 
 // DocumentContext contains stable metadata used to contextualize document

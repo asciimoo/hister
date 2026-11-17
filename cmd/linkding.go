@@ -62,11 +62,11 @@ var importLinkdingCmd = &cobra.Command{
 
 Set the Linkding API token with HISTER_IMPORT_LINKDING_TOKEN or --api-token.
 
-Linkding stores bookmark metadata rather than complete page content. Hister
+Linkding stores bookmark metadata rather than complete page content. Nogon
 downloads linked pages using the configured crawler backend. Override the
 backend with --backend and --backend-option.
 
-The global --token flag remains the access token for the destination Hister server.`,
+The global --token flag remains the access token for the destination Nogon server.`,
 	Args: cobra.ExactArgs(1),
 	PreRun: func(_ *cobra.Command, _ []string) {
 		initExtractor()

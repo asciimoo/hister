@@ -27,6 +27,8 @@ func (b *trackedResponseBody) Close() error {
 	return b.closeErr
 }
 
+// Keep the request formats and literal protocol identifiers compatible with
+// Hister servers even when the client identifies itself as Nogon.
 func TestRequestFormatsAndHeaders(t *testing.T) {
 	const sourceURL = "https://example.com/a?x=1&y=two words"
 	tests := []struct {
@@ -60,13 +62,13 @@ func TestRequestFormatsAndHeaders(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			body := &trackedResponseBody{Reader: strings.NewReader(`{"htmlRemoved":3,"id":7,"username":"alice","deleted_documents":2}`)}
 			calls := 0
-			c := New("http://hister.test/prefix/", WithAccessToken("secret"), WithUserAgent("test-client"), WithTargetUserID(7), WithHTTPClient(&http.Client{
+			c := New("http://hister.test/prefix/", WithAccessToken("secret"), WithUserAgent("Nogon/test"), WithTargetUserID(7), WithHTTPClient(&http.Client{
 				Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 					calls++
 					if r.Method != tt.method || r.URL.RequestURI() != "/prefix"+tt.path {
 						t.Errorf("request = %s %s", r.Method, r.URL)
 					}
-					for key, want := range map[string]string{"Content-Type": tt.contentType, "Origin": "hister://", "X-Access-Token": "secret", "User-Agent": "test-client", targetUserIDHeader: "7"} {
+					for key, want := range map[string]string{"Content-Type": tt.contentType, "Origin": "hister://", "X-Access-Token": "secret", "User-Agent": "Nogon/test", "X-Hister-Target-User-ID": "7"} {
 						if got := r.Header.Get(key); got != want {
 							t.Errorf("header %s = %q, want %q", key, got, want)
 						}

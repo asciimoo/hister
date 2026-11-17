@@ -22,13 +22,13 @@ import (
 var userCmd = &cobra.Command{
 	Use:   "user",
 	Short: "Manage user accounts",
-	Long:  "Create, show, update, or delete user accounts on the configured Hister server. Use user create --offline with the server stopped to create an account directly in its database.",
+	Long:  "Create, show, update, or delete user accounts on the configured Nogon server. Use user create --offline with the server stopped to create an account directly in its database.",
 }
 
 var createUserCmd = &cobra.Command{
 	Use:   "create USERNAME",
 	Short: "Create a user on the server",
-	Long:  "Create a user account on the configured running Hister server. Requires user handling on that server and an administrator token. Use --offline to create an account directly in the configured database with the server stopped. Offline administrator creation prints the new access token for bootstrap or recovery.",
+	Long:  "Create a user account on the configured running Nogon server. Requires user handling on that server and an administrator token. Use --offline to create an account directly in the configured database with the server stopped. Offline administrator creation prints the new access token for bootstrap or recovery.",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		username := args[0]
@@ -71,7 +71,7 @@ var createUserCmd = &cobra.Command{
 var deleteUserCmd = &cobra.Command{
 	Use:   "delete USERNAME",
 	Short: "Delete a user on the server",
-	Long:  "Delete a user account on the configured running Hister server. Requires user handling on that server and an administrator token. Use --purge to also remove all indexed documents belonging to the user.",
+	Long:  "Delete a user account on the configured running Nogon server. Requires user handling on that server and an administrator token. Use --purge to also remove all indexed documents belonging to the user.",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		username := args[0]
@@ -101,7 +101,7 @@ var deleteUserCmd = &cobra.Command{
 var showUserCmd = &cobra.Command{
 	Use:   "show USERNAME",
 	Short: "Show user information from the server",
-	Long:  "Display information about a user account on the configured running Hister server. Requires user handling on that server and an administrator token. Use --show-token to also retrieve and display the user's access token.",
+	Long:  "Display information about a user account on the configured running Nogon server. Requires user handling on that server and an administrator token. Use --show-token to also retrieve and display the user's access token.",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		c := newClient()
@@ -137,7 +137,7 @@ var showUserCmd = &cobra.Command{
 var updateUserCmd = &cobra.Command{
 	Use:   "update USERNAME",
 	Short: "Update a user on the server",
-	Long:  "Update a user account on the configured running Hister server. Requires user handling on that server and an administrator token. Combine flags to change the username or password, regenerate the token, or toggle administrator status in one update. Concurrent account changes are rejected; review the account before retrying.",
+	Long:  "Update a user account on the configured running Nogon server. Requires user handling on that server and an administrator token. Combine flags to change the username or password, regenerate the token, or toggle administrator status in one update. Concurrent account changes are rejected; review the account before retrying.",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		username := args[0]
