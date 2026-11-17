@@ -28,7 +28,7 @@
   >
     {#if authorURL}
       <a
-        class="text-hister-teal font-semibold hover:underline"
+        class="text-nogon-teal font-semibold hover:underline"
         href={authorURL}
         target="_blank"
         rel="noopener noreferrer">{comment.author || 'Unknown author'}</a

@@ -5,7 +5,7 @@ set -e
 cd "$(dirname -- "$0")/.." || exit
 
 npm install --workspaces --include=optional
-npm run build -w @hister/app
+npm run build -w @nogon/app
 
 rm -rf server/static/app
 mkdir -p server/static

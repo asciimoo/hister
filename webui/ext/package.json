@@ -1,5 +1,5 @@
 {
-  "name": "@hister/ext",
+  "name": "@nogon/ext",
   "version": "0.34.0",
   "type": "module",
   "scripts": {
@@ -12,7 +12,7 @@
     "@fontsource/fira-code": "^5.3.0",
     "@fontsource/inter": "^5.3.0",
     "@fontsource/outfit": "^5.3.0",
-    "@hister/components": "^1.0.0",
+    "@nogon/components": "^1.0.0",
     "@lucide/svelte": "^1.72.0",
     "mode-watcher": "^1.1.0"
   },

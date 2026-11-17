@@ -56,15 +56,15 @@
   } from '#lib/query-suggestions.js';
   import type { QuerySuggestion } from '#lib/query-suggestions.js';
   import { animate } from 'animejs';
-  import { Input } from '@hister/components/ui/input';
-  import { Button } from '@hister/components/ui/button';
-  import { Badge } from '@hister/components/ui/badge';
-  import { Separator } from '@hister/components/ui/separator';
-  import * as Dialog from '@hister/components/ui/dialog';
-  import * as Card from '@hister/components/ui/card';
-  import * as DropdownMenu from '@hister/components/ui/dropdown-menu';
-  import * as Tooltip from '@hister/components/ui/tooltip';
-  import { ScrollArea } from '@hister/components/ui/scroll-area';
+  import { Input } from '@nogon/components/ui/input';
+  import { Button } from '@nogon/components/ui/button';
+  import { Badge } from '@nogon/components/ui/badge';
+  import { Separator } from '@nogon/components/ui/separator';
+  import * as Dialog from '@nogon/components/ui/dialog';
+  import * as Card from '@nogon/components/ui/card';
+  import * as DropdownMenu from '@nogon/components/ui/dropdown-menu';
+  import * as Tooltip from '@nogon/components/ui/tooltip';
+  import { ScrollArea } from '@nogon/components/ui/scroll-area';
   import {
     PreviewPanel,
     QuerySuggestions,
@@ -72,7 +72,7 @@
     ResultActionsMenu,
     ResultFavicon,
   } from '#lib/components/index.js';
-  import { Kbd } from '@hister/components/ui/kbd';
+  import { Kbd } from '@nogon/components/ui/kbd';
   import {
     Search,
     Star,
@@ -301,16 +301,16 @@
   );
   const connectionStatus = $derived.by(() => {
     if (connectionState === 'connected') {
-      return { label: 'Online', description: 'Server connected', dotClass: 'bg-hister-lime' };
+      return { label: 'Online', description: 'Server connected', dotClass: 'bg-nogon-lime' };
     }
     if (connectionState === 'connecting') {
       return {
         label: 'Connecting',
         description: 'Connecting to server',
-        dotClass: 'bg-hister-amber',
+        dotClass: 'bg-nogon-amber',
       };
     }
-    return { label: 'Offline', description: 'Server disconnected', dotClass: 'bg-hister-rose' };
+    return { label: 'Offline', description: 'Server disconnected', dotClass: 'bg-nogon-rose' };
   });
 
   let animationHandles: any[] = [];
@@ -418,10 +418,10 @@
   );
 
   const chipColors = [
-    { border: 'border-hister-indigo', bg: 'bg-hister-indigo/10', text: 'text-hister-indigo' },
-    { border: 'border-hister-teal', bg: 'bg-hister-teal/10', text: 'text-hister-teal' },
-    { border: 'border-hister-coral', bg: 'bg-hister-coral/10', text: 'text-hister-coral' },
-    { border: 'border-hister-amber', bg: 'bg-hister-amber/10', text: 'text-hister-amber' },
+    { border: 'border-nogon-indigo', bg: 'bg-nogon-indigo/10', text: 'text-nogon-indigo' },
+    { border: 'border-nogon-teal', bg: 'bg-nogon-teal/10', text: 'text-nogon-teal' },
+    { border: 'border-nogon-coral', bg: 'bg-nogon-coral/10', text: 'text-nogon-coral' },
+    { border: 'border-nogon-amber', bg: 'bg-nogon-amber/10', text: 'text-nogon-amber' },
   ];
 
   const hotkeyActions: Record<
@@ -1637,9 +1637,9 @@
 <Dialog.Root bind:open={$showHelp}>
   <Dialog.Content
     showCloseButton={false}
-    class="border-border-brand bg-card-surface max-w-md gap-0 overflow-hidden rounded-none border-[3px] p-0 shadow-[6px_6px_0px_var(--hister-indigo)]"
+    class="border-border-brand bg-card-surface max-w-md gap-0 overflow-hidden rounded-none border-[3px] p-0 shadow-[6px_6px_0px_var(--nogon-indigo)]"
   >
-    <Dialog.Header class="bg-hister-indigo flex-row items-center justify-between gap-2 px-5 py-4">
+    <Dialog.Header class="bg-nogon-indigo flex-row items-center justify-between gap-2 px-5 py-4">
       <Dialog.Title class="flex items-center gap-2">
         <Keyboard class="text-primary-foreground size-5" />
         <span class="font-outfit text-primary-foreground text-lg font-extrabold"
@@ -1682,7 +1682,7 @@
     showCloseButton={false}
     class="border-border-brand bg-card-surface flex max-h-[80vh] max-w-md flex-col gap-0 overflow-hidden rounded-none border-[3px] p-0 shadow-[6px_6px_0px_var(--brutal-shadow)]"
   >
-    <Dialog.Header class="bg-hister-rose flex-row items-center justify-between gap-2 px-5 py-4">
+    <Dialog.Header class="bg-nogon-rose flex-row items-center justify-between gap-2 px-5 py-4">
       <Dialog.Title class="flex items-center gap-2">
         <Trash2 class="text-primary-foreground size-5" />
         <span class="font-outfit text-primary-foreground text-lg font-extrabold">Delete result</span
@@ -1698,7 +1698,7 @@
         title={deleteConfirmUrl}>{deleteConfirmUrl}</code
       >
       <label class="flex cursor-pointer items-center gap-2">
-        <input type="checkbox" bind:checked={deleteConfirmSkip} class="accent-hister-rose" />
+        <input type="checkbox" bind:checked={deleteConfirmSkip} class="accent-nogon-rose" />
         <span class="font-inter text-text-brand-secondary text-sm">Don't ask again</span>
       </label>
     </div>
@@ -1713,7 +1713,7 @@
       </Button>
       <Button
         size="sm"
-        class="bg-hister-rose text-primary-foreground hover:bg-hister-rose/90 rounded-none border-0"
+        class="bg-nogon-rose text-primary-foreground hover:bg-nogon-rose/90 rounded-none border-0"
         onclick={confirmDelete}
       >
         Yes, delete
@@ -1728,7 +1728,7 @@
     showCloseButton={false}
     class="border-border-brand bg-card-surface flex max-h-[80vh] max-w-md flex-col gap-0 overflow-hidden rounded-none border-[3px] p-0 shadow-[6px_6px_0px_var(--brutal-shadow)]"
   >
-    <Dialog.Header class="bg-hister-rose flex-row items-center justify-between gap-2 px-5 py-4">
+    <Dialog.Header class="bg-nogon-rose flex-row items-center justify-between gap-2 px-5 py-4">
       <Dialog.Title class="flex items-center gap-2">
         <Trash2 class="text-primary-foreground size-5" />
         <span class="font-outfit text-primary-foreground text-lg font-extrabold"
@@ -1746,7 +1746,7 @@
         class="font-fira bg-muted-surface text-text-brand-muted block px-2 py-1 text-xs break-all"
         >{query}</code
       >
-      <p class="font-inter text-hister-rose text-xs font-semibold">This action cannot be undone.</p>
+      <p class="font-inter text-nogon-rose text-xs font-semibold">This action cannot be undone.</p>
     </div>
     <div class="border-border-brand-muted flex shrink-0 justify-end gap-2 border-t-[3px] px-5 py-3">
       <Button
@@ -1759,7 +1759,7 @@
       </Button>
       <Button
         size="sm"
-        class="bg-hister-rose text-primary-foreground hover:bg-hister-rose/90 rounded-none border-0"
+        class="bg-nogon-rose text-primary-foreground hover:bg-nogon-rose/90 rounded-none border-0"
         onclick={confirmDeleteAll}
       >
         Yes, delete all
@@ -1771,12 +1771,12 @@
 {#snippet connectionNotice(className: string)}
   {#if connectionState === 'disconnected'}
     <div
-      class="border-hister-rose bg-hister-rose/10 flex flex-col gap-3 border-[3px] px-4 py-3 sm:flex-row sm:items-center {className}"
+      class="border-nogon-rose bg-nogon-rose/10 flex flex-col gap-3 border-[3px] px-4 py-3 sm:flex-row sm:items-center {className}"
       role="alert"
     >
-      <WifiOff class="text-hister-rose size-5 shrink-0" />
+      <WifiOff class="text-nogon-rose size-5 shrink-0" />
       <div class="min-w-0 flex-1">
-        <p class="font-outfit text-hister-rose font-bold">Cannot connect to Nogon</p>
+        <p class="font-outfit text-nogon-rose font-bold">Cannot connect to Nogon</p>
         <p class="font-inter text-text-brand-secondary text-sm">
           {hasResults
             ? 'Showing the last loaded results while automatic reconnection continues.'
@@ -1787,7 +1787,7 @@
         <Button
           variant="outline"
           size="sm"
-          class="border-hister-rose text-hister-rose hover:bg-hister-rose/10 border-[2px]"
+          class="border-nogon-rose text-nogon-rose hover:bg-nogon-rose/10 border-[2px]"
           onclick={retryConnection}
         >
           <RefreshCw class="size-3.5" />
@@ -1799,7 +1799,7 @@
           href="https://hister.org/docs/troubleshooting"
           target="_blank"
           rel="noopener noreferrer"
-          class="text-text-brand-secondary hover:text-hister-indigo"
+          class="text-text-brand-secondary hover:text-nogon-indigo"
         >
           Troubleshooting
           <ExternalLink class="size-3.5" />
@@ -1868,8 +1868,8 @@
                   type="button"
                   onclick={() => (semanticOn = !semanticOn)}
                   class="flex shrink-0 items-center gap-1 px-1.5 py-0.5 text-xs font-semibold transition-colors {semanticOn
-                    ? 'text-hister-indigo'
-                    : 'text-text-brand-muted hover:text-hister-indigo'}"
+                    ? 'text-nogon-indigo'
+                    : 'text-text-brand-muted hover:text-nogon-indigo'}"
                   aria-pressed={semanticOn}
                   aria-label="Toggle semantic search"
                 >
@@ -1925,7 +1925,7 @@
             <Button
               variant="outline"
               size="sm"
-              class="border-hister-indigo/40 bg-hister-indigo/5 text-hister-indigo font-inter h-auto min-h-7 max-w-full gap-1 border-2 px-2 py-1 text-xs"
+              class="border-nogon-indigo/40 bg-nogon-indigo/5 text-nogon-indigo font-inter h-auto min-h-7 max-w-full gap-1 border-2 px-2 py-1 text-xs"
               aria-label={`Remove ${chip.label} filter`}
               title={`Remove ${chip.label} filter`}
               onclick={() => removeFilters([chip.filter])}
@@ -1963,7 +1963,7 @@
           >
             {#if deleteError}
               <div
-                class="border-hister-rose bg-hister-rose/10 text-hister-rose flex items-center justify-between gap-2 border-[2px] px-3 py-2 text-sm"
+                class="border-nogon-rose bg-nogon-rose/10 text-nogon-rose flex items-center justify-between gap-2 border-[2px] px-3 py-2 text-sm"
               >
                 <span class="font-inter">{deleteError}</span>
                 <button
@@ -1996,14 +1996,14 @@
                           size="sm"
                           class="font-inter min-h-10 gap-1 px-2 text-xs has-[>svg]:px-2 {filtersDropdownOpen ||
                           activeFilterCount > 0
-                            ? 'text-hister-indigo'
-                            : 'text-text-brand-muted hover:text-hister-indigo'}"
+                            ? 'text-nogon-indigo'
+                            : 'text-text-brand-muted hover:text-nogon-indigo'}"
                         >
                           <Filter class="size-3" />
                           Filters
                           {#if activeFilterCount > 0}
                             <span
-                              class="bg-hister-indigo text-background flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] leading-none font-bold"
+                              class="bg-nogon-indigo text-background flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] leading-none font-bold"
                               >{activeFilterCount}</span
                             >
                           {/if}
@@ -2036,8 +2036,8 @@
                                   class="font-inter cursor-pointer rounded-none border-[2px] px-2 py-0.5 text-xs transition-colors {activeFilters.has(
                                     term,
                                   )
-                                    ? 'border-hister-indigo bg-hister-indigo text-background'
-                                    : 'border-border-brand-muted text-text-brand-secondary hover:border-hister-indigo hover:text-hister-indigo'}"
+                                    ? 'border-nogon-indigo bg-nogon-indigo text-background'
+                                    : 'border-border-brand-muted text-text-brand-secondary hover:border-nogon-indigo hover:text-nogon-indigo'}"
                                   onclick={() => toggleQueryToken(facet.queryField, term)}
                                   aria-pressed={activeFilters.has(term)}
                                 >
@@ -2048,7 +2048,7 @@
                             </div>
                             {#if currentFacets?.terms?.[facet.name]?.other}
                               <button
-                                class="font-inter text-text-brand-muted hover:text-hister-indigo mt-1 cursor-pointer text-xs underline-offset-2 hover:underline"
+                                class="font-inter text-text-brand-muted hover:text-nogon-indigo mt-1 cursor-pointer text-xs underline-offset-2 hover:underline"
                                 onclick={() => loadMoreFacet(facet.name)}>Load more</button
                               >
                             {/if}
@@ -2067,7 +2067,7 @@
                           {#snippet customDateInputs()}
                             <details class="group/custom w-full">
                               <summary
-                                class="font-inter text-text-brand-muted hover:text-hister-indigo cursor-pointer list-none text-xs underline-offset-2 hover:underline"
+                                class="font-inter text-text-brand-muted hover:text-nogon-indigo cursor-pointer list-none text-xs underline-offset-2 hover:underline"
                                 >Custom</summary
                               >
                               <div
@@ -2081,7 +2081,7 @@
                                   value={dateFrom}
                                   oninput={(event) =>
                                     updateCustomDateFilter('from', event.currentTarget.value)}
-                                  class="border-border-brand-muted bg-card-surface text-text-brand font-fira focus-visible:border-hister-indigo h-7 w-auto min-w-0 border-[2px] px-2 text-xs shadow-none focus-visible:ring-0"
+                                  class="border-border-brand-muted bg-card-surface text-text-brand font-fira focus-visible:border-nogon-indigo h-7 w-auto min-w-0 border-[2px] px-2 text-xs shadow-none focus-visible:ring-0"
                                 />
                                 <span class="font-inter text-text-brand-secondary text-xs">To:</span
                                 >
@@ -2090,7 +2090,7 @@
                                   value={dateTo}
                                   oninput={(event) =>
                                     updateCustomDateFilter('to', event.currentTarget.value)}
-                                  class="border-border-brand-muted bg-card-surface text-text-brand font-fira focus-visible:border-hister-indigo h-7 w-auto min-w-0 border-[2px] px-2 text-xs shadow-none focus-visible:ring-0"
+                                  class="border-border-brand-muted bg-card-surface text-text-brand font-fira focus-visible:border-nogon-indigo h-7 w-auto min-w-0 border-[2px] px-2 text-xs shadow-none focus-visible:ring-0"
                                 />
                               </div>
                             </details>
@@ -2113,8 +2113,8 @@
                                     <button
                                       class="font-inter flex cursor-pointer items-center justify-between rounded-none border-[2px] px-2 py-1 text-xs transition-colors {activeDateBucket ===
                                       name
-                                        ? 'border-hister-indigo bg-hister-indigo text-background'
-                                        : 'border-border-brand-muted text-text-brand-secondary hover:border-hister-indigo hover:text-hister-indigo'}"
+                                        ? 'border-nogon-indigo bg-nogon-indigo text-background'
+                                        : 'border-border-brand-muted text-text-brand-secondary hover:border-nogon-indigo hover:text-nogon-indigo'}"
                                       onclick={() => toggleDateBucket(name)}
                                     >
                                       <span
@@ -2164,8 +2164,8 @@
                           title={`Sort: ${currentSortLabel}`}
                           class="font-inter min-h-10 gap-1 px-2 text-xs has-[>svg]:px-2 {sortDropdownOpen ||
                           currentSort
-                            ? 'text-hister-indigo'
-                            : 'text-text-brand-muted hover:text-hister-indigo'}"
+                            ? 'text-nogon-indigo'
+                            : 'text-text-brand-muted hover:text-nogon-indigo'}"
                         >
                           <ArrowUpDown class="size-3" />
                           <span class="max-w-28 truncate"
@@ -2189,8 +2189,8 @@
                             <button
                               class="font-inter flex cursor-pointer items-center gap-2 rounded-none border-[2px] px-2 py-1 text-xs transition-colors {currentSort ===
                               value
-                                ? 'border-hister-indigo bg-hister-indigo text-background'
-                                : 'border-border-brand-muted text-text-brand-secondary hover:border-hister-indigo hover:text-hister-indigo'}"
+                                ? 'border-nogon-indigo bg-nogon-indigo text-background'
+                                : 'border-border-brand-muted text-text-brand-secondary hover:border-nogon-indigo hover:text-nogon-indigo'}"
                               onclick={() => {
                                 setSort(value);
                                 sortDropdownOpen = false;
@@ -2214,7 +2214,7 @@
                   <Button
                     variant="ghost"
                     size="sm"
-                    class="font-inter text-text-brand-muted hover:text-hister-coral min-h-10 gap-1 px-2 text-xs has-[>svg]:px-2"
+                    class="font-inter text-text-brand-muted hover:text-nogon-coral min-h-10 gap-1 px-2 text-xs has-[>svg]:px-2"
                     href={getSearchUrl(config.searchUrl, query)}
                     aria-label="Search the web"
                     title="Search the web"
@@ -2236,8 +2236,8 @@
                         aria-label="Actions"
                         title="Actions"
                         class="font-inter {actionsDropdownOpen
-                          ? 'text-hister-indigo'
-                          : 'text-text-brand-muted hover:text-hister-indigo'}"
+                          ? 'text-nogon-indigo'
+                          : 'text-text-brand-muted hover:text-nogon-indigo'}"
                       >
                         <Ellipsis class="size-4" />
                       </Button>
@@ -2258,7 +2258,7 @@
                           onkeydown={(event) => {
                             if (event.key !== 'Escape') event.stopPropagation();
                           }}
-                          class="accent-hister-indigo size-4 cursor-pointer"
+                          class="accent-nogon-indigo size-4 cursor-pointer"
                         />
                         Show suggestions
                       </label>
@@ -2267,7 +2267,7 @@
                         <Button
                           variant="ghost"
                           size="sm"
-                          class="font-inter text-text-brand-secondary hover:text-hister-indigo w-full justify-start gap-2 text-xs"
+                          class="font-inter text-text-brand-secondary hover:text-nogon-indigo w-full justify-start gap-2 text-xs"
                           onclick={() => {
                             previewState.setPanelOpen(true);
                             actionsDropdownOpen = false;
@@ -2293,7 +2293,7 @@
                             <Button
                               variant="outline"
                               size="sm"
-                              class="font-inter text-hister-indigo border-hister-indigo border-2 text-xs"
+                              class="font-inter text-nogon-indigo border-nogon-indigo border-2 text-xs"
                               onclick={() => (semanticOn = true)}
                             >
                               Enable semantic search
@@ -2303,7 +2303,7 @@
                             class="font-inter text-text-brand-secondary flex flex-col gap-1 text-xs"
                           >
                             <span
-                              >Similarity threshold: <span class="font-fira text-hister-indigo"
+                              >Similarity threshold: <span class="font-fira text-nogon-indigo"
                                 >{similarityThreshold.toFixed(2)}</span
                               ></span
                             >
@@ -2317,14 +2317,14 @@
                               onkeydown={(event) => {
                                 if (event.key !== 'Escape') event.stopPropagation();
                               }}
-                              class="accent-hister-indigo w-full cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+                              class="accent-nogon-indigo w-full cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                             />
                           </label>
                           <label
                             class="font-inter text-text-brand-secondary flex flex-col gap-1 text-xs"
                           >
                             <span
-                              >Semantic weight: <span class="font-fira text-hister-indigo"
+                              >Semantic weight: <span class="font-fira text-nogon-indigo"
                                 >{semanticWeight.toFixed(2)}</span
                               ></span
                             >
@@ -2338,7 +2338,7 @@
                               onkeydown={(event) => {
                                 if (event.key !== 'Escape') event.stopPropagation();
                               }}
-                              class="accent-hister-indigo w-full cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+                              class="accent-nogon-indigo w-full cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                             />
                           </label>
                         </div>
@@ -2355,7 +2355,7 @@
                             onkeydown={(event) => {
                               if (event.key !== 'Escape') event.stopPropagation();
                             }}
-                            class="accent-hister-indigo size-4 cursor-pointer"
+                            class="accent-nogon-indigo size-4 cursor-pointer"
                           />
                           Always expand snippets
                         </label>
@@ -2371,7 +2371,7 @@
                             <Button
                               variant="outline"
                               size="sm"
-                              class="border-hister-indigo text-hister-indigo hover:bg-hister-indigo/10 h-7 border-[2px] text-xs"
+                              class="border-nogon-indigo text-nogon-indigo hover:bg-nogon-indigo/10 h-7 border-[2px] text-xs"
                               onclick={() =>
                                 exportJSON({ ...lastResults!, documents: accumulatedDocs })}
                             >
@@ -2380,7 +2380,7 @@
                             <Button
                               variant="outline"
                               size="sm"
-                              class="border-hister-indigo text-hister-indigo hover:bg-hister-indigo/10 h-7 border-[2px] text-xs"
+                              class="border-nogon-indigo text-nogon-indigo hover:bg-nogon-indigo/10 h-7 border-[2px] text-xs"
                               onclick={() =>
                                 exportCSV({ ...lastResults!, documents: accumulatedDocs }, query)}
                             >
@@ -2389,7 +2389,7 @@
                             <Button
                               variant="outline"
                               size="sm"
-                              class="border-hister-indigo text-hister-indigo hover:bg-hister-indigo/10 h-7 border-[2px] text-xs"
+                              class="border-nogon-indigo text-nogon-indigo hover:bg-nogon-indigo/10 h-7 border-[2px] text-xs"
                               onclick={() =>
                                 exportRSS({ ...lastResults!, documents: accumulatedDocs }, query)}
                             >
@@ -2401,7 +2401,7 @@
                           <Separator class="bg-border-brand-muted" />
                           <div class="space-y-2">
                             <p
-                              class="font-inter text-hister-rose flex items-center gap-1.5 text-xs font-semibold"
+                              class="font-inter text-nogon-rose flex items-center gap-1.5 text-xs font-semibold"
                             >
                               <Trash2 class="size-3" />
                               Danger Zone
@@ -2409,7 +2409,7 @@
                             <Button
                               variant="outline"
                               size="sm"
-                              class="border-hister-rose text-hister-rose hover:bg-hister-rose/10 h-7 w-full border-[2px] text-xs"
+                              class="border-nogon-rose text-nogon-rose hover:bg-nogon-rose/10 h-7 w-full border-[2px] text-xs"
                               onclick={() => {
                                 showDeleteAllConfirm = true;
                               }}
@@ -2435,7 +2435,7 @@
               <SearchLoading />
             {:else if !searchPending && lastResults?.error}
               <section class="px-4 py-8 md:px-12">
-                <p role="alert" class="font-inter text-hister-rose mb-4 break-words">
+                <p role="alert" class="font-inter text-nogon-rose mb-4 break-words">
                   {lastResults.error}
                 </p>
                 {#if lastResults.query && lastResults.query.text !== query}
@@ -2443,7 +2443,7 @@
                     Expanded query: <code class="font-fira">{lastResults.query.text}</code>
                   </p>
                 {/if}
-                <a href="help" class="font-inter text-hister-indigo text-sm underline">
+                <a href="help" class="font-inter text-nogon-indigo text-sm underline">
                   Query syntax help
                 </a>
               </section>
@@ -2551,7 +2551,7 @@
                               size="sm"
                               href={buildPreviewUrl(r.url, r.title || '*title*', undefined, r.id)}
                               data-document-id={r.id || ''}
-                              class="text-text-brand-muted hover:text-hister-indigo h-auto shrink-0 cursor-pointer gap-0.5 p-0 text-xs font-medium md:text-sm"
+                              class="text-text-brand-muted hover:text-nogon-indigo h-auto shrink-0 cursor-pointer gap-0.5 p-0 text-xs font-medium md:text-sm"
                               onclick={(e) => {
                                 highlightIdx = i;
                                 openReadable(e, r.url, r.title || '*title*', r.id || '');
@@ -2634,7 +2634,7 @@
                   {#if activeFilterCount > 0}
                     <Button
                       variant="outline"
-                      class="border-hister-indigo text-hister-indigo font-inter border-2"
+                      class="border-nogon-indigo text-nogon-indigo font-inter border-2"
                       onclick={clearFilters}
                       onkeydown={(event) => {
                         if (event.key !== 'Escape') event.stopPropagation();
@@ -2645,7 +2645,7 @@
                   {/if}
                   <Button
                     variant="outline"
-                    class="border-hister-coral text-hister-coral hover:bg-hister-coral/10 font-inter border-[3px] font-semibold shadow-[3px_3px_0px_var(--hister-coral)]"
+                    class="border-nogon-coral text-nogon-coral hover:bg-nogon-coral/10 font-inter border-[3px] font-semibold shadow-[3px_3px_0px_var(--nogon-coral)]"
                     href={getSearchUrl(config.searchUrl, query)}
                   >
                     <ExternalLink class="size-4" />
@@ -2716,7 +2716,7 @@
     <h1
       bind:this={heroTitleEl}
       class="home-title font-outfit bg-clip-text text-5xl leading-none font-black tracking-[8px] text-transparent uppercase select-none md:text-9xl"
-      style="background-image: linear-gradient(90deg, var(--hister-indigo), var(--hister-coral), var(--hister-teal), var(--hister-indigo)); background-size: 300% 100%; background-position: 0% 50%;"
+      style="background-image: linear-gradient(90deg, var(--nogon-indigo), var(--nogon-coral), var(--nogon-teal), var(--nogon-indigo)); background-size: 300% 100%; background-position: 0% 50%;"
     >
       {config.title}
     </h1>
@@ -2729,7 +2729,7 @@
     <div
       bind:this={underlineEl}
       class="home-underline h-[3px] w-48"
-      style="background: linear-gradient(90deg, var(--hister-indigo), var(--hister-coral), var(--hister-teal)); transform: scaleX(0); transform-origin: left;"
+      style="background: linear-gradient(90deg, var(--nogon-indigo), var(--nogon-coral), var(--nogon-teal)); transform: scaleX(0); transform-origin: left;"
     ></div>
 
     <div class="relative z-40 w-full max-w-[1100px] shrink-0">
@@ -2737,7 +2737,7 @@
         bind:this={searchBoxEl}
         class="home-search border-brutal-border bg-card-surface flex h-12 w-full items-center gap-3 border-[3px] px-4 md:h-15 md:px-5"
       >
-        <Search aria-hidden="true" class="text-hister-indigo size-5 shrink-0 md:size-6" />
+        <Search aria-hidden="true" class="text-nogon-indigo size-5 shrink-0 md:size-6" />
         <Input
           bind:ref={inputEl}
           bind:value={query}
@@ -2812,7 +2812,7 @@
             >{part.value}</code
           >
         {:else if part.type === 'link'}
-          <a href={part.href} class="text-hister-indigo hover:underline">{part.value}</a>
+          <a href={part.href} class="text-nogon-indigo hover:underline">{part.value}</a>
         {/if}
       {/each}
     </div>
@@ -2826,7 +2826,7 @@
           id="recent-searches-title"
           class="font-inter text-text-brand-secondary flex items-center gap-2 text-sm font-semibold"
         >
-          <History class="text-hister-indigo size-4" />
+          <History class="text-nogon-indigo size-4" />
           Recent searches
         </h2>
         <div class="flex flex-wrap items-center justify-center gap-2">
@@ -2869,7 +2869,7 @@
             href="https://hister.org/docs/quickstart"
             target="_blank"
             rel="noopener noreferrer"
-            class="font-inter text-hister-indigo flex shrink-0 items-center gap-1 text-sm font-semibold hover:underline"
+            class="font-inter text-nogon-indigo flex shrink-0 items-center gap-1 text-sm font-semibold hover:underline"
           >
             <HelpCircle class="size-4" />
             Quickstart
@@ -2882,9 +2882,9 @@
             href="https://hister.org/docs/browser-extension"
             target="_blank"
             rel="noopener noreferrer"
-            class="empty-index-action border-hister-indigo bg-hister-indigo/5 hover:bg-hister-indigo/10"
+            class="empty-index-action border-nogon-indigo bg-nogon-indigo/5 hover:bg-nogon-indigo/10"
           >
-            <Globe class="text-hister-indigo size-5 shrink-0" />
+            <Globe class="text-nogon-indigo size-5 shrink-0" />
             <span class="min-w-0">
               <span class="font-outfit text-text-brand block font-bold">Install the extension</span>
               <span class="font-inter text-text-brand-muted block text-xs"
@@ -2896,9 +2896,9 @@
 
           <a
             href={resolve('/add')}
-            class="empty-index-action border-hister-coral bg-hister-coral/5 hover:bg-hister-coral/10"
+            class="empty-index-action border-nogon-coral bg-nogon-coral/5 hover:bg-nogon-coral/10"
           >
-            <Link2 class="text-hister-coral size-5 shrink-0" />
+            <Link2 class="text-nogon-coral size-5 shrink-0" />
             <span class="min-w-0">
               <span class="font-outfit text-text-brand block font-bold">Add manually</span>
               <span class="font-inter text-text-brand-muted block text-xs"
@@ -2911,9 +2911,9 @@
             href="https://hister.org/docs/import#importing-browser-history"
             target="_blank"
             rel="noopener noreferrer"
-            class="empty-index-action border-hister-teal bg-hister-teal/5 hover:bg-hister-teal/10"
+            class="empty-index-action border-nogon-teal bg-nogon-teal/5 hover:bg-nogon-teal/10"
           >
-            <History class="text-hister-teal size-5 shrink-0" />
+            <History class="text-nogon-teal size-5 shrink-0" />
             <span class="min-w-0">
               <span class="font-outfit text-text-brand block font-bold">Import browser history</span
               >
@@ -2944,7 +2944,7 @@
       {:else if statsAvailable}
         {@render homeStatChip(
           `${resolve('/')}?q=*`,
-          'text-hister-indigo',
+          'text-nogon-indigo',
           'Browse all indexed pages',
           History,
           displayHistoryCount,
@@ -2954,7 +2954,7 @@
         {#if fileCount > 0}
           {@render homeStatChip(
             `${resolve('/')}?q=type:file`,
-            'text-hister-amber',
+            'text-nogon-amber',
             'Browse all indexed files',
             FileText,
             displayFileCount,
@@ -2965,7 +2965,7 @@
         {#if !config.public || config.canWrite}
           {@render homeStatChip(
             `${resolve('/rules')}#indexing-rules`,
-            'text-hister-teal',
+            'text-nogon-teal',
             'Open indexing rules',
             Shield,
             displayRulesCount,
@@ -2974,7 +2974,7 @@
           )}
           {@render homeStatChip(
             `${resolve('/rules')}#search-aliases`,
-            'text-hister-coral',
+            'text-nogon-coral',
             'Open search aliases',
             Link2,
             displayAliasesCount,
@@ -3001,10 +3001,10 @@
   }
 
   .home-search:focus-within {
-    border-color: var(--hister-indigo);
+    border-color: var(--nogon-indigo);
     box-shadow:
       0 1px 0 color-mix(in srgb, white 7%, transparent) inset,
-      4px 4px 0 var(--hister-indigo);
+      4px 4px 0 var(--nogon-indigo);
   }
 
   .home-title,
@@ -3120,7 +3120,7 @@
   }
 
   .split-resize-handle:hover {
-    background: color-mix(in srgb, var(--hister-indigo) 28%, transparent);
+    background: color-mix(in srgb, var(--nogon-indigo) 28%, transparent);
   }
 
   :global(.results-list-panel) {
@@ -3177,7 +3177,7 @@
   }
 
   .result-card-active {
-    border-left-color: var(--hister-cyan);
+    border-left-color: var(--nogon-cyan);
     background: color-mix(in srgb, var(--text-primary-brand) 8%, transparent);
   }
 
@@ -3188,13 +3188,13 @@
   }
 
   .result-title {
-    color: color-mix(in srgb, var(--hister-cyan) 82%, var(--text-primary-brand));
+    color: color-mix(in srgb, var(--nogon-cyan) 82%, var(--text-primary-brand));
     overflow-wrap: anywhere;
     word-break: break-word;
   }
 
   .result-title:hover {
-    color: var(--hister-cyan);
+    color: var(--nogon-cyan);
   }
 
   .result-snippet {
@@ -3234,7 +3234,7 @@
 
   :global(.result-snippet mark) {
     color: var(--text-primary-brand);
-    background: color-mix(in srgb, var(--hister-amber) 8%, transparent);
+    background: color-mix(in srgb, var(--nogon-amber) 8%, transparent);
     font-weight: 600;
   }
 
@@ -3243,7 +3243,7 @@
     box-shadow:
       0 1px 0 color-mix(in srgb, white 10%, transparent) inset,
       0 0 0 1px color-mix(in srgb, white 3%, transparent),
-      3px 3px 0 color-mix(in srgb, var(--hister-indigo) 16%, var(--brutal-shadow));
+      3px 3px 0 color-mix(in srgb, var(--nogon-indigo) 16%, var(--brutal-shadow));
   }
 
   :global(.dark) .home-stat-pill {
@@ -3260,6 +3260,6 @@
   }
 
   :global(.dark) .result-title {
-    color: color-mix(in srgb, var(--hister-cyan) 88%, white);
+    color: color-mix(in srgb, var(--nogon-cyan) 88%, white);
   }
 </style>

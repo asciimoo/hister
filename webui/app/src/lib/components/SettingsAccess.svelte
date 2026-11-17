@@ -2,8 +2,8 @@
   import { onMount } from 'svelte';
   import { page } from '$app/state';
   import { resolve } from '$app/paths';
-  import { Button } from '@hister/components/ui/button';
-  import { Input } from '@hister/components/ui/input';
+  import { Button } from '@nogon/components/ui/button';
+  import { Input } from '@nogon/components/ui/input';
   import { fetchConfig, resetConfig } from '#lib/api.js';
   import {
     settingsRequest,
@@ -184,14 +184,14 @@
   {:else}
     <p class="text-sm">Without confirmation, the previous settings return after two minutes.</p>
   {/if}
-  {#if problem}<p role="alert" class="text-hister-rose text-sm">{problem}</p>{/if}
+  {#if problem}<p role="alert" class="text-nogon-rose text-sm">{problem}</p>{/if}
   {#if !atDestination}
     <p class="text-sm">
       Open the new address to verify access. Keep this page open until the change is confirmed.
     </p>
     {#if target}
       <a
-        class="text-hister-indigo block [overflow-wrap:anywhere] underline"
+        class="text-nogon-indigo block [overflow-wrap:anywhere] underline"
         href={target.href}
         target="_blank"
         rel="noreferrer">Open new address: {target.href}</a
@@ -231,7 +231,7 @@
             : 'using the new access settings'}, then confirm below.
       </p>
       <a
-        class="text-hister-indigo inline-block underline"
+        class="text-nogon-indigo inline-block underline"
         href={pending?.oauth_provider ? oauthURL : authURL}
       >
         {pending?.oauth_provider ? `Sign in with ${pending.oauth_provider}` : 'Sign in again'}

@@ -3,7 +3,7 @@
 import { apiFetch, getUserId } from './api';
 import { deleteDocuments, previewDocumentDeletion } from './document-delete';
 import { fetchRules, saveRuleLists } from './rules';
-import { buildUrlSkipPattern, buildDomainSkipPattern } from '@hister/components';
+import { buildUrlSkipPattern, buildDomainSkipPattern } from '@nogon/components';
 
 interface AddSkipRuleOptions {
   url: string;

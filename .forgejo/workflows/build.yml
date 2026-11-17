@@ -62,7 +62,7 @@ jobs:
 
       - name: Build website
         if: steps.changes.outputs.skip != 'true'
-        run: npm run build -w @hister/website
+        run: npm run build -w @nogon/website
 
   ext:
     name: Browser extension build
@@ -89,4 +89,4 @@ jobs:
 
       - name: Build extension
         if: steps.changes.outputs.skip != 'true'
-        run: npm run build -w @hister/ext
+        run: npm run build -w @nogon/ext

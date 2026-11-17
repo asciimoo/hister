@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
   import type { HTMLAttributes } from 'svelte/elements';
-  import { type WithElementRef } from '@hister/components/utils';
+  import { type WithElementRef } from '@nogon/components/utils';
   import Callout from './callout.svelte';
 
   let {

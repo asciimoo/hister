@@ -10,7 +10,7 @@
   import Coins from '@lucide/svelte/icons/coins';
   import Copy from '@lucide/svelte/icons/copy';
   import Check from '@lucide/svelte/icons/check';
-  import { Button } from '@hister/components';
+  import { Button } from '@nogon/components';
   import Seo from '#lib/Seo.svelte';
 
   const cryptoWallets = [
@@ -20,7 +20,7 @@
       address: '1JwT5gEFYP358GvcdNCKbwgTKvwFujnHSF',
       href: 'bitcoin:1JwT5gEFYP358GvcdNCKbwgTKvwFujnHSF',
       icon: Bitcoin,
-      color: 'bg-hister-amber',
+      color: 'bg-nogon-amber',
     },
     {
       name: 'Ethereum',
@@ -28,7 +28,7 @@
       address: '0x4Eb476D91c92b744600F282F7B727e8b46eDe8Bb',
       href: 'ethereum:0x4Eb476D91c92b744600F282F7B727e8b46eDe8Bb',
       icon: Coins,
-      color: 'bg-hister-indigo',
+      color: 'bg-nogon-indigo',
     },
   ];
 
@@ -55,7 +55,7 @@
       desc: 'Connect trusted Hister instances so they can exchange selected public results, datasets, and index metadata while administrators remain in control of what they share and import.',
       href: null,
       linkLabel: null,
-      color: 'bg-hister-amber',
+      color: 'bg-nogon-amber',
     },
     {
       icon: Puzzle,
@@ -63,7 +63,7 @@
       desc: 'Add extractors for more content types to improve integration and index quality so Hister understands the web deeply, not just superficially.',
       href: '/docs/extractors',
       linkLabel: 'Learn about extractors',
-      color: 'bg-hister-indigo',
+      color: 'bg-nogon-indigo',
     },
     {
       icon: Database,
@@ -71,7 +71,7 @@
       desc: 'Create infrastructure for importable, pre-indexed databases organized by topic, letting users quickly expand their local index with curated, relevant content.',
       href: '/datasets',
       linkLabel: 'Explore datasets',
-      color: 'bg-hister-teal',
+      color: 'bg-nogon-teal',
     },
     {
       icon: Globe,
@@ -79,7 +79,7 @@
       desc: 'Support importing data from public datasets such as the Open Search Foundation and the Internet Archive, giving Hister access to the breadth of human knowledge.',
       href: null,
       linkLabel: null,
-      color: 'bg-hister-coral',
+      color: 'bg-nogon-coral',
     },
   ];
 </script>
@@ -92,7 +92,7 @@
 
 <section class="border-brutal-border border-t-[3px] bg-[var(--text-primary)] px-6 py-10">
   <div class="mx-auto flex max-w-5xl flex-col items-center gap-8">
-    <Heart size={256} class="fill-[var(--hister-rose)] text-[var(--hister-rose)]" />
+    <Heart size={256} class="fill-[var(--nogon-rose)] text-[var(--nogon-rose)]" />
     <h1
       class="font-outfit text-center text-4xl leading-[0.95] font-black tracking-[-1.5px] text-white uppercase md:text-6xl"
     >
@@ -107,7 +107,7 @@
       <div
         class="border-brutal-border brutal-press-card flex flex-col gap-6 border-[3px] bg-white p-8 md:p-10"
       >
-        <div class="border-brutal-border bg-hister-rose inline-flex w-fit border-[3px] p-3">
+        <div class="border-brutal-border bg-nogon-rose inline-flex w-fit border-[3px] p-3">
           <Heart size={28} class="fill-white text-white" />
         </div>
         <div class="flex flex-col gap-3">
@@ -126,7 +126,7 @@
             href="https://github.com/sponsors/asciimoo"
             target="_blank"
             rel="noopener noreferrer"
-            class="bg-hister-rose font-space border-brutal-border brutal-press h-auto rounded-none border-[3px] px-7 py-3.5 text-[14px] font-bold tracking-[1.5px] text-white uppercase no-underline"
+            class="bg-nogon-rose font-space border-brutal-border brutal-press h-auto rounded-none border-[3px] px-7 py-3.5 text-[14px] font-bold tracking-[1.5px] text-white uppercase no-underline"
           >
             <Heart size={16} class="shrink-0 fill-white text-white" />
             Donate
@@ -139,7 +139,7 @@
       <div
         class="border-brutal-border brutal-press-card flex flex-col gap-6 border-[3px] bg-white p-8 md:p-10"
       >
-        <div class="border-brutal-border bg-hister-indigo inline-flex w-fit border-[3px] p-3">
+        <div class="border-brutal-border bg-nogon-indigo inline-flex w-fit border-[3px] p-3">
           <GitPullRequest size={28} class="text-white" />
         </div>
         <div class="flex flex-col gap-3">
@@ -158,7 +158,7 @@
             href="https://github.com/asciimoo/hister"
             target="_blank"
             rel="noopener noreferrer"
-            class="bg-hister-indigo font-space border-brutal-border brutal-press h-auto rounded-none border-[3px] px-7 py-3.5 text-[14px] font-bold tracking-[1.5px] text-white uppercase no-underline"
+            class="bg-nogon-indigo font-space border-brutal-border brutal-press h-auto rounded-none border-[3px] px-7 py-3.5 text-[14px] font-bold tracking-[1.5px] text-white uppercase no-underline"
           >
             <GitPullRequest size={16} class="shrink-0" />
             View on GitHub
@@ -237,7 +237,7 @@
   <div class="mx-auto grid max-w-5xl grid-cols-1 gap-0 md:grid-cols-2">
     <article class="border-brutal-border flex flex-col gap-6 p-10 md:border-r-[3px] md:p-14">
       <div
-        class="bg-hister-rose border-brutal-border inline-flex w-fit items-center gap-2 border-[3px] px-3.5 py-1.5"
+        class="bg-nogon-rose border-brutal-border inline-flex w-fit items-center gap-2 border-[3px] px-3.5 py-1.5"
       >
         <span class="font-space text-[11px] font-bold tracking-[2px] text-white uppercase"
           >The Mission</span
@@ -265,7 +265,7 @@
 </section>
 
 <!-- Future Plans -->
-<section class="bg-hister-rose w-full px-6 py-14 text-white md:px-12 md:py-20">
+<section class="bg-nogon-rose w-full px-6 py-14 text-white md:px-12 md:py-20">
   <div class="mx-auto max-w-5xl">
     <div class="mb-12 flex flex-col items-center gap-4 text-center">
       <h2

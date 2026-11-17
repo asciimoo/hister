@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Button } from '@hister/components/ui/button';
+  import { Button } from '@nogon/components/ui/button';
   import { ChevronDown, ChevronRight } from '@lucide/svelte';
   import {
     getColorVar,
@@ -38,7 +38,7 @@
     {#if loadingPeriods.has(bucket.key)}
       <span class="font-inter text-text-brand-muted shrink-0 text-xs">Loading days...</span>
     {:else if periodErrors.has(bucket.key)}
-      <span class="font-inter text-hister-coral shrink-0 text-xs">
+      <span class="font-inter text-nogon-coral shrink-0 text-xs">
         {periodErrors.get(bucket.key)}
       </span>
     {:else}

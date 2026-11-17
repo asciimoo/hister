@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Button } from '@hister/components/ui/button';
+  import { Button } from '@nogon/components/ui/button';
   import StickyNote from '@lucide/svelte/icons/sticky-note';
   import Globe from '@lucide/svelte/icons/globe';
 
@@ -21,7 +21,7 @@
     <input
       type="checkbox"
       bind:checked={deleteMatches}
-      class="accent-hister-rose h-3.5 w-3.5 cursor-pointer"
+      class="accent-nogon-rose h-3.5 w-3.5 cursor-pointer"
     />
     Delete matching documents
   </label>
@@ -29,7 +29,7 @@
     <Button
       variant="outline"
       size="sm"
-      class="border-brutal-border font-outfit hover:border-hister-rose h-9 flex-1 border-[3px] text-xs font-bold tracking-wide transition-all hover:shadow-[3px_3px_0_var(--brutal-shadow)]"
+      class="border-brutal-border font-outfit hover:border-nogon-rose h-9 flex-1 border-[3px] text-xs font-bold tracking-wide transition-all hover:shadow-[3px_3px_0_var(--brutal-shadow)]"
       onclick={() => onAddSkipRule?.('url', deleteMatches)}
     >
       <StickyNote class="size-3.5" />
@@ -38,7 +38,7 @@
     <Button
       variant="outline"
       size="sm"
-      class="border-brutal-border font-outfit hover:border-hister-rose h-9 flex-1 border-[3px] text-xs font-bold tracking-wide transition-all hover:shadow-[3px_3px_0_var(--brutal-shadow)]"
+      class="border-brutal-border font-outfit hover:border-nogon-rose h-9 flex-1 border-[3px] text-xs font-bold tracking-wide transition-all hover:shadow-[3px_3px_0_var(--brutal-shadow)]"
       onclick={() => onAddSkipRule?.('domain', deleteMatches)}
     >
       <Globe class="size-3.5" />

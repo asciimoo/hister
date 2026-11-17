@@ -10,10 +10,10 @@
     ],
     variants: {
       variant: {
-        note: '[--callout-color:var(--hister-indigo)] border-l-[var(--hister-indigo)]',
-        warning: '[--callout-color:var(--hister-amber)] border-l-[var(--hister-amber)]',
-        danger: '[--callout-color:var(--hister-rose)] border-l-[var(--hister-rose)]',
-        tip: '[--callout-color:var(--hister-lime)] border-l-[var(--hister-lime)]',
+        note: '[--callout-color:var(--nogon-indigo)] border-l-[var(--nogon-indigo)]',
+        warning: '[--callout-color:var(--nogon-amber)] border-l-[var(--nogon-amber)]',
+        danger: '[--callout-color:var(--nogon-rose)] border-l-[var(--nogon-rose)]',
+        tip: '[--callout-color:var(--nogon-lime)] border-l-[var(--nogon-lime)]',
       },
     },
     defaultVariants: {
@@ -27,7 +27,7 @@
 <script lang="ts">
   import type { Component, Snippet } from 'svelte';
   import type { HTMLAttributes } from 'svelte/elements';
-  import { cn, type WithElementRef } from '@hister/components/utils';
+  import { cn, type WithElementRef } from '@nogon/components/utils';
   import InfoIcon from '@lucide/svelte/icons/info';
   import AlertTriangleIcon from '@lucide/svelte/icons/triangle-alert';
   import AlertOctagonIcon from '@lucide/svelte/icons/octagon-alert';

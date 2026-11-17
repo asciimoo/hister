@@ -6,12 +6,12 @@
   import { page } from '$app/state';
   import { formatTimestamp, formatRelativeTime, KeyHandler, scrollTo } from '#lib/search.js';
   import type { HistoryItem } from '#lib/types.js';
-  import { Button } from '@hister/components/ui/button';
-  import { Input } from '@hister/components/ui/input';
-  import { Badge } from '@hister/components/ui/badge';
-  import { Separator } from '@hister/components/ui/separator';
-  import { ScrollArea } from '@hister/components/ui/scroll-area';
-  import { PageHeader } from '@hister/components';
+  import { Button } from '@nogon/components/ui/button';
+  import { Input } from '@nogon/components/ui/input';
+  import { Badge } from '@nogon/components/ui/badge';
+  import { Separator } from '@nogon/components/ui/separator';
+  import { ScrollArea } from '@nogon/components/ui/scroll-area';
+  import { PageHeader } from '@nogon/components';
   import {
     StatusMessage,
     PreviewPanel,
@@ -620,7 +620,7 @@
 <header class="border-brutal-border bg-card-surface shrink-0 border-b-[3px] px-3 py-3 md:px-6">
   <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
     <div class="flex min-w-0 items-center gap-4">
-      <PageHeader color="hister-indigo" size="sm" class="min-w-0 shrink-0" truncate>
+      <PageHeader color="nogon-indigo" size="sm" class="min-w-0 shrink-0" truncate>
         History
       </PageHeader>
       <a
@@ -640,7 +640,7 @@
         <input
           type="checkbox"
           bind:checked={openedOnly}
-          class="accent-hister-indigo size-3.5 cursor-pointer"
+          class="accent-nogon-indigo size-3.5 cursor-pointer"
         />
         <span>Show only opened results</span>
       </label>
@@ -696,7 +696,7 @@
           <Button
             variant="ghost"
             class="flex h-auto w-full cursor-pointer items-center justify-start gap-2 rounded-none border-[2px] px-3 py-2 shadow-[2px_2px_0_transparent] hover:shadow-[2px_2px_0_var(--brutal-shadow)] {!activeTimelineKey
-              ? 'border-brutal-border bg-hister-indigo text-primary-foreground hover:bg-hister-indigo/90 hover:text-primary-foreground'
+              ? 'border-brutal-border bg-nogon-indigo text-primary-foreground hover:bg-nogon-indigo/90 hover:text-primary-foreground'
               : 'hover:border-border-brand hover:bg-muted-surface border-transparent'}"
             onclick={showAll}
           >
@@ -785,7 +785,7 @@
           {/if}
 
           {#if timelineError}
-            <p class="font-inter text-hister-coral px-1 text-xs">{timelineError}</p>
+            <p class="font-inter text-nogon-coral px-1 text-xs">{timelineError}</p>
           {/if}
         </div>
       </ScrollArea>
@@ -802,7 +802,7 @@
             variant="ghost"
             size="sm"
             class="font-inter border-brutal-border h-8 shrink-0 rounded-none border-[2px] px-3 text-xs font-bold {!activeTimelineKey
-              ? 'bg-hister-indigo hover:bg-hister-indigo/90 text-primary-foreground hover:text-primary-foreground'
+              ? 'bg-nogon-indigo hover:bg-nogon-indigo/90 text-primary-foreground hover:text-primary-foreground'
               : 'text-text-brand-secondary hover:bg-muted-surface'}"
             onclick={showAll}
           >
@@ -895,7 +895,7 @@
                         <a
                           data-result-link={item.url}
                           href={historyResultUrl(item)}
-                          class="history-title font-outfit text-hister-cyan line-clamp-2 text-base font-bold no-underline hover:underline md:text-lg"
+                          class="history-title font-outfit text-nogon-cyan line-clamp-2 text-base font-bold no-underline hover:underline md:text-lg"
                           title={item.title || item.url}
                           target="_blank"
                           rel="noopener"
@@ -931,7 +931,7 @@
                           <Button
                             variant="ghost"
                             size="icon-sm"
-                            class="text-text-brand-muted hover:bg-muted-surface hover:text-hister-teal size-8 shrink-0"
+                            class="text-text-brand-muted hover:bg-muted-surface hover:text-nogon-teal size-8 shrink-0"
                             aria-label="Preview entry"
                             title="Preview"
                             onclick={() => {
@@ -949,7 +949,7 @@
                         <Button
                           variant="ghost"
                           size="icon-sm"
-                          class="text-text-brand-muted hover:bg-muted-surface hover:text-hister-rose size-8 shrink-0"
+                          class="text-text-brand-muted hover:bg-muted-surface hover:text-nogon-rose size-8 shrink-0"
                           aria-label="Delete entry"
                           title="Delete"
                           onclick={() => deleteItem(item)}
@@ -989,7 +989,7 @@
           <!-- Drag handle to resize the split-screen panel -->
           <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
           <div
-            class="hover:bg-hister-indigo/40 w-1.5 shrink-0 cursor-col-resize bg-transparent transition-colors"
+            class="hover:bg-nogon-indigo/40 w-1.5 shrink-0 cursor-col-resize bg-transparent transition-colors"
             onmousedown={previewState.startResize}
             role="separator"
             aria-label="Resize preview panel"

@@ -1,11 +1,11 @@
 <script lang="ts">
   import Download from '@lucide/svelte/icons/download';
   import ExternalLink from '@lucide/svelte/icons/external-link';
-  import { Button } from '@hister/components';
+  import { Button } from '@nogon/components';
 </script>
 
 <section
-  class="border-brutal-border bg-hister-coral relative isolate overflow-hidden border-b-[3px]"
+  class="border-brutal-border bg-nogon-coral relative isolate overflow-hidden border-b-[3px]"
 >
   <div class="document-backdrop" aria-hidden="true">
     <svg viewBox="0 0 1600 700" preserveAspectRatio="xMidYMid slice">
@@ -138,7 +138,7 @@
   }
 
   .document-fragment .match {
-    fill: var(--hister-lime);
+    fill: var(--nogon-lime);
     stroke: none;
   }
 

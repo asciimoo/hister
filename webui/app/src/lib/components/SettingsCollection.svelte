@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { Button } from '@hister/components/ui/button';
-  import { Input } from '@hister/components/ui/input';
-  import { Badge } from '@hister/components/ui/badge';
-  import { Kbd } from '@hister/components/ui/kbd';
-  import * as Tooltip from '@hister/components/ui/tooltip';
+  import { Button } from '@nogon/components/ui/button';
+  import { Input } from '@nogon/components/ui/input';
+  import { Badge } from '@nogon/components/ui/badge';
+  import { Kbd } from '@nogon/components/ui/kbd';
+  import * as Tooltip from '@nogon/components/ui/tooltip';
   import { Pencil, Plus, Trash2 } from '@lucide/svelte';
   import {
     choiceLabel,
@@ -206,7 +206,7 @@
   {#if current}
     <fieldset
       aria-label={`${field.label} ${index + 1}`}
-      class="border-hister-indigo/40 min-w-0 space-y-4 border p-4"
+      class="border-nogon-indigo/40 min-w-0 space-y-4 border p-4"
       use:focusEditor
     >
       <legend class="px-1 text-sm font-medium"
@@ -250,7 +250,7 @@
           </div>
         </details>
       {/if}
-      {#if nameError}<p id={`${id}-name-error`} role="alert" class="text-hister-rose text-sm">
+      {#if nameError}<p id={`${id}-name-error`} role="alert" class="text-nogon-rose text-sm">
           {nameError}
         </p>{/if}
       <div class="flex flex-wrap justify-end gap-2">
@@ -274,7 +274,7 @@
   <fieldset
     aria-label={`${field.label} ${index + 1}`}
     class="min-w-0 space-y-2 border px-3 py-2 transition-colors {changed
-      ? 'border-hister-indigo/40 bg-hister-indigo/5'
+      ? 'border-nogon-indigo/40 bg-nogon-indigo/5'
       : 'border-border-brand-muted bg-background/40 hover:border-border-brand'}"
   >
     <div class="flex min-w-0 items-start justify-between gap-2">
@@ -290,7 +290,7 @@
         {#if changed}
           <Badge
             variant="outline"
-            class="border-hister-indigo/30 text-text-brand shrink-0 text-[10px]">Unsaved</Badge
+            class="border-nogon-indigo/30 text-text-brand shrink-0 text-[10px]">Unsaved</Badge
           >
         {/if}
       </div>
@@ -330,7 +330,7 @@
                   variant="ghost"
                   size="icon-sm"
                   aria-label={`Remove ${field.label} item ${index + 1}`}
-                  class="text-text-brand-muted hover:bg-hister-rose/10 hover:text-hister-rose size-10 sm:size-9"
+                  class="text-text-brand-muted hover:bg-nogon-rose/10 hover:text-nogon-rose size-10 sm:size-9"
                 >
                   <Trash2 class="size-4" aria-hidden="true" />
                 </Button>

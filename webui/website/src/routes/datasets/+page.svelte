@@ -157,7 +157,7 @@
       Public datasets you can import into Hister to extend your local index. <button
         onclick={() => (submitModalOpen = true)}
         aria-haspopup="dialog"
-        class="font-space border-brutal-border brutal-press cursor-pointer border-[2px] bg-(--hister-cyan) px-4 py-2.5 text-[12px] font-bold tracking-[1px] text-white uppercase"
+        class="font-space border-brutal-border brutal-press cursor-pointer border-[2px] bg-(--nogon-cyan) px-4 py-2.5 text-[12px] font-bold tracking-[1px] text-white uppercase"
         >Submit new dataset</button
       >
     </p>
@@ -178,7 +178,7 @@
           <SlidersHorizontal size={14} />
           Filters
           {#if hasFilters}
-            <span class="bg-(--hister-indigo) px-1.5 py-0.5 text-[10px] font-bold text-white">
+            <span class="bg-(--nogon-indigo) px-1.5 py-0.5 text-[10px] font-bold text-white">
               {[
                 selectedTags.length > 0 ? 1 : 0,
                 selectedLicense ? 1 : 0,
@@ -206,7 +206,7 @@
             >Search</label
           >
           <div
-            class="border-brutal-border focus-within:border-hister-indigo focus-within:ring-hister-indigo/35 relative flex items-center border-[2px] transition-[border-color,box-shadow] focus-within:ring-[3px]"
+            class="border-brutal-border focus-within:border-nogon-indigo focus-within:ring-nogon-indigo/35 relative flex items-center border-[2px] transition-[border-color,box-shadow] focus-within:ring-[3px]"
           >
             <span class="pointer-events-none absolute left-3 text-(--text-secondary)">
               <Search size={14} />
@@ -360,10 +360,10 @@
           aria-labelledby="kiwix-heading"
           class="border-brutal-border bg-brutal-card shadow-brutal mx-auto flex w-full max-w-3xl min-w-0 flex-col border-[3px]"
         >
-          <div class="bg-hister-cyan/5 flex flex-1 flex-col justify-between gap-5 p-5">
+          <div class="bg-nogon-cyan/5 flex flex-1 flex-col justify-between gap-5 p-5">
             <div class="flex min-w-0 items-start gap-3">
               <div
-                class="border-brutal-border bg-hister-cyan flex size-10 shrink-0 items-center justify-center border-[2px] text-white"
+                class="border-brutal-border bg-nogon-cyan flex size-10 shrink-0 items-center justify-center border-[2px] text-white"
               >
                 <BookOpen size={21} aria-hidden="true" />
               </div>
@@ -384,7 +384,7 @@
               href="https://browse.library.kiwix.org/#lang=eng"
               target="_blank"
               rel="noopener noreferrer"
-              class="font-space border-brutal-border brutal-press bg-hister-cyan inline-flex shrink-0 items-center justify-center gap-2 self-start border-[2px] px-3 py-2 text-xs font-bold tracking-[0.5px] text-white uppercase no-underline"
+              class="font-space border-brutal-border brutal-press bg-nogon-cyan inline-flex shrink-0 items-center justify-center gap-2 self-start border-[2px] px-3 py-2 text-xs font-bold tracking-[0.5px] text-white uppercase no-underline"
             >
               Browse Kiwix
               <ArrowUpRight size={16} aria-hidden="true" />
@@ -428,7 +428,7 @@
 
                 <div class="flex flex-wrap gap-2">
                   <span
-                    class="font-space border-brutal-border border-[2px] bg-(--hister-teal) px-2 py-0.5 text-[10px] font-bold tracking-[1px] text-white uppercase"
+                    class="font-space border-brutal-border border-[2px] bg-(--nogon-teal) px-2 py-0.5 text-[10px] font-bold tracking-[1px] text-white uppercase"
                   >
                     {dataset.license}
                   </span>
@@ -486,7 +486,7 @@
                   href={dataset.downloadUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  class="font-space border-brutal-border brutal-press flex w-full items-center justify-center gap-2 border-[2px] bg-(--hister-indigo) px-4 py-2.5 text-[12px] font-bold tracking-[1px] text-white uppercase no-underline"
+                  class="font-space border-brutal-border brutal-press flex w-full items-center justify-center gap-2 border-[2px] bg-(--nogon-indigo) px-4 py-2.5 text-[12px] font-bold tracking-[1px] text-white uppercase no-underline"
                 >
                   <Download size={14} class="shrink-0" />
                   Download
@@ -559,7 +559,7 @@
           href="https://github.com/asciimoo/hister"
           target="_blank"
           rel="noopener noreferrer"
-          class="font-space border-brutal-border brutal-press flex w-full items-center justify-center gap-2 self-start border-[2px] bg-(--hister-indigo) px-5 py-2.5 text-[12px] font-bold tracking-[1px] text-white uppercase no-underline"
+          class="font-space border-brutal-border brutal-press flex w-full items-center justify-center gap-2 self-start border-[2px] bg-(--nogon-indigo) px-5 py-2.5 text-[12px] font-bold tracking-[1px] text-white uppercase no-underline"
         >
           <GitPullRequest size={14} class="shrink-0" />
           Open a Pull Request

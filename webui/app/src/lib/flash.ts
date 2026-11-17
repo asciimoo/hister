@@ -1,5 +1,5 @@
 import { tick } from 'svelte';
-import { toast } from '@hister/components/ui/sonner';
+import { toast } from '@nogon/components/ui/sonner';
 
 const flashMessageKey = 'histerFlashMessage';
 

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Separator } from '@hister/components/ui/separator';
+  import { Separator } from '@nogon/components/ui/separator';
   import Heart from '@lucide/svelte/icons/heart';
 
   const linkCols = [

@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { Badge } from '@hister/components/ui/badge';
-  import { Button } from '@hister/components/ui/button';
+  import { Badge } from '@nogon/components/ui/badge';
+  import { Button } from '@nogon/components/ui/button';
   import SettingInput from './SettingInput.svelte';
   import SettingsCollection from './SettingsCollection.svelte';
-  import * as Tooltip from '@hister/components/ui/tooltip';
+  import * as Tooltip from '@nogon/components/ui/tooltip';
   import { Check, Eye, Folder, Info, Lock, Minus, Pencil } from '@lucide/svelte';
   import {
     canEditSetting,
@@ -114,7 +114,7 @@
 <section
   aria-label={preview ? `Pending ${field.label}` : field.label}
   class="border-border-brand-muted grid gap-x-8 gap-y-3 border-b px-4 py-4 last:border-b-0 md:px-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] {edit
-    ? 'bg-hister-indigo/5'
+    ? 'bg-nogon-indigo/5'
     : ''}"
 >
   <div class="min-w-0 space-y-1 break-words {directories ? 'lg:col-span-2' : ''}">
@@ -174,7 +174,7 @@
         <div class="ml-auto flex flex-wrap justify-end gap-2">
           <Badge
             variant="outline"
-            class="border-hister-indigo/30 bg-hister-indigo/10 text-text-brand gap-1.5"
+            class="border-nogon-indigo/30 bg-nogon-indigo/10 text-text-brand gap-1.5"
           >
             <Pencil aria-hidden="true" />
             Unsaved
@@ -296,14 +296,14 @@
           : 'Unsaved change.'}
       </p>
     {/if}
-    {#if errors.length}<div id={`${id}-errors`} class="text-hister-rose text-sm">
+    {#if errors.length}<div id={`${id}-errors`} class="text-nogon-rose text-sm">
         {#each errors as error}<p>{error}</p>{/each}
       </div>{/if}
     {#if conflict && (edit || editor?.path === field.path)}
       <div
         id={`${id}-conflict`}
         role="alert"
-        class="border-hister-rose/40 space-y-2 border p-3 text-sm"
+        class="border-nogon-rose/40 space-y-2 border p-3 text-sm"
       >
         <p>{conflict}</p>
         <p class="text-text-brand-muted [overflow-wrap:anywhere]">

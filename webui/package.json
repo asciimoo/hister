@@ -2,10 +2,10 @@
   "name": "hister-webui",
   "private": true,
   "scripts": {
-    "build:app": "npm -w @hister/app run build",
-    "build:website": "npm -w @hister/website run build",
+    "build:app": "npm -w @nogon/app run build",
+    "build:website": "npm -w @nogon/website run build",
     "build": "npm run build:app && npm run build:website",
-    "dev:app": "npm -w @hister/app run dev",
-    "dev:website": "npm -w @hister/website run dev"
+    "dev:app": "npm -w @nogon/app run dev",
+    "dev:website": "npm -w @nogon/website run dev"
   }
 }

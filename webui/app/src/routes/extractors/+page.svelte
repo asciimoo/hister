@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { PageHeader } from '@hister/components';
+  import { PageHeader } from '@nogon/components';
   import { fetchExtractors, type ExtractorInfo } from '#lib/api.js';
 
   let extractors = $state<ExtractorInfo[]>([]);
@@ -36,7 +36,7 @@
 {/snippet}
 
 <div class="flex-1 overflow-y-auto px-4 py-6 md:px-12 md:py-10">
-  <PageHeader color="hister-green" class="mx-auto mb-8 max-w-3xl">Extractors</PageHeader>
+  <PageHeader color="nogon-green" class="mx-auto mb-8 max-w-3xl">Extractors</PageHeader>
 
   <div class="mx-auto max-w-3xl">
     {#if error}
@@ -55,7 +55,7 @@
               <span class="font-outfit text-text-brand text-lg font-extrabold">{ext.name}</span>
               {#if ext.enabled}
                 <span
-                  class="bg-hister-green/20 text-hister-green font-space rounded px-2 py-0.5 text-[11px] font-semibold tracking-wider uppercase"
+                  class="bg-nogon-green/20 text-nogon-green font-space rounded px-2 py-0.5 text-[11px] font-semibold tracking-wider uppercase"
                   >Enabled</span
                 >
               {:else}
@@ -67,17 +67,17 @@
               {@render capabilityBadge(
                 ext.capabilities.enrich,
                 'Enricher',
-                'bg-hister-teal/15 text-hister-teal',
+                'bg-nogon-teal/15 text-nogon-teal',
               )}
               {@render capabilityBadge(
                 ext.capabilities.extract,
                 'Content',
-                'bg-hister-amber/15 text-hister-amber',
+                'bg-nogon-amber/15 text-nogon-amber',
               )}
               {@render capabilityBadge(
                 ext.capabilities.preview,
                 'Preview',
-                'bg-hister-indigo/15 text-hister-indigo',
+                'bg-nogon-indigo/15 text-nogon-indigo',
               )}
             </div>
             <p class="font-inter text-text-brand-secondary text-sm leading-relaxed">

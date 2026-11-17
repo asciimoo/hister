@@ -9,7 +9,7 @@
     bg = 'bg-brutal-card',
     textColor = 'text-[var(--text-primary)]',
     descColor = 'text-[var(--text-secondary)]',
-    iconBg = 'bg-hister-indigo',
+    iconBg = 'bg-nogon-indigo',
     iconColor = 'text-white',
     iconSize = 24,
     horizontal = false,

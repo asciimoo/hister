@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { Button } from '@hister/components/ui/button';
-  import { Badge } from '@hister/components/ui/badge';
+  import { Button } from '@nogon/components/ui/button';
+  import { Badge } from '@nogon/components/ui/badge';
   import { ChevronDown, ChevronRight } from '@lucide/svelte';
   import {
     getColorVar,
@@ -49,7 +49,7 @@
     {#if loadingPeriods.has(bucket.key)}
       <p class="font-inter text-text-brand-muted ml-8 px-3 py-1 text-xs">Loading days...</p>
     {:else if periodErrors.has(bucket.key)}
-      <p class="font-inter text-hister-coral ml-8 px-3 py-1 text-xs">
+      <p class="font-inter text-nogon-coral ml-8 px-3 py-1 text-xs">
         {periodErrors.get(bucket.key)}
       </p>
     {:else}

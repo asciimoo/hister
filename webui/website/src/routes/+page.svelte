@@ -2,7 +2,7 @@
   import Hero from '#lib/Hero.svelte';
   import HowItWorks from '#lib/HowItWorks.svelte';
   import Previews from '#lib/Previews.svelte';
-  import WhyHister from '#lib/WhyHister.svelte';
+  import WhyNogon from '#lib/WhyNogon.svelte';
   import Features from '#lib/Features.svelte';
   import FinalCTA from '#lib/FinalCTA.svelte';
   import Seo from '#lib/Seo.svelte';
@@ -20,5 +20,5 @@
 <FinalCTA />
 <Previews />
 <HowItWorks />
-<WhyHister />
+<WhyNogon />
 <Features />

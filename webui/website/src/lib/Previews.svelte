@@ -3,7 +3,7 @@
   import Eye from '@lucide/svelte/icons/eye';
   import Filter from '@lucide/svelte/icons/list-filter';
   import Search from '@lucide/svelte/icons/search';
-  import { BrowserFrame } from '@hister/components';
+  import { BrowserFrame } from '@nogon/components';
 
   import screenshot from '#lib/assets/screenshot.png';
 
@@ -12,19 +12,19 @@
       icon: Search,
       title: 'Search the actual content',
       text: 'Look beyond titles and URLs to the words inside every indexed document.',
-      color: 'var(--hister-cyan)',
+      color: 'var(--nogon-cyan)',
     },
     {
       icon: Filter,
       title: 'Narrow with precision',
       text: 'Use fields, phrases, wildcards, negation, priorities, and your own aliases.',
-      color: 'var(--hister-amber)',
+      color: 'var(--nogon-amber)',
     },
     {
       icon: Eye,
       title: 'Read it in context',
       text: 'Open a clean stored preview beside the results without losing your search.',
-      color: 'var(--hister-lime)',
+      color: 'var(--nogon-lime)',
     },
   ];
 </script>
@@ -70,7 +70,7 @@
 
         <a
           href="/docs/query-language"
-          class="font-space decoration-hister-coral mt-8 inline-flex items-center gap-2 text-xs font-bold tracking-[1.2px] text-[var(--text-primary)] uppercase underline decoration-[3px] underline-offset-4 hover:no-underline"
+          class="font-space decoration-nogon-coral mt-8 inline-flex items-center gap-2 text-xs font-bold tracking-[1.2px] text-[var(--text-primary)] uppercase underline decoration-[3px] underline-offset-4 hover:no-underline"
         >
           Explore the query language
           <ArrowRight size={15} />
@@ -79,11 +79,11 @@
 
       <div class="relative min-w-0 lg:py-8">
         <div
-          class="border-brutal-border bg-hister-amber shadow-brutal absolute -top-2 -right-3 h-28 w-28 border-[3px] sm:-right-7 lg:top-0"
+          class="border-brutal-border bg-nogon-amber shadow-brutal absolute -top-2 -right-3 h-28 w-28 border-[3px] sm:-right-7 lg:top-0"
           aria-hidden="true"
         ></div>
         <div
-          class="border-brutal-border bg-hister-rose shadow-brutal absolute -bottom-4 -left-3 h-20 w-20 border-[3px] sm:-left-8"
+          class="border-brutal-border bg-nogon-rose shadow-brutal absolute -bottom-4 -left-3 h-20 w-20 border-[3px] sm:-left-8"
           aria-hidden="true"
         ></div>
         <div class="relative z-10">

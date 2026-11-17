@@ -2,7 +2,7 @@
   import ArrowRightIcon from '@lucide/svelte/icons/arrow-right';
   import ArrowUpRightIcon from '@lucide/svelte/icons/arrow-up-right';
   import Globe from '@lucide/svelte/icons/globe';
-  import * as Card from '@hister/components/ui/card';
+  import * as Card from '@nogon/components/ui/card';
   import DocsSearch from '#lib/DocsSearch.svelte';
   import Seo from '#lib/Seo.svelte';
 
@@ -44,7 +44,7 @@
 
   <section
     aria-labelledby="getting-started-heading"
-    class="border-brutal-border bg-hister-indigo/10 mb-10 border-[3px] p-5 sm:p-6"
+    class="border-brutal-border bg-nogon-indigo/10 mb-10 border-[3px] p-5 sm:p-6"
   >
     <h2
       id="getting-started-heading"
@@ -61,7 +61,7 @@
           <Card.Root href={step.href} class="bg-brutal-card h-full p-4">
             <span
               aria-hidden="true"
-              class="font-fira border-brutal-border bg-hister-indigo mb-3 flex size-8 items-center justify-center border-[2px] text-sm font-bold text-white"
+              class="font-fira border-brutal-border bg-nogon-indigo mb-3 flex size-8 items-center justify-center border-[2px] text-sm font-bold text-white"
               >{i + 1}</span
             >
             <h3 class="font-space flex items-center justify-between gap-2 text-base font-bold">
@@ -110,7 +110,7 @@
   <section
     aria-labelledby="browser-extensions-heading"
     class="docs-category"
-    style="--section-accent: var(--hister-indigo)"
+    style="--section-accent: var(--nogon-indigo)"
   >
     <div class="docs-category-heading">
       <span class="docs-category-mark" aria-hidden="true"></span>

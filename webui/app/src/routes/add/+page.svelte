@@ -3,12 +3,12 @@
   import { fetchConfig, apiFetch } from '#lib/api.js';
   import { buildPreviewUrl } from '#lib/preview.svelte.js';
   import { redirectToAuth } from '#lib/auth-navigation.js';
-  import { Input } from '@hister/components/ui/input';
-  import { Textarea } from '@hister/components/ui/textarea';
-  import { Label } from '@hister/components/ui/label';
-  import { Button } from '@hister/components/ui/button';
-  import * as Card from '@hister/components/ui/card';
-  import * as Alert from '@hister/components/ui/alert';
+  import { Input } from '@nogon/components/ui/input';
+  import { Textarea } from '@nogon/components/ui/textarea';
+  import { Label } from '@nogon/components/ui/label';
+  import { Button } from '@nogon/components/ui/button';
+  import * as Card from '@nogon/components/ui/card';
+  import * as Alert from '@nogon/components/ui/alert';
   import AlertCircle from '@lucide/svelte/icons/circle-alert';
   import CheckCircle from '@lucide/svelte/icons/circle-check';
   import {
@@ -160,9 +160,9 @@
           <div class="flex w-full flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div class="flex min-w-0 items-start gap-3">
               <span
-                class="bg-hister-coral/10 border-border-brand-muted flex size-10 shrink-0 items-center justify-center border"
+                class="bg-nogon-coral/10 border-border-brand-muted flex size-10 shrink-0 items-center justify-center border"
               >
-                <Database class="text-hister-coral size-5" />
+                <Database class="text-nogon-coral size-5" />
               </span>
               <div class="min-w-0">
                 <Card.Title
@@ -190,7 +190,7 @@
                 type="submit"
                 form="add-entry-form"
                 disabled={!canSubmit}
-                class="bg-hister-coral font-outfit text-primary-foreground brutal-press border-brutal-border hover:bg-hister-coral/90 h-10 shrink-0 gap-2 border-[3px] px-5 text-sm font-extrabold uppercase disabled:opacity-50"
+                class="bg-nogon-coral font-outfit text-primary-foreground brutal-press border-brutal-border hover:bg-nogon-coral/90 h-10 shrink-0 gap-2 border-[3px] px-5 text-sm font-extrabold uppercase disabled:opacity-50"
               >
                 {#if submitting}
                   <LoaderCircle class="size-4 shrink-0 animate-spin" />
@@ -214,7 +214,7 @@
                 href="https://hister.org/docs/browser-extension"
                 target="_blank"
                 rel="noopener noreferrer"
-                class="text-hister-indigo font-semibold underline underline-offset-2"
+                class="text-nogon-indigo font-semibold underline underline-offset-2"
               >
                 set up the browser extension<ExternalLink
                   class="ml-1 inline size-3.5 align-baseline"
@@ -227,7 +227,7 @@
             <div class="grid gap-3 p-4 md:grid-cols-[12rem_minmax(0,1fr)] md:p-5">
               <div class="flex items-start gap-2">
                 <span
-                  class="border-brutal-border bg-card-surface text-hister-coral flex size-8 shrink-0 items-center justify-center border-[2px]"
+                  class="border-brutal-border bg-card-surface text-nogon-coral flex size-8 shrink-0 items-center justify-center border-[2px]"
                 >
                   <Link class="size-4" />
                 </span>
@@ -235,7 +235,7 @@
                   <Label for="entry-url" class="font-outfit text-text-brand text-sm font-black">
                     URL
                   </Label>
-                  <p class="font-fira text-hister-rose mt-1 text-[11px] font-semibold uppercase">
+                  <p class="font-fira text-nogon-rose mt-1 text-[11px] font-semibold uppercase">
                     Required
                   </p>
                 </div>
@@ -251,7 +251,7 @@
                   required
                   autocomplete="url"
                   aria-describedby="entry-url-help"
-                  class="focus-visible:border-hister-coral [font-variant-ligatures:none]"
+                  class="focus-visible:border-nogon-coral [font-variant-ligatures:none]"
                 />
                 <p id="entry-url-help" class="font-inter text-text-brand-muted text-xs">
                   The address to save in your index
@@ -262,7 +262,7 @@
             <div class="grid gap-3 p-4 md:grid-cols-[12rem_minmax(0,1fr)] md:p-5">
               <div class="flex items-start gap-2">
                 <span
-                  class="border-brutal-border bg-card-surface text-hister-coral flex size-8 shrink-0 items-center justify-center border-[2px]"
+                  class="border-brutal-border bg-card-surface text-nogon-coral flex size-8 shrink-0 items-center justify-center border-[2px]"
                 >
                   <Type class="size-4" />
                 </span>
@@ -286,7 +286,7 @@
                   placeholder="Page title"
                   autocomplete="off"
                   aria-describedby="entry-title-help"
-                  class="font-inter focus-visible:border-hister-coral"
+                  class="font-inter focus-visible:border-nogon-coral"
                 />
                 <p id="entry-title-help" class="font-inter text-text-brand-muted text-xs">
                   Searchable title for the document
@@ -297,7 +297,7 @@
             <div class="grid gap-3 p-4 md:grid-cols-[12rem_minmax(0,1fr)] md:p-5">
               <div class="flex items-start gap-2">
                 <span
-                  class="border-brutal-border bg-card-surface text-hister-coral flex size-8 shrink-0 items-center justify-center border-[2px]"
+                  class="border-brutal-border bg-card-surface text-nogon-coral flex size-8 shrink-0 items-center justify-center border-[2px]"
                 >
                   <FileText class="size-4" />
                 </span>
@@ -318,7 +318,7 @@
                   bind:value={text}
                   placeholder="Page content"
                   aria-describedby="entry-content-help"
-                  class="bg-page-bg border-brutal-border font-inter text-text-brand placeholder:text-text-brand-muted focus-visible:border-hister-coral min-h-64 w-full resize-y rounded-none border-[3px] p-4 text-sm transition-colors outline-none focus-visible:ring-0"
+                  class="bg-page-bg border-brutal-border font-inter text-text-brand placeholder:text-text-brand-muted focus-visible:border-nogon-coral min-h-64 w-full resize-y rounded-none border-[3px] p-4 text-sm transition-colors outline-none focus-visible:ring-0"
                 />
                 <div class="flex items-center justify-between gap-3">
                   <p id="entry-content-help" class="font-inter text-text-brand-muted text-xs">

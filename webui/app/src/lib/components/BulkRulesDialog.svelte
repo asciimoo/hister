@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { Button } from '@hister/components/ui/button';
+  import { Button } from '@nogon/components/ui/button';
   import DeleteMatchingDocumentsOption from '#lib/components/DeleteMatchingDocumentsOption.svelte';
   import type { RuleType } from '#lib/rules.js';
-  import * as Dialog from '@hister/components/ui/dialog';
-  import { Label } from '@hister/components/ui/label';
-  import { Textarea } from '@hister/components/ui/textarea';
+  import * as Dialog from '@nogon/components/ui/dialog';
+  import { Label } from '@nogon/components/ui/label';
+  import { Textarea } from '@nogon/components/ui/textarea';
   import { ListPlus, Plus, X } from '@lucide/svelte';
 
   interface Props {
@@ -44,9 +44,9 @@
 <Dialog.Root bind:open>
   <Dialog.Content
     showCloseButton={false}
-    class="border-border-brand bg-card-surface max-w-lg gap-0 overflow-hidden rounded-none border-[3px] p-0 shadow-[6px_6px_0px_var(--hister-coral)]"
+    class="border-border-brand bg-card-surface max-w-lg gap-0 overflow-hidden rounded-none border-[3px] p-0 shadow-[6px_6px_0px_var(--nogon-coral)]"
   >
-    <Dialog.Header class="bg-hister-coral flex-row items-center justify-between gap-2 px-5 py-4">
+    <Dialog.Header class="bg-nogon-coral flex-row items-center justify-between gap-2 px-5 py-4">
       <div>
         <Dialog.Title class="flex items-center gap-2">
           <ListPlus class="size-5 text-white" />
@@ -72,7 +72,7 @@
           placeholder={'^https://example\\.com/\n^https://docs\\.example\\.com/'}
           aria-describedby="bulk-rule-patterns-help"
           wrap="off"
-          class="bg-page-bg border-brutal-border font-fira text-text-brand placeholder:text-text-brand-muted focus-visible:border-hister-coral field-sizing-fixed h-48 max-h-48 min-h-48 w-full resize-none overflow-auto rounded-none border-[3px] p-3 text-sm whitespace-pre"
+          class="bg-page-bg border-brutal-border font-fira text-text-brand placeholder:text-text-brand-muted focus-visible:border-nogon-coral field-sizing-fixed h-48 max-h-48 min-h-48 w-full resize-none overflow-auto rounded-none border-[3px] p-3 text-sm whitespace-pre"
         />
         <div
           id="bulk-rule-patterns-help"
@@ -118,7 +118,7 @@
         type="button"
         onclick={onAdd}
         disabled={saving || !patterns.trim()}
-        class="bg-hister-coral font-space border-brutal-border brutal-press h-9 gap-2 rounded-none border-[3px] px-4 text-xs font-bold tracking-[0.5px] text-white uppercase"
+        class="bg-nogon-coral font-space border-brutal-border brutal-press h-9 gap-2 rounded-none border-[3px] px-4 text-xs font-bold tracking-[0.5px] text-white uppercase"
       >
         <Plus class="size-4" />
         {addLabel}

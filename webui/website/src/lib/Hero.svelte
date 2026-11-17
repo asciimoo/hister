@@ -4,7 +4,7 @@
   import ExternalLink from '@lucide/svelte/icons/external-link';
   import Lock from '@lucide/svelte/icons/lock';
   import Server from '@lucide/svelte/icons/server';
-  import { Button } from '@hister/components';
+  import { Button } from '@nogon/components';
   import { onMount } from 'svelte';
   import HeroSearchDemo from '#lib/HeroSearchDemo.svelte';
 
@@ -25,19 +25,19 @@
       icon: Code2,
       title: 'Free software',
       copy: 'AGPLv3',
-      iconClass: 'bg-hister-cyan text-white',
+      iconClass: 'bg-nogon-cyan text-white',
     },
     {
       icon: Server,
       title: 'Self hosted',
       copy: 'Run it on your own machine or server',
-      iconClass: 'bg-hister-amber text-[var(--text-primary)]',
+      iconClass: 'bg-nogon-amber text-[var(--text-primary)]',
     },
     {
       icon: Lock,
       title: 'Privacy focused',
       copy: 'No telemetry, no external requests ',
-      iconClass: 'bg-hister-lime text-[var(--text-primary)]',
+      iconClass: 'bg-nogon-lime text-[var(--text-primary)]',
     },
   ];
 </script>
@@ -129,12 +129,12 @@
     background:
       radial-gradient(
         circle at 18% 12%,
-        color-mix(in srgb, var(--hister-amber) 20%, transparent),
+        color-mix(in srgb, var(--nogon-amber) 20%, transparent),
         transparent 30%
       ),
       radial-gradient(
         circle at 84% 80%,
-        color-mix(in srgb, var(--hister-indigo) 17%, transparent),
+        color-mix(in srgb, var(--nogon-indigo) 17%, transparent),
         transparent 34%
       ),
       var(--brutal-bg);
@@ -169,7 +169,7 @@
     right: 3%;
     width: 34px;
     height: 34px;
-    background: var(--hister-cyan);
+    background: var(--nogon-cyan);
     rotate: 12deg;
   }
 
@@ -178,13 +178,13 @@
     left: 2%;
     width: 25px;
     height: 52px;
-    background: var(--hister-rose);
+    background: var(--nogon-rose);
     rotate: -9deg;
   }
 
   .hero-title-accent {
-    color: var(--hister-indigo);
-    text-shadow: 4px 4px 0 color-mix(in srgb, var(--hister-coral) 42%, transparent);
+    color: var(--nogon-indigo);
+    text-shadow: 4px 4px 0 color-mix(in srgb, var(--nogon-coral) 42%, transparent);
   }
 
   @media (max-width: 640px) {

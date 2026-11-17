@@ -302,8 +302,8 @@
 
 <style>
   .search-shell {
-    background: color-mix(in srgb, var(--hister-indigo) 18%, var(--brutal-bg));
-    box-shadow: 7px 7px 0 var(--hister-indigo);
+    background: color-mix(in srgb, var(--nogon-indigo) 18%, var(--brutal-bg));
+    box-shadow: 7px 7px 0 var(--nogon-indigo);
   }
 
   .search-label {
@@ -311,7 +311,7 @@
   }
 
   .search-label-mark {
-    background: var(--hister-coral);
+    background: var(--nogon-coral);
     box-shadow: 2px 2px 0 var(--brutal-border);
   }
 
@@ -329,7 +329,7 @@
   .search-field:focus-within {
     box-shadow:
       inset 3px 3px 0 color-mix(in srgb, var(--brutal-shadow) 10%, transparent),
-      0 0 0 3px var(--hister-indigo);
+      0 0 0 3px var(--nogon-indigo);
   }
 
   .search-icon {
@@ -338,7 +338,7 @@
   }
 
   .search-field:focus-within .search-icon {
-    color: var(--hister-indigo);
+    color: var(--nogon-indigo);
   }
 
   input {
@@ -356,18 +356,18 @@
 
   .dark .search-shell {
     border-color: color-mix(in srgb, white 55%, var(--brutal-border));
-    background: color-mix(in srgb, var(--hister-indigo) 24%, var(--brutal-bg));
-    box-shadow: 7px 7px 0 var(--hister-coral);
+    background: color-mix(in srgb, var(--nogon-indigo) 24%, var(--brutal-bg));
+    box-shadow: 7px 7px 0 var(--nogon-coral);
   }
 
   .result[aria-selected='true'],
   .result:hover {
-    background: color-mix(in srgb, var(--hister-indigo) 14%, var(--brutal-card));
+    background: color-mix(in srgb, var(--nogon-indigo) 14%, var(--brutal-card));
   }
 
   mark {
     color: inherit;
-    background: color-mix(in srgb, var(--hister-amber) 65%, transparent);
+    background: color-mix(in srgb, var(--nogon-amber) 65%, transparent);
     padding: 0 0.08em;
   }
 </style>

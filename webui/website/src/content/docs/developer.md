@@ -71,7 +71,7 @@ good first issues. Coding agents should also follow the repository
 
 | Path                | Purpose                                                                 |
 | ------------------- | ----------------------------------------------------------------------- |
-| `hister.go`         | Program entry point                                                     |
+| `nogon.go`          | Program entry point                                                     |
 | `cmd/`              | Command implementations and the terminal interface                      |
 | `client/`           | HTTP client used by commands                                            |
 | `config/`           | Configuration loading and validation                                    |
@@ -235,23 +235,23 @@ Install the frontend dependencies once before running frontend commands:
 
 Use these commands for common work:
 
-| Goal                                  | Command                               |
-| ------------------------------------- | ------------------------------------- |
-| Build the Go program                  | `go build`                            |
-| Run Go tests                          | `go test ./...`                       |
-| Run app browser tests                 | `npm run test:browser -w @hister/app` |
-| Run browser extension tests           | `npm test -w @hister/ext`             |
-| Rebuild embedded frontend assets      | `go generate`                         |
-| Build the complete Hister binary      | `./manage.sh build`                   |
-| Build the web application             | `npm run build -w @hister/app`        |
-| Build this documentation website      | `npm run build -w @hister/website`    |
-| Build the browser extension           | `npm run build -w @hister/ext`        |
-| Run the app development servers       | `npm run serve:app`                   |
-| Format and lint Go code               | `golangci-lint run --fix ./...`       |
-| Check frontend formatting and linting | `npm run check`                       |
-| Apply frontend formatting             | `npm run format`                      |
+| Goal                                  | Command                              |
+| ------------------------------------- | ------------------------------------ |
+| Build the Go program                  | `go build`                           |
+| Run Go tests                          | `go test ./...`                      |
+| Run app browser tests                 | `npm run test:browser -w @nogon/app` |
+| Run browser extension tests           | `npm test -w @nogon/ext`             |
+| Rebuild embedded frontend assets      | `go generate`                        |
+| Build the complete Hister binary      | `./manage.sh build`                  |
+| Build the web application             | `npm run build -w @nogon/app`        |
+| Build this documentation website      | `npm run build -w @nogon/website`    |
+| Build the browser extension           | `npm run build -w @nogon/ext`        |
+| Run the app development servers       | `npm run serve:app`                  |
+| Format and lint Go code               | `golangci-lint run --fix ./...`      |
+| Check frontend formatting and linting | `npm run check`                      |
+| Apply frontend formatting             | `npm run format`                     |
 
-`go generate` runs `webui/build.sh`. That script builds `@hister/app`, replaces
+`go generate` runs `webui/build.sh`. That script builds `@nogon/app`, replaces
 `server/static/app`, and copies the new frontend build into the embedded asset
 directory. Run it before building the Go binary whenever embedded frontend code
 changes.
@@ -267,7 +267,7 @@ The app browser tests use Chromium with desktop and mobile layouts. Install the
 browser before the first run:
 
 ```bash
-npm exec -w @hister/app -- playwright install --with-deps chromium
+npm exec -w @nogon/app -- playwright install --with-deps chromium
 ```
 
 Playwright starts the app development server and the tests mock the HTTP API and

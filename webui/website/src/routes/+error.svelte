@@ -5,7 +5,7 @@
   import Newspaper from '@lucide/svelte/icons/newspaper';
   import RefreshCw from '@lucide/svelte/icons/refresh-cw';
   import SearchX from '@lucide/svelte/icons/search-x';
-  import { Button } from '@hister/components';
+  import { Button } from '@nogon/components';
 
   const notFound = $derived(page.status === 404);
   const title = $derived(notFound ? 'Page Not Found' : 'Something Went Wrong');
@@ -21,21 +21,21 @@
       label: 'Home',
       description: 'Return to the Hister overview.',
       icon: House,
-      color: 'bg-hister-cyan',
+      color: 'bg-nogon-cyan',
     },
     {
       href: '/docs',
       label: 'Documentation',
       description: 'Find installation and usage guides.',
       icon: BookOpen,
-      color: 'bg-hister-lime',
+      color: 'bg-nogon-lime',
     },
     {
       href: '/posts',
       label: 'Posts',
       description: 'Read Hister news and practical guides.',
       icon: Newspaper,
-      color: 'bg-hister-amber',
+      color: 'bg-nogon-amber',
     },
   ];
 </script>
@@ -55,15 +55,15 @@
   >
     <div class="relative mx-auto w-fit lg:mx-0" aria-hidden="true">
       <div
-        class="border-brutal-border bg-hister-rose shadow-brutal absolute -top-5 -right-5 h-14 w-14 rotate-12 border-[3px]"
+        class="border-brutal-border bg-nogon-rose shadow-brutal absolute -top-5 -right-5 h-14 w-14 rotate-12 border-[3px]"
       ></div>
       <div
-        class="border-brutal-border bg-hister-amber shadow-brutal absolute -bottom-6 -left-6 h-10 w-20 -rotate-6 border-[3px]"
+        class="border-brutal-border bg-nogon-amber shadow-brutal absolute -bottom-6 -left-6 h-10 w-20 -rotate-6 border-[3px]"
       ></div>
       <div
         class="bg-brutal-card border-brutal-border relative flex aspect-square w-[min(68vw,320px)] flex-col items-center justify-center border-[4px] shadow-[12px_12px_0_var(--brutal-shadow)]"
       >
-        <SearchX size={72} strokeWidth={2.2} class="text-hister-indigo mb-2" />
+        <SearchX size={72} strokeWidth={2.2} class="text-nogon-indigo mb-2" />
         <span class="font-outfit text-8xl leading-none font-black tracking-[-0.06em]">
           {page.status}
         </span>
@@ -71,7 +71,7 @@
     </div>
 
     <div>
-      <p class="font-fira text-hister-indigo mb-4 text-sm font-bold tracking-[2px] uppercase">
+      <p class="font-fira text-nogon-indigo mb-4 text-sm font-bold tracking-[2px] uppercase">
         Error {page.status}
       </p>
       <h1
@@ -141,12 +141,12 @@
     background:
       radial-gradient(
         circle at 15% 20%,
-        color-mix(in srgb, var(--hister-coral) 18%, transparent),
+        color-mix(in srgb, var(--nogon-coral) 18%, transparent),
         transparent 32%
       ),
       radial-gradient(
         circle at 86% 72%,
-        color-mix(in srgb, var(--hister-indigo) 15%, transparent),
+        color-mix(in srgb, var(--nogon-indigo) 15%, transparent),
         transparent 35%
       ),
       var(--brutal-bg);

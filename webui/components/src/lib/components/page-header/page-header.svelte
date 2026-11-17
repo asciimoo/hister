@@ -1,9 +1,9 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
-  import { cn } from '@hister/components/utils';
+  import { cn } from '@nogon/components/utils';
 
   let {
-    color = 'hister-indigo',
+    color = 'nogon-indigo',
     size = 'md',
     tag = 'h1',
     truncate = false,

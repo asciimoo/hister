@@ -9,7 +9,7 @@
 @import '@fontsource/inter/latin-500.css';
 @import '@fontsource/inter/latin-600.css';
 @import '@fontsource/inter/latin-700.css';
-@import '@hister/components/colors.css';
+@import '@nogon/components/colors.css';
 @source '../../components/src';
 @import './content.css';
 
@@ -24,6 +24,6 @@ a:not([data-slot='button']):focus-visible,
 button:not([data-slot='button']):focus-visible,
 summary:focus-visible,
 [role='button']:focus-visible {
-  outline: 3px solid var(--hister-indigo);
+  outline: 3px solid var(--nogon-indigo);
   outline-offset: 3px;
 }

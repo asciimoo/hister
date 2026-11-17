@@ -9,7 +9,7 @@
 @import '@fontsource/inter/600.css';
 @import '@fontsource/inter/700.css';
 @import 'tw-animate-css';
-@import '@hister/components/colors.css';
+@import '@nogon/components/colors.css';
 @source '../../components/src';
 
 @layer base {
@@ -30,7 +30,7 @@
   }
 
   a {
-    color: var(--color-hister-indigo);
+    color: var(--color-nogon-indigo);
     text-decoration: none;
     cursor: pointer;
   }

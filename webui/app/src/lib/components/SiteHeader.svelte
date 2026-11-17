@@ -1,8 +1,8 @@
 <script lang="ts">
   import { page } from '$app/state';
   import { resolve } from '$app/paths';
-  import { Button } from '@hister/components/ui/button';
-  import * as DropdownMenu from '@hister/components/ui/dropdown-menu';
+  import { Button } from '@nogon/components/ui/button';
+  import * as DropdownMenu from '@nogon/components/ui/dropdown-menu';
   import { userPrefersMode } from 'mode-watcher';
   import {
     ExternalLink,
@@ -24,20 +24,20 @@
   let { config, onLogout }: { config: AppConfig | null; onLogout: () => void } = $props();
 
   const navItems = [
-    { label: 'History', href: 'history', color: 'var(--hister-indigo)' },
-    { label: 'Rules', href: 'rules', color: 'var(--hister-teal)' },
+    { label: 'History', href: 'history', color: 'var(--nogon-indigo)' },
+    { label: 'Rules', href: 'rules', color: 'var(--nogon-teal)' },
   ];
-  const addMenuItem = { label: 'Add', href: 'add', color: 'var(--hister-coral)' };
+  const addMenuItem = { label: 'Add', href: 'add', color: 'var(--nogon-coral)' };
 
   const secondaryItems = [
-    { label: 'Help', href: 'help', color: 'var(--hister-indigo)' },
-    { label: 'Extractors', href: 'extractors', color: 'var(--hister-cyan)' },
-    { label: 'About', href: 'about', color: 'var(--hister-teal)' },
-    { label: 'API', href: 'api-docs', color: 'var(--hister-coral)' },
+    { label: 'Help', href: 'help', color: 'var(--nogon-indigo)' },
+    { label: 'Extractors', href: 'extractors', color: 'var(--nogon-cyan)' },
+    { label: 'About', href: 'about', color: 'var(--nogon-teal)' },
+    { label: 'API', href: 'api-docs', color: 'var(--nogon-coral)' },
     {
       label: 'GitHub',
       href: 'https://github.com/asciimoo/hister/',
-      color: 'var(--hister-amber)',
+      color: 'var(--nogon-amber)',
       external: true,
     },
   ];
@@ -45,14 +45,14 @@
   const extensionBrowser = detectExtensionBrowser(navigator.userAgent);
   const secondaryMenuItems = $derived(
     config?.canConfigure
-      ? [{ label: 'Settings', href: 'settings', color: 'var(--hister-indigo)' }, ...secondaryItems]
+      ? [{ label: 'Settings', href: 'settings', color: 'var(--nogon-indigo)' }, ...secondaryItems]
       : secondaryItems,
   );
   const menuItems = $derived(
     extensionBrowser
       ? [
           ...secondaryMenuItems,
-          { ...extensionStores[extensionBrowser], color: 'var(--hister-rose)', external: true },
+          { ...extensionStores[extensionBrowser], color: 'var(--nogon-rose)', external: true },
         ]
       : secondaryMenuItems,
   );
@@ -121,7 +121,7 @@
             {...props}
             variant="ghost"
             size="icon"
-            class="text-text-brand-muted hover:text-hister-indigo hover:bg-muted-surface size-8 shrink-0 transition-all md:size-10"
+            class="text-text-brand-muted hover:text-nogon-indigo hover:bg-muted-surface size-8 shrink-0 transition-all md:size-10"
             title="Open menu"
             aria-label="Open navigation menu"
           >

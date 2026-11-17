@@ -1,12 +1,12 @@
 <script lang="ts">
-  import { Button } from '@hister/components/ui/button';
-  import { Input } from '@hister/components/ui/input';
-  import { Label } from '@hister/components/ui/label';
-  import { Switch } from '@hister/components/ui/switch';
-  import * as Card from '@hister/components/ui/card';
+  import { Button } from '@nogon/components/ui/button';
+  import { Input } from '@nogon/components/ui/input';
+  import { Label } from '@nogon/components/ui/label';
+  import { Switch } from '@nogon/components/ui/switch';
+  import * as Card from '@nogon/components/ui/card';
   import SettingsInput from '../options/SettingsInput.svelte';
-  import * as Tooltip from '@hister/components/ui/tooltip';
-  import { SkipRuleActions, buildUrlSkipPattern, buildDomainSkipPattern } from '@hister/components';
+  import * as Tooltip from '@nogon/components/ui/tooltip';
+  import { SkipRuleActions, buildUrlSkipPattern, buildDomainSkipPattern } from '@nogon/components';
   import { Settings, Sun, Moon, Save, Info, Check } from '@lucide/svelte';
   import { slide } from 'svelte/transition';
   import { ModeWatcher, toggleMode, mode } from 'mode-watcher';
@@ -319,7 +319,7 @@
 <main class="w-80">
   <!-- Header bar -->
   <div
-    class="bg-hister-indigo/90 border-brutal-border flex items-center justify-between border-b-[3px] px-5 py-3"
+    class="bg-nogon-indigo/90 border-brutal-border flex items-center justify-between border-b-[3px] px-5 py-3"
   >
     <a
       href={url}
@@ -333,7 +333,7 @@
     <div class="flex items-center gap-2">
       <button
         onclick={toggleSettings}
-        class="hover:text-hister-coral cursor-pointer border-0 bg-transparent p-0 text-white transition-colors"
+        class="hover:text-nogon-coral cursor-pointer border-0 bg-transparent p-0 text-white transition-colors"
         aria-label="Settings"
       >
         <Settings size={20} />
@@ -360,7 +360,7 @@
 
           <Button
             type="submit"
-            class="bg-hister-coral border-brutal-border font-outfit h-9 w-full border-[3px] text-sm font-bold tracking-wide text-white shadow-[3px_3px_0_var(--brutal-shadow)] transition-all hover:translate-x-px hover:translate-y-px hover:shadow-[1px_1px_0_var(--brutal-shadow)]"
+            class="bg-nogon-coral border-brutal-border font-outfit h-9 w-full border-[3px] text-sm font-bold tracking-wide text-white shadow-[3px_3px_0_var(--brutal-shadow)] transition-all hover:translate-x-px hover:translate-y-px hover:shadow-[1px_1px_0_var(--brutal-shadow)]"
           >
             Save
           </Button>
@@ -399,7 +399,7 @@
             <Label class="font-outfit text-text-brand text-sm font-bold">Theme</Label>
             <button
               onclick={toggleMode}
-              class="border-brutal-border hover:border-hister-indigo flex cursor-pointer items-center gap-2 rounded border-[3px] bg-transparent px-3 py-1.5 transition-all"
+              class="border-brutal-border hover:border-nogon-indigo flex cursor-pointer items-center gap-2 rounded border-[3px] bg-transparent px-3 py-1.5 transition-all"
               aria-label="Toggle theme"
             >
               {#if mode.current === 'light'}
@@ -437,7 +437,7 @@
         <Button
           variant="outline"
           onclick={reindex}
-          class="border-brutal-border font-outfit hover:border-hister-indigo h-9 w-full border-[3px] text-sm font-bold tracking-wide transition-all hover:shadow-[3px_3px_0_var(--brutal-shadow)]"
+          class="border-brutal-border font-outfit hover:border-nogon-indigo h-9 w-full border-[3px] text-sm font-bold tracking-wide transition-all hover:shadow-[3px_3px_0_var(--brutal-shadow)]"
         >
           Index this page now
         </Button>
@@ -466,7 +466,7 @@
             type="text"
             bind:value={pageLabel}
             placeholder="Add label..."
-            class="bg-page-bg border-hister-indigo font-fira text-text-brand placeholder:text-text-brand-muted focus-visible:border-hister-coral h-9 flex-1 border-[3px] px-3 text-sm shadow-none transition-colors focus-visible:ring-0"
+            class="bg-page-bg border-nogon-indigo font-fira text-text-brand placeholder:text-text-brand-muted focus-visible:border-nogon-coral h-9 flex-1 border-[3px] px-3 text-sm shadow-none transition-colors focus-visible:ring-0"
           />
           <Tooltip.Provider delayDuration={0}>
             <Tooltip.Root>
@@ -477,7 +477,7 @@
                     variant="outline"
                     onclick={saveLabel}
                     aria-label="Save label"
-                    class="border-brutal-border font-outfit hover:border-hister-indigo h-9 border-[3px] px-3 text-sm font-bold tracking-wide transition-all hover:shadow-[3px_3px_0_var(--brutal-shadow)]"
+                    class="border-brutal-border font-outfit hover:border-nogon-indigo h-9 border-[3px] px-3 text-sm font-bold tracking-wide transition-all hover:shadow-[3px_3px_0_var(--brutal-shadow)]"
                   >
                     <Save size={16} />
                   </Button>
@@ -499,7 +499,7 @@
                     variant="outline"
                     onclick={applyLabel}
                     aria-label="Apply label to this page"
-                    class="border-brutal-border font-outfit hover:border-hister-indigo h-9 border-[3px] px-3 text-sm font-bold tracking-wide transition-all hover:shadow-[3px_3px_0_var(--brutal-shadow)]"
+                    class="border-brutal-border font-outfit hover:border-nogon-indigo h-9 border-[3px] px-3 text-sm font-bold tracking-wide transition-all hover:shadow-[3px_3px_0_var(--brutal-shadow)]"
                   >
                     <Check size={16} />
                   </Button>
@@ -531,7 +531,7 @@
         <Button
           variant="outline"
           onclick={authenticate}
-          class="border-brutal-border font-outfit hover:border-hister-indigo h-9 w-full border-[3px] text-sm font-bold tracking-wide transition-all hover:shadow-[3px_3px_0_var(--brutal-shadow)]"
+          class="border-brutal-border font-outfit hover:border-nogon-indigo h-9 w-full border-[3px] text-sm font-bold tracking-wide transition-all hover:shadow-[3px_3px_0_var(--brutal-shadow)]"
         >
           Authenticate with Browser Session
         </Button>
@@ -544,10 +544,10 @@
       <div
         transition:slide
         class="font-inter mx-5 my-4 border-l-[4px] px-4 py-3 text-sm {messageType === 'success'
-          ? 'border-l-hister-teal bg-hister-teal/10 text-hister-teal'
+          ? 'border-l-nogon-teal bg-nogon-teal/10 text-nogon-teal'
           : messageType === 'info'
-            ? 'border-l-hister-indigo/60 bg-hister-indigo/10 text-hister-indigo'
-            : 'border-l-hister-rose bg-hister-rose/10 text-hister-rose'}"
+            ? 'border-l-nogon-indigo/60 bg-nogon-indigo/10 text-nogon-indigo'
+            : 'border-l-nogon-rose bg-nogon-rose/10 text-nogon-rose'}"
       >
         {message}
       </div>

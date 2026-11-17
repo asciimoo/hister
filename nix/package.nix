@@ -41,7 +41,7 @@ buildGoModule (finalAttrs: {
     fileset = lib.fileset.unions [
       ../go.mod
       ../go.sum
-      ../hister.go
+      ../nogon.go
       ../client
       ../server
       ../config

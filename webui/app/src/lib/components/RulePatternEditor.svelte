@@ -1,8 +1,8 @@
 <script lang="ts">
   import { previewRule, type RuleMatchMode, type RulePreview } from '#lib/rules.js';
-  import { Input } from '@hister/components/ui/input';
-  import { Label } from '@hister/components/ui/label';
-  import { Button } from '@hister/components/ui/button';
+  import { Input } from '@nogon/components/ui/input';
+  import { Label } from '@nogon/components/ui/label';
+  import { Button } from '@nogon/components/ui/button';
   import { Check, X } from '@lucide/svelte';
 
   interface Props {
@@ -103,7 +103,7 @@
         autocomplete="off"
         spellcheck={false}
         aria-describedby={`${id}-help`}
-        class="bg-card-surface focus-visible:border-hister-coral h-10 w-full px-3"
+        class="bg-card-surface focus-visible:border-nogon-coral h-10 w-full px-3"
       />
       <p id={`${id}-help`} class="font-inter text-text-brand-muted text-xs">
         Enter a domain or paste a page URL. Matches pages on that domain over HTTP or HTTPS, on any
@@ -114,7 +114,7 @@
           type="checkbox"
           bind:checked={includeSubdomains}
           {disabled}
-          class="accent-hister-coral size-4"
+          class="accent-nogon-coral size-4"
         />
         Include subdomains
       </label>
@@ -130,7 +130,7 @@
         autocomplete="off"
         spellcheck={false}
         aria-describedby={`${id}-help`}
-        class="bg-card-surface focus-visible:border-hister-coral h-10 w-full px-3"
+        class="bg-card-surface focus-visible:border-nogon-coral h-10 w-full px-3"
       />
       <p id={`${id}-help`} class="font-inter text-text-brand-muted text-xs">
         Matches only this complete URL, including its path and query. Use the URL shown in your
@@ -147,7 +147,7 @@
         autocomplete="off"
         spellcheck={false}
         aria-describedby={`${id}-help`}
-        class="bg-card-surface font-fira focus-visible:border-hister-coral h-10 w-full px-3 text-sm"
+        class="bg-card-surface font-fira focus-visible:border-nogon-coral h-10 w-full px-3 text-sm"
       />
       <p id={`${id}-help`} class="font-inter text-text-brand-muted text-xs">
         One <a
@@ -177,7 +177,7 @@
       autocomplete="off"
       spellcheck={false}
       aria-describedby={`${id}-test-help ${id}-status`}
-      class="bg-card-surface focus-visible:border-hister-coral h-10 w-full px-3"
+      class="bg-card-surface focus-visible:border-nogon-coral h-10 w-full px-3"
     />
     <p id={`${id}-test-help`} class="font-inter text-text-brand-muted text-xs">
       Checks this draft only, without saving it or opening the URL. Other saved rules can affect
@@ -189,14 +189,14 @@
     {#if checking}
       <p class="text-text-brand-muted">Checking rule…</p>
     {:else if error}
-      <div class="text-hister-rose flex flex-wrap items-center gap-2">
+      <div class="text-nogon-rose flex flex-wrap items-center gap-2">
         <p>{error}</p>
         <Button variant="outline" size="sm" {disabled} onclick={() => retry++}>Retry</Button>
       </div>
     {:else if preview?.matches !== undefined}
       <p class="text-text-brand flex items-center gap-2">
         {#if preview.matches}
-          <Check class="text-hister-teal size-4 shrink-0" aria-hidden="true" />
+          <Check class="text-nogon-teal size-4 shrink-0" aria-hidden="true" />
           This URL matches the rule.
         {:else}
           <X class="text-text-brand-muted size-4 shrink-0" aria-hidden="true" />

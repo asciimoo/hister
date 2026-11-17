@@ -6,7 +6,7 @@ description: "How to search your local documents, notes, and code alongside your
 ---
 
 <script>
-  import { CalloutNote } from '@hister/components';
+  import { CalloutNote } from '@nogon/components';
 </script>
 
 One of the most exciting features we've added to Hister is the ability to automatically index and search local files alongside your browser history. This means you can now find meeting notes, project documents, org files just as easily as you'd find a web page you visited last week.

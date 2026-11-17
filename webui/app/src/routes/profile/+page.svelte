@@ -3,10 +3,10 @@
   import { apiFetch, fetchConfig } from '#lib/api.js';
   import { resolve } from '$app/paths';
   import { redirectToAuth } from '#lib/auth-navigation.js';
-  import { Button } from '@hister/components/ui/button';
-  import * as Card from '@hister/components/ui/card';
-  import * as Dialog from '@hister/components/ui/dialog';
-  import { PageHeader } from '@hister/components';
+  import { Button } from '@nogon/components/ui/button';
+  import * as Card from '@nogon/components/ui/card';
+  import * as Dialog from '@nogon/components/ui/dialog';
+  import { PageHeader } from '@nogon/components';
   import { StatusMessage } from '#lib/components/index.js';
   import { Copy, Eye, EyeOff, RefreshCw, User, Info } from '@lucide/svelte';
 
@@ -129,14 +129,14 @@
 </svelte:head>
 
 <div class="flex-1 overflow-y-auto px-4 py-6 md:px-12 md:py-10">
-  <PageHeader color="hister-indigo" class="mx-auto mb-8 max-w-2xl">Profile</PageHeader>
+  <PageHeader color="nogon-indigo" class="mx-auto mb-8 max-w-2xl">Profile</PageHeader>
 
   <div class="mx-auto max-w-2xl space-y-6">
     <!-- User info card -->
     <Card.Root
-      class="bg-card-surface border-hister-indigo gap-0 overflow-hidden rounded-none border-[3px] py-0 shadow-[6px_6px_0_var(--hister-indigo)]"
+      class="bg-card-surface border-nogon-indigo gap-0 overflow-hidden rounded-none border-[3px] py-0 shadow-[6px_6px_0_var(--nogon-indigo)]"
     >
-      <Card.Header class="bg-hister-indigo px-7 py-5">
+      <Card.Header class="bg-nogon-indigo px-7 py-5">
         <Card.Title
           class="font-outfit flex items-center gap-2 text-xl font-black tracking-wide text-white"
         >
@@ -187,7 +187,7 @@
             {/if}
             <button
               onclick={() => (tokenVisible = !tokenVisible)}
-              class="text-text-brand-muted hover:text-hister-indigo shrink-0 cursor-pointer border-0 bg-transparent p-1 transition-colors"
+              class="text-text-brand-muted hover:text-nogon-indigo shrink-0 cursor-pointer border-0 bg-transparent p-1 transition-colors"
               aria-label={tokenVisible ? 'Hide token' : 'Show token'}
             >
               {#if tokenVisible}
@@ -203,7 +203,7 @@
               disabled={copying || generating}
               title="Copy token"
               aria-label="Copy token"
-              class="text-text-brand-muted hover:text-hister-indigo"
+              class="text-text-brand-muted hover:text-nogon-indigo"
             >
               <Copy size={16} />
             </Button>
@@ -214,7 +214,7 @@
           onclick={() => (resetConfirmOpen = true)}
           disabled={generating || copying || !userId || !revision}
           variant="outline"
-          class="border-brutal-border font-outfit hover:border-hister-indigo h-11 w-full border-[3px] text-sm font-bold tracking-wide transition-all hover:shadow-[4px_4px_0_var(--brutal-shadow)] disabled:opacity-50"
+          class="border-brutal-border font-outfit hover:border-nogon-indigo h-11 w-full border-[3px] text-sm font-bold tracking-wide transition-all hover:shadow-[4px_4px_0_var(--brutal-shadow)] disabled:opacity-50"
         >
           <RefreshCw size={16} class="mr-2 {generating ? 'animate-spin' : ''}" />
           {generating ? 'Resetting Token...' : 'Reset Token'}
@@ -254,7 +254,7 @@
     showCloseButton={false}
     class="border-border-brand bg-card-surface max-w-md gap-0 overflow-hidden rounded-none border-[3px] p-0 shadow-[6px_6px_0px_var(--brutal-shadow)]"
   >
-    <Dialog.Header class="bg-hister-rose flex-row items-center gap-2 px-5 py-4">
+    <Dialog.Header class="bg-nogon-rose flex-row items-center gap-2 px-5 py-4">
       <Dialog.Title class="flex items-center gap-2">
         <RefreshCw class="size-5 text-white" />
         <span class="font-outfit text-lg font-extrabold text-white">Reset access token?</span>
@@ -279,7 +279,7 @@
       <Button
         type="button"
         onclick={confirmTokenReset}
-        class="bg-hister-rose font-space border-brutal-border rounded-none border-[3px] text-xs font-bold text-white uppercase"
+        class="bg-nogon-rose font-space border-brutal-border rounded-none border-[3px] text-xs font-bold text-white uppercase"
       >
         Reset Token
       </Button>

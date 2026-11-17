@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <script lang="ts">
-  import { Button } from '@hister/components/ui/button';
-  import * as Dialog from '@hister/components/ui/dialog';
+  import { Button } from '@nogon/components/ui/button';
+  import * as Dialog from '@nogon/components/ui/dialog';
   import Trash2 from '@lucide/svelte/icons/trash-2';
 
   interface Props {
@@ -35,7 +35,7 @@
     showCloseButton={false}
     class="border-border-brand bg-card-surface max-w-md gap-0 overflow-hidden rounded-none border-[3px] p-0 shadow-[6px_6px_0px_var(--brutal-shadow)]"
   >
-    <Dialog.Header class="bg-hister-rose flex-row items-center gap-2 px-5 py-4">
+    <Dialog.Header class="bg-nogon-rose flex-row items-center gap-2 px-5 py-4">
       <Dialog.Title class="flex items-center gap-2">
         <Trash2 class="size-5 text-white" />
         <span class="font-outfit text-lg font-extrabold text-white">Delete matching documents?</span
@@ -66,7 +66,7 @@
         type="button"
         disabled={deleting}
         onclick={onConfirm}
-        class="bg-hister-rose font-space border-brutal-border rounded-none border-[3px] text-xs font-bold text-white uppercase"
+        class="bg-nogon-rose font-space border-brutal-border rounded-none border-[3px] text-xs font-bold text-white uppercase"
       >
         {deleteLabel}
       </Button>

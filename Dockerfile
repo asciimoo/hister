@@ -11,13 +11,13 @@ COPY webui/components/package.json webui/components/
 
 RUN --mount=type=cache,id=hister-npm,target=/root/.npm,sharing=locked \
     npm ci \
-      --workspace=@hister/app \
-      --workspace=@hister/components
+      --workspace=@nogon/app \
+      --workspace=@nogon/components
 
 COPY webui/app/ webui/app/
 COPY webui/components/ webui/components/
 
-RUN npm run build --workspace=@hister/app
+RUN npm run build --workspace=@nogon/app
 
 # Build a static Go binary. Cache downloads and compiled packages separately so
 # source changes do not force the toolchain to start cold.

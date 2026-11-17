@@ -6,7 +6,7 @@
   import CopyIcon from '@lucide/svelte/icons/copy';
   import LinkIcon from '@lucide/svelte/icons/link';
   import ListIcon from '@lucide/svelte/icons/list';
-  import { Button, Separator } from '@hister/components';
+  import { Button, Separator } from '@nogon/components';
   import ImageLightbox from '#lib/ImageLightbox.svelte';
   import Seo from '#lib/Seo.svelte';
 
@@ -179,7 +179,7 @@
         <summary
           class="flex cursor-pointer list-none items-center gap-3 px-4 py-3 [&::-webkit-details-marker]:hidden"
         >
-          <ListIcon aria-hidden="true" size={18} class="text-hister-indigo shrink-0" />
+          <ListIcon aria-hidden="true" size={18} class="text-nogon-indigo shrink-0" />
           <span class="min-w-0 flex-1">
             <span class="font-inter block text-sm font-bold text-(--text-secondary)"
               >On this page</span
@@ -207,7 +207,7 @@
               3
                 ? 'pl-6'
                 : 'pl-3'} {activeId === entry.id
-                ? 'border-hister-indigo bg-hister-indigo/10 text-(--text-primary)'
+                ? 'border-nogon-indigo bg-nogon-indigo/10 text-(--text-primary)'
                 : 'border-transparent text-(--text-secondary) hover:bg-(--muted-surface) hover:text-(--text-primary)'}"
             >
               {entry.text}
@@ -285,7 +285,7 @@
             class="font-inter h-auto justify-start rounded-none border-l-2 py-1 text-left text-[13px] font-normal whitespace-normal no-underline transition-colors
               {entry.level === 3 ? 'pl-5' : 'pl-3'}
               {activeId === entry.id
-              ? 'border-hister-indigo text-(--text-primary)'
+              ? 'border-nogon-indigo text-(--text-primary)'
               : 'hover:border-brutal-border border-transparent text-(--text-secondary) hover:text-(--text-primary)'}"
           >
             {entry.text}

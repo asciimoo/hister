@@ -3,8 +3,8 @@
   import { resolve } from '$app/paths';
   import { fetchConfig, type AppConfig } from '#lib/api.js';
   import { hotkeyDescriptions } from '#lib/hotkeys.js';
-  import { Button } from '@hister/components/ui/button';
-  import { Kbd } from '@hister/components/ui/kbd';
+  import { Button } from '@nogon/components/ui/button';
+  import { Kbd } from '@nogon/components/ui/kbd';
   import { ArrowRight, ArrowUpRight, Keyboard, Search } from '@lucide/svelte';
 
   interface QueryExample {
@@ -238,7 +238,7 @@
         aria-labelledby="shortcuts-title"
       >
         <h2 id="shortcuts-title" class="font-outfit flex items-center gap-3 text-2xl font-bold">
-          <Keyboard class="text-hister-indigo size-6 shrink-0" aria-hidden="true" />Keyboard
+          <Keyboard class="text-nogon-indigo size-6 shrink-0" aria-hidden="true" />Keyboard
           shortcuts
         </h2>
         <p class="section-intro">
@@ -469,7 +469,7 @@
   .page-intro {
     border: 2px solid var(--brutal-border);
     background: var(--brutal-bg);
-    box-shadow: 6px 6px 0 color-mix(in srgb, var(--hister-indigo) 60%, var(--brutal-shadow));
+    box-shadow: 6px 6px 0 color-mix(in srgb, var(--nogon-indigo) 60%, var(--brutal-shadow));
   }
 
   .eyebrow {
@@ -507,7 +507,7 @@
   }
 
   .text-link:hover {
-    text-decoration-color: var(--hister-indigo);
+    text-decoration-color: var(--nogon-indigo);
   }
 
   .section-link {
@@ -571,7 +571,7 @@
 
   .alias-section {
     border: 1px solid var(--border-brand);
-    border-left: 4px solid var(--hister-teal);
+    border-left: 4px solid var(--nogon-teal);
     background: var(--card-surface);
   }
 </style>

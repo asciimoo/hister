@@ -100,12 +100,12 @@ jobs:
 
       - name: Install Chromium and system dependencies
         if: steps.changes.outputs.skip != 'true'
-        run: npm exec -w @hister/app -- playwright install --with-deps chromium
+        run: npm exec -w @nogon/app -- playwright install --with-deps chromium
 
       - name: Run browser tests
         id: browser-tests
         if: steps.changes.outputs.skip != 'true'
-        run: npm run test:browser -w @hister/app
+        run: npm run test:browser -w @nogon/app
 
       - name: Upload browser failure reports
         if: failure() && steps.browser-tests.outcome == 'failure'
@@ -155,4 +155,4 @@ jobs:
 
       - name: Run extension tests
         if: steps.changes.outputs.skip != 'true'
-        run: npm test -w @hister/ext
+        run: npm test -w @nogon/ext

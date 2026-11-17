@@ -3,7 +3,7 @@
   import Menu from '@lucide/svelte/icons/menu';
   import X from '@lucide/svelte/icons/x';
   import Heart from '@lucide/svelte/icons/heart';
-  import { Button } from '@hister/components';
+  import { Button } from '@nogon/components';
 
   let menuOpen = $state(false);
   let menuButton: HTMLButtonElement;
@@ -67,7 +67,7 @@
       <Button
         href="/support"
         aria-current={page.url.pathname === '/support' ? 'page' : undefined}
-        class="bg-hister-rose font-space border-brutal-border h-auto rounded-none border-[3px] px-5 py-2.5 text-[13px] font-semibold tracking-[1px] text-white uppercase no-underline shadow-[3px_3px_0_rgba(0,0,0,0.25)] transition-all hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[1px_1px_0_rgba(0,0,0,0.25)]"
+        class="bg-nogon-rose font-space border-brutal-border h-auto rounded-none border-[3px] px-5 py-2.5 text-[13px] font-semibold tracking-[1px] text-white uppercase no-underline shadow-[3px_3px_0_rgba(0,0,0,0.25)] transition-all hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[1px_1px_0_rgba(0,0,0,0.25)]"
       >
         <Heart size={14} class="shrink-0 fill-white text-white" />
         Support
@@ -76,7 +76,7 @@
         href="https://github.com/asciimoo/hister"
         target="_blank"
         rel="noopener noreferrer"
-        class="bg-hister-indigo font-space border-brutal-border h-auto rounded-none border-[3px] px-5 py-2.5 text-[13px] font-semibold tracking-[1px] text-white uppercase no-underline shadow-[3px_3px_0_rgba(0,0,0,0.25)] transition-all hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[1px_1px_0_rgba(0,0,0,0.25)]"
+        class="bg-nogon-indigo font-space border-brutal-border h-auto rounded-none border-[3px] px-5 py-2.5 text-[13px] font-semibold tracking-[1px] text-white uppercase no-underline shadow-[3px_3px_0_rgba(0,0,0,0.25)] transition-all hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[1px_1px_0_rgba(0,0,0,0.25)]"
       >
         GitHub
       </Button>
@@ -124,7 +124,7 @@
           href="/support"
           aria-current={page.url.pathname === '/support' ? 'page' : undefined}
           onclick={() => (menuOpen = false)}
-          class="bg-hister-rose font-space border-brutal-border h-auto w-fit rounded-none border-[3px] px-5 py-2.5 text-[13px] font-semibold tracking-[1px] text-white uppercase no-underline shadow-[3px_3px_0_rgba(0,0,0,0.25)]"
+          class="bg-nogon-rose font-space border-brutal-border h-auto w-fit rounded-none border-[3px] px-5 py-2.5 text-[13px] font-semibold tracking-[1px] text-white uppercase no-underline shadow-[3px_3px_0_rgba(0,0,0,0.25)]"
         >
           <Heart size={14} class="shrink-0 fill-white text-white" />
           Support
@@ -135,7 +135,7 @@
           href="https://github.com/asciimoo/hister"
           target="_blank"
           rel="noopener noreferrer"
-          class="bg-hister-indigo font-space border-brutal-border h-auto w-fit rounded-none border-[3px] px-5 py-2.5 text-[13px] font-semibold tracking-[1px] text-white uppercase no-underline shadow-[3px_3px_0_rgba(0,0,0,0.25)]"
+          class="bg-nogon-indigo font-space border-brutal-border h-auto w-fit rounded-none border-[3px] px-5 py-2.5 text-[13px] font-semibold tracking-[1px] text-white uppercase no-underline shadow-[3px_3px_0_rgba(0,0,0,0.25)]"
         >
           GitHub
         </Button>

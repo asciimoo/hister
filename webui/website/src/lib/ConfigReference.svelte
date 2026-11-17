@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { Badge } from '@hister/components/ui/badge';
-  import * as Card from '@hister/components/ui/card';
+  import { Badge } from '@nogon/components/ui/badge';
+  import * as Card from '@nogon/components/ui/card';
   import AlertTriangleIcon from '@lucide/svelte/icons/triangle-alert';
 
   type ConfigScope = 'client' | 'server';
@@ -22,7 +22,7 @@
     {@const optionScopes = item.scopes ?? scopes}
     <Card.Root
       aria-labelledby="config-option-{item.name}"
-      color="hister-indigo"
+      color="nogon-indigo"
       class="bg-brutal-card min-w-0"
     >
       <Card.Header
@@ -42,8 +42,8 @@
               <Badge
                 variant="outline"
                 class={scope === 'server'
-                  ? 'font-space border-hister-amber text-hister-amber bg-transparent text-[9px] font-bold tracking-[1.25px] uppercase'
-                  : 'font-space border-hister-cyan text-hister-cyan bg-transparent text-[9px] font-bold tracking-[1.25px] uppercase'}
+                  ? 'font-space border-nogon-amber text-nogon-amber bg-transparent text-[9px] font-bold tracking-[1.25px] uppercase'
+                  : 'font-space border-nogon-cyan text-nogon-cyan bg-transparent text-[9px] font-bold tracking-[1.25px] uppercase'}
               >
                 {scope}
               </Badge>
@@ -98,9 +98,9 @@
           >
             <Badge
               variant="outline"
-              class="font-space border-hister-amber bg-hister-amber/10 border-2 px-2 py-1 text-[10px] font-bold tracking-[1px] text-(--text-primary) uppercase"
+              class="font-space border-nogon-amber bg-nogon-amber/10 border-2 px-2 py-1 text-[10px] font-bold tracking-[1px] text-(--text-primary) uppercase"
             >
-              <AlertTriangleIcon aria-hidden="true" class="text-hister-amber size-3.5!" />
+              <AlertTriangleIcon aria-hidden="true" class="text-nogon-amber size-3.5!" />
               {item.requirement}
             </Badge>
           </div>

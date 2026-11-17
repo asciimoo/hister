@@ -15,7 +15,7 @@
       description:
         'Browser extensions can index visited pages automatically. File watching, history imports, and the crawler add other sources.',
       features: ['Browser extensions', 'Local file watching', 'History import', 'Website crawler'],
-      color: 'var(--hister-coral)',
+      color: 'var(--nogon-coral)',
     },
     {
       icon: SearchCheck,
@@ -23,7 +23,7 @@
       description:
         'Full text search supports field filters, quoted phrases, wildcards, negation, date ranges, and query aliases.',
       features: ['Field filters', 'Quoted phrases', 'Wildcards and negation', 'Query aliases'],
-      color: 'var(--hister-cyan)',
+      color: 'var(--nogon-cyan)',
     },
     {
       icon: Boxes,
@@ -36,7 +36,7 @@
         'Language aware indexes',
         'Readable previews',
       ],
-      color: 'var(--hister-amber)',
+      color: 'var(--nogon-amber)',
     },
     {
       icon: SlidersHorizontal,
@@ -44,7 +44,7 @@
       description:
         'Skip and priority rules control indexing and ranking. Versioning can retain earlier document content.',
       features: ['Skip rules', 'Priority rules', 'Version tracking', 'Sensitive content checks'],
-      color: 'var(--hister-rose)',
+      color: 'var(--nogon-rose)',
     },
     {
       icon: Bot,
@@ -52,7 +52,7 @@
       description:
         'The same index is available through the web interface, terminal client, CLI, HTTP API, and MCP server.',
       features: ['Web interface', 'Terminal interface', 'HTTP API and CLI', 'MCP server'],
-      color: 'var(--hister-lime)',
+      color: 'var(--nogon-lime)',
     },
     {
       icon: ServerCog,
@@ -65,7 +65,7 @@
         'Multiple users',
         'Docker and Nix',
       ],
-      color: 'var(--hister-indigo)',
+      color: 'var(--nogon-indigo)',
     },
   ];
 </script>
@@ -78,7 +78,7 @@
     <header class="flex flex-col gap-7 lg:flex-row lg:items-end lg:justify-between">
       <div>
         <div class="mb-5 flex items-center gap-3">
-          <span class="bg-hister-indigo h-3 w-3"></span>
+          <span class="bg-nogon-indigo h-3 w-3"></span>
           <p
             class="font-fira text-xs font-bold tracking-[1.8px] text-[var(--text-secondary)] uppercase"
           >
@@ -138,7 +138,7 @@
       class="border-brutal-border bg-brutal-card shadow-brutal-lg mt-12 grid border-[3px] md:grid-cols-[auto_1fr_auto] md:items-center"
     >
       <div
-        class="border-brutal-border bg-hister-teal flex h-full items-center justify-center border-b-[3px] p-5 text-white md:border-r-[3px] md:border-b-0"
+        class="border-brutal-border bg-nogon-teal flex h-full items-center justify-center border-b-[3px] p-5 text-white md:border-r-[3px] md:border-b-0"
       >
         <Languages size={28} />
       </div>

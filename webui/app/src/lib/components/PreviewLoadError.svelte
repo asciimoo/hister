@@ -1,6 +1,6 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <script lang="ts">
-  import { Button } from '@hister/components/ui/button';
+  import { Button } from '@nogon/components/ui/button';
   import { ExternalLink, RotateCcw } from '@lucide/svelte';
 
   let {

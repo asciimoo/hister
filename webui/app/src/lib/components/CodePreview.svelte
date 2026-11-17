@@ -99,7 +99,7 @@
 </script>
 
 <script lang="ts">
-  import { Button } from '@hister/components/ui/button';
+  import { Button } from '@nogon/components/ui/button';
   import { Check, Copy } from '@lucide/svelte';
 
   let { data, documentKey }: { data: CodePreviewData; documentKey: string } = $props();

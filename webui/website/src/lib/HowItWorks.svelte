@@ -16,7 +16,7 @@
       description:
         'Save newly visited pages with the browser extension, watch local folders, import your history, or crawl a site.',
       icon: Archive,
-      color: 'var(--hister-coral)',
+      color: 'var(--nogon-coral)',
       items: [
         { icon: Globe2, label: 'Visited pages' },
         { icon: FileText, label: 'Local files' },
@@ -27,7 +27,7 @@
       description:
         'Hister extracts the parts that matter and indexes their full text on the server you choose.',
       icon: FolderSearch,
-      color: 'var(--hister-amber)',
+      color: 'var(--nogon-amber)',
       items: [
         { icon: FileText, label: 'Full text' },
         { icon: Archive, label: 'Stored context' },
@@ -38,7 +38,7 @@
       description:
         'Search from the web, terminal, command line, or let an AI assistant retrieve it through MCP.',
       icon: Search,
-      color: 'var(--hister-lime)',
+      color: 'var(--nogon-lime)',
       items: [
         { icon: Terminal, label: 'Web and terminal' },
         { icon: Bot, label: 'MCP assistants' },
@@ -55,7 +55,7 @@
     <header>
       <div>
         <div class="mb-5 flex items-center gap-3">
-          <span class="bg-hister-coral h-3 w-3"></span>
+          <span class="bg-nogon-coral h-3 w-3"></span>
           <p
             class="font-fira text-xs font-bold tracking-[1.8px] text-[var(--text-secondary)] uppercase"
           >

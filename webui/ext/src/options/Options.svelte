@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { Button } from '@hister/components/ui/button';
-  import { Input } from '@hister/components/ui/input';
-  import { Label } from '@hister/components/ui/label';
-  import { Switch } from '@hister/components/ui/switch';
-  import * as Card from '@hister/components/ui/card';
+  import { Button } from '@nogon/components/ui/button';
+  import { Input } from '@nogon/components/ui/input';
+  import { Label } from '@nogon/components/ui/label';
+  import { Switch } from '@nogon/components/ui/switch';
+  import * as Card from '@nogon/components/ui/card';
   import SettingsInput from './SettingsInput.svelte';
   import { Plus, Trash2, Sun, Moon } from '@lucide/svelte';
   import { ModeWatcher, toggleMode, mode } from 'mode-watcher';
@@ -158,7 +158,7 @@
     </span>
     <button
       onclick={toggleMode}
-      class="text-text-brand-muted hover:text-hister-coral cursor-pointer border-0 bg-transparent p-0 transition-colors"
+      class="text-text-brand-muted hover:text-nogon-coral cursor-pointer border-0 bg-transparent p-0 transition-colors"
       aria-label="Toggle theme"
     >
       {#if mode.current === 'light'}
@@ -172,9 +172,9 @@
   <div class="mx-auto max-w-2xl space-y-8 px-8 py-10">
     <!-- Connection settings card -->
     <Card.Root
-      class="bg-card-surface border-hister-indigo gap-0 overflow-hidden rounded-none border-[3px] py-0 shadow-[6px_6px_0_var(--hister-indigo)]"
+      class="bg-card-surface border-nogon-indigo gap-0 overflow-hidden rounded-none border-[3px] py-0 shadow-[6px_6px_0_var(--nogon-indigo)]"
     >
-      <Card.Header class="bg-hister-indigo px-7 py-5">
+      <Card.Header class="bg-nogon-indigo px-7 py-5">
         <Card.Title class="font-outfit text-xl font-black tracking-wide text-white"
           >Connection Settings</Card.Title
         >
@@ -187,8 +187,8 @@
         {#if message}
           <div
             class="font-inter border-l-[4px] px-4 py-3 text-sm {messageType === 'success'
-              ? 'border-l-hister-teal bg-hister-teal/10 text-hister-teal'
-              : 'border-l-hister-rose bg-hister-rose/10 text-hister-rose'}"
+              ? 'border-l-nogon-teal bg-nogon-teal/10 text-nogon-teal'
+              : 'border-l-nogon-rose bg-nogon-rose/10 text-nogon-rose'}"
           >
             {message}
           </div>
@@ -224,17 +224,17 @@
                 <Input
                   bind:value={header.name}
                   placeholder="Header name"
-                  class="bg-page-bg border-hister-indigo font-fira text-text-brand placeholder:text-text-brand-muted focus-visible:border-hister-coral h-10 border-[3px] px-3 text-sm shadow-none transition-colors focus-visible:ring-0"
+                  class="bg-page-bg border-nogon-indigo font-fira text-text-brand placeholder:text-text-brand-muted focus-visible:border-nogon-coral h-10 border-[3px] px-3 text-sm shadow-none transition-colors focus-visible:ring-0"
                 />
                 <Input
                   bind:value={header.value}
                   placeholder="Header value"
-                  class="bg-page-bg border-hister-indigo font-fira text-text-brand placeholder:text-text-brand-muted focus-visible:border-hister-coral h-10 border-[3px] px-3 text-sm shadow-none transition-colors focus-visible:ring-0"
+                  class="bg-page-bg border-nogon-indigo font-fira text-text-brand placeholder:text-text-brand-muted focus-visible:border-nogon-coral h-10 border-[3px] px-3 text-sm shadow-none transition-colors focus-visible:ring-0"
                 />
                 <button
                   type="button"
                   onclick={() => removeHeader(i)}
-                  class="text-text-brand-muted hover:text-hister-rose h-10 shrink-0 cursor-pointer border-0 bg-transparent p-2 transition-colors"
+                  class="text-text-brand-muted hover:text-nogon-rose h-10 shrink-0 cursor-pointer border-0 bg-transparent p-2 transition-colors"
                   aria-label="Remove header"
                 >
                   <Trash2 size={16} />
@@ -245,7 +245,7 @@
               type="button"
               variant="outline"
               onclick={addHeader}
-              class="border-brutal-border font-outfit hover:border-hister-indigo h-9 border-[3px] text-sm font-bold tracking-wide transition-all"
+              class="border-brutal-border font-outfit hover:border-nogon-indigo h-9 border-[3px] text-sm font-bold tracking-wide transition-all"
             >
               <Plus size={16} class="mr-1" />
               Add Header
@@ -276,7 +276,7 @@
           <Button
             type="submit"
             size="lg"
-            class="bg-hister-coral border-brutal-border font-outfit h-12 w-full border-[3px] text-base font-bold tracking-wide text-white shadow-[4px_4px_0_var(--brutal-shadow)] transition-all hover:translate-x-px hover:translate-y-px hover:shadow-[2px_2px_0_var(--brutal-shadow)]"
+            class="bg-nogon-coral border-brutal-border font-outfit h-12 w-full border-[3px] text-base font-bold tracking-wide text-white shadow-[4px_4px_0_var(--brutal-shadow)] transition-all hover:translate-x-px hover:translate-y-px hover:shadow-[2px_2px_0_var(--brutal-shadow)]"
           >
             Save Settings
           </Button>
@@ -286,7 +286,7 @@
             variant="outline"
             size="lg"
             onclick={authenticate}
-            class="border-brutal-border font-outfit hover:border-hister-indigo h-12 w-full border-[3px] text-base font-bold tracking-wide transition-all"
+            class="border-brutal-border font-outfit hover:border-nogon-indigo h-12 w-full border-[3px] text-base font-bold tracking-wide transition-all"
           >
             Authenticate with Browser Session
           </Button>

@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { Button } from '@hister/components/ui/button';
+  import { Button } from '@nogon/components/ui/button';
   import { ArrowLeft } from '@lucide/svelte';
   import PreviewPanel from '#lib/components/PreviewPanel.svelte';
   import { replacePreviewHistory } from '#lib/preview.svelte.js';

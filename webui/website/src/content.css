@@ -15,7 +15,7 @@
 }
 
 .content.doc-content .table-scroll:focus-visible {
-  outline: 3px solid var(--hister-indigo);
+  outline: 3px solid var(--nogon-indigo);
   outline-offset: 3px;
 }
 
@@ -68,7 +68,7 @@
   width: 1.75rem;
   height: 1.75rem;
   margin-top: 0.25em;
-  color: var(--hister-indigo);
+  color: var(--nogon-indigo);
   text-decoration: none;
   opacity: 0.5;
 }
@@ -105,14 +105,14 @@
 }
 
 .content a {
-  color: var(--hister-indigo);
+  color: var(--nogon-indigo);
   text-decoration: underline;
   text-underline-offset: 2px;
   font-weight: 500;
 }
 
 .content a:hover {
-  color: var(--hister-coral);
+  color: var(--nogon-coral);
 }
 
 .content ul,
@@ -131,7 +131,7 @@
 }
 
 .content ul li::marker {
-  color: var(--hister-indigo);
+  color: var(--nogon-indigo);
 }
 
 .content ol {
@@ -172,9 +172,9 @@
 .content.doc-content .code-block {
   position: relative;
   margin-bottom: 1.5em;
-  border: 2px solid var(--hister-indigo);
+  border: 2px solid var(--nogon-indigo);
   border-left-width: 5px;
-  box-shadow: 4px 4px 0 color-mix(in srgb, var(--hister-indigo) 25%, transparent);
+  box-shadow: 4px 4px 0 color-mix(in srgb, var(--nogon-indigo) 25%, transparent);
 }
 
 .content.doc-content .code-block pre {
@@ -205,8 +205,8 @@
 
 .content.doc-content .code-controls button:hover,
 .content.doc-content .code-controls button:focus-visible {
-  border-color: var(--hister-indigo);
-  background-color: color-mix(in srgb, var(--hister-indigo) 20%, transparent);
+  border-color: var(--nogon-indigo);
+  background-color: color-mix(in srgb, var(--nogon-indigo) 20%, transparent);
 }
 
 .content.doc-content .code-controls button:disabled {
@@ -227,10 +227,10 @@
 
 .content.doc-content .code-controls [role='status']:not(:empty) {
   padding: 0.375rem 0.625rem;
-  border: 1px solid var(--hister-indigo);
+  border: 1px solid var(--nogon-indigo);
   background-color: var(--brutal-card);
   color: var(--text-primary);
-  box-shadow: 2px 2px 0 color-mix(in srgb, var(--hister-indigo) 25%, transparent);
+  box-shadow: 2px 2px 0 color-mix(in srgb, var(--nogon-indigo) 25%, transparent);
 }
 
 @media (pointer: coarse) {
@@ -245,7 +245,7 @@
 }
 
 .content blockquote {
-  border-left: 4px solid var(--hister-indigo);
+  border-left: 4px solid var(--nogon-indigo);
   padding: 0.75rem 1.25rem;
   margin-bottom: 1.25em;
   background-color: var(--brutal-card);

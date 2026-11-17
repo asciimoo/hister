@@ -10,14 +10,14 @@
       title: 'The ultimate way to protect digital privacy',
       source: 'hister.org/posts',
       text: 'Keep useful pages close, searchable, and under your control...',
-      accent: 'var(--hister-indigo)',
+      accent: 'var(--nogon-indigo)',
     },
     {
       icon: FileText,
       title: 'privacy-notes.md',
       source: '~/documents/notes',
       text: 'A private index makes the things you already found useful again.',
-      accent: 'var(--hister-cyan)',
+      accent: 'var(--nogon-cyan)',
     },
   ];
 </script>
@@ -40,14 +40,14 @@
 
     <div class="p-4 sm:p-6">
       <div
-        class="border-brutal-border flex items-center gap-3 border-[3px] bg-white px-4 py-3 shadow-[4px_4px_0_var(--hister-coral)] sm:py-4"
+        class="border-brutal-border flex items-center gap-3 border-[3px] bg-white px-4 py-3 shadow-[4px_4px_0_var(--nogon-coral)] sm:py-4"
       >
         <Search size={20} class="shrink-0 text-[var(--text-secondary)]" />
         <span
           class="font-inter min-w-0 flex-1 truncate text-sm font-medium text-[var(--text-primary)] sm:text-base"
           >privacy notes I read last month</span
         >
-        <span class="bg-hister-indigo h-5 w-1 shrink-0" aria-hidden="true"></span>
+        <span class="bg-nogon-indigo h-5 w-1 shrink-0" aria-hidden="true"></span>
       </div>
 
       <div class="mt-5 grid gap-4 md:grid-cols-[1.08fr_0.92fr]">
@@ -77,7 +77,7 @@
                   >
                     {result.title}
                   </p>
-                  <p class="font-fira mt-1 truncate text-[9px] text-[var(--hister-cyan)]">
+                  <p class="font-fira mt-1 truncate text-[9px] text-[var(--nogon-cyan)]">
                     {result.source}
                   </p>
                 </div>
@@ -97,7 +97,7 @@
               class="font-fira text-[9px] font-bold tracking-[1px] text-[var(--text-secondary)] uppercase"
               >Stored preview</span
             >
-            <span class="bg-hister-coral h-2.5 w-2.5"></span>
+            <span class="bg-nogon-coral h-2.5 w-2.5"></span>
           </div>
           <p class="font-space mt-4 text-lg leading-tight font-black text-[var(--text-primary)]">
             Search without retracing your steps
@@ -112,7 +112,7 @@
                 class="font-fira flex items-center gap-2 text-[9px] font-semibold text-[var(--text-primary)]"
               >
                 <span
-                  class="bg-hister-lime flex h-4 w-4 items-center justify-center text-[var(--text-primary)]"
+                  class="bg-nogon-lime flex h-4 w-4 items-center justify-center text-[var(--text-primary)]"
                   ><Check size={11} strokeWidth={3} /></span
                 >
                 {item}

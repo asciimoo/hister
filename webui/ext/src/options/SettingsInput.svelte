@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { Input } from '@hister/components/ui/input';
-  import { Label } from '@hister/components/ui/label';
+  import { Input } from '@nogon/components/ui/input';
+  import { Label } from '@nogon/components/ui/label';
 
   let {
     label,
@@ -23,7 +23,7 @@
     {type}
     bind:value
     {placeholder}
-    class="bg-page-bg border-hister-indigo font-fira text-text-brand placeholder:text-text-brand-muted focus-visible:border-hister-coral h-12 w-full border-[3px] px-4 text-sm shadow-none transition-colors focus-visible:ring-0"
+    class="bg-page-bg border-nogon-indigo font-fira text-text-brand placeholder:text-text-brand-muted focus-visible:border-nogon-coral h-12 w-full border-[3px] px-4 text-sm shadow-none transition-colors focus-visible:ring-0"
   />
   {#if description}
     <p class="text-text-brand-muted font-inter text-xs">{description}</p>

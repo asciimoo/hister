@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { Button } from '@hister/components/ui/button';
-  import { Input } from '@hister/components/ui/input';
-  import { Switch } from '@hister/components/ui/switch';
+  import { Button } from '@nogon/components/ui/button';
+  import { Input } from '@nogon/components/ui/input';
+  import { Switch } from '@nogon/components/ui/switch';
   import { choiceLabel, emptySettingValue as empty, type SettingSchema } from '#lib/settings.js';
   import SettingInput from './SettingInput.svelte';
 
@@ -198,7 +198,7 @@
         >
       </fieldset>
     {/each}
-    {#if dictionaryError}<p role="alert" class="text-hister-rose text-sm">{dictionaryError}</p>{/if}
+    {#if dictionaryError}<p role="alert" class="text-nogon-rose text-sm">{dictionaryError}</p>{/if}
     <Button
       type="button"
       variant="outline"

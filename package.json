@@ -1,9 +1,9 @@
 {
-  "name": "hister",
+  "name": "nogon",
   "private": true,
   "type": "module",
   "scripts": {
-    "serve:app": "npm -w @hister/app run serve --",
+    "serve:app": "npm -w @nogon/app run serve --",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "fallow",

@@ -8,9 +8,9 @@
 ## Build
 
 From the repository root, execute `./manage.sh build` to build the app and Go binary.
-Execute `npm run build -w @hister/website` to build the website, or `npm run build -w @hister/ext` to build the browser extension.
+Execute `npm run build -w @nogon/website` to build the website, or `npm run build -w @nogon/ext` to build the browser extension.
 
-A live website preview is available with `npm run preview -w @hister/website`.
+A live website preview is available with `npm run preview -w @nogon/website`.
 
 ## Add new component from ShadCN
 
@@ -19,4 +19,4 @@ cd webui/components
 npx shadcn-svelte@latest add [component]
 ```
 
-Change imports from `$lib/utils` to `@hister/components/utils` under `src/lib/components/ui/[component]/*` if necessary.
+Change imports from `$lib/utils` to `@nogon/components/utils` under `src/lib/components/ui/[component]/*` if necessary.

@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { Button } from '@hister/components/ui/button';
-  import { Badge } from '@hister/components/ui/badge';
-  import { Separator } from '@hister/components/ui/separator';
+  import { Button } from '@nogon/components/ui/button';
+  import { Badge } from '@nogon/components/ui/badge';
+  import { Separator } from '@nogon/components/ui/separator';
   import { Clock, Calendar, Eye, ThumbsUp, ExternalLink } from '@lucide/svelte';
 
   interface Chapter {
@@ -73,28 +73,28 @@
   <dl class="text-text-brand-secondary flex flex-wrap gap-x-4 gap-y-1.5 text-xs">
     {#if data.durationFormatted}
       <div class="flex items-center gap-1">
-        <Clock class="text-hister-teal size-3.5" />
+        <Clock class="text-nogon-teal size-3.5" />
         <dt class="sr-only">Duration</dt>
         <dd>{data.durationFormatted}</dd>
       </div>
     {/if}
     {#if data.uploadDate}
       <div class="flex items-center gap-1">
-        <Calendar class="text-hister-teal size-3.5" />
+        <Calendar class="text-nogon-teal size-3.5" />
         <dt class="sr-only">Uploaded</dt>
         <dd>{data.uploadDate}</dd>
       </div>
     {/if}
     {#if data.viewCount}
       <div class="flex items-center gap-1">
-        <Eye class="text-hister-teal size-3.5" />
+        <Eye class="text-nogon-teal size-3.5" />
         <dt class="sr-only">Views</dt>
         <dd>{formatNumber(data.viewCount)} views</dd>
       </div>
     {/if}
     {#if data.likeCount}
       <div class="flex items-center gap-1">
-        <ThumbsUp class="text-hister-teal size-3.5" />
+        <ThumbsUp class="text-nogon-teal size-3.5" />
         <dt class="sr-only">Likes</dt>
         <dd>{formatNumber(data.likeCount)} likes</dd>
       </div>
@@ -116,12 +116,12 @@
       {#each data.categories || [] as cat}
         <Badge
           variant="secondary"
-          class="bg-hister-indigo/15 text-hister-indigo border-hister-indigo/30 text-[11px]"
+          class="bg-nogon-indigo/15 text-nogon-indigo border-nogon-indigo/30 text-[11px]"
           >{cat}</Badge
         >
       {/each}
       {#each data.tags || [] as tag}
-        <Badge variant="outline" class="text-hister-teal border-hister-teal/30 text-[11px]"
+        <Badge variant="outline" class="text-nogon-teal border-nogon-teal/30 text-[11px]"
           >{tag}</Badge
         >
       {/each}
@@ -137,7 +137,7 @@
       <ol class="list-none space-y-0.5 pl-0">
         {#each data.chapters as ch}
           <li class="text-text-brand-secondary flex gap-3 text-xs">
-            <code class="text-hister-teal w-14 shrink-0">{ch.startTime}</code>
+            <code class="text-nogon-teal w-14 shrink-0">{ch.startTime}</code>
             <span class="text-text-brand">{ch.title}</span>
           </li>
         {/each}

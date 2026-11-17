@@ -40,7 +40,7 @@
   }
 
   a {
-    color: var(--color-hister-indigo);
+    color: var(--color-nogon-indigo);
     text-decoration: none;
     cursor: pointer;
   }
@@ -95,8 +95,8 @@
   }
 
   .dark mark {
-    color: var(--color-hister-amber);
-    background: color-mix(in srgb, var(--color-hister-amber) 16%, transparent);
+    color: var(--color-nogon-amber);
+    background: color-mix(in srgb, var(--color-nogon-amber) 16%, transparent);
     padding: 0 0.12em;
   }
 

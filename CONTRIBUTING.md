@@ -13,9 +13,9 @@ Thanks for your interest in contributing to Hister! This document outlines the g
 
 - Format with: `npm run format`
 - Check formatting: `npm run format:check`
-- Build the app: `npm run build -w @hister/app`
-- Build the website: `npm run build -w @hister/website`
-- Build the extension: `npm run build -w @hister/ext`
+- Build the app: `npm run build -w @nogon/app`
+- Build the website: `npm run build -w @nogon/website`
+- Build the extension: `npm run build -w @nogon/ext`
 
 ### Full Build
 

@@ -2,11 +2,11 @@
 <script lang="ts">
   import { tick } from 'svelte';
   import type { ResultState } from '#lib/result-state.svelte.js';
-  import { SkipRuleActions } from '@hister/components';
-  import { Button } from '@hister/components/ui/button';
-  import { Input } from '@hister/components/ui/input';
-  import { Label } from '@hister/components/ui/label';
-  import * as Dialog from '@hister/components/ui/dialog';
+  import { SkipRuleActions } from '@nogon/components';
+  import { Button } from '@nogon/components/ui/button';
+  import { Input } from '@nogon/components/ui/input';
+  import { Label } from '@nogon/components/ui/label';
+  import * as Dialog from '@nogon/components/ui/dialog';
   import {
     ArrowLeft,
     Ban,
@@ -213,7 +213,7 @@
             <hr class="border-border-brand-muted my-1" />
             <Button
               variant="outline"
-              class="{actionClass} border-hister-rose text-hister-rose"
+              class="{actionClass} border-nogon-rose text-nogon-rose"
               onclick={() => {
                 open = false;
                 onDelete?.();
@@ -276,8 +276,8 @@
         <p
           role={resultState.labelError ? 'alert' : 'status'}
           class="font-inter text-sm {resultState.labelError
-            ? 'text-hister-rose'
-            : 'text-hister-teal'}"
+            ? 'text-nogon-rose'
+            : 'text-nogon-teal'}"
         >
           {resultState.labelMessage}
         </p>
@@ -298,8 +298,8 @@
       <p
         role={resultState.actionsError ? 'alert' : 'status'}
         class="font-inter text-sm {resultState.actionsError
-          ? 'text-hister-rose'
-          : 'text-hister-teal'}"
+          ? 'text-nogon-rose'
+          : 'text-nogon-teal'}"
       >
         {resultState.actionsMessage}
       </p>

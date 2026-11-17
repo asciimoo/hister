@@ -20,10 +20,10 @@
     PreviewDocumentDetails,
     PreviewMetadata,
   } from '#lib/types.js';
-  import { ScrollArea } from '@hister/components/ui/scroll-area';
-  import { Button } from '@hister/components/ui/button';
-  import * as DropdownMenu from '@hister/components/ui/dropdown-menu';
-  import * as Tooltip from '@hister/components/ui/tooltip';
+  import { ScrollArea } from '@nogon/components/ui/scroll-area';
+  import { Button } from '@nogon/components/ui/button';
+  import * as DropdownMenu from '@nogon/components/ui/dropdown-menu';
+  import * as Tooltip from '@nogon/components/ui/tooltip';
   import {
     Eye,
     X,
@@ -513,7 +513,7 @@
                       variant="ghost"
                       size="icon-sm"
                       class={showDocumentDetails
-                        ? 'text-hister-teal hover:text-hister-teal'
+                        ? 'text-nogon-teal hover:text-nogon-teal'
                         : 'text-text-brand-muted hover:text-text-brand'}
                       aria-label={showDocumentDetails
                         ? 'Hide document details'
@@ -597,7 +597,7 @@
                 <button
                   onclick={toggleVersions}
                   aria-expanded={showVersions}
-                  class="font-inter text-hister-teal inline-flex cursor-pointer items-center gap-1 text-xs hover:underline"
+                  class="font-inter text-nogon-teal inline-flex cursor-pointer items-center gap-1 text-xs hover:underline"
                 >
                   <History class="size-3" />
                   {versionCount}
@@ -609,7 +609,7 @@
                   onclick={() => (showEmbeddedVideos = !showEmbeddedVideos)}
                   aria-expanded={showEmbeddedVideos}
                   class="font-inter inline-flex cursor-pointer items-center gap-1.5 text-xs {showEmbeddedVideos
-                    ? 'text-hister-teal'
+                    ? 'text-nogon-teal'
                     : 'text-text-brand-muted hover:text-text-brand'}"
                 >
                   <Video class="size-3.5 shrink-0" />
@@ -661,7 +661,7 @@
               <div
                 class="border-border-brand-muted grid gap-1 border-b py-1.5 last:border-b-0 sm:grid-cols-[minmax(8rem,12rem)_minmax(0,1fr)] sm:gap-3"
               >
-                <dt><code class="text-hister-teal break-all">{entry.field}</code></dt>
+                <dt><code class="text-nogon-teal break-all">{entry.field}</code></dt>
                 <dd class="text-text-brand-secondary min-w-0 break-all whitespace-pre-wrap">
                   {formatDocumentDetailValue(entry)}
                 </dd>
@@ -680,7 +680,7 @@
                   <div
                     class="border-border-brand-muted grid gap-1 border-b py-1.5 last:border-b-0 sm:grid-cols-[minmax(8rem,12rem)_minmax(0,1fr)] sm:gap-3"
                   >
-                    <dt><code class="text-hister-teal break-all">{entry.field}</code></dt>
+                    <dt><code class="text-nogon-teal break-all">{entry.field}</code></dt>
                     <dd class="text-text-brand-secondary min-w-0 break-all whitespace-pre-wrap">
                       {formatTechnicalValue(entry.value)}
                     </dd>
@@ -698,7 +698,7 @@
       <div
         class="border-border-brand-muted bg-card-surface-muted flex shrink-0 items-center gap-1.5 border-b-[2px] px-4 py-2"
       >
-        <History class="text-hister-teal size-3.5 shrink-0" />
+        <History class="text-nogon-teal size-3.5 shrink-0" />
         <span class="font-inter text-text-brand-muted text-xs">
           Viewing archived version from {formatTimestamp(
             versionTimestamp(viewingVersion.created_at),
@@ -707,7 +707,7 @@
         <span class="text-text-brand-muted text-xs">·</span>
         <button
           onclick={() => loadContent(url, hintTitle, extractorName)}
-          class="font-inter text-hister-teal cursor-pointer text-xs hover:underline"
+          class="font-inter text-nogon-teal cursor-pointer text-xs hover:underline"
         >
           Show current
         </button>
@@ -730,7 +730,7 @@
                 </p>
                 <button
                   onclick={() => loadContent(url, hintTitle, extractorName, v.id)}
-                  class="font-inter text-hister-teal shrink-0 cursor-pointer text-xs hover:underline"
+                  class="font-inter text-nogon-teal shrink-0 cursor-pointer text-xs hover:underline"
                 >
                   show this version
                 </button>
@@ -769,7 +769,7 @@
         </div>
       {:else}
         <div
-          class="preview-content font-inter text-text-brand-secondary prose dark:prose-invert prose-a:text-hister-teal w-full p-4 text-sm {template ===
+          class="preview-content font-inter text-text-brand-secondary prose dark:prose-invert prose-a:text-nogon-teal w-full p-4 text-sm {template ===
           'code'
             ? 'max-w-none'
             : 'max-w-[60em]'}"

@@ -1,5 +1,5 @@
 {
-  "name": "@hister/app",
+  "name": "@nogon/app",
   "version": "0.21.0",
   "private": true,
   "type": "module",
@@ -27,7 +27,7 @@
     "@fontsource/inter": "^5.3.0",
     "@fontsource/outfit": "^5.3.0",
     "@fontsource/space-grotesk": "^5.3.0",
-    "@hister/components": "^1.0.0",
+    "@nogon/components": "^1.0.0",
     "@lucide/svelte": "^1.72.0",
     "@tailwindcss/typography": "^0.5.20",
     "animejs": "^4.5.0",

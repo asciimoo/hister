@@ -3,10 +3,10 @@
   import { MediaQuery } from 'svelte/reactivity';
   import { beforeNavigate, goto } from '$app/navigation';
   import { page } from '$app/state';
-  import { Badge } from '@hister/components/ui/badge';
-  import { Button } from '@hister/components/ui/button';
-  import * as Tooltip from '@hister/components/ui/tooltip';
-  import * as Dialog from '@hister/components/ui/dialog';
+  import { Badge } from '@nogon/components/ui/badge';
+  import { Button } from '@nogon/components/ui/button';
+  import * as Tooltip from '@nogon/components/ui/tooltip';
+  import * as Dialog from '@nogon/components/ui/dialog';
   import { TriangleAlert } from '@lucide/svelte';
   import { fetchConfig, resetConfig } from '#lib/api.js';
   import { redirectToAuth } from '#lib/auth-navigation.js';
@@ -623,7 +623,7 @@
         Configure appearance, search behavior, logging, indexing, crawling, extraction and web
         shortcuts. Other settings are shown for reference.
       </p>
-      {#if problem}<div role="alert" class="text-hister-rose my-2 text-sm">
+      {#if problem}<div role="alert" class="text-nogon-rose my-2 text-sm">
           <p>{problem}{needsReload && dirty ? ' Your draft is still here.' : ''}</p>
           {#each errors.filter((error) => !error.path || !categories.includes(error.path.split('.')[0])) as error}<p
             >
@@ -664,7 +664,7 @@
                 class="font-inter hover:bg-muted-surface w-full cursor-pointer border-b-2 px-3 py-2 text-sm whitespace-nowrap transition-colors lg:border-b-0 lg:border-l-2 lg:py-3 lg:text-left lg:whitespace-normal {unsavedCount
                   ? 'pr-12'
                   : ''} {category === item
-                  ? 'border-hister-indigo text-text-brand lg:bg-hister-indigo/10 font-semibold'
+                  ? 'border-nogon-indigo text-text-brand lg:bg-nogon-indigo/10 font-semibold'
                   : 'text-text-brand-muted border-transparent font-medium'}"
                 >{categoryLabels[item] ?? item}{count
                   ? ` (${count} ${count === 1 ? 'error' : 'errors'})`
@@ -683,7 +683,7 @@
                       <Badge
                         variant="outline"
                         aria-hidden="true"
-                        class="border-hister-indigo/30 bg-hister-indigo/10 text-text-brand min-w-5 px-1.5 tabular-nums"
+                        class="border-nogon-indigo/30 bg-nogon-indigo/10 text-text-brand min-w-5 px-1.5 tabular-nums"
                         >{unsavedCount}</Badge
                       >
                     </Tooltip.Trigger>
@@ -751,7 +751,7 @@
                 </div>
               {/if}
               {#each tabErrors(category).filter((error) => !settings?.fields.some((field) => field.path === error.path)) as error}<p
-                  class="text-hister-rose my-2 text-sm"
+                  class="text-nogon-rose my-2 text-sm"
                 >
                   {error.path}: {error.message}
                 </p>{/each}
@@ -820,7 +820,7 @@
             role="group"
             aria-label="Settings actions"
             class="shrink-0 border-t px-4 py-3 md:px-6 {dirty
-              ? 'border-hister-indigo/50 bg-hister-indigo/5'
+              ? 'border-nogon-indigo/50 bg-nogon-indigo/5'
               : 'border-border-brand-muted bg-page-bg'}"
           >
             <div

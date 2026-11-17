@@ -4,10 +4,10 @@
   import type { ResultState } from '#lib/result-state.svelte.js';
   import ResultActionsSheet from '#lib/components/ResultActionsSheet.svelte';
   import DeleteMatchingDocumentsDialog from '#lib/components/DeleteMatchingDocumentsDialog.svelte';
-  import { SkipRuleActions } from '@hister/components';
-  import { Input } from '@hister/components/ui/input';
-  import { Button } from '@hister/components/ui/button';
-  import * as DropdownMenu from '@hister/components/ui/dropdown-menu';
+  import { SkipRuleActions } from '@nogon/components';
+  import { Input } from '@nogon/components/ui/input';
+  import { Button } from '@nogon/components/ui/button';
+  import * as DropdownMenu from '@nogon/components/ui/dropdown-menu';
   import { Copy, MoreVertical, Pin, PinOff, Tag, Trash2, Unlink } from '@lucide/svelte';
 
   interface Props {
@@ -156,7 +156,7 @@
               <Button
                 variant="outline"
                 size="sm"
-                class="border-hister-rose text-hister-rose hover:bg-hister-rose/10 w-full border-[2px] text-xs"
+                class="border-nogon-rose text-nogon-rose hover:bg-nogon-rose/10 w-full border-[2px] text-xs"
                 onclick={() => resultState.pin(url, title, query, true)}
               >
                 <PinOff class="size-3.5" />
@@ -171,12 +171,12 @@
                   bind:value={resultState.actionsQuery}
                   placeholder="Query.."
                   size="sm"
-                  class="font-inter border-border-brand-muted focus-visible:border-hister-indigo flex-1 border-[2px] text-sm shadow-none focus-visible:ring-0"
+                  class="font-inter border-border-brand-muted focus-visible:border-nogon-indigo flex-1 border-[2px] text-sm shadow-none focus-visible:ring-0"
                 />
                 <Button
                   variant="outline"
                   size="sm"
-                  class="border-hister-indigo text-hister-indigo border-[2px] text-xs"
+                  class="border-nogon-indigo text-nogon-indigo border-[2px] text-xs"
                   onclick={() => resultState.pin(url, title, query)}
                 >
                   <Pin class="size-3.5" />
@@ -192,7 +192,7 @@
               <Button
                 variant="outline"
                 size="sm"
-                class="border-hister-rose text-hister-rose hover:bg-hister-rose/10 w-full border-[2px] text-xs"
+                class="border-nogon-rose text-nogon-rose hover:bg-nogon-rose/10 w-full border-[2px] text-xs"
                 onclick={forgetResult}
               >
                 <Unlink class="size-3.5" />
@@ -209,7 +209,7 @@
                 bind:value={resultState.labelInput}
                 placeholder="Add a label…"
                 size="sm"
-                class="font-inter border-border-brand-muted focus-visible:border-hister-amber flex-1 border-[2px] text-sm shadow-none focus-visible:ring-0"
+                class="font-inter border-border-brand-muted focus-visible:border-nogon-amber flex-1 border-[2px] text-sm shadow-none focus-visible:ring-0"
               />
               <Button
                 variant="outline"
@@ -224,8 +224,8 @@
             {#if resultState.labelMessage}
               <p
                 class="font-inter text-xs {resultState.labelError
-                  ? 'text-hister-rose'
-                  : 'text-hister-teal'}"
+                  ? 'text-nogon-rose'
+                  : 'text-nogon-teal'}"
               >
                 {resultState.labelMessage}
               </p>
@@ -236,7 +236,7 @@
             <Button
               variant="outline"
               size="sm"
-              class="border-hister-rose text-hister-rose hover:bg-hister-rose/10 w-full border-[2px] text-xs"
+              class="border-nogon-rose text-nogon-rose hover:bg-nogon-rose/10 w-full border-[2px] text-xs"
               onclick={() => {
                 open = false;
                 onDelete?.();
@@ -251,8 +251,8 @@
           <p
             role={resultState.actionsError ? 'alert' : 'status'}
             class="font-inter text-xs {resultState.actionsError
-              ? 'text-hister-rose'
-              : 'text-hister-teal'}"
+              ? 'text-nogon-rose'
+              : 'text-nogon-teal'}"
           >
             {resultState.actionsMessage}
           </p>

@@ -26,13 +26,13 @@ export interface TimelinePeriodRendererProps {
 }
 
 const groupColors = [
-  'hister-indigo',
-  'hister-coral',
-  'hister-teal',
-  'hister-amber',
-  'hister-rose',
-  'hister-cyan',
-  'hister-lime',
+  'nogon-indigo',
+  'nogon-coral',
+  'nogon-teal',
+  'nogon-amber',
+  'nogon-rose',
+  'nogon-cyan',
+  'nogon-lime',
 ];
 
 export function getGroupColor(index: number): string {

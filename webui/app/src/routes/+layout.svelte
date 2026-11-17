@@ -2,7 +2,7 @@
   import { onMount, tick, untrack } from 'svelte';
   import { ModeWatcher, setMode } from 'mode-watcher';
   import SiteHeader from '#lib/components/SiteHeader.svelte';
-  import { Toaster, toast } from '@hister/components/ui/sonner';
+  import { Toaster, toast } from '@nogon/components/ui/sonner';
   import { fetchConfig, logout, resetConfig } from '#lib/api.js';
   import { publicConfig } from '#lib/stores.js';
   import { setFlashMessage, showFlashMessage } from '#lib/flash.js';

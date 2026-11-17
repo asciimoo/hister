@@ -12,7 +12,7 @@ fi
 
 # Initial SPA build so the Go server has something to embed on first start.
 # Uses development mode (unminified) for faster builds.
-npm run build -w @hister/app -- --mode development
+npm run build -w @nogon/app -- --mode development
 rm -rf server/static/app
 mkdir -p server/static
 cp -r webui/app/build server/static/app
@@ -34,6 +34,6 @@ done
 echo "Go server ready."
 
 # Vite dev server (frontend hot reload, proxies /api + /static to Go)
-npm run dev -w @hister/app &
+npm run dev -w @nogon/app &
 
 wait

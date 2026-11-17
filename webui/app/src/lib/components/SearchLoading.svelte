@@ -8,7 +8,7 @@
   role="status"
   aria-live="polite"
 >
-  <LoaderCircle class="text-hister-indigo size-9 motion-safe:animate-spin" aria-hidden="true" />
+  <LoaderCircle class="text-nogon-indigo size-9 motion-safe:animate-spin" aria-hidden="true" />
   <h2 class="font-outfit text-text-brand text-xl font-semibold">Searching…</h2>
   <p class="font-inter text-text-brand-muted text-sm">Results will appear here.</p>
 </section>

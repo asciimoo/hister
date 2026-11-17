@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { HTMLInputAttributes, HTMLInputTypeAttribute } from 'svelte/elements';
-  import { cn, type WithElementRef } from '@hister/components/utils';
+  import { cn, type WithElementRef } from '@nogon/components/utils';
   import { tv } from 'tailwind-variants';
 
   const inputVariants = tv({
@@ -14,7 +14,7 @@
         ],
         brutal: [
           'h-12 px-4 bg-page-bg border-[3px] border-brutal-border font-fira text-sm text-text-brand placeholder:text-text-brand-muted shadow-none',
-          'focus-visible:ring-0 focus-visible:border-hister-indigo transition-colors',
+          'focus-visible:ring-0 focus-visible:border-nogon-indigo transition-colors',
         ],
       },
     },

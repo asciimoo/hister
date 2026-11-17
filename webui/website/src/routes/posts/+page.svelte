@@ -1,5 +1,5 @@
 <script lang="ts">
-  import * as Card from '@hister/components/ui/card';
+  import * as Card from '@nogon/components/ui/card';
   import Rss from '@lucide/svelte/icons/rss';
   import Seo from '#lib/Seo.svelte';
 

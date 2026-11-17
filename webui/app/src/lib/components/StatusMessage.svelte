@@ -14,8 +14,8 @@
   } = $props();
 
   const typeStyles: Record<StatusType, string> = {
-    error: 'border-hister-rose bg-hister-rose/10 text-hister-rose',
-    success: 'border-hister-teal bg-hister-teal/10 text-hister-teal',
+    error: 'border-nogon-rose bg-nogon-rose/10 text-nogon-rose',
+    success: 'border-nogon-teal bg-nogon-teal/10 text-nogon-teal',
     loading: 'border-border-brand-muted bg-muted-surface text-text-brand-muted',
     empty: 'text-text-brand-muted',
   };

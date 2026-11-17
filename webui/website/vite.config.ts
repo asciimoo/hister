@@ -112,7 +112,7 @@ export default defineConfig({
     copyDatasetJsons(),
   ],
   ssr: {
-    noExternal: ['@hister/components', 'bits-ui', 'svelte-toolbelt', 'runed', 'svelte-sonner'],
+    noExternal: ['@nogon/components', 'bits-ui', 'svelte-toolbelt', 'runed', 'svelte-sonner'],
   },
   build: {
     rolldownOptions: {

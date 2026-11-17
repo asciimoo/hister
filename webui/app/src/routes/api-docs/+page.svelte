@@ -3,10 +3,10 @@
   import { page } from '$app/state';
   import { goto } from '$app/navigation';
   import { apiFetch } from '#lib/api.js';
-  import { Badge } from '@hister/components/ui/badge';
-  import * as Card from '@hister/components/ui/card';
-  import * as Table from '@hister/components/ui/table';
-  import { PageHeader } from '@hister/components';
+  import { Badge } from '@nogon/components/ui/badge';
+  import * as Card from '@nogon/components/ui/card';
+  import * as Table from '@nogon/components/ui/table';
+  import { PageHeader } from '@nogon/components';
 
   interface EndpointArg {
     name: string;
@@ -155,8 +155,8 @@
               >
                 <span
                   class="shrink-0 font-bold {ep.method === 'GET'
-                    ? 'text-hister-teal'
-                    : 'text-hister-coral'}">{ep.method}</span
+                    ? 'text-nogon-teal'
+                    : 'text-nogon-coral'}">{ep.method}</span
                 >
                 <span class="truncate">{ep.name}</span>
               </a>
@@ -173,7 +173,7 @@
   >
     <div class="mx-auto max-w-[80em]">
       <div class="space-y-1 pt-4 md:mb-5 md:pt-0">
-        <PageHeader color="hister-teal" size="sm">API Documentation</PageHeader>
+        <PageHeader color="nogon-teal" size="sm">API Documentation</PageHeader>
         <p class="font-inter text-text-brand-secondary pb-2 text-xs md:pb-0 md:text-sm">
           Available HTTP endpoints for integrating with Nogon
         </p>
@@ -220,8 +220,8 @@
                   <Badge
                     variant="default"
                     class="border-0 px-2 py-0 text-[11px] leading-5 font-bold {ep.method === 'GET'
-                      ? 'bg-hister-teal text-white'
-                      : 'bg-hister-coral text-white'}"
+                      ? 'bg-nogon-teal text-white'
+                      : 'bg-nogon-coral text-white'}"
                   >
                     {ep.method}
                   </Badge>
@@ -229,7 +229,7 @@
                   {#if ep.csrf_required}
                     <Badge
                       variant="outline"
-                      class="border-hister-amber text-hister-amber border-2 px-1.5 py-0 text-[10px] leading-5 font-semibold"
+                      class="border-nogon-amber text-nogon-amber border-2 px-1.5 py-0 text-[10px] leading-5 font-semibold"
                     >
                       CSRF
                     </Badge>
@@ -237,7 +237,7 @@
                   {#if ep.public}
                     <Badge
                       variant="outline"
-                      class="border-hister-teal text-hister-teal border-2 px-1.5 py-0 text-[10px] leading-5 font-semibold"
+                      class="border-nogon-teal text-nogon-teal border-2 px-1.5 py-0 text-[10px] leading-5 font-semibold"
                     >
                       Public
                     </Badge>
@@ -245,7 +245,7 @@
                   {#if ep.requires_auth}
                     <Badge
                       variant="outline"
-                      class="border-hister-rose text-hister-rose border-2 px-1.5 py-0 text-[10px] leading-5 font-semibold"
+                      class="border-nogon-rose text-nogon-rose border-2 px-1.5 py-0 text-[10px] leading-5 font-semibold"
                     >
                       Auth
                     </Badge>
@@ -253,7 +253,7 @@
                   {#if ep.mutates}
                     <Badge
                       variant="outline"
-                      class="border-hister-coral text-hister-coral border-2 px-1.5 py-0 text-[10px] leading-5 font-semibold"
+                      class="border-nogon-coral text-nogon-coral border-2 px-1.5 py-0 text-[10px] leading-5 font-semibold"
                     >
                       Write
                     </Badge>
@@ -309,7 +309,7 @@
                               {#if arg.required}
                                 <Badge
                                   variant="default"
-                                  class="bg-hister-rose border-0 px-1.5 py-0 text-[10px] text-white"
+                                  class="bg-nogon-rose border-0 px-1.5 py-0 text-[10px] text-white"
                                   >required</Badge
                                 >
                               {:else}
@@ -338,7 +338,7 @@
                           {#if arg.required}
                             <Badge
                               variant="default"
-                              class="bg-hister-rose border-0 px-1.5 py-0 text-[10px] text-white"
+                              class="bg-nogon-rose border-0 px-1.5 py-0 text-[10px] text-white"
                               >required</Badge
                             >
                           {/if}
@@ -371,7 +371,7 @@
                           {#if field.required}
                             <Badge
                               variant="default"
-                              class="bg-hister-rose border-0 px-1.5 py-0 text-[10px] text-white"
+                              class="bg-nogon-rose border-0 px-1.5 py-0 text-[10px] text-white"
                               >required</Badge
                             >
                           {:else}
@@ -403,7 +403,7 @@
                           {#if field.required}
                             <Badge
                               variant="default"
-                              class="bg-hister-rose border-0 px-1.5 py-0 text-[10px] text-white"
+                              class="bg-nogon-rose border-0 px-1.5 py-0 text-[10px] text-white"
                               >required</Badge
                             >
                           {/if}

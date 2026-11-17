@@ -54,12 +54,12 @@
               aria-current={doc.slug === currentSlug ? 'page' : undefined}
               class="font-inter flex items-center justify-between gap-2 border-l-[3px] px-3 py-2 text-sm no-underline transition-colors {doc.slug ===
               currentSlug
-                ? 'border-hister-indigo bg-hister-indigo/10 text-(--text-primary)'
+                ? 'border-nogon-indigo bg-nogon-indigo/10 text-(--text-primary)'
                 : 'hover:border-brutal-border border-transparent text-(--text-secondary) hover:bg-(--muted-surface) hover:text-(--text-primary)'}"
             >
               <span>{doc.title}</span>
               {#if doc.slug === currentSlug}
-                <ArrowRightIcon aria-hidden="true" size={14} class="text-hister-indigo shrink-0" />
+                <ArrowRightIcon aria-hidden="true" size={14} class="text-nogon-indigo shrink-0" />
               {/if}
             </a>
           {/each}

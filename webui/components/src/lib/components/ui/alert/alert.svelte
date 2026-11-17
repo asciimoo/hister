@@ -8,8 +8,8 @@
         default: 'bg-card text-card-foreground',
         destructive:
           'text-destructive bg-card *:data-[slot=alert-description]:text-destructive/90 [&>svg]:text-current',
-        success: 'border-[2px] rounded-none border-hister-teal bg-hister-teal/10 text-hister-teal',
-        error: 'border-[2px] rounded-none border-hister-rose bg-hister-rose/10 text-hister-rose',
+        success: 'border-[2px] rounded-none border-nogon-teal bg-nogon-teal/10 text-nogon-teal',
+        error: 'border-[2px] rounded-none border-nogon-rose bg-nogon-rose/10 text-nogon-rose',
       },
     },
     defaultVariants: {
@@ -22,7 +22,7 @@
 
 <script lang="ts">
   import type { HTMLAttributes } from 'svelte/elements';
-  import { cn, type WithElementRef } from '@hister/components/utils';
+  import { cn, type WithElementRef } from '@nogon/components/utils';
 
   let {
     ref = $bindable(null),

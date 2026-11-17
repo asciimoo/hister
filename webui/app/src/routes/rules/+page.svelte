@@ -19,11 +19,11 @@
     type RuleType,
     type RuleMatchMode,
   } from '#lib/rules.js';
-  import { Button } from '@hister/components/ui/button';
-  import { Input } from '@hister/components/ui/input';
-  import { Badge } from '@hister/components/ui/badge';
-  import * as Card from '@hister/components/ui/card';
-  import * as Table from '@hister/components/ui/table';
+  import { Button } from '@nogon/components/ui/button';
+  import { Input } from '@nogon/components/ui/input';
+  import { Badge } from '@nogon/components/ui/badge';
+  import * as Card from '@nogon/components/ui/card';
+  import * as Table from '@nogon/components/ui/table';
   import {
     Shield,
     Link2,
@@ -38,9 +38,9 @@
     ChevronDown,
     ListPlus,
   } from '@lucide/svelte';
-  import { PageHeader } from '@hister/components';
-  import { Label } from '@hister/components/ui/label';
-  import * as Alert from '@hister/components/ui/alert';
+  import { PageHeader } from '@nogon/components';
+  import { Label } from '@nogon/components/ui/label';
+  import * as Alert from '@nogon/components/ui/alert';
   import AlertCircle from '@lucide/svelte/icons/circle-alert';
   import CheckCircle from '@lucide/svelte/icons/circle-check';
 
@@ -537,7 +537,7 @@
 <div class="flex flex-1 flex-col gap-8 overflow-y-auto px-6 py-8 md:gap-10 md:px-12 md:py-12">
   <!-- Section Header -->
   <div class="flex flex-col gap-4">
-    <PageHeader color="hister-coral" size="lg" class="uppercase">Rules &amp; Aliases</PageHeader>
+    <PageHeader color="nogon-coral" size="lg" class="uppercase">Rules &amp; Aliases</PageHeader>
   </div>
 
   {#if message}
@@ -622,7 +622,7 @@
       <Button
         variant="ghost"
         size="icon-sm"
-        class="text-hister-teal shrink-0 transition-colors"
+        class="text-nogon-teal shrink-0 transition-colors"
         onclick={onSave}
         disabled={saveDisabled}
         aria-label="Save changes"
@@ -654,7 +654,7 @@
       <Button
         variant="ghost"
         size="icon-sm"
-        class="text-text-brand-muted hover:text-hister-rose shrink-0 transition-colors"
+        class="text-text-brand-muted hover:text-nogon-rose shrink-0 transition-colors"
         onclick={onDelete}
       >
         <Trash2 class="size-4" />
@@ -670,7 +670,7 @@
     <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
       <!-- Search Aliases Card -->
       <Card.Root id="search-aliases" class="scroll-mt-6">
-        <Card.Header color="hister-indigo">
+        <Card.Header color="nogon-indigo">
           <div class="flex h-12 w-12 shrink-0 items-center justify-center bg-white/20">
             <Link2 class="size-6 text-white" />
           </div>
@@ -706,7 +706,7 @@
                 variant="brutal"
                 bind:value={newAliasKeyword}
                 placeholder="keyword..."
-                class="bg-card-surface focus-visible:border-hister-indigo h-10 w-full px-3 md:w-35"
+                class="bg-card-surface focus-visible:border-nogon-indigo h-10 w-full px-3 md:w-35"
               />
             </div>
             <div class="flex flex-1 flex-col gap-1">
@@ -716,12 +716,12 @@
                 variant="brutal"
                 bind:value={newAliasValue}
                 placeholder="expands to..."
-                class="bg-card-surface focus-visible:border-hister-indigo h-10 w-full px-3"
+                class="bg-card-surface focus-visible:border-nogon-indigo h-10 w-full px-3"
               />
             </div>
             <Button
               type="submit"
-              class="bg-hister-indigo font-space border-brutal-border brutal-press h-10 gap-2 border-[3px] px-5 text-sm font-bold tracking-[1px] text-white uppercase"
+              class="bg-nogon-indigo font-space border-brutal-border brutal-press h-10 gap-2 border-[3px] px-5 text-sm font-bold tracking-[1px] text-white uppercase"
             >
               <Plus class="size-4 shrink-0" />
               Add
@@ -753,7 +753,7 @@
                   'font-space text-text-brand-muted h-auto px-2 py-3 text-xs font-bold tracking-[1px] uppercase md:px-5',
                 )}
                 <Table.Head class="h-auto w-16 px-2 py-3 md:w-20 md:px-5">
-                  {@render filterToggleButton('bg-hister-indigo text-white', () => {
+                  {@render filterToggleButton('bg-nogon-indigo text-white', () => {
                     aliasFilterOpen = !aliasFilterOpen;
                     if (!aliasFilterOpen) aliasFilter = '';
                   })}
@@ -764,7 +764,7 @@
                 aliasFilter,
                 (v) => (aliasFilter = v),
                 'Filter aliases...',
-                'focus-visible:border-hister-indigo',
+                'focus-visible:border-nogon-indigo',
               )}
             </Table.Header>
             <Table.Body>
@@ -777,13 +777,13 @@
                           type="text"
                           variant="brutal"
                           bind:value={editAliasKeyword}
-                          class="bg-card-surface focus-visible:border-hister-indigo h-8 w-20 px-2 text-sm md:w-28"
+                          class="bg-card-surface focus-visible:border-nogon-indigo h-8 w-20 px-2 text-sm md:w-28"
                         />
                         <Input
                           type="text"
                           variant="brutal"
                           bind:value={editAliasValue}
-                          class="bg-card-surface focus-visible:border-hister-indigo h-8 flex-1 px-2 text-sm"
+                          class="bg-card-surface focus-visible:border-nogon-indigo h-8 flex-1 px-2 text-sm"
                           onkeydown={(e) => {
                             if (e.key === 'Enter') saveEditAlias();
                             if (e.key === 'Escape') cancelEditAlias();
@@ -807,7 +807,7 @@
                       {@render editDeleteButtons(
                         () => startEditAlias(keyword, value),
                         () => deleteAlias(keyword),
-                        'hover:text-hister-indigo',
+                        'hover:text-nogon-indigo',
                       )}
                     </Table.Cell>
                   {/if}
@@ -820,7 +820,7 @@
             <div class="flex flex-col items-center justify-center gap-3 py-10">
               <div
                 class="flex h-12 w-12 items-center justify-center"
-                style="background-color: color-mix(in srgb, var(--hister-indigo) 10%, transparent); color: var(--hister-indigo);"
+                style="background-color: color-mix(in srgb, var(--nogon-indigo) 10%, transparent); color: var(--nogon-indigo);"
               >
                 <Link2 class="size-5" />
               </div>
@@ -834,7 +834,7 @@
 
       <!-- Indexing Rules Card -->
       <Card.Root id="indexing-rules" class="scroll-mt-6">
-        <Card.Header color="hister-coral">
+        <Card.Header color="nogon-coral">
           <div class="flex h-12 w-12 shrink-0 items-center justify-center bg-white/20">
             <Shield class="size-6 text-white" />
           </div>
@@ -860,7 +860,7 @@
           class="group/rule-add bg-muted-surface border-brutal-border border-b-[3px]"
         >
           <summary
-            class="font-outfit text-text-brand hover:bg-card-surface focus-visible:outline-hister-coral box-border flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 font-bold focus-visible:outline-2 focus-visible:outline-offset-[-4px] md:px-5 [&::-webkit-details-marker]:hidden"
+            class="font-outfit text-text-brand hover:bg-card-surface focus-visible:outline-nogon-coral box-border flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 font-bold focus-visible:outline-2 focus-visible:outline-offset-[-4px] md:px-5 [&::-webkit-details-marker]:hidden"
           >
             <span class="flex items-center gap-2">
               <Plus class="size-4" aria-hidden="true" />
@@ -945,7 +945,7 @@
                 type="button"
                 onclick={addRule}
                 disabled={saving || !newRuleValid || !newRulePattern.trim()}
-                class="bg-hister-coral font-space border-brutal-border brutal-press h-10 flex-1 gap-2 border-[3px] px-5 text-sm font-bold tracking-[1px] text-white uppercase md:flex-none"
+                class="bg-nogon-coral font-space border-brutal-border brutal-press h-10 flex-1 gap-2 border-[3px] px-5 text-sm font-bold tracking-[1px] text-white uppercase md:flex-none"
               >
                 <Plus class="size-4 shrink-0" />
                 Add rule
@@ -978,7 +978,7 @@
                   'font-space text-text-brand-muted h-auto w-20 px-2 py-3 text-xs font-bold tracking-[1px] uppercase md:w-28 md:px-5',
                 )}
                 <Table.Head class="h-auto w-16 px-2 py-3 md:w-20 md:px-5">
-                  {@render filterToggleButton('bg-hister-coral text-white', () => {
+                  {@render filterToggleButton('bg-nogon-coral text-white', () => {
                     ruleFilterOpen = !ruleFilterOpen;
                     if (!ruleFilterOpen) ruleFilter = '';
                   })}
@@ -989,7 +989,7 @@
                 ruleFilter,
                 (v) => (ruleFilter = v),
                 'Filter rules...',
-                'focus-visible:border-hister-coral',
+                'focus-visible:border-nogon-coral',
               )}
             </Table.Header>
             <Table.Body>
@@ -1060,11 +1060,11 @@
                         variant="default"
                         class="font-space border-0 px-2 py-1 text-xs font-bold tracking-[0.5px] uppercase md:px-3 {row.type ===
                         'skip'
-                          ? 'bg-hister-rose text-white'
+                          ? 'bg-nogon-rose text-white'
                           : row.type === 'allow'
-                            ? 'bg-hister-indigo text-white'
+                            ? 'bg-nogon-indigo text-white'
                             : row.type === 'priority'
-                              ? 'bg-hister-teal text-white'
+                              ? 'bg-nogon-teal text-white'
                               : 'bg-violet-500 text-white'}"
                       >
                         {row.type}
@@ -1074,7 +1074,7 @@
                       {@render editDeleteButtons(
                         () => startEditRule(i),
                         () => removeRule(row.pattern, row.type),
-                        'hover:text-hister-coral',
+                        'hover:text-nogon-coral',
                       )}
                     </Table.Cell>
                   {/if}
@@ -1087,7 +1087,7 @@
             <div class="flex flex-col items-center justify-center gap-3 py-10">
               <div
                 class="flex h-12 w-12 items-center justify-center"
-                style="background-color: color-mix(in srgb, var(--hister-coral) 10%, transparent); color: var(--hister-coral);"
+                style="background-color: color-mix(in srgb, var(--nogon-coral) 10%, transparent); color: var(--nogon-coral);"
               >
                 <Shield class="size-5" />
               </div>

@@ -161,13 +161,13 @@
           aria-selected={index === activeIndex}
           class="font-inter flex w-full cursor-pointer items-center gap-3 px-3 py-2 text-left transition-colors {index ===
           activeIndex
-            ? 'bg-hister-indigo/10 text-text-brand'
+            ? 'bg-nogon-indigo/10 text-text-brand'
             : 'text-text-brand-secondary hover:bg-muted-surface hover:text-text-brand'}"
           onpointerdown={(event) => event.preventDefault()}
           onmouseenter={() => onactivechange(index)}
           onclick={() => onselect(suggestion)}
         >
-          <span class="text-hister-indigo flex size-5 shrink-0 items-center justify-center">
+          <span class="text-nogon-indigo flex size-5 shrink-0 items-center justify-center">
             <Icon class="size-4" />
           </span>
           <span class="min-w-0 flex-1">
@@ -182,7 +182,7 @@
       {/each}
       {#if loading && suggestions.length === 0}
         <div class="font-inter text-text-brand-muted flex items-center gap-2 px-3 py-3 text-sm">
-          <span class="bg-hister-indigo size-2 animate-pulse"></span>
+          <span class="bg-nogon-indigo size-2 animate-pulse"></span>
           Loading values…
         </div>
       {/if}
@@ -208,7 +208,7 @@
     >
       <span
         aria-hidden="true"
-        class="bg-border-brand-muted group-hover:bg-hister-indigo group-focus-visible:bg-hister-indigo h-0.5 w-12 transition-colors"
+        class="bg-border-brand-muted group-hover:bg-nogon-indigo group-focus-visible:bg-nogon-indigo h-0.5 w-12 transition-colors"
       ></span>
     </button>
   </div>

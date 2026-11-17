@@ -3,7 +3,7 @@
   import { resolve } from '$app/paths';
   import { fetchConfig, type AppConfig } from '#lib/api.js';
   import { extensionStores } from '#lib/extension.js';
-  import { Button } from '@hister/components/ui/button';
+  import { Button } from '@nogon/components/ui/button';
   import {
     ArrowRight,
     ArrowUpRight,
@@ -132,19 +132,19 @@
           {@render docLink('quickstart', 'Quickstart guide')}
         </div>
         <p class="text-text-brand-secondary mt-6 flex items-center gap-2 text-xs leading-relaxed">
-          <Database class="text-hister-teal size-4 shrink-0" aria-hidden="true" />
+          <Database class="text-nogon-teal size-4 shrink-0" aria-hidden="true" />
           Indexed content is stored on the Nogon server.
         </p>
       </div>
 
       <section class="workflow self-center" aria-labelledby="workflow-title">
         <div class="border-border-brand-muted flex items-center gap-2 border-b px-5 py-3">
-          <span class="bg-hister-teal size-2" aria-hidden="true"></span>
+          <span class="bg-nogon-teal size-2" aria-hidden="true"></span>
           <h2 id="workflow-title" class="eyebrow">Core features</h2>
         </div>
         <div class="space-y-6 p-5 md:p-6">
           <div class="flex gap-4">
-            <Globe class="text-hister-coral mt-1 size-6 shrink-0" aria-hidden="true" />
+            <Globe class="text-nogon-coral mt-1 size-6 shrink-0" aria-hidden="true" />
             <div>
               <h3 class="font-outfit text-lg font-bold">Indexing</h3>
               <p class="text-text-brand-secondary mt-1 text-sm leading-relaxed">
@@ -153,7 +153,7 @@
             </div>
           </div>
           <div class="flex gap-4">
-            <Search class="text-hister-indigo mt-1 size-6 shrink-0" aria-hidden="true" />
+            <Search class="text-nogon-indigo mt-1 size-6 shrink-0" aria-hidden="true" />
             <div>
               <h3 class="font-outfit text-lg font-bold">Search</h3>
               <p class="text-text-brand-secondary mt-1 text-sm leading-relaxed">
@@ -162,7 +162,7 @@
             </div>
           </div>
           <div class="flex gap-4">
-            <FileText class="text-hister-teal mt-1 size-6 shrink-0" aria-hidden="true" />
+            <FileText class="text-nogon-teal mt-1 size-6 shrink-0" aria-hidden="true" />
             <div>
               <h3 class="font-outfit text-lg font-bold">Previews</h3>
               <p class="text-text-brand-secondary mt-1 text-sm leading-relaxed">
@@ -175,7 +175,7 @@
     </section>
 
     <section aria-labelledby="getting-started-title">
-      <p class="eyebrow mb-2" style="--eyebrow-color: var(--hister-coral)">Setup</p>
+      <p class="eyebrow mb-2" style="--eyebrow-color: var(--nogon-coral)">Setup</p>
       <h2 id="getting-started-title" class="section-title">Getting started</h2>
       <p class="section-intro">
         After connecting the extension or importing content, search for a phrase from an indexed
@@ -184,7 +184,7 @@
 
       {#if config?.public && !config.canWrite}
         <p
-          class="border-hister-indigo/40 bg-hister-indigo/10 mt-5 border-l-4 px-4 py-3 text-sm leading-relaxed"
+          class="border-nogon-indigo/40 bg-nogon-indigo/10 mt-5 border-l-4 px-4 py-3 text-sm leading-relaxed"
         >
           You are browsing a public collection without write access. Follow the quickstart guide to
           set up a server for your own content.
@@ -192,7 +192,7 @@
       {/if}
 
       <ol class="mt-6 grid gap-4 md:grid-cols-3">
-        <li class="onboarding-card" style="--step-color: var(--hister-coral)">
+        <li class="onboarding-card" style="--step-color: var(--nogon-coral)">
           <span class="step-number" aria-hidden="true">01</span>
           <h3 class="card-title">Connect the browser extension</h3>
           <p class="card-copy">
@@ -213,7 +213,7 @@
           <div class="mt-auto pt-5">{@render docLink('browser-extension', 'Extension setup')}</div>
         </li>
 
-        <li class="onboarding-card" style="--step-color: var(--hister-indigo)">
+        <li class="onboarding-card" style="--step-color: var(--nogon-indigo)">
           <span class="step-number" aria-hidden="true">02</span>
           <h3 class="card-title">Import existing content</h3>
           <p class="card-copy">
@@ -234,7 +234,7 @@
           </div>
         </li>
 
-        <li class="onboarding-card" style="--step-color: var(--hister-teal)">
+        <li class="onboarding-card" style="--step-color: var(--nogon-teal)">
           <span class="step-number" aria-hidden="true">03</span>
           <h3 class="card-title">Configure indexing rules</h3>
           <p class="card-copy">
@@ -258,7 +258,7 @@
 
     <section class="grid gap-8 lg:grid-cols-[1.5fr_1fr] lg:gap-12" aria-labelledby="search-title">
       <div class="min-w-0">
-        <p class="eyebrow mb-2" style="--eyebrow-color: var(--hister-indigo)">Usage</p>
+        <p class="eyebrow mb-2" style="--eyebrow-color: var(--nogon-indigo)">Usage</p>
         <h2 id="search-title" class="section-title">Search syntax</h2>
         <p class="section-intro">
           Enter keywords to search indexed content. Combine them with phrases and filters to narrow
@@ -294,7 +294,7 @@
         class="border-border-brand bg-card-surface self-start border p-6 lg:mt-8"
         aria-labelledby="daily-tips-title"
       >
-        <BookOpen class="text-hister-teal mb-4 size-6" aria-hidden="true" />
+        <BookOpen class="text-nogon-teal mb-4 size-6" aria-hidden="true" />
         <h3 id="daily-tips-title" class="font-outfit text-2xl font-bold">Using search results</h3>
         <div class="mt-5 space-y-5 text-sm leading-relaxed">
           <div>
@@ -331,7 +331,7 @@
     <section aria-labelledby="docs-title">
       <div class="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p class="eyebrow mb-2" style="--eyebrow-color: var(--hister-teal)">Reference</p>
+          <p class="eyebrow mb-2" style="--eyebrow-color: var(--nogon-teal)">Reference</p>
           <h2 id="docs-title" class="section-title">Documentation</h2>
         </div>
         {@render docLink('', 'All documentation')}
@@ -345,7 +345,7 @@
             rel="noopener noreferrer"
           >
             <div class="mb-4 flex items-center justify-between gap-3">
-              <guide.icon class="text-hister-teal size-5" aria-hidden="true" />
+              <guide.icon class="text-nogon-teal size-5" aria-hidden="true" />
               <ArrowUpRight
                 class="text-text-brand-muted group-hover:text-text-brand size-4"
                 aria-hidden="true"
@@ -388,7 +388,7 @@
   .hero {
     border: 2px solid var(--brutal-border);
     background: var(--brutal-bg);
-    box-shadow: 6px 6px 0 color-mix(in srgb, var(--hister-indigo) 60%, var(--brutal-shadow));
+    box-shadow: 6px 6px 0 color-mix(in srgb, var(--nogon-indigo) 60%, var(--brutal-shadow));
   }
 
   .eyebrow {
@@ -469,7 +469,7 @@
   }
 
   .text-link:hover {
-    text-decoration-color: var(--hister-indigo);
+    text-decoration-color: var(--nogon-indigo);
   }
 
   .search-example {
@@ -495,7 +495,7 @@
   }
 
   .guide-link:hover {
-    border-color: var(--hister-teal);
+    border-color: var(--nogon-teal);
   }
 
   @media (prefers-reduced-motion: reduce) {
