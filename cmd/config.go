@@ -66,7 +66,7 @@ var configCmd = &cobra.Command{
 var configPathCmd = &cobra.Command{
 	Use:   "path",
 	Short: "Print the selected configuration file path",
-	Long:  "Print the absolute path of the selected main configuration file, or (defaults) when no file is present. The file does not need to contain valid YAML.",
+	Long:  "Print the absolute path of the selected main configuration file, or (defaults) when no file is present. Without an explicit selection, search ./config.yml, then Nogon locations, then legacy Hister locations. The file does not need to contain valid YAML.",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		filename, explicit := inspectionConfigSource()

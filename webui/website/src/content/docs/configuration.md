@@ -675,27 +675,49 @@ An explicit path from `--config` or an environment variable must exist. An empty
 
 ## Default Config Locations
 
-**Linux** (respects `$XDG_CONFIG_HOME`):
+Nogon locations are searched first, in the order shown:
 
-- `$XDG_CONFIG_HOME/hister/config.yml` if `$XDG_CONFIG_HOME` is set, otherwise `~/.config/hister/config.yml`
-- `~/.histerrc` (legacy, deprecated)
+| Platform | Locations                                                                                                                                                                                               |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Linux    | `$XDG_CONFIG_HOME/nogon/config.yml`, or `~/.config/nogon/config.yml` when XDG_CONFIG_HOME is unset.                                                                                                     |
+| macOS    | `$XDG_CONFIG_HOME/nogon/config.yml`, or `~/Library/Preferences/nogon/config.yml` when XDG_CONFIG_HOME is unset; then `~/Library/Application Support/nogon/config.yml` and `~/.config/nogon/config.yml`. |
+| Windows  | `%LOCALAPPDATA%\nogon\config.yml`, `$XDG_CONFIG_HOME\nogon\config.yml`, `%APPDATA%\nogon\config.yml`, then `~\.config\nogon\config.yml`. Unset environment locations are skipped.                       |
 
-**macOS** (respects `$XDG_CONFIG_HOME`):
+If none exists, existing Hister locations remain supported. Linux checks the
+corresponding `hister/config.yml`, then `~/.histerrc`. macOS and Windows check
+the corresponding Hister platform locations, then `~/.histerrc`, then
+`~/.config/hister/config.yml`. Only one main file is loaded; files are never merged.
+A selected file with invalid contents produces an error instead of falling back.
 
-- `$XDG_CONFIG_HOME/hister/config.yml` if `$XDG_CONFIG_HOME` is set, otherwise `~/Library/Preferences/hister/config.yml`
-- `~/Library/Application Support/hister/config.yml` (backwards compatible)
-- `~/.histerrc` (legacy, deprecated)
-- `~/.config/hister/config.yml` (legacy)
+## Data Directory Compatibility
 
-**Windows** (respects environment variables):
+An explicit `app.directory` or data directory environment variable keeps its
+selected location. An empty or null `app.directory` or an inaccessible directory is an
+error. Existing directories are never copied, moved, or merged automatically.
 
-- `%LOCALAPPDATA%\hister\config.yml` (recommended)
-- `$XDG_CONFIG_HOME\hister\config.yml` (if `$XDG_CONFIG_HOME` is set)
-- `%APPDATA%\hister\config.yml` (fallback)
-- `~\.histerrc` (legacy, deprecated)
-- `~\.config\hister\config.yml` (legacy)
+Without an explicit selection, existing data is reused from supported Nogon or
+Hister locations. If more than one directory contains stored application data,
+set `app.directory` or `NOGON_DATA_DIR` to choose the intended instance. A main
+config file or TUI preferences alone do not count as stored application data.
 
-If you have a legacy `~/.histerrc` file and Hister finds it, you'll see a deprecation warning suggesting you move it to the recommended location.
+Fresh installations use these defaults:
+
+| Platform | Data directory                                                                                                                             |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Linux    | `$XDG_STATE_HOME/nogon`, then `$XDG_DATA_HOME/nogon`, then `$XDG_CONFIG_HOME/nogon` or `~/.config/nogon`, using the first configured root. |
+| macOS    | `~/Library/Application Support/nogon`                                                                                                      |
+| Windows  | `%LOCALAPPDATA%\nogon`, falling back to `%APPDATA%\nogon`                                                                                  |
+
+Existing Hister data in any of these roots remains discoverable, including
+`~/.config/hister` on Linux. An existing empty Hister directory is also reused
+when no populated directory is found. Unix service accounts with `/var/empty`
+or `/nonexistent` as their home and no XDG overrides use `/var/lib/nogon`,
+with existing `/var/lib/hister` data reused. Services with an explicit data
+location continue using it.
+
+Saved rules, web settings, sessions, indexes, and queued work stay in the selected
+data directory. Reload keeps the original main file selection and rejects new
+data directory conflicts until an explicit choice is made.
 
 ## Setting Precedence
 
@@ -727,7 +749,7 @@ output formats, and exit statuses.
 Generate a commented reference containing all default settings:
 
 ```bash
-hister config create ~/.config/hister/config.yml
+hister config create ~/.config/nogon/config.yml
 ```
 
 Every YAML line is commented, including the listen address for your installed build. Comments
@@ -763,13 +785,13 @@ Or use your platform's recommended location:
 
 ```bash
 # Linux
-hister config create ~/.config/hister/config.yml
+hister config create ~/.config/nogon/config.yml
 
 # macOS
-hister config create ~/Library/Preferences/hister/config.yml
+hister config create ~/Library/Preferences/nogon/config.yml
 
 # Windows
-hister config create %LOCALAPPDATA%\hister\config.yml
+hister config create %LOCALAPPDATA%\nogon\config.yml
 ```
 
 You can also specify a custom config location using the `--config` flag:
@@ -1002,7 +1024,8 @@ Three special purpose variables are also supported:
 For these variables, a present Nogon spelling suppresses its legacy equivalent.
 Empty `NOGON_PORT` and `NOGON_DATA_DIR` values leave the underlying setting in
 effect. Nonempty values override ordinary environment settings; explicit flags
-still take precedence. Existing configuration and data locations remain unchanged.
+still take precedence. See [Data Directory Compatibility](#data-directory-compatibility)
+for fresh installation defaults and existing data discovery.
 
 ## Full Configuration
 
@@ -1524,7 +1547,10 @@ Terminal shortcuts remain in `tui.yaml`.
 
 TUI-specific settings are stored in a separate `tui.yaml` file in the same directory as your main config. This file is automatically created with defaults the first time you run `hister search`.
 
-**Default location**: `~/.config/hister/tui.yaml` (or alongside your config file)
+Without a main config file, existing `tui.yaml` preferences are discovered in the
+Nogon and legacy Hister config locations. New preferences use the first Nogon
+config location, such as `~/.config/nogon/tui.yaml` on Linux. Saving preferences
+keeps their selected location.
 
 ### tui.yaml Example
 

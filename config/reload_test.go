@@ -68,6 +68,62 @@ func TestNogonEnvironmentReloadPreservesManagedSettings(t *testing.T) {
 	}
 }
 
+func TestNogonReloadRetainsDiscoveredLegacyInstance(t *testing.T) {
+	dir := isolateRenamePaths(t)
+	dataRoot := filepath.Join(dir, "state")
+	switch runtime.GOOS {
+	case "darwin":
+		dataRoot = filepath.Join(dir, "Library/Application Support")
+	case "windows":
+		dataRoot = filepath.Join(dir, "config")
+	}
+	legacy := filepath.Join(dataRoot, "hister")
+	filename := filepath.Join(dir, "config", "hister", "config.yml")
+	writeRenameFile(t, filename, "# main configuration\n")
+	managed := filepath.Join(legacy, "config.web.yml")
+	writeRenameFile(t, managed, "app:\n  title: Saved title\n")
+	writeRenameFile(t, filepath.Join(filepath.Dir(filename), "tui.yaml"), "dark_theme: saved-theme\n")
+	name, err := ResolvePath("", false)
+	if err != nil || name != filename {
+		t.Fatalf("legacy discovery: %q, %v", name, err)
+	}
+	c, err := Load(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !c.SourcesUnchanged() {
+		t.Fatal("runtime initialization changed the selected default data directory")
+	}
+	writeRenameFile(t, filepath.Join(dir, "config", "nogon", "config.yml"), "app:\n  title: Unrelated new file\n")
+	writeRenameFile(t, managed, "app:\n  title: Updated saved title\n")
+	next, err := c.Reload()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if next.Filename() != filename || next.App.Directory != legacy || next.App.Title != "Updated saved title" || next.Source("app.directory").Kind != "default" {
+		t.Fatal("reload rediscovered a main file or lost the legacy data directory")
+	}
+	if !bytes.Equal(c.secretKey, next.secretKey) || next.TUI.DarkTheme != "saved-theme" {
+		t.Fatal("reload lost the original session key or TUI preferences")
+	}
+	draft, fields := next.PrepareDraft([]SettingEdit{{Path: "app.title", Action: "reset"}})
+	if len(fields) != 0 || draft.App.Directory != legacy {
+		t.Fatalf("web draft lost the resolved default directory: %v", fields)
+	}
+	writeRenameFile(t, filepath.Join(dataRoot, "nogon", "db.sqlite3"), "another instance")
+	if _, err := next.Reload(); err == nil || !strings.Contains(err.Error(), "app.directory") {
+		t.Fatalf("reload accepted ambiguous data directories: %v", err)
+	}
+	if next.App.Directory != legacy || next.App.Title != "Updated saved title" {
+		t.Fatal("failed reload mutated the active configuration")
+	}
+	t.Setenv("NOGON_DATA_DIR", legacy)
+	selected, err := next.Reload()
+	if err != nil || selected.App.Directory != legacy || selected.Source("app.directory").Name != "NOGON_DATA_DIR" {
+		t.Fatalf("explicit choice did not resolve the conflict: %v", err)
+	}
+}
+
 func TestManagedPersistenceRoundTrip(t *testing.T) {
 	for _, existing := range []bool{false, true} {
 		for _, longPath := range []bool{false, true} {
@@ -512,8 +568,8 @@ func TestReloadWithoutMainConfiguration(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A file appearing after startup must not silently become authoritative.
-	if err := os.WriteFile(filepath.Join(dir, "hister", "config.yml"), []byte("app:\n  title: Unexpected file\n"), 0o600); err != nil {
-		t.Fatal(err)
+	for _, name := range []string{"hister", "nogon"} {
+		writeRenameFile(t, filepath.Join(dir, name, "config.yml"), "app:\n  title: Unexpected file\n")
 	}
 	t.Setenv("HISTER__APP__SUBTITLE", "Updated environment")
 	next, err := c.Reload()

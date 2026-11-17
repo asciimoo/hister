@@ -230,7 +230,7 @@ func parseDateRangeFlags(cmd *cobra.Command) (dateRangeFlags, error) {
 
 func init() {
 	dcfg := config.CreateDefaultConfig()
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "config.yml", "config file (default paths: ./config.yml or $HOME/.histerrc or $HOME/.config/hister/config.yml)")
+	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "config.yml", "config file (searches ./config.yml, then Nogon and legacy Hister locations)")
 	rootCmd.PersistentFlags().StringP("log-level", "l", "info", "set log level (possible options: error, warning, info, debug, trace)")
 	bindConfigFlag(rootCmd.PersistentFlags(), "log-level", "app.log_level")
 	rootCmd.PersistentFlags().StringP("search-url", "s", dcfg.App.SearchURL, "set default search engine url")

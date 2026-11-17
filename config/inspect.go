@@ -87,6 +87,14 @@ func loadSelected(name string, strict bool, overrides ...Override) (*Config, err
 			return nil, err
 		}
 	}
+	if _, selected := inputs.sources["app.directory"]; selected && inputs.values.Get("app.directory") == nil {
+		return nil, errors.New("app.directory must not be null")
+	}
+	if err := c.resolveDataDirectory(); err != nil {
+		return nil, err
+	}
+	// Keep the discovered default in every decode and draft of this composition.
+	inputs.defaults.App.Directory = c.App.Directory
 	if err := c.normalize(); err != nil {
 		return nil, err
 	}

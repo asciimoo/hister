@@ -16,6 +16,303 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// Give path discovery a disposable home without changing Go's cache or temp paths.
+func isolateRenamePaths(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	for key, value := range map[string]string{
+		"HOME": dir, "USERPROFILE": dir,
+		"XDG_CONFIG_HOME": filepath.Join(dir, "config"),
+		"XDG_STATE_HOME":  filepath.Join(dir, "state"),
+		"XDG_DATA_HOME":   filepath.Join(dir, "data"),
+		"LOCALAPPDATA":    filepath.Join(dir, "config"),
+		"APPDATA":         filepath.Join(dir, "roaming"),
+	} {
+		t.Setenv(key, value)
+	}
+	for _, key := range []string{"NOGON_DATA_DIR", "HISTER_DATA_DIR"} {
+		t.Setenv(key, "")
+		if err := os.Unsetenv(key); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return dir
+}
+
+func writeRenameFile(t *testing.T, name, content string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(name), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(name, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestNogonDataDirectorySelection(t *testing.T) {
+	for _, scenario := range []string{"fresh", "legacy", "nogon", "both", "empty legacy", "new config only", "file selection", "environment selection", "empty selection", "null selection"} {
+		t.Run(scenario, func(t *testing.T) {
+			dir := isolateRenamePaths(t)
+			root := filepath.Join(dir, "state")
+			switch runtime.GOOS {
+			case "darwin":
+				root = filepath.Join(dir, "Library/Application Support")
+			case "windows":
+				root = filepath.Join(dir, "config")
+			}
+			legacy, current := filepath.Join(root, "hister"), filepath.Join(root, "nogon")
+			want := current
+			switch scenario {
+			case "legacy", "both", "new config only", "file selection", "environment selection", "empty selection", "null selection":
+				writeRenameFile(t, filepath.Join(legacy, "config.web.yml"), "app:\n  subtitle: Saved subtitle\n")
+				want = legacy
+			case "empty legacy":
+				if err := os.MkdirAll(legacy, 0o700); err != nil {
+					t.Fatal(err)
+				}
+				want = legacy
+			}
+			switch scenario {
+			case "nogon", "both", "file selection", "environment selection", "empty selection", "null selection":
+				writeRenameFile(t, filepath.Join(current, "db.sqlite3"), "stored database")
+			case "new config only":
+				writeRenameFile(t, filepath.Join(current, "config.yml"), "# configuration only\n")
+				writeRenameFile(t, filepath.Join(current, "tui.yaml"), "dark_theme: saved\n")
+				writeRenameFile(t, filepath.Join(current, ".DS_Store"), "file manager metadata")
+			}
+			filename := filepath.Join(dir, "selected.yml")
+			content := "# defaults\n"
+			source := "default"
+			switch scenario {
+			case "file selection":
+				want, source = filepath.Join(dir, "custom"), "file"
+				content = fmt.Sprintf("app:\n  directory: %q\n", want)
+			case "environment selection":
+				want, source = current, "environment"
+				t.Setenv("NOGON_DATA_DIR", want)
+			case "empty selection":
+				content = "app:\n  directory: ''\n"
+			case "null selection":
+				content = "app:\n  directory: null\n"
+			}
+			writeRenameFile(t, filename, content)
+			c, _, err := LoadForInspection(filename, true)
+			if scenario == "both" || scenario == "empty selection" || scenario == "null selection" {
+				if err == nil || !strings.Contains(err.Error(), "app.directory") {
+					t.Fatalf("expected an explicit data directory choice, got %v", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if c.App.Directory != want || c.Source("app.directory").Kind != source {
+				t.Fatalf("directory = %q (%+v), want %q from %s", c.App.Directory, c.Source("app.directory"), want, source)
+			}
+			if (scenario == "legacy" || scenario == "new config only") && c.App.Subtitle != "Saved subtitle" {
+				t.Fatal("legacy managed settings were not loaded")
+			}
+			if scenario == "fresh" {
+				if defaults := CreateDefaultConfig(); defaults.App.Directory != want {
+					t.Fatalf("fresh defaults use %q, want %q", defaults.App.Directory, want)
+				}
+				if _, err := os.Stat(want); !os.IsNotExist(err) {
+					t.Fatalf("inspection created a data directory: %v", err)
+				}
+			}
+		})
+	}
+}
+
+func TestNogonConflictingStoredDataRequiresExplicitSelection(t *testing.T) {
+	for _, marker := range []string{".secret_key", "rules.json", "config.web.yml", "db.sqlite3", "db.sqlite3-wal", "index.db/store", "index_en.db/store", "data/html/saved", "custom.sqlite3", "nested/custom.sqlite3"} {
+		t.Run(marker, func(t *testing.T) {
+			dir := isolateRenamePaths(t)
+			root := filepath.Join(dir, "state")
+			switch runtime.GOOS {
+			case "darwin":
+				root = filepath.Join(dir, "Library/Application Support")
+			case "windows":
+				root = filepath.Join(dir, "config")
+			}
+			legacy, current := filepath.Join(root, "hister"), filepath.Join(root, "nogon")
+			writeRenameFile(t, filepath.Join(legacy, ".secret_key"), "existing key")
+			writeRenameFile(t, filepath.Join(current, filepath.FromSlash(marker)), "other stored data")
+			filename := filepath.Join(dir, "selected.yml")
+			content := "# defaults\n"
+			if strings.Contains(marker, "custom") {
+				content = "server:\n  database: " + marker + "\n"
+			}
+			writeRenameFile(t, filename, content)
+			if _, err := Load(filename); err == nil || !strings.Contains(err.Error(), "app.directory") {
+				t.Fatalf("startup accepted conflicting %s data: %v", marker, err)
+			}
+			entries, err := os.ReadDir(legacy)
+			if err != nil || len(entries) != 1 {
+				t.Fatalf("failed startup created runtime files: %v, %v", entries, err)
+			}
+			if raw, err := os.ReadFile(filepath.Join(current, filepath.FromSlash(marker))); err != nil || string(raw) != "other stored data" {
+				t.Fatalf("failed startup modified the other instance: %q, %v", raw, err)
+			}
+		})
+	}
+}
+
+func TestNogonFindsLegacyDataAcrossPlatformLocations(t *testing.T) {
+	locations := []string{"state", "data", "config", ".config"}
+	switch runtime.GOOS {
+	case "darwin":
+		locations = []string{"Library/Application Support"}
+	case "windows":
+		locations = []string{"config", "roaming"}
+	}
+	for _, location := range locations {
+		t.Run(location, func(t *testing.T) {
+			dir := isolateRenamePaths(t)
+			legacy := filepath.Join(dir, location, "hister")
+			writeRenameFile(t, filepath.Join(legacy, "config.web.yml"), "app:\n  title: Existing instance\n")
+			filename := filepath.Join(dir, "selected.yml")
+			writeRenameFile(t, filename, "# defaults\n")
+			c, _, err := LoadForInspection(filename, true)
+			if err != nil || c.App.Directory != legacy || c.App.Title != "Existing instance" {
+				t.Fatalf("existing instance in %q was not selected: %+v, %v", legacy, c, err)
+			}
+		})
+	}
+}
+
+func TestNogonFreshPlatformDataDefaults(t *testing.T) {
+	for _, selection := range []string{"primary", "without state", "without data", "system account"} {
+		t.Run(selection, func(t *testing.T) {
+			dir := isolateRenamePaths(t)
+			want := filepath.Join(dir, "state", "nogon")
+			if selection == "without state" || selection == "without data" {
+				t.Setenv("XDG_STATE_HOME", "")
+				t.Setenv("LOCALAPPDATA", "")
+				want = filepath.Join(dir, "data", "nogon")
+			}
+			if selection == "without data" {
+				t.Setenv("XDG_DATA_HOME", "")
+				want = filepath.Join(dir, "config", "nogon")
+			}
+			switch runtime.GOOS {
+			case "darwin":
+				want = filepath.Join(dir, "Library/Application Support", "nogon")
+			case "windows":
+				want = filepath.Join(dir, "config", "nogon")
+				if selection == "without state" || selection == "without data" {
+					want = filepath.Join(dir, "roaming", "nogon")
+				}
+			}
+			if selection == "system account" {
+				if runtime.GOOS == "windows" {
+					t.Skip("Unix service account default")
+				}
+				t.Setenv("HOME", "/var/empty")
+				t.Setenv("XDG_STATE_HOME", "")
+				t.Setenv("XDG_DATA_HOME", "")
+				t.Setenv("XDG_CONFIG_HOME", "")
+				want = "/var/lib/nogon"
+			}
+			if got := CreateDefaultConfig().App.Directory; got != want {
+				t.Fatalf("default directory = %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+func TestNogonStartupPreservesLegacyState(t *testing.T) {
+	dir := isolateRenamePaths(t)
+	dataRoot := filepath.Join(dir, "state")
+	switch runtime.GOOS {
+	case "darwin":
+		dataRoot = filepath.Join(dir, "Library/Application Support")
+	case "windows":
+		dataRoot = filepath.Join(dir, "config")
+	}
+	legacy := filepath.Join(dataRoot, "hister")
+	files := map[string]string{
+		".secret_key":    "existing session key",
+		"rules.json":     `{"skip":["blocked.example"]}`,
+		"config.web.yml": "app:\n  title: Hister\n",
+		"db.sqlite3":     "database including users, sessions, vectors, and jobs",
+		"index.db/store": "default index", "index_en.db/store": "language index",
+		"data/html/saved": "stored HTML", "data/favicon/saved": "stored favicon",
+	}
+	for name, content := range files {
+		writeRenameFile(t, filepath.Join(legacy, name), content)
+	}
+	tui := filepath.Join(dir, "config", "hister", "tui.yaml")
+	writeRenameFile(t, tui, "dark_theme: saved-theme\n")
+	c, err := Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.App.Directory != legacy || c.App.Title != "Hister" || string(c.secretKey) != files[".secret_key"] || !c.Rules.IsSkip("https://blocked.example") {
+		t.Fatal("startup did not reuse legacy state")
+	}
+	if c.TUI.DarkTheme != "saved-theme" || c.Filename() != "*Default Config*" {
+		t.Fatalf("legacy TUI preferences lost: %+v", c.TUI)
+	}
+	c.TUI.DarkTheme = "updated-theme"
+	if err := c.SaveTUIConfig(); err != nil {
+		t.Fatal(err)
+	}
+	if raw, err := os.ReadFile(tui); err != nil || !strings.Contains(string(raw), "updated-theme") {
+		t.Fatalf("TUI settings were saved to a different location: %q, %v", raw, err)
+	}
+	for name, want := range files {
+		if raw, err := os.ReadFile(filepath.Join(legacy, name)); err != nil || string(raw) != want {
+			t.Fatalf("startup changed %s: %q, %v", name, raw, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dataRoot, "nogon")); !os.IsNotExist(err) {
+		t.Fatalf("upgrade initialized separate Nogon data: %v", err)
+	}
+}
+
+func TestNogonExplicitDataDirectoryNeverFallsBack(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("requires Unix permission enforcement for an ordinary user")
+	}
+	dir := isolateRenamePaths(t)
+	parent := filepath.Join(dir, "readonly")
+	if err := os.Mkdir(parent, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(parent, 0o700) })
+	want := filepath.Join(parent, "data")
+	filename := filepath.Join(dir, "selected.yml")
+	writeRenameFile(t, filename, fmt.Sprintf("app:\n  directory: %q\n", want))
+	c, err := Load(filename)
+	if err == nil || c == nil || c.App.Directory != want {
+		t.Fatalf("unwritable explicit directory changed to a fallback: config=%+v, error=%v", c, err)
+	}
+}
+
+func TestNogonStartupRejectsUnreadableExistingSessionKey(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("requires Unix permission enforcement for an ordinary user")
+	}
+	dir := isolateRenamePaths(t)
+	t.Setenv("NOGON_DATA_DIR", dir)
+	key := filepath.Join(dir, ".secret_key")
+	writeRenameFile(t, key, "original session key")
+	if err := os.Chmod(key, 0o200); err != nil {
+		t.Fatal(err)
+	}
+	_, loadErr := Load("")
+	if err := os.Chmod(key, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if loadErr == nil {
+		t.Error("startup accepted an unreadable existing session key")
+	}
+	if raw, err := os.ReadFile(key); err != nil || string(raw) != "original session key" {
+		t.Fatalf("startup replaced the existing session key: %q, %v", raw, err)
+	}
+}
+
 func TestLoadCommentedConfiguration(t *testing.T) {
 	for _, tc := range []struct {
 		name, content, address string
@@ -347,7 +644,7 @@ func TestManagedConfigurationDiscoversAuthoritativeDirectory(t *testing.T) {
 			if level == 0 && runtime.GOOS == "darwin" {
 				t.Skip("the macOS default data directory has no environment override")
 			}
-			dir := t.TempDir()
+			dir := isolateRenamePaths(t)
 			t.Setenv("XDG_STATE_HOME", dir)
 			t.Setenv("LOCALAPPDATA", dir)
 			directories := []string{filepath.Join(dir, "hister"), filepath.Join(dir, "file"), filepath.Join(dir, "env"), filepath.Join(dir, "special"), filepath.Join(dir, "flag")}

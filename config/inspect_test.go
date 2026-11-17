@@ -1863,6 +1863,125 @@ func TestServerConnectionValidationAcceptsSupportedAddresses(t *testing.T) {
 	}
 }
 
+func TestNogonConfigDiscovery(t *testing.T) {
+	for _, selection := range []string{"fresh", "legacy", "nogon", "explicit legacy", "missing explicit", "invalid nogon"} {
+		t.Run(selection, func(t *testing.T) {
+			dir := isolateRenamePaths(t)
+			legacy := filepath.Join(dir, "config", "hister", "config.yml")
+			current := filepath.Join(dir, "config", "nogon", "config.yml")
+			if selection != "fresh" {
+				writeRenameFile(t, legacy, "app:\n  title: Legacy title\n  subtitle: Legacy subtitle\n")
+			}
+			if selection != "fresh" && selection != "legacy" {
+				writeRenameFile(t, current, "app:\n  title: Nogon title\n")
+			}
+			filename, explicit, want := "", false, current
+			switch selection {
+			case "fresh":
+				want = ""
+			case "legacy":
+				want = legacy
+			case "explicit legacy":
+				filename, explicit, want = legacy, true, legacy
+			case "missing explicit":
+				filename, explicit = filepath.Join(dir, "missing.yml"), true
+			case "invalid nogon":
+				writeRenameFile(t, current, "[")
+			}
+			name, err := ResolvePath(filename, explicit)
+			if selection == "missing explicit" {
+				if err == nil {
+					t.Fatal("missing explicit path fell back to another file")
+				}
+				return
+			}
+			if err != nil || name != want {
+				t.Fatalf("selected %q, want %q: %v", name, want, err)
+			}
+			c, selected, err := LoadForInspection(filename, explicit)
+			if selection == "invalid nogon" {
+				if err == nil {
+					t.Fatal("invalid preferred configuration fell back to legacy configuration")
+				}
+				return
+			}
+			if err != nil || selected != name {
+				t.Fatalf("inspection disagrees with path selection: %q, %v", selected, err)
+			}
+			if selection == "nogon" && (c.App.Title != "Nogon title" || c.App.Subtitle != "Your own search engine" || c.Source("app.title").Name != current) {
+				t.Fatal("inspection merged unrelated files or reported the wrong source")
+			}
+			if _, err := os.Stat(filepath.Join(dir, "state")); !os.IsNotExist(err) {
+				t.Fatalf("inspection initialized data: %v", err)
+			}
+		})
+	}
+}
+
+func TestNogonPlatformConfigLocations(t *testing.T) {
+	locations := []string{".histerrc", "config/hister/config.yml", "config/nogon/config.yml"}
+	switch runtime.GOOS {
+	case "darwin":
+		locations = append(locations, "Library/Application Support/nogon/config.yml", "Library/Application Support/hister/config.yml", ".config/hister/config.yml")
+	case "windows":
+		locations = append(locations, "roaming/nogon/config.yml", "roaming/hister/config.yml", ".config/hister/config.yml")
+	}
+	for _, location := range locations {
+		t.Run(location, func(t *testing.T) {
+			dir := isolateRenamePaths(t)
+			want := filepath.Join(dir, filepath.FromSlash(location))
+			writeRenameFile(t, want, "# selected file\n")
+			if strings.Contains(location, "nogon") {
+				writeRenameFile(t, filepath.Join(dir, "config", "hister", "config.yml"), "# lower priority legacy file\n")
+			}
+			got, err := ResolvePath("", false)
+			if err != nil || got != want {
+				t.Fatalf("path = %q, want %q: %v", got, want, err)
+			}
+		})
+	}
+}
+
+func TestNogonDataDiscoveryHandlesFilesystemErrors(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("requires Unix symlinks and permission enforcement")
+	}
+	for _, scenario := range []string{"same directory", "unreadable legacy", "file instead of directory"} {
+		t.Run(scenario, func(t *testing.T) {
+			dir := isolateRenamePaths(t)
+			root := filepath.Join(dir, "state")
+			if runtime.GOOS == "darwin" {
+				root = filepath.Join(dir, "Library/Application Support")
+			}
+			legacy, current := filepath.Join(root, "hister"), filepath.Join(root, "nogon")
+			writeRenameFile(t, filepath.Join(legacy, ".secret_key"), "existing session key")
+			filename := filepath.Join(dir, "selected.yml")
+			writeRenameFile(t, filename, "# defaults\n")
+			switch scenario {
+			case "same directory":
+				if err := os.Symlink(legacy, current); err != nil {
+					t.Fatal(err)
+				}
+			case "unreadable legacy":
+				if err := os.Chmod(legacy, 0); err != nil {
+					t.Fatal(err)
+				}
+				t.Cleanup(func() { _ = os.Chmod(legacy, 0o700) })
+			case "file instead of directory":
+				writeRenameFile(t, current, "not a directory")
+			}
+			c, _, err := LoadForInspection(filename, true)
+			if scenario == "same directory" {
+				if err != nil || c.App.Directory != current {
+					t.Fatalf("two names for the same directory conflicted: %v", err)
+				}
+			} else if err == nil || !strings.Contains(err.Error(), "app.directory") {
+				t.Fatalf("inaccessible candidate was silently skipped: %v", err)
+			}
+		})
+	}
+}
+
 func TestResolvePathDoesNotParseYAML(t *testing.T) {
 	filename := filepath.Join(t.TempDir(), "config.yml")
 	if err := os.WriteFile(filename, []byte("["), 0o600); err != nil {

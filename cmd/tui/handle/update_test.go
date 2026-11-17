@@ -129,6 +129,8 @@ func TestThemePickerCancelRestoresTerminalAppearance(t *testing.T) {
 func TestSettingsCycleAndPersistAppearance(t *testing.T) {
 	t.Setenv("NO_COLOR", "")
 	configHome := t.TempDir()
+	t.Setenv("HOME", configHome)
+	t.Setenv("USERPROFILE", configHome)
 	t.Setenv("XDG_CONFIG_HOME", configHome)
 	t.Setenv("LOCALAPPDATA", configHome)
 	m := handleTestModel(t)
@@ -142,7 +144,7 @@ func TestSettingsCycleAndPersistAppearance(t *testing.T) {
 		}
 	}
 
-	data, err := os.ReadFile(filepath.Join(configHome, "hister", "tui.yaml"))
+	data, err := os.ReadFile(filepath.Join(configHome, "nogon", "tui.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}

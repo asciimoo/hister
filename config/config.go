@@ -663,91 +663,141 @@ var (
 	}
 )
 
-func getDefaultDataDir() string {
+// dataDirectoryRoots lists every supported default root in preference order.
+// Keep older roots discoverable when an XDG or Windows preference changes.
+func dataDirectoryRoots() []string {
+	homeDir, _ := os.UserHomeDir()
+	var roots []string
 	switch runtime.GOOS {
 	case "darwin":
-		homeDir, _ := os.UserHomeDir()
-		return filepath.Join(homeDir, "Library/Application Support/hister")
-
+		roots = append(roots, filepath.Join(homeDir, "Library/Application Support"))
 	case "windows":
-		localAppData := os.Getenv("LOCALAPPDATA")
-		if localAppData != "" {
-			return filepath.Join(localAppData, "hister")
+		for _, key := range []string{"LOCALAPPDATA", "APPDATA"} {
+			if root := os.Getenv(key); root != "" {
+				roots = append(roots, root)
+			}
 		}
-		// fallback to APPDATA
-		appData := os.Getenv("APPDATA")
-		return filepath.Join(appData, "hister")
-
 	default:
-		if xdgState := os.Getenv("XDG_STATE_HOME"); xdgState != "" {
-			return filepath.Join(xdgState, "hister")
+		for _, key := range []string{"XDG_STATE_HOME", "XDG_DATA_HOME"} {
+			if root := os.Getenv(key); root != "" {
+				roots = append(roots, root)
+			}
 		}
-		if xdgData := os.Getenv("XDG_DATA_HOME"); xdgData != "" {
-			return filepath.Join(xdgData, "hister")
-		}
-		// fall back to ~/.config/hister
 		configDir, _ := os.UserConfigDir()
-		return filepath.Join(configDir, "hister")
+		roots = append(roots, configDir, filepath.Join(homeDir, ".config"))
 	}
+	if runtime.GOOS != "windows" && (homeDir == "/var/empty" || homeDir == "/nonexistent") {
+		// Service accounts cannot use their placeholder home directories.
+		if os.Getenv("XDG_STATE_HOME") == "" && os.Getenv("XDG_DATA_HOME") == "" && os.Getenv("XDG_CONFIG_HOME") == "" {
+			return []string{"/var/lib"}
+		}
+	}
+	if len(roots) == 0 {
+		roots = append(roots, homeDir)
+	}
+	return roots
+}
+
+func getDefaultDataDir() string {
+	return filepath.Join(dataDirectoryRoots()[0], "nogon")
+}
+
+// Resolve storage before reading managed settings or creating runtime files.
+// Configuration, TUI, and unrelated files do not identify stored application data.
+func (c *Config) resolveDataDirectory() error {
+	if c.Source("app.directory").Kind != "default" {
+		if c.App.Directory == "" {
+			return errors.New("app.directory must not be empty")
+		}
+		return nil
+	}
+	var paths []string
+	for _, name := range []string{"nogon", "hister"} {
+		for _, root := range dataDirectoryRoots() {
+			paths = append(paths, filepath.Join(root, name))
+		}
+	}
+	var selected, legacy string
+	var seen []os.FileInfo
+	var database string
+	if !strings.Contains(c.Server.Database, "=") && !filepath.IsAbs(c.Server.Database) {
+		database, _, _ = strings.Cut(filepath.Clean(c.Server.Database), string(filepath.Separator))
+	}
+	for _, name := range paths {
+		info, err := os.Stat(name)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("inspect data directory %q: %w; set app.directory explicitly", name, err)
+		}
+		if slices.ContainsFunc(seen, func(previous os.FileInfo) bool { return os.SameFile(previous, info) }) {
+			continue
+		}
+		seen = append(seen, info)
+		entries, err := os.ReadDir(name)
+		if err != nil {
+			return fmt.Errorf("inspect data directory %q: %w; set app.directory explicitly", name, err)
+		}
+		if legacy == "" && filepath.Base(name) == "hister" {
+			legacy = name
+		}
+		populated := slices.ContainsFunc(entries, func(entry os.DirEntry) bool {
+			name := entry.Name()
+			switch name {
+			case secretKeyFilename, "rules.json", "config.web.yml", "db.sqlite3", "db.sqlite3-wal", "data", "index.db":
+				return true
+			}
+			return name == database || name == database+"-wal" || (strings.HasPrefix(name, "index_") && strings.HasSuffix(name, ".db"))
+		})
+		if populated {
+			if selected != "" {
+				return fmt.Errorf("multiple data directories contain stored files: %q and %q; set app.directory or NOGON_DATA_DIR explicitly", selected, name)
+			}
+			selected = name
+		}
+	}
+	if selected != "" {
+		c.App.Directory = selected
+	} else if legacy != "" {
+		c.App.Directory = legacy
+	}
+	return nil
 }
 
 // getConfigSearchPaths returns the list of paths to search for config files
 // in order of preference, respecting XDG Base Directory standards.
 func getConfigSearchPaths(homeDir string) []string {
 	var paths []string
-
-	switch runtime.GOOS {
-	case "darwin":
-		// macOS: XDG_CONFIG_HOME defaults to ~/Library/Preferences
-		xdgConfig := os.Getenv("XDG_CONFIG_HOME")
-		if xdgConfig == "" {
-			xdgConfig = filepath.Join(homeDir, "Library/Preferences")
+	for _, name := range []string{"nogon", "hister"} {
+		switch runtime.GOOS {
+		case "darwin":
+			xdgConfig := os.Getenv("XDG_CONFIG_HOME")
+			if xdgConfig == "" {
+				xdgConfig = filepath.Join(homeDir, "Library/Preferences")
+			}
+			paths = append(paths, filepath.Join(xdgConfig, name, "config.yml"),
+				filepath.Join(homeDir, "Library/Application Support", name, "config.yml"))
+		case "windows":
+			for _, key := range []string{"LOCALAPPDATA", "XDG_CONFIG_HOME", "APPDATA"} {
+				if root := os.Getenv(key); root != "" {
+					paths = append(paths, filepath.Join(root, name, "config.yml"))
+				}
+			}
+		default:
+			xdgConfig := os.Getenv("XDG_CONFIG_HOME")
+			if xdgConfig == "" {
+				xdgConfig = filepath.Join(homeDir, ".config")
+			}
+			paths = append(paths, filepath.Join(xdgConfig, name, "config.yml"))
 		}
-		paths = append(paths, filepath.Join(xdgConfig, "hister/config.yml"))
-
-		// Application Support for backwards compatibility with some users
-		paths = append(paths, filepath.Join(homeDir, "Library/Application Support/hister/config.yml"))
-
-		// Legacy paths (for deprecation warning)
-		paths = append(paths, filepath.Join(homeDir, ".histerrc"))
-		paths = append(paths, filepath.Join(homeDir, ".config/hister/config.yml"))
-
-	case "windows":
-		// Windows: use LOCALAPPDATA
-		localAppData := os.Getenv("LOCALAPPDATA")
-		if localAppData != "" {
-			paths = append(paths, filepath.Join(localAppData, "hister/config.yml"))
+		if name == "hister" {
+			paths = append(paths, filepath.Join(homeDir, ".histerrc"))
 		}
-
-		// XDG_CONFIG_HOME if set
-		xdgConfig := os.Getenv("XDG_CONFIG_HOME")
-		if xdgConfig != "" {
-			paths = append(paths, filepath.Join(xdgConfig, "hister/config.yml"))
+		if runtime.GOOS == "darwin" || runtime.GOOS == "windows" {
+			paths = append(paths, filepath.Join(homeDir, ".config", name, "config.yml"))
 		}
-
-		// APPDATA fallback
-		appData := os.Getenv("APPDATA")
-		if appData != "" {
-			paths = append(paths, filepath.Join(appData, "hister/config.yml"))
-		}
-
-		// Legacy paths
-		paths = append(paths, filepath.Join(homeDir, ".histerrc"))
-		paths = append(paths, filepath.Join(homeDir, ".config/hister/config.yml"))
-
-	default:
-		// Linux and other Unix-like systems: follow XDG Base Directory
-		xdgConfig := os.Getenv("XDG_CONFIG_HOME")
-		if xdgConfig != "" {
-			paths = append(paths, filepath.Join(xdgConfig, "hister/config.yml"))
-		} else {
-			paths = append(paths, filepath.Join(homeDir, ".config/hister/config.yml"))
-		}
-
-		// Legacy paths
-		paths = append(paths, filepath.Join(homeDir, ".histerrc"))
 	}
-
 	return paths
 }
 
@@ -1016,37 +1066,17 @@ func (c *Config) normalize() error {
 
 func (c *Config) init() error {
 	if err := os.MkdirAll(c.App.Directory, 0o750); err != nil {
-		isPermissionErr := errors.Is(err, os.ErrPermission) ||
-			strings.Contains(strings.ToLower(err.Error()), "permission denied") ||
-			strings.Contains(strings.ToLower(err.Error()), "operation not permitted")
-
-		if isPermissionErr {
-			home, _ := os.UserHomeDir()
-			useFallback := home == "/var/empty" || c.App.Directory != getDefaultDataDir()
-
-			if useFallback {
-				c.App.Directory = "/var/lib/hister"
-				log.Info().Str("directory", c.App.Directory).Str("fallback", "/var/lib/hister").Msg("System user detected, using system-wide data directory")
-			} else {
-				log.Warn().Str("directory", c.App.Directory).Msg("Cannot write to data directory. Set HISTER_DATA_DIR environment variable or configure app.directory")
-				return fmt.Errorf("cannot create data directory: %w. Set HISTER_DATA_DIR environment variable or configure app.directory in your config file", err)
-			}
-
-			c.App.Directory = "/var/lib/hister"
-		}
-
-		err = os.MkdirAll(c.App.Directory, 0o750)
-		if err != nil {
-			return err
-		}
+		return fmt.Errorf("cannot create data directory: %w; set NOGON_DATA_DIR or app.directory explicitly", err)
 	}
 	sPath := c.FullPath(secretKeyFilename)
 	b, err := os.ReadFile(sPath)
-	if err != nil {
+	if errors.Is(err, os.ErrNotExist) {
 		c.secretKey = []byte(rand.Text() + rand.Text())
 		if err := os.WriteFile(sPath, c.secretKey, 0o600); err != nil {
 			return fmt.Errorf("failed to create secret key file: %w", err)
 		}
+	} else if err != nil {
+		return fmt.Errorf("read existing secret key file: %w", err)
 	} else {
 		c.secretKey = b
 	}
@@ -1323,6 +1353,14 @@ func (c *Config) tuiConfigPath() string {
 	if c.tuiPath == "" {
 		mainPath := c.fname
 		if mainPath == "" {
+			homeDir, _ := os.UserHomeDir()
+			for _, candidate := range getConfigSearchPaths(homeDir) {
+				name := filepath.Join(filepath.Dir(candidate), "tui.yaml")
+				if _, err := os.Stat(name); !errors.Is(err, os.ErrNotExist) {
+					c.tuiPath = name
+					return name
+				}
+			}
 			mainPath = c.defaultConfigPath()
 		}
 		c.tuiPath = filepath.Join(filepath.Dir(mainPath), "tui.yaml")
@@ -1337,7 +1375,7 @@ func (c *Config) defaultConfigPath() string {
 		return paths[0]
 	}
 	// Fallback (shouldn't happen)
-	return filepath.Join(homeDir, ".config/hister/config.yml")
+	return filepath.Join(homeDir, ".config/nogon/config.yml")
 }
 
 func (c *Config) BaseURL(u string) string {

@@ -65,6 +65,82 @@ func TestNogonConfigSelection(t *testing.T) {
 	}
 }
 
+func TestNogonConfigCommandsDiscoverPaths(t *testing.T) {
+	for _, command := range []string{"path", "show", "validate"} {
+		for _, scenario := range []string{"fresh", "legacy", "new config with legacy data", "conflicting data"} {
+			t.Run(command+"/"+scenario, func(t *testing.T) {
+				dir := t.TempDir()
+				t.Chdir(dir)
+				for _, key := range []string{"NOGON_CONFIG", "HISTER_CONFIG", "NOGON_DATA_DIR", "HISTER_DATA_DIR"} {
+					t.Setenv(key, "")
+					if err := os.Unsetenv(key); err != nil {
+						t.Fatal(err)
+					}
+				}
+				for _, key := range []string{"HOME", "USERPROFILE", "XDG_CONFIG_HOME", "XDG_STATE_HOME", "XDG_DATA_HOME", "LOCALAPPDATA", "APPDATA"} {
+					t.Setenv(key, dir)
+				}
+				dataRoot := dir
+				if runtime.GOOS == "darwin" {
+					dataRoot = filepath.Join(dir, "Library/Application Support")
+				}
+				write := func(name, content string) {
+					t.Helper()
+					if err := os.MkdirAll(filepath.Dir(name), 0o700); err != nil {
+						t.Fatal(err)
+					}
+					if err := os.WriteFile(name, []byte(content), 0o600); err != nil {
+						t.Fatal(err)
+					}
+				}
+				wantPath := "(defaults)"
+				wantData := filepath.Join(dataRoot, "nogon")
+				if scenario != "fresh" {
+					wantPath = filepath.Join(dir, "hister", "config.yml")
+					wantData = filepath.Join(dataRoot, "hister")
+					write(wantPath, "app:\n  title: Legacy title\n")
+					write(filepath.Join(wantData, "config.web.yml"), "app:\n  subtitle: Saved subtitle\n")
+				}
+				if scenario == "new config with legacy data" || scenario == "conflicting data" {
+					wantPath = filepath.Join(dir, "nogon", "config.yml")
+					write(wantPath, "app:\n  title: New title\n")
+				}
+				if scenario == "conflicting data" {
+					write(filepath.Join(dataRoot, "nogon", ".secret_key"), "other instance")
+				}
+				out, err := executeInspection(t, "config", command)
+				if scenario == "conflicting data" && command != "path" {
+					if err == nil || !strings.Contains(err.Error(), "app.directory") {
+						t.Fatalf("ambiguous storage was accepted: %v", err)
+					}
+					return
+				}
+				if err != nil {
+					t.Fatal(err)
+				}
+				if command == "show" {
+					var values struct {
+						App config.App `yaml:"app"`
+					}
+					if err := yaml.Unmarshal([]byte(out), &values); err != nil {
+						t.Fatal(err)
+					}
+					if values.App.Directory != wantData || (scenario == "new config with legacy data" && (values.App.Title != "New title" || values.App.Subtitle != "Saved subtitle")) {
+						t.Fatalf("wrong effective configuration: %+v", values.App)
+					}
+				} else if !strings.Contains(out, wantPath) {
+					t.Fatalf("output selected wrong config: %s", out)
+				}
+				if scenario != "conflicting data" {
+					if _, err := os.Stat(filepath.Join(wantData, ".secret_key")); !os.IsNotExist(err) {
+						t.Fatalf("inspection created runtime state: %v", err)
+					}
+				}
+			})
+		}
+	}
+}
+
 func TestConfigFlagsCaptureRegisteredPathsGenerically(t *testing.T) {
 	flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
 	flags.String("heading", "", "")
