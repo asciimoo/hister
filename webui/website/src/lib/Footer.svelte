@@ -8,7 +8,7 @@
       links: [
         { label: 'Features', href: '/#features' },
         { label: 'Documentation', href: '/docs' },
-        { label: 'Demo', href: 'https://demo.hister.org/' },
+        { label: 'Demo', href: 'https://demo.nogon.eu/' },
       ],
     },
     {

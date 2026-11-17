@@ -75,4 +75,4 @@ No tool offers unlimited capability, and Hister is no exception.
 
 Hister is not the right tool for every search. It is the right tool when privacy is non-negotiable, when you need to be certain, not just hopeful, that your searches stay private.
 
-If that matters to you, [try the demo](https://demo.hister.org/) or follow the [quickstart guide](/docs/quickstart) to run your own instance in minutes.
+If that matters to you, [try the demo](https://demo.nogon.eu/) or follow the [quickstart guide](/docs/quickstart) to run your own instance in minutes.

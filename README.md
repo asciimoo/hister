@@ -6,7 +6,7 @@ Nogon was formerly known as Hister. Some downloads, packages, and public links s
 
 Nogon is a private search engine for the pages you visit and the files you keep. It indexes their full contents so you can find information again from the web interface, terminal, or an AI assistant connected through MCP.
 
-[Try the demo](https://demo.hister.org/) · [Download Nogon](https://github.com/asciimoo/hister/releases/latest) · [Read the quickstart](https://nogon.eu/docs/quickstart) · [Documentation](https://nogon.eu/docs) · [Support the development](https://nogon.eu/support)
+[Try the demo](https://demo.nogon.eu/) · [Download Nogon](https://github.com/asciimoo/hister/releases/latest) · [Read the quickstart](https://nogon.eu/docs/quickstart) · [Documentation](https://nogon.eu/docs) · [Support the development](https://nogon.eu/support)
 
 ![Nogon web interface](webui/website/src/lib/assets/screenshot.png)
 

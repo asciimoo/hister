@@ -91,7 +91,7 @@
           <Download size={18} />
         </Button>
         <Button
-          href="https://demo.hister.org/"
+          href="https://demo.nogon.eu/"
           target="_blank"
           rel="noopener noreferrer"
           class="bg-brutal-card font-space brutal-press-lg border-brutal-border h-auto justify-center rounded-none border-[3px] px-8 py-4 text-[15px] font-bold tracking-[1.3px] text-[var(--text-primary)] uppercase no-underline hover:bg-[var(--text-primary)] hover:text-white"
