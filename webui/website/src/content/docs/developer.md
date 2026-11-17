@@ -1235,6 +1235,12 @@ their slugs in `webui/website/src/lib/docs-structure.ts`. The docs search index,
 page routes, previous and next links, and sitemap are generated from this
 content during the website build.
 
+The public website origin is set in `webui/website/src/lib/config.ts`. Canonical
+URLs, social metadata, sitemap locations, robots instructions, and RSS links
+use this value. RSS item GUIDs retain the original `hister.org` URLs as stable
+identifiers so existing subscribers do not receive old posts again. Keep these
+identifiers unchanged when updating the public domain.
+
 When changing query syntax, update query builder tests and the query language
 guide. When changing configuration, update the generated configuration
 reference data, examples, and related operator guidance. When adding an API

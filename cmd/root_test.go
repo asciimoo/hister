@@ -1384,7 +1384,7 @@ func TestCommandBranding(t *testing.T) {
 			}
 		})
 	}
-	if !strings.Contains(UserAgent, "Nogon/"+Version) {
+	if !strings.Contains(UserAgent, "Nogon/"+Version) || !strings.Contains(UserAgent, "+https://nogon.eu/") {
 		t.Fatalf("crawler user agent = %q", UserAgent)
 	}
 }

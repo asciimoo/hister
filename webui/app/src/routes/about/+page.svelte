@@ -78,7 +78,7 @@
   ];
 
   const communityLinks = [
-    { label: 'Website', href: 'https://hister.org/' },
+    { label: 'Website', href: 'https://nogon.eu/' },
     { label: 'GitHub', href: 'https://github.com/asciimoo/hister' },
     { label: 'Codeberg', href: 'https://codeberg.org/asciimoo/hister' },
     { label: 'Report an issue', href: 'https://github.com/asciimoo/hister/issues' },
@@ -97,7 +97,7 @@
 {#snippet docLink(path: string, label: string)}
   <a
     class="text-link"
-    href={`https://hister.org/docs/${path}`}
+    href={`https://nogon.eu/docs/${path}`}
     target="_blank"
     rel="noopener noreferrer"
   >
@@ -340,7 +340,7 @@
         {#each guides as guide (guide.path)}
           <a
             class="guide-link group"
-            href={`https://hister.org/docs/${guide.path}`}
+            href={`https://nogon.eu/docs/${guide.path}`}
             target="_blank"
             rel="noopener noreferrer"
           >

@@ -27,6 +27,8 @@ Some packages still provide the `hister` command. Use that name in place of `nog
 
 Content can come from the browser extension, imported browser history or bookmarks, watched directories, crawlers, or API clients. The extension captures rendered pages as you visit them. Browser imports read URLs from history or saved bookmarks and fetch their current contents. See [Browser Ingestion](browser-ingestion) to choose how to collect content.
 
+<span id="privacy"></span>
+
 ## Privacy and Storage
 
 Nogon has no telemetry and requires no Nogon cloud service. Indexed data is stored on the server you choose and is not encrypted by Nogon. Use disk encryption when needed, and HTTPS when clients connect across an untrusted network.

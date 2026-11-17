@@ -1,1 +1,1 @@
-export const SITE_URL = 'https://hister.org';
+export const SITE_URL = 'https://nogon.eu';

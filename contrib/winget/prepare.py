@@ -78,7 +78,7 @@ Tags:
 ReleaseNotesUrl: {repository}/releases/tag/v{version}
 Documentations:
   - DocumentLabel: Documentation
-    DocumentUrl: https://hister.org/docs
+    DocumentUrl: https://nogon.eu/docs
 """),
     }
     # Refuse to overwrite a maintainer's reviewed or edited manifests.

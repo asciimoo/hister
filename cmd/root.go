@@ -57,7 +57,7 @@ var (
 var (
 	cfgFile   string
 	cfg       *config.Config
-	UserAgent = fmt.Sprintf("Mozilla/5.0 (compatible; Nogon/%s; +https://hister.org/)", Version)
+	UserAgent = fmt.Sprintf("Mozilla/5.0 (compatible; Nogon/%s; +https://nogon.eu/)", Version)
 )
 
 // stringToAnyMap converts map[string]string to map[string]any, used when

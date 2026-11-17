@@ -126,7 +126,7 @@
 {#snippet docLink(path: string, label: string)}
   <a
     class="text-link"
-    href={`https://hister.org/docs/${path}`}
+    href={`https://nogon.eu/docs/${path}`}
     target="_blank"
     rel="noopener noreferrer"
   >

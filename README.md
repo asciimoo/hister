@@ -6,7 +6,7 @@ Nogon was formerly known as Hister. Some downloads, packages, and public links s
 
 Nogon is a private search engine for the pages you visit and the files you keep. It indexes their full contents so you can find information again from the web interface, terminal, or an AI assistant connected through MCP.
 
-[Try the demo](https://demo.hister.org/) · [Download Nogon](https://github.com/asciimoo/hister/releases/latest) · [Read the quickstart](https://hister.org/docs/quickstart) · [Documentation](https://hister.org/docs) · [Support the development](https://hister.org/support)
+[Try the demo](https://demo.hister.org/) · [Download Nogon](https://github.com/asciimoo/hister/releases/latest) · [Read the quickstart](https://nogon.eu/docs/quickstart) · [Documentation](https://nogon.eu/docs) · [Support the development](https://nogon.eu/support)
 
 ![Nogon web interface](webui/website/src/lib/assets/screenshot.png)
 
@@ -34,11 +34,11 @@ Nogon is a private search engine for the pages you visit and the files you keep.
 
 5. Visit a web page with the extension enabled, then return to Nogon and search for a phrase from that page to find your first indexed result.
 
-No configuration is required for a local personal setup. See the [complete quickstart](https://hister.org/docs/quickstart) to choose what Nogon indexes.
+No configuration is required for a local personal setup. See the [complete quickstart](https://nogon.eu/docs/quickstart) to choose what Nogon indexes.
 
-To search existing content, [import browser history](https://hister.org/docs/import#importing-browser-history), [import browser bookmarks](https://hister.org/docs/import#importing-browser-bookmarks), [index local directories](https://hister.org/docs/configuration#local-directory-indexing), or [import files](https://hister.org/docs/import#importing-files).
+To search existing content, [import browser history](https://nogon.eu/docs/import#importing-browser-history), [import browser bookmarks](https://nogon.eu/docs/import#importing-browser-bookmarks), [index local directories](https://nogon.eu/docs/configuration#local-directory-indexing), or [import files](https://nogon.eu/docs/import#importing-files).
 
-Alternative installation methods include Homebrew (`brew install hister`), Docker, and Nix. See the [installation guide](https://hister.org/docs/installing) for instructions.
+Alternative installation methods include Homebrew (`brew install hister`), Docker, and Nix. See the [installation guide](https://nogon.eu/docs/installing) for instructions.
 
 ## Features
 
@@ -57,7 +57,7 @@ Alternative installation methods include Homebrew (`brew install hister`), Docke
 
 By default, Nogon has no telemetry and no cloud sync. The browser extension sends indexed page content only to the Nogon server you configure, apart from downloading page favicons. The server stores documents and search indexes on that server.
 
-Optional semantic search sends document text to the embeddings endpoint you choose. Review the [privacy overview](https://hister.org/docs/intro#privacy) and [semantic search configuration](https://hister.org/docs/configuration#semantic-search) before enabling remote integrations.
+Optional semantic search sends document text to the embeddings endpoint you choose. Review the [privacy overview](https://nogon.eu/docs/intro#privacy) and [semantic search configuration](https://nogon.eu/docs/configuration#semantic-search) before enabling remote integrations.
 
 <a id="why-hister"></a>
 

@@ -1796,7 +1796,7 @@
         <Button
           variant="ghost"
           size="sm"
-          href="https://hister.org/docs/troubleshooting"
+          href="https://nogon.eu/docs/troubleshooting"
           target="_blank"
           rel="noopener noreferrer"
           class="text-text-brand-secondary hover:text-nogon-indigo"
@@ -2866,7 +2866,7 @@
             </p>
           </div>
           <a
-            href="https://hister.org/docs/quickstart"
+            href="https://nogon.eu/docs/quickstart"
             target="_blank"
             rel="noopener noreferrer"
             class="font-inter text-nogon-indigo flex shrink-0 items-center gap-1 text-sm font-semibold hover:underline"
@@ -2879,7 +2879,7 @@
 
         <div class="grid gap-3 p-4 md:grid-cols-3 md:p-5">
           <a
-            href="https://hister.org/docs/browser-extension"
+            href="https://nogon.eu/docs/browser-extension"
             target="_blank"
             rel="noopener noreferrer"
             class="empty-index-action border-nogon-indigo bg-nogon-indigo/5 hover:bg-nogon-indigo/10"
@@ -2908,7 +2908,7 @@
           </a>
 
           <a
-            href="https://hister.org/docs/import#importing-browser-history"
+            href="https://nogon.eu/docs/import#importing-browser-history"
             target="_blank"
             rel="noopener noreferrer"
             class="empty-index-action border-nogon-teal bg-nogon-teal/5 hover:bg-nogon-teal/10"

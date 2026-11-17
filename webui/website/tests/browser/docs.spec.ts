@@ -1,6 +1,74 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { expect, test } from '@playwright/test';
 
+test('canonical metadata uses the Nogon domain and preserves existing page paths', async ({
+  page,
+}) => {
+  for (const path of ['/', '/docs/quickstart', '/posts/how-hister-works']) {
+    await page.goto(path);
+    const canonical = `https://nogon.eu${path}`;
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', canonical);
+    await expect(page.locator('meta[property="og:url"]')).toHaveAttribute('content', canonical);
+    await expect(page.locator('meta[property="og:image"]')).toHaveAttribute(
+      'content',
+      'https://nogon.eu/logo.png',
+    );
+    const schemas = await page.locator('script[type="application/ld+json"]').allTextContents();
+    expect(schemas.length).toBeGreaterThan(0);
+    for (const schema of schemas) {
+      const data = JSON.parse(schema);
+      expect(data['@graph'].some((node: { url?: string }) => node.url === canonical)).toBe(true);
+      expect(schema).not.toContain('hister.org');
+    }
+  }
+});
+
+test('discovery links use Nogon while existing RSS article identities remain stable', async ({
+  page,
+  request,
+}) => {
+  await page.goto('/');
+  const robots = await request.get('/robots.txt');
+  expect(robots.ok()).toBe(true);
+  expect(await robots.text()).toContain('Sitemap: https://nogon.eu/sitemap.xml');
+
+  for (const path of ['/sitemap.xml', '/posts/rss.xml']) {
+    const response = await request.get(path);
+    expect(response.ok()).toBe(true);
+    const parsed = await page.evaluate(
+      (xml) => {
+        const document = new DOMParser().parseFromString(xml, 'application/xml');
+        return {
+          errors: document.querySelectorAll('parsererror').length,
+          locations: Array.from(document.querySelectorAll('loc'), (node) => node.textContent),
+          links: Array.from(
+            document.querySelectorAll('link'),
+            (node) => node.getAttribute('href') || node.textContent,
+          ),
+          items: Array.from(document.querySelectorAll('item'), (item) => ({
+            link: item.querySelector('link')?.textContent,
+            guid: item.querySelector('guid')?.textContent,
+          })),
+        };
+      },
+      await response.text(),
+    );
+    expect(parsed.errors).toBe(0);
+    const urls = [...parsed.locations, ...parsed.links];
+    expect(urls.length).toBeGreaterThan(0);
+    for (const url of urls) expect(url).toMatch(/^https:\/\/nogon\.eu\//);
+    if (path === '/posts/rss.xml') {
+      expect(parsed.items.length).toBeGreaterThan(0);
+      for (const item of parsed.items) {
+        expect(item.guid).toBe(item.link?.replace('https://nogon.eu/', 'https://hister.org/'));
+      }
+    } else {
+      expect(parsed.locations).toContain('https://nogon.eu/docs/quickstart');
+      expect(parsed.locations).toContain('https://nogon.eu/posts/how-hister-works');
+    }
+  }
+});
+
 test('new users can follow the setup steps from installation to their first search', async ({
   page,
 }) => {

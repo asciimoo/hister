@@ -8,7 +8,7 @@
     {
       icon: Globe2,
       title: 'The ultimate way to protect digital privacy',
-      source: 'hister.org/posts',
+      source: 'nogon.eu/posts',
       text: 'Keep useful pages close, searchable, and under your control...',
       accent: 'var(--nogon-indigo)',
     },

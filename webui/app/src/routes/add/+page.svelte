@@ -211,7 +211,7 @@
             <p class="font-inter text-text-brand-secondary text-sm">
               To capture page content automatically as you browse,
               <a
-                href="https://hister.org/docs/browser-extension"
+                href="https://nogon.eu/docs/browser-extension"
                 target="_blank"
                 rel="noopener noreferrer"
                 class="text-nogon-indigo font-semibold underline underline-offset-2"
