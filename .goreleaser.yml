@@ -53,6 +53,15 @@ archives:
   - id: hister-compat
     formats: ['binary']
     name_template: 'hister_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ . }}{{ end }}'
+  - id: windows-portable
+    formats: ['none']
+    format_overrides:
+      - goos: windows
+        formats: ['zip']
+    name_template: 'nogon_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
+    files:
+      - src: '{{ .ArtifactPath }}'
+        dst: hister.exe
 
 checksum:
   name_template: 'hister_{{ .Version }}_checksums.txt'

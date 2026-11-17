@@ -1,8 +1,11 @@
 package main
 
 import (
+	"archive/zip"
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path"
@@ -23,8 +26,12 @@ type releaseConfig struct {
 		Hooks  struct{ Post []string }
 	}
 	Archives []struct {
-		Formats []string
-		Name    string `yaml:"name_template"`
+		Formats   []string
+		Name      string `yaml:"name_template"`
+		Overrides []struct {
+			GOOS    string `yaml:"goos"`
+			Formats []string
+		} `yaml:"format_overrides"`
 	}
 	Checksum struct {
 		Name string `yaml:"name_template"`
@@ -248,21 +255,137 @@ func TestReleaseDownloadNames(t *testing.T) {
 			values := map[string]string{"Version": "0.34.0", "Os": goos, "Arch": goarch, "Arm": "", "Mips": "", "Amd64": "v1", "Binary": cfg.Builds[0].Binary}
 			var names []string
 			for _, archive := range cfg.Archives {
-				if !slices.Equal(archive.Formats, []string{"binary"}) {
-					t.Fatal("release downloads must remain standalone binaries")
+				formats := archive.Formats
+				for _, override := range archive.Overrides {
+					if override.GOOS == goos {
+						formats = override.Formats
+					}
 				}
-				// GoReleaser appends the platform extension to the upload name.
-				names = append(names, renderReleaseTemplate(t, archive.Name, values)+ext)
+				for _, format := range formats {
+					switch format {
+					case "binary":
+						// GoReleaser appends the platform extension to the upload name.
+						names = append(names, renderReleaseTemplate(t, archive.Name, values)+ext)
+					case "none":
+					default:
+						names = append(names, renderReleaseTemplate(t, archive.Name, values)+"."+format)
+					}
+				}
 			}
 			slices.Sort(names)
 			suffix := "_0.34.0_" + goos + "_" + goarch + ext
-			if want := []string{"hister" + suffix, "nogon" + suffix}; !slices.Equal(names, want) {
+			want := []string{"hister" + suffix, "nogon" + suffix}
+			if goos == "windows" {
+				want = append(want, "nogon_0.34.0_windows_amd64.zip")
+			}
+			if !slices.Equal(names, want) {
 				t.Fatalf("download names = %v, want %v", names, want)
 			}
 		})
 	}
 	if name := renderReleaseTemplate(t, cfg.Checksum.Name, map[string]string{"Version": "0.34.0"}); name != "hister_0.34.0_checksums.txt" {
 		t.Fatalf("legacy checksum download renamed to %q", name)
+	}
+}
+
+func TestWinGetManifestPreparation(t *testing.T) {
+	python, err := exec.LookPath("python3")
+	if err != nil {
+		t.Skip("WinGet manifest preparation requires Python 3")
+	}
+	for _, tc := range []struct {
+		name    string
+		archive string
+		files   map[string]string
+		wantErr string
+	}{
+		{"both commands", "nogon_0.99.0_windows_amd64.zip", map[string]string{"nogon.exe": "executable fixture", "hister.exe": "executable fixture"}, ""},
+		{"missing legacy command", "nogon_0.99.0_windows_amd64.zip", map[string]string{"nogon.exe": "executable fixture"}, "nogon.exe and hister.exe"},
+		{"different commands", "nogon_0.99.0_windows_amd64.zip", map[string]string{"nogon.exe": "new", "hister.exe": "old"}, "identical"},
+		{"nested commands", "nogon_0.99.0_windows_amd64.zip", map[string]string{"nested/nogon.exe": "fixture", "nested/hister.exe": "fixture"}, "nogon.exe and hister.exe"},
+		{"unexpected file", "nogon_0.99.0_windows_amd64.zip", map[string]string{"nogon.exe": "fixture", "hister.exe": "fixture", "../outside.exe": "fixture"}, "nogon.exe and hister.exe"},
+		{"unreleased snapshot", "nogon_0.99.0-SNAPSHOT_windows_amd64.zip", nil, "stable Windows amd64 release archive"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			archive := filepath.Join(root, tc.archive)
+			var content bytes.Buffer
+			writer := zip.NewWriter(&content)
+			for name, data := range tc.files {
+				entry, err := writer.Create(name)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if _, err := entry.Write([]byte(data)); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := writer.Close(); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(archive, content.Bytes(), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			outputDir := filepath.Join(root, "manifests with spaces")
+			cmd := exec.Command(python, "contrib/winget/prepare.py", archive, outputDir)
+			output, err := cmd.CombinedOutput()
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(string(output), tc.wantErr) {
+					t.Fatalf("want error containing %q, got %v\n%s", tc.wantErr, err, output)
+				}
+				if _, err := os.Stat(outputDir); !os.IsNotExist(err) {
+					t.Fatal("invalid input must not create manifests")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("manifest preparation failed: %v\n%s", err, output)
+			}
+			for _, suffix := range []string{"", ".installer", ".locale.en-US"} {
+				var manifest map[string]any
+				readReleaseYAML(t, filepath.Join(outputDir, "asciimoo.hister"+suffix+".yaml"), &manifest)
+				if manifest["PackageIdentifier"] != "asciimoo.hister" || manifest["PackageVersion"] != "0.99.0" {
+					t.Fatalf("package identity or version mismatch: %v", manifest)
+				}
+				switch suffix {
+				case "":
+					if manifest["ManifestType"] != "version" || manifest["DefaultLocale"] != "en-US" {
+						t.Fatalf("invalid version manifest: %v", manifest)
+					}
+				case ".locale.en-US":
+					if manifest["PackageName"] != "Nogon" || manifest["PackageUrl"] != "https://github.com/asciimoo/hister" || manifest["ManifestType"] != "defaultLocale" {
+						t.Fatalf("invalid locale manifest: %v", manifest)
+					}
+				case ".installer":
+					if manifest["InstallerType"] != "zip" || manifest["NestedInstallerType"] != "portable" || manifest["ManifestType"] != "installer" {
+						t.Fatalf("invalid archive installer: %v", manifest)
+					}
+					files := manifest["NestedInstallerFiles"].([]any)
+					if len(files) != 2 {
+						t.Fatalf("want two portable commands, got %v", files)
+					}
+					for i, command := range []string{"nogon", "hister"} {
+						file := files[i].(map[string]any)
+						if file["RelativeFilePath"] != command+".exe" || file["PortableCommandAlias"] != command {
+							t.Errorf("missing %s command alias: %v", command, file)
+						}
+					}
+					installers := manifest["Installers"].([]any)
+					if len(installers) != 1 {
+						t.Fatalf("want one installer, got %v", installers)
+					}
+					installer := installers[0].(map[string]any)
+					if installer["Architecture"] != "x64" || installer["InstallerUrl"] != "https://github.com/asciimoo/hister/releases/download/v0.99.0/"+tc.archive || installer["InstallerSha256"] != fmt.Sprintf("%X", sha256.Sum256(content.Bytes())) {
+						t.Fatalf("installer does not describe the input archive: %v", installer)
+					}
+				}
+			}
+			// Repeating preparation must not overwrite a maintainer's reviewed manifests.
+			cmd = exec.Command(python, "contrib/winget/prepare.py", archive, outputDir)
+			if output, err := cmd.CombinedOutput(); err == nil || !strings.Contains(string(output), "already exists") {
+				t.Fatalf("existing output must be preserved: %v\n%s", err, output)
+			}
+		})
 	}
 }
 
@@ -361,7 +484,7 @@ func TestReleaseWorkflowDownloads(t *testing.T) {
 				t.Fatal(err)
 			}
 			var installers []string
-			for _, name := range []string{"nogon_0.34.0_windows_amd64.exe", "hister_0.34.0_windows_amd64.exe", "hister_0.34.0_linux_amd64", "hister_0.34.0_checksums.txt"} {
+			for _, name := range []string{"nogon_0.34.0_windows_amd64.exe", "hister_0.34.0_windows_amd64.exe", "nogon_0.34.0_windows_amd64.zip", "hister_0.34.0_linux_amd64", "hister_0.34.0_checksums.txt"} {
 				if matcher.MatchString(name) {
 					installers = append(installers, name)
 				}

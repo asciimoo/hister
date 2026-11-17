@@ -288,6 +288,9 @@ refer to the same build. The checksum file keeps its existing
 `hister_VERSION_checksums.txt` name. GoReleaser applies
 [binary archive names](https://goreleaser.com/customization/package/archives/#do-not-archive)
 when uploading; local paths remain under the build directory.
+Windows releases also include `nogon_VERSION_windows_amd64.zip`, containing
+identical `nogon.exe` and `hister.exe` copies. Its checksum is included in the
+same checksum file.
 
 Rolling builds use `.goreleaser-rolling.yml` and copy each executable to both
 `dist/nogon_cgo_OS_ARCH` and `dist/hister_cgo_OS_ARCH`. The upload step selects
@@ -342,17 +345,40 @@ release.
 The [current installer manifest](https://github.com/microsoft/winget-pkgs/blob/master/manifests/a/asciimoo/hister/0.21.0/asciimoo.hister.installer.yaml)
 uses `asciimoo.hister`, a standalone portable executable, and the `hister`
 command. Both publishing workflows retain that identifier and select only the
-legacy executable download. The package display name can change to Nogon in
-the next version's locale manifest while keeping its identifier and working URLs.
+legacy executable download until the archive migration is verified on Windows.
 
 WinGet's [portable installation code](https://github.com/microsoft/winget-cli/blob/master/src/AppInstallerCLICore/Workflows/PortableFlow.cpp)
 uses only the first `Commands` entry for a standalone executable. Adding `nogon`
 to that list does not install a second alias. Providing both commands requires
 an archive with portable entries and explicit `PortableCommandAlias` values.
-Prepare that artifact and manifest together, then verify fresh installation,
-upgrade from `asciimoo.hister`, both commands, and uninstall on Windows before
-changing the workflow's download selection. This archive migration is still
-pending; the existing workflow preserves the Hister command.
+
+After building a stable release, use Python 3 to prepare local manifests from
+its Windows ZIP. Replace `VERSION` with the actual release version:
+
+```bash
+python3 contrib/winget/prepare.py dist/nogon_VERSION_windows_amd64.zip dist/winget/VERSION
+```
+
+The script checks that the archive contains identical Nogon and Hister
+executables, calculates its SHA256, and writes three manifests into a new
+directory. They set the display name to Nogon, declare both command aliases,
+and preserve `asciimoo.hister` and the current GitHub release URLs. The script
+does not publish manifests or overwrite an existing output directory. Snapshot
+versions are not accepted.
+
+Validate the output with `winget validate --manifest PATH` on Windows. Verify
+fresh installation, upgrade from the existing portable package, both commands,
+retained configuration and data, and uninstall before submitting the manifests.
+Local schema validation does not establish that the upgrade works.
+
+The updater also needs verification before either publishing workflow selects
+the ZIP. The current action invokes `komac update --submit`. In
+[Komac v2.17.1](https://github.com/russellbanks/Komac/blob/v2.17.1/src/analysis/installers/zip.rs),
+automatic ZIP analysis leaves nested installer entries empty when it finds two
+executables; its [update path](https://github.com/russellbanks/Komac/blob/v2.17.1/src/commands/update_version.rs)
+replaces installer entries with those analysis results. Prepare and review the
+archive manifest explicitly, then verify a subsequent automated update retains
+both aliases before enabling it.
 
 ## Container Compatibility Checks
 
