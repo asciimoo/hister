@@ -1,5 +1,5 @@
 [Unit]
-Description=Hister web history service
+Description=Nogon web history service
 After=network.target
 
 [Service]
@@ -9,7 +9,7 @@ Group=hister
 StateDirectory=hister
 Environment=HISTER_DATA_DIR=%S/hister
 EnvironmentFile=-%E/hister/hister.env
-ExecStart=/usr/local/bin/hister listen
+ExecStart=/usr/local/bin/nogon listen
 Restart=on-failure
 
 # For privileged ports (< 1024), set both values to CAP_NET_BIND_SERVICE.
@@ -41,4 +41,5 @@ MemoryDenyWriteExecute=true
 UMask=0077
 
 [Install]
+Alias=nogon.service
 WantedBy=multi-user.target

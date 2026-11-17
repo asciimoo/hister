@@ -16,7 +16,7 @@
     systemd.user.services = lib.mkIf pkgs.stdenv.hostPlatform.isLinux {
       hister = {
         Unit = {
-          Description = "Hister web history service";
+          Description = "Nogon web history service";
           After = [ "network.target" ];
         };
 
@@ -35,6 +35,7 @@
         };
 
         Install = {
+          Alias = [ "nogon.service" ];
           WantedBy = [ "default.target" ];
         };
       };

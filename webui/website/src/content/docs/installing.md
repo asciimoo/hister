@@ -71,17 +71,42 @@ Running this command will place `hister` in your `$PATH`. This can be either `op
 
 The official container is published at [GitHub Container Registry](https://github.com/asciimoo/hister/pkgs/container/hister). See the [Docker guide](docker) for a complete Compose setup, persistent storage, and reverse proxy examples.
 
+## Systemd
+
+For a manual Linux installation, install the Nogon executable at
+`/usr/local/bin/nogon` and keep `hister` as an alias to that executable if you use
+the old command. Copy `contrib/systemd/hister.service` from the repository to
+`/etc/systemd/system/hister.service`.
+
+The service uses the `hister` user and group, `/var/lib/hister` for data, and the
+optional `/etc/hister/hister.env` environment file. On a fresh installation,
+create that system user and group first. On an upgrade, keep the existing account,
+paths, ownership, and environment file.
+
+After updating an existing installation:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl reenable hister.service
+sudo systemctl restart hister.service
+```
+
+For a fresh installation, use `sudo systemctl enable --now hister.service`.
+Enabling the unit also creates the `nogon.service` alias. Commands such as
+`systemctl status nogon.service` refer to the same running service. Keep the
+installed filename `hister.service` to preserve existing service overrides.
+
 ## Nix
 
 ### Quick usage
 
-Run the Hister server directly from the repository:
+Run the Nogon server directly from the repository:
 
 ```nix
 nix run github:asciimoo/hister -- listen
 ```
 
-Add Hister to the current shell:
+Add Nogon to the current shell:
 
 ```nix
 nix shell github:asciimoo/hister
@@ -93,33 +118,37 @@ Install it into your user profile:
 nix profile install github:asciimoo/hister
 ```
 
+The package provides both `nogon` and the compatible `hister` command. The
+`default`, `nogon`, and `hister` package names select the same installation.
+The repository address remains `github:asciimoo/hister`.
+
 ### Flake setup
 
 Add the input to `flake.nix`:
 
 ```nix
 {
-  inputs.hister.url = "github:asciimoo/hister";
+  inputs.nogon.url = "github:asciimoo/hister";
 
-  outputs = { self, nixpkgs, hister, ... }: {
+  outputs = { self, nixpkgs, nogon, ... }: {
     nixosConfigurations.yourHostname = nixpkgs.lib.nixosSystem {
       modules = [
         ./configuration.nix
-        hister.nixosModules.default
+        nogon.nixosModules.default
       ];
     };
 
     homeConfigurations."yourUsername" = home-manager.lib.homeManagerConfiguration {
       modules = [
         ./home.nix
-        hister.homeModules.default
+        nogon.homeModules.default
       ];
     };
 
     darwinConfigurations."yourHostname" = darwin.lib.darwinSystem {
       modules = [
         ./configuration.nix
-        hister.darwinModules.default
+        nogon.darwinModules.default
       ];
     };
   };
@@ -131,7 +160,7 @@ Add the input to `flake.nix`:
 Enable and configure the service in your configuration file:
 
 ```nix
-services.hister = {
+services.nogon = {
   enable = true;
 
   # Optional: Set via Nix options. These take precedence over the config file.
@@ -156,11 +185,17 @@ services.hister = {
 
 The NixOS module uses a hardened systemd service. The Linux Home Manager module uses a systemd user service, while the Darwin modules use a launchd agent. Use `environmentFile` for secrets on supported Linux services instead of placing them in the world readable Nix store.
 
+Existing `services.hister` settings and `hister` module imports still work.
+Both option names configure the same service; conflicting values produce a Nix
+configuration error. Linux retains `hister.service`, with `nogon.service` as an
+alias. Darwin retains the existing launchd agent name. Keep your current data
+paths and environment files when upgrading.
+
 To install only the package without enabling a service:
 
 ```nix
 { inputs, pkgs, ... }: {
-  environment.systemPackages = [ inputs.hister.packages.${pkgs.stdenvNoCC.hostPlatform.system}.default ];
+  environment.systemPackages = [ inputs.nogon.packages.${pkgs.stdenvNoCC.hostPlatform.system}.default ];
 }
 ```
 
@@ -168,7 +203,7 @@ For Home Manager:
 
 ```nix
 { inputs, pkgs, ... }: {
-  home.packages = [ inputs.hister.packages.${pkgs.stdenvNoCC.hostPlatform.system}.default ];
+  home.packages = [ inputs.nogon.packages.${pkgs.stdenvNoCC.hostPlatform.system}.default ];
 }
 ```
 

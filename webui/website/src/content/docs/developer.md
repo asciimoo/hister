@@ -317,6 +317,24 @@ overrides still apply. The executable is `/usr/local/bin/nogon`, with aliases at
 and volume names. Registry addresses remain unchanged until replacement images
 are published.
 
+## Nix and Service Compatibility Checks
+
+Run `nix build --no-link .#checks.x86_64-linux.compatibility` to evaluate the
+package and module aliases and exercise the package install hook. The check
+verifies NixOS service identity, existing storage paths, mixed option names,
+disabled services, and conflicting settings. It also evaluates the Home Manager
+and Darwin module outputs for Linux and Darwin. These checks do not build the
+full application or activate services; native launchd activation still needs
+verification on macOS.
+
+Module exports have stable identities so importing both names loads each module
+once. Linux service names, Darwin agent names, and legacy environment defaults
+remain unchanged. `go test . -run TestSystemdServiceAliasInstallation` uses
+`systemctl --root` with a temporary fixture to verify that enabling the supplied
+unit creates `nogon.service` as an alias of `hister.service`. See the
+[systemd alias documentation](https://www.freedesktop.org/software/systemd/man/latest/systemd.unit.html)
+for how these names resolve to one unit.
+
 ## ZIM Import Development
 
 `cmd/zim.go` implements `hister import zim` with the pure Go [stazelabs/gozim](https://github.com/stazelabs/gozim) reader, pinned in `go.mod`. It supports uncompressed, XZ, and Zstd content without an external executable. The importer checks header and pointer table bounds before opening the archive, disables memory mapping, and caches one cluster. It reads selected metadata and uses error returning directory lookups so damaged entries cannot silently disappear.

@@ -24,15 +24,16 @@ let
 in
 {
   imports = [
+    (lib.mkAliasOptionModule [ "services" "nogon" ] [ "services" "hister" ])
     (lib.mkRenamedOptionModule [ "services" "hister" "config" ] [ "services" "hister" "settings" ])
   ];
 
   options.services.hister = {
-    enable = lib.mkEnableOption "Hister web history service";
+    enable = lib.mkEnableOption "Nogon web history service";
 
     package = lib.mkOption {
       type = lib.types.package;
-      description = "The hister package to use.";
+      description = "The Nogon package to use.";
     };
 
     dataDir = lib.mkOption {
@@ -40,7 +41,7 @@ in
       default = null;
       example = "/var/lib/hister";
       description = ''
-        Directory where Hister stores its data.
+        Directory where Nogon stores its data.
         If set, this will override the `app.directory` setting in the configuration file.
       '';
     };
@@ -50,7 +51,7 @@ in
       default = null;
       example = 4433;
       description = ''
-        Port on which Hister listens.
+        Port on which Nogon listens.
         If set, this will override the `server.address` port in the configuration file.
       '';
     };
@@ -78,8 +79,8 @@ in
       type = yamlFormat.type;
       default = { };
       description = ''
-        Hister configuration rendered to YAML and passed via HISTER_CONFIG.
-        Accepts any structure the server accepts — see the `app`, `server`,
+        Nogon configuration rendered to YAML and passed via HISTER_CONFIG.
+        Accepts any structure the server accepts. See the `app`, `server`,
         `indexer`, `crawler`, `hotkeys`, `extractors`, and
         `sensitive_content_patterns` blocks documented upstream.
       '';

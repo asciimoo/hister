@@ -35,7 +35,7 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
-          if git diff --quiet "$BASE_SHA" HEAD -- '*.go' 'cmd/testdata/zim/**' 'go.mod' 'go.sum' '.goreleaser*.yml' 'Dockerfile' 'compose.yml' '.github/workflows/*.yml' '.forgejo/workflows/*.yml' 'webui/**' 'package.json' 'package-lock.json' '.github/workflows/test.yml'; then
+          if git diff --quiet "$BASE_SHA" HEAD -- '*.go' 'cmd/testdata/zim/**' 'go.mod' 'go.sum' '.goreleaser*.yml' 'Dockerfile' 'compose.yml' 'contrib/systemd/**' '.github/workflows/*.yml' '.forgejo/workflows/*.yml' 'webui/**' 'package.json' 'package-lock.json' '.github/workflows/test.yml'; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"
@@ -61,6 +61,39 @@ jobs:
         if: steps.changes.outputs.skip != 'true'
         # Windows race tests can exceed Go's default 10 minute package timeout.
         run: go test -race -cover -timeout 30m ./...
+
+  nix-test:
+    name: Nix compatibility
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check for Nix changes
+        if: github.event_name == 'pull_request'
+        id: changes
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if git diff --quiet "$BASE_SHA" HEAD -- 'flake.nix' 'flake.lock' 'nix/**' '.github/workflows/test.yml'; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install Nix
+        if: steps.changes.outputs.skip != 'true'
+        uses: cachix/install-nix-action@v31.11.5
+
+      - name: Check package and service compatibility
+        if: steps.changes.outputs.skip != 'true'
+        run: nix build --no-link .#checks.x86_64-linux.compatibility
 
   app-browser-test:
     name: App browser tests

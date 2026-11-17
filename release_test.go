@@ -96,6 +96,61 @@ func packagingEnvironment() []string {
 	})
 }
 
+func TestSystemdServiceAliasInstallation(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("systemd installation requires Linux")
+	}
+	if _, err := exec.LookPath("systemctl"); err != nil {
+		t.Skip("systemctl is unavailable")
+	}
+	data, err := os.ReadFile("contrib/systemd/hister.service")
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	units := filepath.Join(root, "usr/lib/systemd/system")
+	if err := os.MkdirAll(units, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	unit := filepath.Join(units, "hister.service")
+	if err := os.WriteFile(unit, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(units, "multi-user.target"), []byte("[Unit]\nDescription=Test target\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// --root only edits the fixture's unit links; it never contacts a service manager.
+	cmd := exec.Command("systemctl", "--root", root, "--no-reload", "enable", "hister.service")
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("enable service: %v\n%s", err, output)
+	}
+	for _, name := range []string{"nogon.service", "multi-user.target.wants/hister.service"} {
+		link := filepath.Join(root, "etc/systemd/system", name)
+		target, err := os.Readlink(link)
+		if err != nil {
+			t.Errorf("missing service link %s: %v", name, err)
+			continue
+		}
+		if filepath.IsAbs(target) {
+			target = filepath.Join(root, target)
+		} else {
+			target = filepath.Join(filepath.Dir(link), target)
+		}
+		if target != unit {
+			t.Errorf("%s must resolve to the existing service, got %s", name, target)
+		}
+	}
+	for _, setting := range []string{
+		"User=hister", "Group=hister", "StateDirectory=hister",
+		"Environment=HISTER_DATA_DIR=%S/hister", "EnvironmentFile=-%E/hister/hister.env",
+		"ExecStart=/usr/local/bin/nogon listen", "ProtectSystem=strict", "NoNewPrivileges=true",
+	} {
+		if !slices.Contains(strings.Split(string(data), "\n"), setting) {
+			t.Errorf("missing service compatibility setting %q", setting)
+		}
+	}
+}
+
 func TestComposeImageAliasesPreserveStorage(t *testing.T) {
 	if output, err := exec.Command("docker", "compose", "version").CombinedOutput(); err != nil {
 		t.Skipf("Docker Compose is unavailable: %v\n%s", err, output)

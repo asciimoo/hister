@@ -14,7 +14,7 @@ let
   version = (builtins.fromJSON (builtins.readFile ../webui/app/package.json)).version;
 
   frontend = buildNpmPackage {
-    pname = "hister-frontend";
+    pname = "nogon-frontend";
     inherit version;
     src = ../.;
     npmWorkspace = "webui/app";
@@ -33,7 +33,7 @@ let
   };
 in
 buildGoModule (finalAttrs: {
-  pname = "hister";
+  pname = "nogon";
   inherit version;
 
   src = lib.fileset.toSource {
@@ -77,14 +77,17 @@ buildGoModule (finalAttrs: {
   subPackages = [ "." ];
 
   postInstall = ''
-    wrapProgram $out/bin/hister \
+    # The Go module still determines the original installed filename.
+    mv "$out/bin/hister" "$out/bin/nogon"
+    wrapProgram "$out/bin/nogon" \
       --prefix PATH : ${lib.makeBinPath [ yt-dlp ]}
+    ln -s nogon "$out/bin/hister"
   '';
 
   passthru = {
     inherit frontend;
     updateScript = nix-update-script {
-      attrPath = "hister";
+      attrPath = "nogon";
       extraArgs = [
         "--flake"
         "--version=skip"
@@ -99,7 +102,7 @@ buildGoModule (finalAttrs: {
     homepage = "https://github.com/asciimoo/hister";
     license = lib.licenses.agpl3Plus;
     maintainers = [ lib.maintainers._4evy ];
-    mainProgram = "hister";
+    mainProgram = "nogon";
     platforms = lib.platforms.unix;
   };
 })
