@@ -1,5 +1,154 @@
 # Changelog
 
+## v0.22.0
+
+### Hister Is Now Nogon
+
+**This is the first release under the Nogon name.** The rename follows a
+trademark complaint about the previous name. Development continues with the
+same purpose: saving and searching your content on a server you control. Read
+[Hister Is Now Nogon](https://nogon.eu/posts/hister-is-now-nogon) for the
+background and what the transition means for your installation.
+
+The project website is now [nogon.eu](https://nogon.eu/), and new release
+downloads use `nogon` names. The application, terminal client, documentation,
+and browser extensions use the new branding. Existing extension installations
+receive the rename through their normal store updates and retain their settings.
+
+Nogon reuses existing Hister configuration and data. The rename itself requires
+no data move, import, or reindex. Follow the upgrade notes below before replacing
+an existing installation.
+
+### New Features
+
+#### Settings in the Web Interface
+
+The new **Settings** page edits application preferences, watched directories,
+indexing, crawler options, extractors, semantic search, hotkeys, and supported
+server and authentication settings. It shows where values come from, marks
+unsaved changes, and reports validation errors beside the affected fields.
+Settings supplied by the main configuration file, environment variables, or startup
+flags remain locked. Administrator access is required in multi user mode.
+
+**Save and apply** persists web selections without rewriting the main
+configuration file and briefly interrupts service while applying them.
+Sensitive changes require review. Connection and authentication changes apply
+temporarily; reconnect and confirm working access within two minutes.
+Cancellation, timeout, or restart restores the last confirmed configuration.
+
+#### RSS and Atom Imports
+
+`nogon import rss FEED_URL` imports the full pages linked from an RSS or Atom
+feed. Duplicate URLs are queued once, existing documents are skipped unless
+`--force` is supplied, and interrupted imports can resume with
+`nogon index --job-id JOB_ID`. The command runs once and exits; it does not
+subscribe to future updates or import text embedded in the feed.
+
+#### Richer File Previews
+
+Local file results open in fullscreen previews with a download action. Code
+previews include syntax highlighting and a copy button, and plain text keeps
+its line breaks and indentation. PDF previews show readable extracted text
+with page divisions when available. DOCX previews preserve paragraphs,
+standard headings, and basic text formatting. PDF and DOCX previews do not
+reproduce the original page layout or images.
+
+#### Retained Data Cleanup
+
+`nogon purge` removes selected old document versions, unpinned history, and
+completed crawl records before an explicit cutoff. For example,
+`nogon purge --versions --history --crawl-jobs --before 2026-01-01 --dry`
+previews the affected counts. Removing `--dry` asks for confirmation before
+deletion. The operation applies across all users and requires administrator
+access in multi user mode. Current searchable documents, pinned history, and
+unfinished crawls remain intact.
+
+#### OIDC Administrator Groups
+
+Configure `admin_groups` to manage administrator access through OIDC group
+membership, with `groups_claim` selecting the provider's group field. Each
+successful OIDC login grants or removes administrator access according to the
+current memberships. Keep an independent local recovery administrator in case
+the provider becomes unavailable or revokes access. Leaving `admin_groups`
+unset preserves manually managed roles.
+
+### Enhancements
+
+1. **Browser extension**: the toolbar icon shows a red border when automatic
+   indexing is disabled. Manual indexing remains available. Orion extension
+   connections are now accepted by the server.
+2. **Search results**: document update dates are visible again.
+3. **Documentation**: an expanded quickstart, heading links, code copy buttons,
+   and improved mobile navigation make setup and reference pages easier to use.
+4. **Dependencies**: Go modules, npm packages, container bases, Nix inputs, and
+   GitHub Actions were updated.
+
+### Bug Fixes
+
+1. Embedding requests better respect model context limits. Reindexing validates
+   the embedding service before discarding existing vectors and keeps keyword
+   entries when individual documents cannot be embedded. Invalid vector
+   dimensions and storage failures still stop the rebuild.
+2. Bulk deletion uses the complete search configuration, and command line
+   deletion counts match the documents the operation can remove.
+3. Opened result history preserves titles containing literal markup instead of
+   changing or hiding parts of them.
+4. Docker starts correctly without a main configuration file. Directory
+   watching handles filesystem events more reliably, and invalid sensitive
+   content patterns are rejected before use.
+5. Browsers receive the correct OpenSearch description type. MCP requests
+   receive consistent protocol validation and structured errors for unknown
+   methods, and MCP previews include stored PDF and DOCX previews even without
+   stored HTML.
+6. The browser extension recognizes case insensitive indexing rules beginning
+   with `(?i)` and avoids duplicate rule requests while pages load concurrently.
+7. Numeric web settings remain editable after saving. Fresh OAuth or password
+   logins can confirm settings changes when proxy authentication is enabled.
+
+### Backward Compatibility Notes
+
+The following changes require attention when upgrading from v0.21.0:
+
+1. **Downloaded executables**: tagged and rolling releases provide Nogon
+   binaries only. Install the executable as `nogon`, or `nogon.exe` on Windows,
+   and update scripts, shortcuts, service launch commands, and download URLs.
+   Windows releases also provide a ZIP containing only `nogon.exe`. Package
+   managers may retain Hister names during the transition; follow the
+   [installation guide](https://nogon.eu/docs/installing#upgrading-from-hister).
+2. **Existing installations**: stop the server and make a complete backup before
+   upgrading. Keep existing data paths, service identities, Docker volumes, and
+   the Compose project name. Nogon configuration paths take precedence over
+   legacy paths, so avoid creating a second configuration unintentionally.
+   Check `nogon config path` and `nogon config show` with the service's usual
+   flags and environment. If multiple directories contain stored data, select
+   the intended one with `app.directory` or `NOGON_DATA_DIR`. Keep the same
+   server URL and credentials in your clients.
+3. **Environment variables**: prefer `NOGON__*`, `NOGON_CONFIG`,
+   `NOGON_DATA_DIR`, and `NOGON_PORT` for new configurations. Their Hister
+   equivalents remain supported. A present Nogon configuration variable takes
+   precedence over its legacy equivalent, even when empty. Service import
+   credentials also accept `NOGON_IMPORT_*` while retaining `HISTER_IMPORT_*`.
+4. **Configuration generation**: `nogon config create` now emits commented
+   examples. Use `--full` if scripts require active YAML values. Existing
+   explicit settings retain their meaning and lock the corresponding web
+   controls; comment out or remove a setting to manage it through the web page.
+5. **Removed command aliases**: replace `create-config` with `config create`,
+   and `create-user`, `show-user`, `update-user`, and `delete-user` with
+   `user create`, `user show`, `user update`, and `user delete`. These previously
+   deprecated aliases have been removed.
+6. **Custom integrations**: use `POST /api/add` for document submission;
+   obsolete submission routes have been removed. MCP transport requirements
+   are validated more strictly, including request content types and accepted
+   response formats. Check custom clients against the current
+   [MCP request examples](https://nogon.eu/docs/developer#mcp-protocol-testing).
+7. **Existing file previews**: import or submit PDFs and DOCX files again to
+   recover page divisions or formatting that was not stored previously. Use
+   `nogon reindex` for watched local files. This is optional and separate from
+   the project rename.
+8. **Recent searches**: the browser's recent search hiding controls have been
+   removed. Previously hidden searches can reappear on the home page; hiding
+   them did not delete their history from the server.
+
 ## v0.21.0
 
 ### New Features
