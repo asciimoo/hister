@@ -46,6 +46,7 @@ var ErrManagedConflict = errors.New("configuration sources changed; reload and r
 // owner must serialize it with reloads and keep requests paused during Commit.
 type ManagedWrite struct {
 	candidate     *Config
+	managed       map[string]any
 	staged        string
 	previous      string
 	directory     *os.File
@@ -77,7 +78,14 @@ func (c *Config) StageManaged() (*ManagedWrite, error) {
 	if err != nil {
 		return nil, err
 	}
-	previous, exists, err := readManagedFile(c.FullPath("config.web.yml"))
+	name := c.FullPath("config.web.yml")
+	// Keep the saved snapshot consistent with loading, including numeric types
+	// and normalized collection keys.
+	managed, err := decodeManagedSelections(raw, name)
+	if err != nil {
+		return nil, err
+	}
+	previous, exists, err := readManagedFile(name)
 	if err != nil {
 		return nil, err
 	}
@@ -89,7 +97,7 @@ func (c *Config) StageManaged() (*ManagedWrite, error) {
 		return nil, err
 	}
 	w := &ManagedWrite{
-		candidate: c, directory: directory, digest: sha256.Sum256(raw),
+		candidate: c, managed: managed, directory: directory, digest: sha256.Sum256(raw),
 		syncDirectory: func() error { return syncManagedDirectory(directory) },
 	}
 	w.staged, err = stageManagedFile(c.App.Directory, ".config.web-*", raw)
@@ -171,6 +179,7 @@ func (w *ManagedWrite) Commit() error {
 		return err
 	}
 	composition := *w.candidate.composition
+	composition.managed = w.managed
 	composition.managedDigest = w.digest
 	w.candidate.composition = &composition
 	return nil
@@ -232,18 +241,26 @@ func (inputs *configInputs) loadManaged(directory string) error {
 		return fmt.Errorf("read managed configuration %s: %w", name, err)
 	}
 	inputs.managedDigest = sha256.Sum256(raw)
-	if err := validateManagedYAML(raw); err != nil {
+	selections, err := decodeManagedSelections(raw, name)
+	if err != nil {
 		return fmt.Errorf("managed configuration %s: %w", name, err)
+	}
+	return inputs.applyManaged(selections, name)
+}
+
+func decodeManagedSelections(raw []byte, name string) (map[string]any, error) {
+	if err := validateManagedYAML(raw); err != nil {
+		return nil, err
 	}
 	web, err := fileInputs(raw, name)
 	if err != nil {
-		return fmt.Errorf("managed configuration %s: %w", name, err)
+		return nil, err
 	}
 	selections := make(map[string]any, len(web.sources))
 	for path := range web.sources {
 		selections[path] = web.values.Get(path)
 	}
-	return inputs.applyManaged(selections, name)
+	return selections, nil
 }
 
 func (inputs *configInputs) applyManaged(selections map[string]any, name string) error {

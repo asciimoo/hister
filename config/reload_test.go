@@ -181,6 +181,55 @@ func TestManagedPersistenceRoundTrip(t *testing.T) {
 	}
 }
 
+func TestManagedNumericSettingsRemainEditable(t *testing.T) {
+	for _, value := range []string{"0", "1", "0.65"} {
+		t.Run(value, func(t *testing.T) {
+			dir := t.TempDir()
+			t.Setenv("NOGON_DATA_DIR", dir)
+			main := filepath.Join(dir, "config.yml")
+			if err := os.WriteFile(main, []byte("# defaults\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			current, _, err := LoadForInspection(main, true)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, edit := range []SettingEdit{
+				{Path: "semantic_search.semantic_weight", Action: "set", Value: json.RawMessage(value)},
+				{Path: "app.title", Action: "set", Value: json.RawMessage(`"Saved after numeric setting"`)},
+			} {
+				if !current.SourcesUnchanged() {
+					t.Fatal("unchanged sources block the next edit")
+				}
+				next, fields := current.PrepareDraft([]SettingEdit{edit})
+				if len(fields) != 0 {
+					t.Fatal(fields)
+				}
+				staged, err := next.StageManaged()
+				if err != nil {
+					t.Fatal(err)
+				}
+				err = staged.Commit()
+				closeErr := staged.Close()
+				if err != nil || closeErr != nil {
+					t.Fatalf("save %s: %v, cleanup: %v", edit.Path, err, closeErr)
+				}
+				if !next.SourcesUnchanged() {
+					t.Fatalf("saving %s immediately invalidated the configuration sources", edit.Path)
+				}
+				if pending, err := next.PendingConfiguration(); err != nil || pending != nil {
+					t.Fatalf("successful save reports an external configuration change: %v", err)
+				}
+				restarted, _, err := LoadForInspection(main, true)
+				if err != nil || !next.ManagedSelectionsEqual(restarted) || restarted.SemanticSearch.SemanticWeight != next.SemanticSearch.SemanticWeight || restarted.App.Title != next.App.Title {
+					t.Fatalf("restart did not retain the saved selections: %v", err)
+				}
+				current = next
+			}
+		})
+	}
+}
+
 func TestManagedPersistenceDurabilityFailures(t *testing.T) {
 	for _, existing := range []bool{false, true} {
 		for _, recoveryFails := range []bool{false, true} {
