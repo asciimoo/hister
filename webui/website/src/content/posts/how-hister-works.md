@@ -14,7 +14,7 @@ Hister is made up of four main parts:
 
 ## The Browser Extension
 
-The browser extension is available for both [Chrome](https://chromewebstore.google.com/detail/hister/cciilamhchpmbdnniabclekddabkifhb) and [Firefox](https://addons.mozilla.org/en-US/firefox/addon/nogon/). Once you install it, it works in the background without requiring any action from you.
+The browser extension is available for both [Chrome](https://chromewebstore.google.com/detail/nogon/cciilamhchpmbdnniabclekddabkifhb) and [Firefox](https://addons.mozilla.org/en-US/firefox/addon/nogon/). Once you install it, it works in the background without requiring any action from you.
 
 Note: Update the server address in the extension, if your Hister server is listening on a non-default address.
 

@@ -7,7 +7,7 @@ export const extensionStores: Record<ExtensionBrowser, { label: string; href: st
   },
   chrome: {
     label: 'Chrome extension',
-    href: 'https://chromewebstore.google.com/detail/hister/cciilamhchpmbdnniabclekddabkifhb',
+    href: 'https://chromewebstore.google.com/detail/nogon/cciilamhchpmbdnniabclekddabkifhb',
   },
 };
 

@@ -42,7 +42,7 @@ The Nogon browser extension is the primary way to automatically index your brows
 
 ## Installation
 
-- **Chrome / Chromium / Edge**: [Install from Chrome Web Store](https://chromewebstore.google.com/detail/hister/cciilamhchpmbdnniabclekddabkifhb)
+- **Chrome / Chromium / Edge**: [Install from Chrome Web Store](https://chromewebstore.google.com/detail/nogon/cciilamhchpmbdnniabclekddabkifhb)
 - **Firefox**: [Install from Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/nogon/) (also works on Firefox for Android)
 - **qutebrowser**: Use the built in `nogon companion qutebrowser` command as described below.
 

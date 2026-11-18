@@ -9,7 +9,7 @@
   import HeroSearchDemo from '#lib/HeroSearchDemo.svelte';
 
   const chromeExtensionURL =
-    'https://chromewebstore.google.com/detail/hister/cciilamhchpmbdnniabclekddabkifhb';
+    'https://chromewebstore.google.com/detail/nogon/cciilamhchpmbdnniabclekddabkifhb';
   const firefoxExtensionURL = 'https://addons.mozilla.org/en-US/firefox/addon/nogon/';
 
   let extensionDownloadURL = chromeExtensionURL;

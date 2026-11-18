@@ -30,7 +30,7 @@ Nogon is a private search engine for the pages you visit and the files you keep.
 
    Keep this terminal open while using Nogon. The server must be running to index pages and search them.
 
-4. Open <http://127.0.0.1:4433> and install the browser extension for [Firefox](https://addons.mozilla.org/en-US/firefox/addon/nogon/) or [Chrome](https://chromewebstore.google.com/detail/hister/cciilamhchpmbdnniabclekddabkifhb).
+4. Open <http://127.0.0.1:4433> and install the browser extension for [Firefox](https://addons.mozilla.org/en-US/firefox/addon/nogon/) or [Chrome](https://chromewebstore.google.com/detail/nogon/cciilamhchpmbdnniabclekddabkifhb).
 
 5. Visit a web page with the extension enabled, then return to Nogon and search for a phrase from that page to find your first indexed result.
 

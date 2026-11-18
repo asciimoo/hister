@@ -121,7 +121,7 @@
     <ul class="docs-list">
       <li>
         <a
-          href="https://chromewebstore.google.com/detail/hister/cciilamhchpmbdnniabclekddabkifhb"
+          href="https://chromewebstore.google.com/detail/nogon/cciilamhchpmbdnniabclekddabkifhb"
           target="_blank"
           rel="noopener noreferrer"
           class="docs-link"
