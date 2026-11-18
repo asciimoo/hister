@@ -50,9 +50,6 @@ archives:
   - id: nogon
     formats: ['binary']
     name_template: 'nogon_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ . }}{{ end }}'
-  - id: hister-compat
-    formats: ['binary']
-    name_template: 'hister_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ . }}{{ end }}'
   - id: windows-portable
     formats: ['none']
     format_overrides:
@@ -60,8 +57,8 @@ archives:
         formats: ['zip']
     name_template: 'nogon_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
     files:
-      - src: '{{ .ArtifactPath }}'
-        dst: hister.exe
+      # Override the default README and LICENSE additions with an unmatched glob.
+      - none*
 
 checksum:
-  name_template: 'hister_{{ .Version }}_checksums.txt'
+  name_template: 'nogon_{{ .Version }}_checksums.txt'

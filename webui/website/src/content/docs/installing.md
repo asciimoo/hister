@@ -7,7 +7,9 @@ description: 'Install a release binary, build from source, or run Nogon with Doc
 
 The `nogon` program contains both the search server and the terminal client. For the fastest local setup, download a prebuilt binary and continue with the [quickstart guide](quickstart).
 
-Downloads and package listings may still use the Hister name. If your installation provides `hister`, use that command in place of `nogon` in these guides.
+New releases provide Nogon binaries. Older downloads and package listings may
+still use the Hister name. If your installation provides `hister`, use that
+command in place of `nogon` in these guides.
 
 If someone else already operates the Nogon server you use and you only search through the web interface, you do not need to install this program.
 

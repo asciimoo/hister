@@ -16,5 +16,5 @@ jobs:
       - uses: vedantmgoyal9/winget-releaser@main
         with:
           identifier: asciimoo.hister
-          installers-regex: '^hister_.*\.exe$'
+          installers-regex: '^nogon_.*_windows_amd64\.exe$'
           token: ${{ secrets.WINGET_TOKEN }}

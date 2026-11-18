@@ -69,6 +69,5 @@ jobs:
           make_latest: true
           files: |
             dist/nogon_cgo_*
-            dist/hister_cgo_*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

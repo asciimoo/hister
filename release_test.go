@@ -396,7 +396,7 @@ func TestReleaseDownloadNames(t *testing.T) {
 			}
 			slices.Sort(names)
 			suffix := "_0.34.0_" + goos + "_" + goarch + ext
-			want := []string{"hister" + suffix, "nogon" + suffix}
+			want := []string{"nogon" + suffix}
 			if goos == "windows" {
 				want = append(want, "nogon_0.34.0_windows_amd64.zip")
 			}
@@ -405,8 +405,8 @@ func TestReleaseDownloadNames(t *testing.T) {
 			}
 		})
 	}
-	if name := renderReleaseTemplate(t, cfg.Checksum.Name, map[string]string{"Version": "0.34.0"}); name != "hister_0.34.0_checksums.txt" {
-		t.Fatalf("legacy checksum download renamed to %q", name)
+	if name := renderReleaseTemplate(t, cfg.Checksum.Name, map[string]string{"Version": "0.34.0"}); name != "nogon_0.34.0_checksums.txt" {
+		t.Fatalf("checksum download name = %q, want Nogon name", name)
 	}
 }
 
@@ -421,11 +421,12 @@ func TestWinGetManifestPreparation(t *testing.T) {
 		files   map[string]string
 		wantErr string
 	}{
-		{"both commands", "nogon_0.99.0_windows_amd64.zip", map[string]string{"nogon.exe": "executable fixture", "hister.exe": "executable fixture"}, ""},
-		{"missing legacy command", "nogon_0.99.0_windows_amd64.zip", map[string]string{"nogon.exe": "executable fixture"}, "nogon.exe and hister.exe"},
-		{"different commands", "nogon_0.99.0_windows_amd64.zip", map[string]string{"nogon.exe": "new", "hister.exe": "old"}, "identical"},
-		{"nested commands", "nogon_0.99.0_windows_amd64.zip", map[string]string{"nested/nogon.exe": "fixture", "nested/hister.exe": "fixture"}, "nogon.exe and hister.exe"},
-		{"unexpected file", "nogon_0.99.0_windows_amd64.zip", map[string]string{"nogon.exe": "fixture", "hister.exe": "fixture", "../outside.exe": "fixture"}, "nogon.exe and hister.exe"},
+		{"Nogon command", "nogon_0.99.0_windows_amd64.zip", map[string]string{"nogon.exe": "executable fixture"}, ""},
+		{"legacy command only", "nogon_0.99.0_windows_amd64.zip", map[string]string{"hister.exe": "executable fixture"}, "only nogon.exe"},
+		{"legacy duplicate", "nogon_0.99.0_windows_amd64.zip", map[string]string{"nogon.exe": "executable fixture", "hister.exe": "executable fixture"}, "only nogon.exe"},
+		{"nested command", "nogon_0.99.0_windows_amd64.zip", map[string]string{"nested/nogon.exe": "fixture"}, "only nogon.exe"},
+		{"unexpected file", "nogon_0.99.0_windows_amd64.zip", map[string]string{"nogon.exe": "fixture", "../outside.exe": "fixture"}, "only nogon.exe"},
+		{"empty archive", "nogon_0.99.0_windows_amd64.zip", nil, "only nogon.exe"},
 		{"unreleased snapshot", "nogon_0.99.0-SNAPSHOT_windows_amd64.zip", nil, "stable Windows amd64 release archive"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -483,14 +484,15 @@ func TestWinGetManifestPreparation(t *testing.T) {
 						t.Fatalf("invalid archive installer: %v", manifest)
 					}
 					files := manifest["NestedInstallerFiles"].([]any)
-					if len(files) != 2 {
-						t.Fatalf("want two portable commands, got %v", files)
+					if len(files) != 1 {
+						t.Fatalf("want one portable command, got %v", files)
 					}
-					for i, command := range []string{"nogon", "hister"} {
-						file := files[i].(map[string]any)
-						if file["RelativeFilePath"] != command+".exe" || file["PortableCommandAlias"] != command {
-							t.Errorf("missing %s command alias: %v", command, file)
-						}
+					file := files[0].(map[string]any)
+					if file["RelativeFilePath"] != "nogon.exe" || file["PortableCommandAlias"] != "nogon" {
+						t.Errorf("missing Nogon command alias: %v", file)
+					}
+					if commands := manifest["Commands"].([]any); len(commands) != 1 || commands[0] != "nogon" {
+						t.Fatalf("want only the Nogon command, got %v", commands)
 					}
 					installers := manifest["Installers"].([]any)
 					if len(installers) != 1 {
@@ -543,11 +545,14 @@ func TestRollingReleaseCopies(t *testing.T) {
 					t.Fatalf("release hook failed: %v\n%s", err, output)
 				}
 			}
-			for _, path := range []string{binary, filepath.Join(dist, "nogon_cgo_"+goos+"_"+goarch+ext), filepath.Join(dist, "hister_cgo_"+goos+"_"+goarch+ext)} {
+			for _, path := range []string{binary, filepath.Join(dist, "nogon_cgo_"+goos+"_"+goarch+ext)} {
 				got, err := os.ReadFile(path)
 				if err != nil || !bytes.Equal(got, content) {
 					t.Errorf("release copy %s differs or is missing: %v", path, err)
 				}
+			}
+			if _, err := os.Stat(filepath.Join(dist, "hister_cgo_"+goos+"_"+goarch+ext)); !os.IsNotExist(err) {
+				t.Errorf("rolling build must not create a Hister binary: %v", err)
 			}
 		})
 	}
@@ -676,7 +681,7 @@ func TestReleaseWorkflowDownloads(t *testing.T) {
 					}
 					uploaded = uploaded || match
 				}
-				if want := strings.Contains(file, "_cgo_"); uploaded != want {
+				if want := strings.HasPrefix(file, "nogon_cgo_"); uploaded != want {
 					t.Errorf("upload %s = %t, want %t", file, uploaded, want)
 				}
 			}
@@ -696,13 +701,13 @@ func TestReleaseWorkflowDownloads(t *testing.T) {
 				t.Fatal(err)
 			}
 			var installers []string
-			for _, name := range []string{"nogon_0.34.0_windows_amd64.exe", "hister_0.34.0_windows_amd64.exe", "nogon_0.34.0_windows_amd64.zip", "hister_0.34.0_linux_amd64", "hister_0.34.0_checksums.txt"} {
+			for _, name := range []string{"nogon_0.34.0_windows_amd64.exe", "hister_0.34.0_windows_amd64.exe", "nogon_0.34.0_windows_amd64.zip", "nogon_0.34.0_linux_amd64", "nogon_0.34.0_checksums.txt"} {
 				if matcher.MatchString(name) {
 					installers = append(installers, name)
 				}
 			}
-			if want := []string{"hister_0.34.0_windows_amd64.exe"}; !slices.Equal(installers, want) {
-				t.Errorf("WinGet must select one legacy installer per architecture, got %v", installers)
+			if want := []string{"nogon_0.34.0_windows_amd64.exe"}; !slices.Equal(installers, want) {
+				t.Errorf("WinGet must select the Nogon installer, got %v", installers)
 			}
 		})
 	}

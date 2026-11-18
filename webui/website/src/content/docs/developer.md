@@ -102,7 +102,7 @@ Preserve these when changing visible branding:
 | Search indexes             | `hister_keep_stopwords`, `hister_snippet`, `hister.*` index metadata                     | Reopen existing indexes without changing their stored definitions.           |
 | Monitoring                 | `hister_*` metric names                                                                  | Preserve queries and dashboards.                                             |
 | Configuration and services | Legacy environment aliases, config and data paths, service identities, container volumes | Reuse existing configuration, permissions, and data.                         |
-| Distribution               | Legacy executable and download aliases, registry URLs, package identifiers               | Keep existing consumers working while publication is coordinated separately. |
+| Distribution               | Package command aliases, registry URLs, package identifiers                              | Keep existing consumers working while publication is coordinated separately. |
 | Published content          | Post slugs, old heading anchors, RSS GUIDs, historical examples and fixtures             | Preserve links, subscriptions, and regression coverage.                      |
 
 Internal helper symbols, temporary file prefixes, cache names, and test controls
@@ -326,22 +326,20 @@ changes. CI rejects focused browser tests such as `test.only` and runs one brows
 worker. Failed browser runs upload an `app-browser-failures` artifact containing
 the HTML report, traces, and screenshots, retained for seven days.
 
-## Release Binary Compatibility
+## Release Binaries
 
-Tagged releases provide standalone binaries with both `nogon_VERSION_OS_ARCH`
-and `hister_VERSION_OS_ARCH` download names, with `.exe` on Windows. Both names
-refer to the same build. The checksum file keeps its existing
-`hister_VERSION_checksums.txt` name. GoReleaser applies
+Tagged releases provide standalone `nogon_VERSION_OS_ARCH` binaries, with `.exe`
+on Windows, and `nogon_VERSION_checksums.txt`. GoReleaser applies
 [binary archive names](https://goreleaser.com/customization/package/archives/#do-not-archive)
 when uploading; local paths remain under the build directory.
-Windows releases also include `nogon_VERSION_windows_amd64.zip`, containing
-identical `nogon.exe` and `hister.exe` copies. Its checksum is included in the
-same checksum file.
+Windows releases also include `nogon_VERSION_windows_amd64.zip`, containing only
+`nogon.exe`. Its checksum is included in the same checksum file. New releases
+do not provide Hister binary downloads or an additional `hister.exe` in the ZIP.
 
-Rolling builds use `.goreleaser-rolling.yml` and copy each executable to both
-`dist/nogon_cgo_OS_ARCH` and `dist/hister_cgo_OS_ARCH`. The upload step selects
-these copies and leaves build metadata out of the release. WinGet continues
-to use the existing `asciimoo.hister` package and Hister installer names.
+Rolling builds use `.goreleaser-rolling.yml` and copy each executable to
+`dist/nogon_cgo_OS_ARCH`, with `.exe` on Windows. The upload step selects these
+copies and leaves build metadata out of the release. WinGet continues to use
+the existing `asciimoo.hister` package identifier and selects Nogon downloads.
 
 Run `go test .` to check release filenames, rolling copies, upload selection,
 and WinGet compatibility. To build a local rolling snapshot without publishing:
@@ -388,15 +386,9 @@ release.
 
 ### WinGet
 
-The [current installer manifest](https://github.com/microsoft/winget-pkgs/blob/master/manifests/a/asciimoo/hister/0.21.0/asciimoo.hister.installer.yaml)
-uses `asciimoo.hister`, a standalone portable executable, and the `hister`
-command. Both publishing workflows retain that identifier and select only the
-legacy executable download until the archive migration is verified on Windows.
-
-WinGet's [portable installation code](https://github.com/microsoft/winget-cli/blob/master/src/AppInstallerCLICore/Workflows/PortableFlow.cpp)
-uses only the first `Commands` entry for a standalone executable. Adding `nogon`
-to that list does not install a second alias. Providing both commands requires
-an archive with portable entries and explicit `PortableCommandAlias` values.
+Both publishing workflows retain the `asciimoo.hister` package identifier and
+select the Nogon standalone Windows executable. The installed command depends
+on the published package manifest.
 
 After building a stable release, use Python 3 to prepare local manifests from
 its Windows ZIP. Replace `VERSION` with the actual release version:
@@ -405,26 +397,21 @@ its Windows ZIP. Replace `VERSION` with the actual release version:
 python3 contrib/winget/prepare.py dist/nogon_VERSION_windows_amd64.zip dist/winget/VERSION
 ```
 
-The script checks that the archive contains identical Nogon and Hister
-executables, calculates its SHA256, and writes three manifests into a new
-directory. They set the display name to Nogon, declare both command aliases,
-and preserve `asciimoo.hister` and the current GitHub release URLs. The script
+The script checks that the archive contains only `nogon.exe`, calculates its
+SHA256, and writes three manifests into a new directory. They set the display
+name and command to Nogon and preserve `asciimoo.hister` and the current GitHub
+release URLs. The script
 does not publish manifests or overwrite an existing output directory. Snapshot
 versions are not accepted.
 
 Validate the output with `winget validate --manifest PATH` on Windows. Verify
-fresh installation, upgrade from the existing portable package, both commands,
+fresh installation, upgrade from the existing portable package, the `nogon` command,
 retained configuration and data, and uninstall before submitting the manifests.
 Local schema validation does not establish that the upgrade works.
 
-The updater also needs verification before either publishing workflow selects
-the ZIP. The current action invokes `komac update --submit`. In
-[Komac v2.17.1](https://github.com/russellbanks/Komac/blob/v2.17.1/src/analysis/installers/zip.rs),
-automatic ZIP analysis leaves nested installer entries empty when it finds two
-executables; its [update path](https://github.com/russellbanks/Komac/blob/v2.17.1/src/commands/update_version.rs)
-replaces installer entries with those analysis results. Prepare and review the
-archive manifest explicitly, then verify a subsequent automated update retains
-both aliases before enabling it.
+Prepare and review the archive manifest explicitly. Verify a subsequent
+automated update retains its portable command before either publishing workflow
+selects the ZIP.
 
 ## Container Compatibility Checks
 

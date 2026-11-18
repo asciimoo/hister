@@ -24,11 +24,8 @@ def prepare(archive, output):
         checksum = digest(source)
         source.seek(0)
         with zipfile.ZipFile(source) as package:
-            if sorted(package.namelist()) != ["hister.exe", "nogon.exe"]:
-                raise ValueError("archive must contain only nogon.exe and hister.exe at its root")
-            with package.open("nogon.exe") as nogon, package.open("hister.exe") as hister:
-                if digest(nogon) != digest(hister):
-                    raise ValueError("nogon.exe and hister.exe must be identical")
+            if package.namelist() != ["nogon.exe"]:
+                raise ValueError("archive must contain only nogon.exe at its root")
 
     identifier = "asciimoo.hister"
     repository = "https://github.com/asciimoo/nogon"
@@ -39,11 +36,8 @@ NestedInstallerType: portable
 NestedInstallerFiles:
   - RelativeFilePath: nogon.exe
     PortableCommandAlias: nogon
-  - RelativeFilePath: hister.exe
-    PortableCommandAlias: hister
 Commands:
   - nogon
-  - hister
 Installers:
   - Architecture: x64
     InstallerUrl: {repository}/releases/download/v{version}/{archive.name}
