@@ -2,7 +2,7 @@
 
 **Your own search engine**
 
-Nogon was formerly known as Hister. Some downloads, packages, and public links still use the Hister name.
+[Nogon was formerly known as Hister](https://nogon.eu/posts/hister-is-now-nogon)
 
 Nogon is a private search engine for the pages you visit and the files you keep. It indexes their full contents so you can find information again from the web interface, terminal, or an AI assistant connected through MCP.
 
