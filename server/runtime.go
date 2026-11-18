@@ -74,13 +74,14 @@ type runtimeRequestKey struct{}
 type runtimeListenerKey struct{}
 
 type runtimeRequest struct {
-	runtime           *serverRuntime
-	generation        *runtimeGeneration
-	sockets           context.Context
-	finish            func()
-	actor             configurationActor
-	confirmationToken string
-	request           *http.Request
+	runtime             *serverRuntime
+	generation          *runtimeGeneration
+	sockets             context.Context
+	finish              func()
+	actor               configurationActor
+	confirmationToken   string
+	confirmationSession string
+	request             *http.Request
 }
 
 type configurationReviewGrant struct {
@@ -204,7 +205,7 @@ func (r *serverRuntime) confirmPending(lease *runtimeRequest, revision string) (
 	if !pending.destinationVerified(lease.request, r.serving) {
 		return http.StatusForbidden, &runtimeApplyError{code: "destination_required", message: "Reconnect through the temporary configuration's destination before confirming access."}
 	}
-	if !pending.authenticationVerified(lease.actor) {
+	if !pending.authenticationVerified(lease.actor, lease.confirmationSession) {
 		return http.StatusForbidden, &runtimeApplyError{code: "fresh_authentication_required", message: "Sign in again using the temporary configuration before confirming access."}
 	}
 	if !time.Now().Before(pending.status.Deadline) {
@@ -226,7 +227,7 @@ func (r *serverRuntime) confirmPending(lease *runtimeRequest, revision string) (
 	if !lease.actor.authorized(pending.generation.cfg) {
 		return http.StatusForbidden, errors.New("administrative authority is no longer available")
 	}
-	if !pending.authenticationVerified(lease.actor) {
+	if !pending.authenticationVerified(lease.actor, lease.confirmationSession) {
 		return http.StatusForbidden, &runtimeApplyError{code: "fresh_authentication_required", message: "Sign in again using the temporary configuration before confirming access."}
 	}
 	if err := checkConfigurationReviewAdministrator(pending.generation.cfg); err != nil {
@@ -308,13 +309,24 @@ func (r *serverRuntime) rejectPending(status int, cause error) (int, error) {
 	return status, cause
 }
 
-func (pending *pendingAccessChange) authenticationVerified(actor configurationActor) bool {
+func (pending *pendingAccessChange) authenticationVerified(actor configurationActor, confirmationSession string) bool {
 	method := pending.status.Authentication
 	if method == "" {
 		return true
 	}
 	if actor.session == "" {
-		return method == "credentials" && (actor.token != [32]byte{} || actor.proxy)
+		if method == "credentials" {
+			return actor.token != [32]byte{} || actor.proxy
+		}
+		if !actor.proxy || confirmationSession == "" {
+			return false
+		}
+		// A proxy request can prove a fresh login with a browser session, but
+		// that session must still authenticate the same administrator.
+		actor.proxy, actor.session = false, confirmationSession
+		if !actor.authorized(pending.generation.cfg) {
+			return false
+		}
 	}
 	record, err := model.GetWebSession(actor.session)
 	if err != nil || !record.ExpiresAt.After(time.Now()) {

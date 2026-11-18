@@ -411,6 +411,11 @@ func completePendingSettings(c *webContext, cancel bool) {
 		c.JSONStatus(http.StatusServiceUnavailable, map[string]string{"code": "unavailable", "error": "Server runtime is unavailable."})
 		return
 	}
+	if !cancel && c.settingsActor.proxy {
+		if session, err := sessionStore.Get(c.Request, storeName); err == nil && session.ID != "" {
+			lease.confirmationSession = sessionTokenHash(session.ID)
+		}
+	}
 	c.releaseConfig()
 	lease.actor = c.settingsActor
 	lease.confirmationToken = confirmationToken

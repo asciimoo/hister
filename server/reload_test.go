@@ -470,73 +470,175 @@ func TestSettingsAccessConfirmationAcceptsDefaultPort(t *testing.T) {
 }
 
 func TestSettingsAccessOAuthVerification(t *testing.T) {
-	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/token" {
-			if err := r.ParseForm(); err != nil || r.Form.Get("client_secret") != "rotated-provider-secret" {
-				t.Error("OAuth exchange did not use the temporary credential")
+	for _, proxy := range []bool{false, true} {
+		t.Run(fmt.Sprintf("proxy=%t", proxy), func(t *testing.T) {
+			provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/token" {
+					if err := r.ParseForm(); err != nil || r.Form.Get("client_secret") != "rotated-provider-secret" {
+						t.Error("OAuth exchange did not use the temporary credential")
+					}
+					_, _ = io.WriteString(w, `{"access_token":"provider-token"}`)
+				} else {
+					_, _ = io.WriteString(w, `{"email":"owner@example.com"}`)
+				}
+			}))
+			t.Cleanup(provider.Close)
+			extra := fmt.Sprintf("  oauth:\n    oidc:\n      client_id: client\n      client_secret: provider-secret\n      auth_url: %s/auth\n      token_url: %s/token\n      userinfo_url: %s/userinfo\n", provider.URL, provider.URL, provider.URL)
+			if proxy {
+				extra += "  proxy_auth_header: X-Remote-User\n"
 			}
-			_, _ = io.WriteString(w, `{"access_token":"provider-token"}`)
-		} else {
-			_, _ = io.WriteString(w, `{"email":"owner@example.com"}`)
+			cfg, handler, headers := newAccessSettingsTestServer(t, "user", extra)
+			main, err := os.ReadFile(cfg.Filename())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(cfg.Filename(), []byte(strings.Replace(string(main), "      client_secret: provider-secret\n", "", 1)), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			web, err := os.ReadFile(cfg.FullPath("config.web.yml"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			web = append(web, []byte("  oauth:\n    oidc:\n      client_secret: provider-secret\n")...)
+			if err := os.WriteFile(cfg.FullPath("config.web.yml"), web, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if status := reloadRequest(t, handler, headers["X-Access-Token"]); status != http.StatusOK {
+				t.Fatalf("provider setup reload: %d", status)
+			}
+			user, err := model.CreateOAuthUser("provider-owner", "oidc-owner@example.com")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := model.SyncOAuthAdmin(user.OAuthID, true); err != nil {
+				t.Fatal(err)
+			}
+			oldFlow, oldQuery := startOAuthLogin(t, handler, nil)
+			pending := activateReviewedSettings(t, cfg, handler, headers, `[{"path":"server.oauth.oidc.scopes","action":"set","value":["openid","profile"]},{"path":"server.oauth.oidc.client_secret","action":"set","value":{"action":"replace","value":"rotated-provider-secret"}},{"path":"server.oauth_only","action":"set","value":true}]`)
+			state := testutil.ServeHTTP(t, handler, http.MethodGet, cfg.BaseURL("/api/settings"), nil, headers)
+			if strings.Contains(state.Body.String(), "provider-secret") {
+				t.Fatal("pending state exposed an OAuth credential")
+			}
+			body := fmt.Sprintf(`{"revision":%q}`, pending.Revision)
+			confirm := func(credentials map[string]string, want int) {
+				t.Helper()
+				credentials = maps.Clone(credentials)
+				if proxy && credentials["X-Remote-User"] == "" {
+					credentials["X-Remote-User"] = "provider-owner"
+				}
+				response := testutil.ServeHTTP(t, handler, http.MethodPost, cfg.BaseURL("/api/settings/confirm"), strings.NewReader(body), credentials)
+				if response.Code != want {
+					t.Fatalf("OAuth confirmation: %d %s, want %d", response.Code, response.Body, want)
+				}
+			}
+			confirm(headers, http.StatusForbidden)
+			oldLogin := oauthCallback(handler, oldFlow, url.Values{"provider": {"oidc"}, "state": {oldQuery.Get("state")}, "code": {"code"}})
+			if oldLogin.Code != http.StatusFound {
+				t.Fatalf("old login callback: %d %s", oldLogin.Code, oldLogin.Body)
+			}
+			confirm(map[string]string{"Origin": "nogon://", "Cookie": responseSessionCookie(t, oldLogin).String()}, http.StatusForbidden)
+			flow, query := startOAuthLogin(t, handler, nil)
+			login := oauthCallback(handler, flow, url.Values{"provider": {"oidc"}, "state": {query.Get("state")}, "code": {"code"}})
+			if login.Code != http.StatusFound {
+				t.Fatalf("fresh OAuth login: %d %s", login.Code, login.Body)
+			}
+			if proxy {
+				confirm(map[string]string{"Origin": "nogon://", "Cookie": responseSessionCookie(t, login).String(), "X-Remote-User": "review-owner"}, http.StatusForbidden)
+			}
+			confirm(map[string]string{"Origin": "nogon://", "Cookie": responseSessionCookie(t, login).String()}, http.StatusOK)
+			loaded, _, err := config.LoadForInspection(cfg.Filename(), true)
+			if err != nil || loaded.Server.OAuth["oidc"].ClientSecret != "rotated-provider-secret" || !reflect.DeepEqual(loaded.Server.OAuth["oidc"].Scopes, []string{"openid", "profile"}) {
+				t.Fatalf("confirmed provider settings did not persist: %v", err)
+			}
+		})
+	}
+}
+
+func TestSettingsAccessProxyPasswordVerification(t *testing.T) {
+	cfg, handler, headers := newAccessSettingsTestServer(t, "user", "  proxy_auth_header: X-Remote-User\n  oauth:\n    oidc:\n      client_id: client\n      client_secret: provider-secret\n      auth_url: https://provider.example/auth\n      token_url: https://provider.example/token\n      userinfo_url: https://provider.example/userinfo\n")
+	headers["X-Remote-User"] = "review-owner"
+	if _, err := model.CreateUser("other-owner", "password123", true); err != nil {
+		t.Fatal(err)
+	}
+	login := func(username string) *http.Cookie {
+		t.Helper()
+		response := testutil.ServeHTTP(t, handler, http.MethodPost, cfg.BaseURL("/api/login"), strings.NewReader(fmt.Sprintf(`{"username":%q,"password":"password123"}`, username)), headers)
+		if response.Code != http.StatusOK {
+			t.Fatalf("password login: %d %s", response.Code, response.Body)
 		}
-	}))
-	t.Cleanup(provider.Close)
-	extra := fmt.Sprintf("  oauth:\n    oidc:\n      client_id: client\n      client_secret: provider-secret\n      auth_url: %s/auth\n      token_url: %s/token\n      userinfo_url: %s/userinfo\n", provider.URL, provider.URL, provider.URL)
-	cfg, handler, headers := newAccessSettingsTestServer(t, "user", extra)
-	main, err := os.ReadFile(cfg.Filename())
-	if err != nil {
-		t.Fatal(err)
+		return responseSessionCookie(t, response)
 	}
-	if err := os.WriteFile(cfg.Filename(), []byte(strings.Replace(string(main), "      client_secret: provider-secret\n", "", 1)), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	old := login("review-owner")
 	web, err := os.ReadFile(cfg.FullPath("config.web.yml"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	web = append(web, []byte("  oauth:\n    oidc:\n      client_secret: provider-secret\n")...)
-	if err := os.WriteFile(cfg.FullPath("config.web.yml"), web, 0o600); err != nil {
+	if err := os.WriteFile(cfg.FullPath("config.web.yml"), append(web, []byte("  oauth_only: true\n")...), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if status := reloadRequest(t, handler, headers["X-Access-Token"]); status != http.StatusOK {
-		t.Fatalf("provider setup reload: %d", status)
+		t.Fatalf("OAuth only setup reload: %d", status)
 	}
-	user, err := model.CreateOAuthUser("provider-owner", "oidc-owner@example.com")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := model.SyncOAuthAdmin(user.OAuthID, true); err != nil {
-		t.Fatal(err)
-	}
-	oldFlow, oldQuery := startOAuthLogin(t, handler, nil)
-	pending := activateReviewedSettings(t, cfg, handler, headers, `[{"path":"server.oauth.oidc.scopes","action":"set","value":["openid","profile"]},{"path":"server.oauth.oidc.client_secret","action":"set","value":{"action":"replace","value":"rotated-provider-secret"}},{"path":"server.oauth_only","action":"set","value":true}]`)
-	state := testutil.ServeHTTP(t, handler, http.MethodGet, cfg.BaseURL("/api/settings"), nil, headers)
-	if strings.Contains(state.Body.String(), "provider-secret") {
-		t.Fatal("pending state exposed an OAuth credential")
+	pending := activateReviewedSettings(t, cfg, handler, headers, `[{"path":"server.oauth_only","action":"set","value":false}]`)
+	if pending.Authentication != "password" {
+		t.Fatalf("confirmation method = %q, want password", pending.Authentication)
 	}
 	body := fmt.Sprintf(`{"revision":%q}`, pending.Revision)
-	confirm := func(credentials map[string]string, want int) {
+	confirm := func(cookie *http.Cookie, want int) {
 		t.Helper()
+		credentials := maps.Clone(headers)
+		if cookie != nil {
+			credentials["Cookie"] = cookie.String()
+		}
 		response := testutil.ServeHTTP(t, handler, http.MethodPost, cfg.BaseURL("/api/settings/confirm"), strings.NewReader(body), credentials)
-		if response.Code != want {
-			t.Fatalf("OAuth confirmation: %d %s, want %d", response.Code, response.Body, want)
+		if response.Code != want || (want == http.StatusForbidden && !strings.Contains(response.Body.String(), "fresh_authentication_required")) {
+			t.Fatalf("password confirmation: %d %s, want %d", response.Code, response.Body, want)
 		}
 	}
-	confirm(headers, http.StatusForbidden)
-	oldLogin := oauthCallback(handler, oldFlow, url.Values{"provider": {"oidc"}, "state": {oldQuery.Get("state")}, "code": {"code"}})
-	if oldLogin.Code != http.StatusFound {
-		t.Fatalf("old login callback: %d %s", oldLogin.Code, oldLogin.Body)
+	confirm(nil, http.StatusForbidden)
+	confirm(old, http.StatusForbidden)
+	confirm(login("other-owner"), http.StatusForbidden)
+	revoked := login("review-owner")
+	if err := model.UpdatePassword("review-owner", "password123"); err != nil {
+		t.Fatal(err)
 	}
-	confirm(map[string]string{"Origin": "nogon://", "Cookie": responseSessionCookie(t, oldLogin).String()}, http.StatusForbidden)
-	flow, query := startOAuthLogin(t, handler, nil)
-	login := oauthCallback(handler, flow, url.Values{"provider": {"oidc"}, "state": {query.Get("state")}, "code": {"code"}})
-	if login.Code != http.StatusFound {
-		t.Fatalf("fresh OAuth login: %d %s", login.Code, login.Body)
+	confirm(revoked, http.StatusForbidden)
+	loggedOut := login("review-owner")
+	logout := testutil.ServeHTTP(t, handler, http.MethodPost, cfg.BaseURL("/api/logout"), nil, map[string]string{"Origin": "nogon://", "X-Remote-User": "review-owner", "Cookie": loggedOut.String()})
+	if logout.Code != http.StatusOK {
+		t.Fatalf("logout: %d %s", logout.Code, logout.Body)
 	}
-	confirm(map[string]string{"Origin": "nogon://", "Cookie": responseSessionCookie(t, login).String()}, http.StatusOK)
+	confirm(loggedOut, http.StatusForbidden)
+	confirm(login("review-owner"), http.StatusOK)
 	loaded, _, err := config.LoadForInspection(cfg.Filename(), true)
-	if err != nil || loaded.Server.OAuth["oidc"].ClientSecret != "rotated-provider-secret" || !reflect.DeepEqual(loaded.Server.OAuth["oidc"].Scopes, []string{"openid", "profile"}) {
-		t.Fatalf("confirmed provider settings did not persist: %v", err)
+	if err != nil || loaded.Server.OAuthOnly {
+		t.Fatalf("confirmed password access did not persist: %v", err)
+	}
+}
+
+func TestSettingsAccessProxyCredentialsIgnoreSession(t *testing.T) {
+	for _, username := range []string{"", "review-owner", "other-owner"} {
+		t.Run("session="+username, func(t *testing.T) {
+			cfg, handler, headers := newAccessSettingsTestServer(t, "user", "  proxy_auth_header: X-Remote-User\n")
+			delete(headers, "X-Access-Token")
+			headers["X-Remote-User"] = "review-owner"
+			if _, err := model.CreateUser("other-owner", "password123", false); err != nil {
+				t.Fatal(err)
+			}
+			if username != "" {
+				login := testutil.ServeHTTP(t, handler, http.MethodPost, cfg.BaseURL("/api/login"), strings.NewReader(fmt.Sprintf(`{"username":%q,"password":"password123"}`, username)), headers)
+				if login.Code != http.StatusOK {
+					t.Fatalf("login: %d %s", login.Code, login.Body)
+				}
+				headers["Cookie"] = responseSessionCookie(t, login).String()
+			}
+			pending := activateReviewedSettings(t, cfg, handler, headers, `[{"path":"app.public","action":"set","value":false}]`)
+			body := fmt.Sprintf(`{"revision":%q}`, pending.Revision)
+			response := testutil.ServeHTTP(t, handler, http.MethodPost, cfg.BaseURL("/api/settings/confirm"), strings.NewReader(body), headers)
+			if response.Code != http.StatusOK {
+				t.Fatalf("proxy credentials could not confirm: %d %s", response.Code, response.Body)
+			}
+		})
 	}
 }
 
