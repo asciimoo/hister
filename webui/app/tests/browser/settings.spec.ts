@@ -47,21 +47,21 @@ test('settings schema definitions are checked by TypeScript', async () => {
 
   const ts = await import('typescript');
   const { fileURLToPath } = await import('node:url');
-  const program = ts.createProgram(
-    [
-      fileURLToPath(import.meta.url),
-      fileURLToPath(new URL('../../.svelte-kit/non-ambient.d.ts', import.meta.url)),
-    ],
-    {
-      strict: true,
-      noEmit: true,
-      skipLibCheck: true,
-      target: ts.ScriptTarget.ESNext,
-      module: ts.ModuleKind.ESNext,
-      moduleResolution: ts.ModuleResolutionKind.Bundler,
-      types: ['svelte', '@sveltejs/kit'],
-    },
-  );
+  const options: import('typescript').CompilerOptions = {
+    strict: true,
+    noEmit: true,
+    skipLibCheck: true,
+    target: ts.ScriptTarget.ESNext,
+    module: ts.ModuleKind.ESNext,
+    moduleResolution: ts.ModuleResolutionKind.Bundler,
+    types: ['svelte', '@sveltejs/kit', '$app/types'],
+  };
+  const host = ts.createCompilerHost(options);
+  const readFile = host.readFile;
+  // Match a clean checkout even if obsolete SvelteKit 2 declarations remain locally.
+  const legacyTypes = fileURLToPath(new URL('../../.svelte-kit/non-ambient.d.ts', import.meta.url));
+  host.readFile = (file) => (file === legacyTypes ? undefined : readFile(file));
+  const program = ts.createProgram([fileURLToPath(import.meta.url)], options, host);
   expect(
     ts.formatDiagnostics(ts.getPreEmitDiagnostics(program), {
       getCanonicalFileName: (file) => file,
