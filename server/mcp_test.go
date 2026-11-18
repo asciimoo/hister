@@ -796,6 +796,87 @@ func TestMCPPreviewContentControls(t *testing.T) {
 	}
 }
 
+func TestMCPPreviewRendersStoredFileText(t *testing.T) {
+	cfg := testutil.InitModel(t)
+	cfg.App.AccessToken = "secret"
+	idx := newServerTestIndexer(t, cfg)
+	handler := registerEndpoints(cfg, idx)
+	session := newMCPTestSession(t, cfg, handler, "secret")
+	for _, tc := range []struct {
+		url      string
+		kind     document.DocType
+		template string
+		metadata map[string]any
+	}{
+		{url: "https://example.com/download?id=123", kind: document.Web, template: "pdf", metadata: map[string]any{"type": "pdf"}},
+		{url: "file:///missing/paper.PDF", kind: document.Local, template: "pdf"},
+		{url: "remote-file://laptop/missing/paper.pdf", kind: document.RemoteFile, template: "pdf"},
+		{url: "file:///missing/notes.docx", kind: document.Local, template: "docx"},
+		{url: "remote-file://laptop/missing/notes.DOCX", kind: document.RemoteFile, template: "docx"},
+		{url: "file:///missing/notes.txt", kind: document.Local},
+		{url: "remote-file://laptop/missing/source.py", kind: document.RemoteFile},
+	} {
+		t.Run(tc.url, func(t *testing.T) {
+			text := "First <script>alert(1)</script>\nSecond line\n\nAnother paragraph"
+			if tc.template == "pdf" {
+				text += "\fNext page"
+			}
+			doc := &document.Document{
+				URL: tc.url, Type: tc.kind, Title: "Stored snapshot", Text: text,
+				Metadata: tc.metadata, Processed: true,
+			}
+			if err := idx.AddDocument(doc); err != nil {
+				t.Fatal(err)
+			}
+			for _, selection := range []string{"default", "html", "text"} {
+				t.Run(selection, func(t *testing.T) {
+					args := map[string]any{"url": tc.url}
+					if selection != "default" {
+						args["fields"] = []string{selection}
+					}
+					response, err := mcpTestCall(t, session, "get_preview", args)
+					if err != nil {
+						t.Fatal(err)
+					}
+					result := mcpTestStructured(t, response)
+					if len(result.UntrustedContent) != 1 || result.UntrustedContent[0].Trust != "untrusted" {
+						t.Fatalf("missing untrusted document boundary: %+v", result)
+					}
+					fields := result.UntrustedContent[0].Fields
+					if selection == "html" {
+						if _, present := fields["text"]; present {
+							t.Fatal("HTML-only request included unselected text")
+						}
+					} else if text, ok := fields["text"].(string); !ok || !strings.Contains(text, "First <script>alert(1)</script>") {
+						t.Fatal("stored plain text was lost")
+					}
+					markup, present := fields["html"].(string)
+					if tc.template == "" || selection == "text" {
+						if present || fields["html_format"] != nil {
+							t.Fatalf("unexpected HTML or serialized template data: %+v", fields)
+						}
+						return
+					}
+					if !present || fields["html_format"] != "rendered_html_fragment" {
+						t.Fatalf("missing rendered file preview: %+v", fields)
+					}
+					for _, want := range []string{tc.template + "-preview", "<p>First &lt;script&gt;alert(1)&lt;/script&gt;<br>Second line</p>", "<p>Another paragraph</p>"} {
+						if !strings.Contains(markup, want) {
+							t.Errorf("preview %q does not contain %q", markup, want)
+						}
+					}
+					if strings.Contains(markup, "<script>") {
+						t.Fatal("stored file text became active HTML")
+					}
+					if tc.template == "pdf" && !strings.Contains(markup, "Page 2") {
+						t.Fatal("PDF preview lost page boundaries")
+					}
+				})
+			}
+		})
+	}
+}
+
 func TestMCPPreviewIncludesRenderedHTMLAndMarksMetadataUntrusted(t *testing.T) {
 	doc := &document.Document{
 		URL:     "https://example.com/article",

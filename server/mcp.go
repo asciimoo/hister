@@ -675,11 +675,13 @@ func mcpToolGetPreview(c *webContext, rawArgs json.RawMessage) (mcpStructuredRes
 	}
 
 	var renderedHTML string
-	if doc.HTML != "" && (args.Fields == nil || slices.Contains(args.Fields, "html")) {
+	hasPreview := doc.HTML != "" || doc.Type == document.Local || doc.Type == document.RemoteFile || doc.Metadata["type"] == "pdf"
+	if hasPreview && (args.Fields == nil || slices.Contains(args.Fields, "html")) {
 		resp, err := extractor.PreviewContext(c.Request.Context(), doc, args.Extractor)
 		if err != nil {
 			log.Warn().Err(err).Str("url", args.URL).Msg("MCP get_preview extractor failed")
-		} else {
+		} else if resp.Template != "code" {
+			// Code previews contain serialized data for the web UI.
 			renderedHTML = resp.Content
 		}
 	}
