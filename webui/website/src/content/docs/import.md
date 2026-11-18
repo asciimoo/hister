@@ -13,11 +13,6 @@ variable, then the Hister variable. An explicitly empty or blank value is treate
 as a missing credential and does not fall back. These source credentials are
 separate from the global `--token` used for the destination Nogon server.
 
-> Hister v0.16.0 uses the standalone `hister import-browser` command. To import
-> browser history with that release, replace `nogon import browser` in the
-> examples below with `hister import-browser`. The unified import command is
-> available in rolling builds and stable releases newer than v0.16.0.
-
 ## Available Import Sources
 
 | Command                                    | Source                                      | Default label             |

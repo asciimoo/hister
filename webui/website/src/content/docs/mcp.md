@@ -19,8 +19,8 @@ POST /mcp
 Configure MCP clients to use this URL with the Streamable HTTP transport.
 
 MCP applies Nogon's usual origin checks when a client sends an `Origin` header.
-The `hister://` origin is supported, and `localhost` and `127.0.0.1` are
-interchangeable for local configurations with the same scheme and port. Requests
+The `nogon://` origin and its legacy alias `hister://` are supported. `localhost`
+and `127.0.0.1` are interchangeable for local configurations with the same scheme and port. Requests
 from unrelated origins receive HTTP 403, even with a valid access token or login
 session. Native clients that omit `Origin` continue to use the normal
 authentication settings.
@@ -331,8 +331,8 @@ Open **Settings** and locate the MCP servers section, or edit
 ### Remote or self-hosted server
 
 Replace `http://127.0.0.1:4433` with your server's `base_url`. If you run
-Nogon behind a reverse proxy under a subpath (e.g. `https://example.com/hister`),
-the endpoint is `https://example.com/hister/mcp`.
+Nogon behind a reverse proxy under a subpath (e.g. `https://example.com/nogon`),
+the endpoint is `https://example.com/nogon/mcp`.
 
 ## Example Interaction
 

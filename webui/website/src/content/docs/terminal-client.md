@@ -81,10 +81,10 @@ This check requires internet access. It does not download or install the update.
 nogon config create ~/.config/nogon/config.yml
 nogon config path
 nogon config show
-nogon --config /etc/hister/config.yml config validate
+nogon --config /etc/nogon/config.yml config validate
 nogon reload
 nogon doctor
-nogon --server-url https://hister.example.com --token "$HISTER_TOKEN" doctor --format json
+nogon --server-url https://nogon.example.com --token "$NOGON_TOKEN" doctor --format json
 ```
 
 `reload` applies updated settings to the running server, including logging changes. Expect a brief

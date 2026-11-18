@@ -24,7 +24,7 @@ Enabling this option makes the version publicly available without authentication
 curl --fail http://127.0.0.1:4433/api/config
 ```
 
-The configuration response includes a `version` field, such as `"version": "v0.20.0"`. The value can also include a source revision. Include any path prefix from `server.base_url`, such as `/hister/api/config`.
+The configuration response includes a `version` field, such as `"version": "v0.20.0"`. The value can also include a source revision. Include any path prefix from `server.base_url`, such as `/nogon/api/config`.
 
 Set `server.expose_version: false` and reload or restart Nogon to disable reporting. The `version` field is omitted while disabled. Version reporting and Prometheus metrics can be enabled independently.
 
@@ -49,7 +49,7 @@ For a local instance without authentication, check the endpoint with:
 curl --fail http://127.0.0.1:4433/metrics
 ```
 
-The endpoint uses the same address and base path as the rest of Nogon. If `server.base_url` is `https://hister.example.com/hister`, fetch `https://hister.example.com/hister/metrics`.
+The endpoint uses the same address and base path as the rest of Nogon. If `server.base_url` is `https://nogon.example.com/nogon`, fetch `https://nogon.example.com/nogon/metrics`.
 
 ## Authentication
 
@@ -79,28 +79,28 @@ Add a scrape job to your Prometheus configuration:
 
 ```yaml
 scrape_configs:
-  - job_name: hister
+  - job_name: nogon
     scrape_interval: 30s
     scheme: http
     metrics_path: /metrics
     authorization:
       type: Bearer
-      credentials_file: /etc/prometheus/hister.token
+      credentials_file: /etc/prometheus/nogon.token
     static_configs:
       - targets: ['127.0.0.1:4433']
 ```
 
-Put the token in `/etc/prometheus/hister.token` on the Prometheus host, with permissions that allow Prometheus to read it. The file contains only the token, without the `Bearer` prefix. Omit the `authorization` block if Nogon has no authentication configured.
+Put the token in `/etc/prometheus/nogon.token` on the Prometheus host, with permissions that allow Prometheus to read it. The file contains only the token, without the `Bearer` prefix. Omit the `authorization` block if Nogon has no authentication configured.
 
 This example assumes Prometheus can reach Nogon at `127.0.0.1:4433`. If Prometheus runs on another host or in a container, use an address reachable from there. See [Server Setup](server-setup) for network access and reverse proxy configuration.
 
-For `server.base_url: https://hister.example.com/hister`, replace the job's connection settings with the following, keeping its authentication settings:
+For `server.base_url: https://nogon.example.com/nogon`, replace the job's connection settings with the following, keeping its authentication settings:
 
 ```yaml
 scheme: https
-metrics_path: /hister/metrics
+metrics_path: /nogon/metrics
 static_configs:
-  - targets: ['hister.example.com:443']
+  - targets: ['nogon.example.com:443']
 ```
 
 Reload or restart Prometheus after updating its configuration. The target should appear as up, and Nogon's metrics retain the `hister_` prefix so existing queries, dashboards, and alerts continue to work. Keep your existing job name and token file when upgrading. See the [Prometheus configuration reference](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#scrape_config) for additional scrape settings.

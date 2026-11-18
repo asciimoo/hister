@@ -114,7 +114,7 @@ The formula currently installs the `hister` command. Start the server with `hist
 
 ## Docker
 
-The official container is published at [GitHub Container Registry](https://github.com/asciimoo/nogon/pkgs/container/hister). See the [Docker guide](docker) for a complete Compose setup, persistent storage, and reverse proxy examples.
+Nogon images are published at [GitHub Container Registry](https://github.com/asciimoo/nogon/pkgs/container/nogon). See the [Docker guide](docker) for available tags, a complete Compose setup, persistent storage, and reverse proxy examples.
 
 ## Systemd
 
@@ -212,7 +212,7 @@ services.nogon = {
   # dataDir = "/var/lib/hister";
   # openFirewall = true; # NixOS only
   # configPath = /path/to/config.yml;
-  # environmentFile = "/run/secrets/hister.env";
+  # environmentFile = "/run/secrets/nogon.env";
 
   settings = {
     app = {

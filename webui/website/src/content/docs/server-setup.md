@@ -236,34 +236,34 @@ On systems with Unix socket support, Nogon can serve HTTP through a filesystem s
 
 ```yaml
 server:
-  address: unix:/run/hister/hister.sock
+  address: unix:/run/nogon/nogon.sock
   base_url: https://nogon.example.com
 ```
 
 The equivalent command line options are:
 
 ```bash
-nogon listen --address unix:/run/hister/hister.sock --server-url https://nogon.example.com
+nogon listen --address unix:/run/nogon/nogon.sock --server-url https://nogon.example.com
 ```
 
-You can also set `NOGON__SERVER__ADDRESS=unix:/run/hister/hister.sock` and `NOGON__SERVER__BASE_URL=https://nogon.example.com`. `NOGON_PORT` and legacy `HISTER_PORT` are ignored for Unix socket addresses.
+You can also set `NOGON__SERVER__ADDRESS=unix:/run/nogon/nogon.sock` and `NOGON__SERVER__BASE_URL=https://nogon.example.com`. `NOGON_PORT` and legacy `HISTER_PORT` are ignored for Unix socket addresses.
 
 An explicit `base_url` is required because a socket path cannot provide the public HTTP URL. Browsers, the extension, and Nogon CLI clients connect through the reverse proxy at that URL.
 
-Create the parent directory before starting Nogon. Its owner must be able to create the socket, and the proxy user must be able to traverse the directory and connect to the socket. Socket permissions follow the process umask. For example, a directory owned by Nogon with a group shared by the proxy, mode `0750`, and umask `0007` allows the proxy group to connect on Linux. Restrict directory access as well, since some systems do not enforce socket file permissions. With systemd, `RuntimeDirectory=hister`, `RuntimeDirectoryMode=0750`, and `UMask=0007` can provide this setup when the service group is shared with the proxy.
+Create the parent directory before starting Nogon. Its owner must be able to create the socket, and the proxy user must be able to traverse the directory and connect to the socket. Socket permissions follow the process umask. For example, a directory owned by Nogon with a group shared by the proxy, mode `0750`, and umask `0007` allows the proxy group to connect on Linux. Restrict directory access as well, since some systems do not enforce socket file permissions. With systemd, `RuntimeDirectory=nogon`, `RuntimeDirectoryMode=0750`, and `UMask=0007` can provide this setup when the service group is shared with the proxy.
 
 For [Caddy](https://caddyserver.com/docs/caddyfile/directives/reverse_proxy#upstream-addresses), use the socket as the upstream:
 
 ```text
 nogon.example.com {
-    reverse_proxy unix//run/hister/hister.sock
+    reverse_proxy unix//run/nogon/nogon.sock
 }
 ```
 
 To check the socket directly:
 
 ```bash
-curl --unix-socket /run/hister/hister.sock http://localhost/api/config
+curl --unix-socket /run/nogon/nogon.sock http://localhost/api/config
 ```
 
 Nogon removes its socket when it shuts down on `SIGINT` or `SIGTERM`. It refuses to replace an existing file or socket. After an unclean shutdown, remove a leftover socket only after confirming that no running process uses it.
@@ -275,16 +275,19 @@ Enable `server.metrics: true` to expose operational statistics for Prometheus. T
 ## AppArmor Profile
 
 If your Linux system uses AppArmor, you can confine Nogon with the following profile.
-Save it to `/etc/apparmor.d/hister`, then load it with `sudo apparmor_parser -r /etc/apparmor.d/hister`.
+For a new installation, save it to `/etc/apparmor.d/nogon`, then load it with
+`sudo apparmor_parser -r /etc/apparmor.d/nogon`. If you already use a profile named
+`hister`, update that file and keep its existing profile name instead of loading
+a second profile for the same executable.
 
 ```
 abi <abi/4.0>,
 
 include <tunables/global>
 
-@{hister_exe} = /usr/{local/,}bin/{nogon,hister}
+@{nogon_exe} = /usr/{local/,}bin/{nogon,hister}
 
-profile hister @{hister_exe} {
+profile nogon @{nogon_exe} {
   include <abstractions/base>
   include <abstractions/nameservice>
   include <abstractions/ssl_certs>
@@ -300,14 +303,14 @@ profile hister @{hister_exe} {
   @{HOME}/.config/{nogon,hister}{,/**} rwlk,
   @{HOME}/.mozilla/firefox/*.*/places.sqlite r,
   @{PROC}/sys/net/core/somaxconn r,
-  @{hister_exe} rix,
+  @{nogon_exe} rix,
   owner /proc/@{pid}/{cgroup,comm,cmdline,smaps,statm,stat,mountinfo,fdinfo/*} r,
 }
 ```
 
-The profile keeps its existing `hister` name and covers both executable names.
-It permits data under `~/.config/nogon` and `~/.config/hister`. Check your selected
-`app.directory`; if it is elsewhere, including under an XDG state or data directory,
+The profile covers both executable names and permits data under `~/.config/nogon`
+and `~/.config/hister`. Check your selected `app.directory`; if it is elsewhere,
+including under an XDG state or data directory,
 add a corresponding `rwlk` rule for that path.
 Browser history paths may also need adjustment depending on which profiles you use.
 

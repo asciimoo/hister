@@ -430,9 +430,12 @@ startup through Compose.
 
 The image keeps `HISTER_DATA_DIR=/hister/data` as its default so existing runtime
 overrides still apply. The executable is `/usr/local/bin/nogon`, with aliases at
-`/usr/local/bin/hister` and `/hister/hister`. Compose retains its service, container,
-and volume names. Registry addresses remain unchanged until replacement images
-are published.
+`/usr/local/bin/hister` and `/hister/hister`. The repository's `compose.yml` retains
+its service, container, and volume names. Documentation for new installations uses
+Nogon names; existing installations must keep their current storage identity.
+The Docker publishing workflows push the same images to `ghcr.io/asciimoo/nogon`
+and `ghcr.io/asciimoo/hister`. Branch builds use `master`; tagged releases publish
+version tags and `latest`, with corresponding `-root` and `-debug` variants.
 
 ## Nix and Service Compatibility Checks
 
@@ -564,7 +567,7 @@ in public mode. It cannot create the first administrator without authentication.
 ```http
 POST /api/users
 Authorization: Bearer <administrator-token>
-Origin: hister://
+Origin: nogon://
 Content-Type: application/json
 
 {"username":"alice","password":"example-password","is_admin":false}
@@ -586,10 +589,10 @@ to that account's URL, including any configured base path. The response does not
 include the password or access token. An administrator can explicitly retrieve
 the generated token with `GET /api/users/{id}/token`.
 
-Command line clients use `Origin: hister://` with their administrator token, as
-shown above. Browser session requests follow the existing CSRF checks. Requests
-from a different origin must supply the session's `X-CSRF-Token`, available from
-`GET /api/config`.
+New clients can use `Origin: nogon://` with their administrator token, as shown
+above. The CLI retains `Origin: hister://` for older servers. Browser session
+requests follow the existing CSRF checks. Requests from a different origin must
+supply the session's `X-CSRF-Token`, available from `GET /api/config`.
 
 Errors use the same JSON `code` and `error` fields as the account read endpoints:
 
@@ -616,7 +619,7 @@ Read the account first, then send its current `revision` with at least one chang
 ```http
 PATCH /api/users/2
 Authorization: Bearer <administrator-token>
-Origin: hister://
+Origin: nogon://
 Content-Type: application/json
 
 {"revision":1,"username":"alice-renamed","password":"replacement-password","is_admin":false,"regenerate_token":true}
@@ -674,7 +677,7 @@ can read another account's revision through `GET /api/users/{id}`.
 ```http
 POST /api/users/2/token
 Authorization: Bearer <current-user-token>
-Origin: hister://
+Origin: nogon://
 Content-Type: application/json
 
 {"revision":1}

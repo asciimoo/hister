@@ -1075,7 +1075,7 @@ server:
 
 ```yaml
 server:
-  database: 'host=localhost user=hister password=hister dbname=hister port=5432 sslmode=disable TimeZone=Europe/Budapest'
+  database: 'host=localhost user=nogon password=change-me dbname=nogon port=5432 sslmode=disable TimeZone=Europe/Budapest'
 ```
 
 Nogon uses the standard PostgreSQL DSN key=value format. Adjust `host`, `user`, `password`, `dbname`, `port`, `sslmode`, and `TimeZone` to match your setup.
@@ -1267,7 +1267,7 @@ app:
   access_token: 'your-secret-token-here'
 
 server:
-  base_url: https://hister.example.com
+  base_url: https://nogon.example.com
 ```
 
 With user handling, anonymous visitors can only see documents stored under user ID `0`. User-owned documents remain visible only to the matching authenticated user.
@@ -1301,7 +1301,7 @@ Once these protections are in place, set the header name in your Nogon configura
 ```yaml
 server:
   address: 127.0.0.1:4433
-  base_url: https://hister.example.com
+  base_url: https://nogon.example.com
   proxy_auth_header: 'Remote-User'
 ```
 
@@ -1338,7 +1338,7 @@ Each entry supports the following fields:
 
 ### GitHub Example
 
-Register an OAuth app at [github.com/settings/developers](https://github.com/settings/developers). Set the **Authorization callback URL** to `https://your-hister-instance/api/oauth/callback?provider=github`.
+Register an OAuth app at [github.com/settings/developers](https://github.com/settings/developers). Set the **Authorization callback URL** to `https://your-nogon-instance/api/oauth/callback?provider=github`.
 
 ```yaml
 server:
@@ -1352,7 +1352,7 @@ GitHub sign in identifies your account by its permanent account ID. A GitHub use
 
 ### Google Example
 
-Create OAuth credentials in the [Google Cloud Console](https://console.cloud.google.com/). Add `https://your-hister-instance/api/oauth/callback?provider=google` as an authorised redirect URI.
+Create OAuth credentials in the [Google Cloud Console](https://console.cloud.google.com/). Add `https://your-nogon-instance/api/oauth/callback?provider=google` as an authorised redirect URI.
 
 ```yaml
 server:
@@ -1364,11 +1364,14 @@ server:
 
 ### Generic OIDC Example
 
+Use the client ID and group names registered with your provider. Existing registrations
+do not need to be renamed.
+
 ```yaml
 server:
   oauth:
     oidc:
-      client_id: 'hister'
+      client_id: 'nogon'
       client_secret: 'your-client-secret'
       configuration_url: 'https://accounts.example.com/.well-known/openid-configuration'
 ```
@@ -1379,7 +1382,7 @@ If your provider does not publish a discovery document, set `auth_url`, `token_u
 server:
   oauth:
     oidc:
-      client_id: 'hister'
+      client_id: 'nogon'
       client_secret: 'your-client-secret'
       auth_url: 'https://accounts.example.com/oauth/authorize'
       token_url: 'https://accounts.example.com/oauth/token'
@@ -1394,7 +1397,7 @@ Set `identity_claim: 'sub'` to identify an OIDC account by its subject, so chang
 server:
   oauth:
     oidc:
-      client_id: 'hister'
+      client_id: 'nogon'
       client_secret: 'your-client-secret'
       configuration_url: 'https://accounts.example.com/.well-known/openid-configuration'
       identity_claim: 'sub'
@@ -1416,11 +1419,11 @@ Set `admin_groups` to manage administrator access through your identity provider
 server:
   oauth:
     oidc:
-      client_id: 'hister'
+      client_id: 'nogon'
       client_secret: 'your-client-secret'
       configuration_url: 'https://accounts.example.com/.well-known/openid-configuration'
       scopes: ['groups'] # Only if your provider requires this scope.
-      admin_groups: ['hister-admins']
+      admin_groups: ['nogon-admins']
       groups_claim: 'groups'
 ```
 
@@ -1432,7 +1435,7 @@ Nogon starts and reloads without a local recovery administrator, but logs a warn
 
 Group changes take effect at the next OIDC login, then apply to the user's existing sessions and API token. Nogon does not check group membership between logins. Omitting `admin_groups` or leaving it empty preserves manually managed roles. Local accounts and other OAuth providers are unaffected.
 
-Environment equivalents are `NOGON__SERVER__OAUTH__OIDC__ADMIN_GROUPS=hister-admins,operators` and `NOGON__SERVER__OAUTH__OIDC__GROUPS_CLAIM=groups`.
+Environment equivalents are `NOGON__SERVER__OAUTH__OIDC__ADMIN_GROUPS=nogon-admins,operators` and `NOGON__SERVER__OAUTH__OIDC__GROUPS_CLAIM=groups`.
 
 ### PKCE and Compatibility
 
@@ -1446,7 +1449,7 @@ For an older provider that rejects PKCE parameters, explicitly set `disable_pkce
 server:
   oauth:
     oidc:
-      client_id: 'hister'
+      client_id: 'nogon'
       client_secret: 'your-client-secret'
       configuration_url: 'https://accounts.example.com/.well-known/openid-configuration'
       disable_pkce: true
