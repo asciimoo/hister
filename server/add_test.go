@@ -29,7 +29,7 @@ func TestRemovedAddEndpoints(t *testing.T) {
 	previousFiles := staticTextFiles
 	staticTextFiles = map[string][]byte{"index.html": []byte("<html>app</html>")}
 	t.Cleanup(func() { staticTextFiles = previousFiles })
-	for _, prefix := range []string{"", "/hister"} {
+	for _, prefix := range []string{"", "/nogon"} {
 		t.Run("prefix="+prefix, func(t *testing.T) {
 			cfg := testutil.InitModel(t)
 			cfg.App.AccessToken = "secret"
@@ -42,7 +42,7 @@ func TestRemovedAddEndpoints(t *testing.T) {
 			headers := map[string]string{
 				"Authorization": "Bearer secret",
 				"Content-Type":  "application/json",
-				"Origin":        "hister://",
+				"Origin":        "nogon://",
 			}
 			for _, tc := range []struct {
 				method, path string

@@ -7,7 +7,7 @@
 let
   yamlFormat = pkgs.formats.yaml { };
   cfg = config.services.hister;
-  mkHisterEnv =
+  mkNogonEnv =
     cfg:
     lib.optionalAttrs (cfg.dataDir != null) {
       HISTER_DATA_DIR = cfg.dataDir;
@@ -110,6 +110,6 @@ in
         message = "Only one of services.hister.configPath and services.hister.settings can be set";
       }
     ];
-    _module.args.histerEnv = mkHisterEnv;
+    _module.args.nogonEnv = mkNogonEnv;
   };
 }

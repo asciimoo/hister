@@ -128,7 +128,7 @@ func TestZIMImportResolvesPageAndArticleURLs(t *testing.T) {
 		}
 	}
 	if _, ok := page.Find("#missing").Attr("href"); ok {
-		t.Error("unidentified archive link must not become a broken link into Hister")
+		t.Error("unidentified archive link must not become a broken link into Nogon")
 	}
 	for _, path := range []string{"missing.html", "ambiguous.html"} {
 		if !strings.Contains(warnings.String(), path) {
@@ -278,7 +278,7 @@ func TestZIMImportedHTMLPreservesPageURL(t *testing.T) {
 		t.Fatal(err)
 	}
 	if html.Find("base").Length() != 0 {
-		t.Error("archive base must not affect the Hister preview")
+		t.Error("archive base must not affect the Nogon preview")
 	}
 	if got := html.Find(`link[rel="canonical"]`).AttrOr("href", ""); got != "https://example.org/docs/chapters/intro" {
 		t.Errorf("saved canonical = %q", got)
@@ -314,9 +314,12 @@ func TestZIMImportLimitsAndErrors(t *testing.T) {
 func TestZIMLegacyArchive(t *testing.T) {
 	// Optional fixture from the upstream suite: data/withns/small.zim.
 	// https://github.com/openzim/zim-testing-suite
-	filename := os.Getenv("HISTER_ZIM_LEGACY_FIXTURE")
+	filename, set := os.LookupEnv("NOGON_ZIM_LEGACY_FIXTURE")
+	if !set {
+		filename = os.Getenv("HISTER_ZIM_LEGACY_FIXTURE")
+	}
 	if filename == "" {
-		t.Skip("set HISTER_ZIM_LEGACY_FIXTURE to the upstream withns/small.zim fixture")
+		t.Skip("set NOGON_ZIM_LEGACY_FIXTURE to the upstream withns/small.zim fixture")
 	}
 	command, _, _, received := zimTestCommand(t, "--base-url=https://example.org/")
 	if err := command.RunE(command, []string{filename}); err != nil {
@@ -347,7 +350,7 @@ func TestZIMImportSkipExistingAndSubmissionPolicy(t *testing.T) {
 	cfg.App.AccessToken = "destination-token"
 	base := http.DefaultTransport
 	http.DefaultTransport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
-		if r.Header.Get("X-Access-Token") != "destination-token" || r.Header.Get("X-Hister-Target-User-ID") != "42" {
+		if r.Header.Get("X-Access-Token") != "destination-token" || r.Header.Get("X-Nogon-Target-User-ID") != "42" {
 			t.Errorf("destination policy missing: %v", r.Header)
 		}
 		if r.URL.Path == "/api/document" {

@@ -338,6 +338,8 @@ function getCustomHeaders(data): CustomHeader[] {
 function getDocumentSubmissionHeaders(data): CustomHeader[] {
   const customHeaders = getCustomHeaders(data);
   if (data['submitPublicDocuments'] === true) {
+    customHeaders.push({ name: 'X-Nogon-Public', value: '1' });
+    // Keep submissions public when connected to an older server.
     customHeaders.push({ name: 'X-Hister-Public', value: '1' });
   }
   return customHeaders;

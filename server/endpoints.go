@@ -627,7 +627,7 @@ func serveSearch(c *webContext) {
 	// `?format=json` (or `Accept: application/json`) opts the caller into a
 	// pure JSON response and skips the same-host Origin check, so CLI tools
 	// and ad-hoc HTTP clients can hit the search endpoint without spoofing
-	// a hister:// Origin header.
+	// a nogon:// or legacy hister:// Origin header.
 	jsonFormat := c.Request.URL.Query().Get("format") == "json" ||
 		c.Request.Header.Get("Accept") == "application/json"
 	if !jsonFormat && !c.Config.IsSameHost(origin) {

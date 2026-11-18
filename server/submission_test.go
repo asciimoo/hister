@@ -172,13 +172,20 @@ func TestDocumentSubmissionOwnership(t *testing.T) {
 		owner   uint
 	}{
 		{name: "caller owns document", owner: 1},
-		{name: "nonadmin cannot target another user", headers: map[string]string{"X-Hister-Target-User-ID": "2"}, owner: 1},
-		{name: "admin targets another user", admin: true, headers: map[string]string{"X-Hister-Target-User-ID": "2"}, owner: 2},
-		{name: "admin targets shared documents", admin: true, headers: map[string]string{"X-Hister-Target-User-ID": "0"}},
-		{name: "invalid target keeps caller", admin: true, headers: map[string]string{"X-Hister-Target-User-ID": "invalid"}, owner: 1},
-		{name: "public submission", headers: map[string]string{"X-Hister-Public": "true"}},
-		{name: "public flag takes precedence", admin: true, headers: map[string]string{"X-Hister-Public": "true", "X-Hister-Target-User-ID": "2"}},
-		{name: "false public flag", headers: map[string]string{"X-Hister-Public": "false"}, owner: 1},
+		{name: "legacy target", admin: true, headers: map[string]string{"X-Hister-Target-User-ID": "2"}, owner: 2},
+		{name: "legacy public", headers: map[string]string{"X-Hister-Public": "true"}},
+		{name: "Nogon target wins", admin: true, headers: map[string]string{"X-Nogon-Target-User-ID": "3", "X-Hister-Target-User-ID": "2"}, owner: 3},
+		{name: "invalid Nogon target suppresses legacy", admin: true, headers: map[string]string{"X-Nogon-Target-User-ID": "invalid", "X-Hister-Target-User-ID": "2"}, owner: 1},
+		{name: "empty Nogon target suppresses legacy", admin: true, headers: map[string]string{"X-Nogon-Target-User-ID": "", "X-Hister-Target-User-ID": "2"}, owner: 1},
+		{name: "Nogon private wins", headers: map[string]string{"X-Nogon-Public": "false", "X-Hister-Public": "true"}, owner: 1},
+		{name: "empty Nogon public suppresses legacy", headers: map[string]string{"X-Nogon-Public": "", "X-Hister-Public": "true"}, owner: 1},
+		{name: "nonadmin cannot target another user", headers: map[string]string{"X-Nogon-Target-User-ID": "2"}, owner: 1},
+		{name: "admin targets another user", admin: true, headers: map[string]string{"X-Nogon-Target-User-ID": "2"}, owner: 2},
+		{name: "admin targets shared documents", admin: true, headers: map[string]string{"X-Nogon-Target-User-ID": "0"}},
+		{name: "invalid target keeps caller", admin: true, headers: map[string]string{"X-Nogon-Target-User-ID": "invalid"}, owner: 1},
+		{name: "public submission", headers: map[string]string{"X-Nogon-Public": "true"}},
+		{name: "public flag takes precedence", admin: true, headers: map[string]string{"X-Nogon-Public": "true", "X-Nogon-Target-User-ID": "2"}},
+		{name: "false public flag", headers: map[string]string{"X-Nogon-Public": "false"}, owner: 1},
 	}
 	for _, endpoint := range []string{"/api/add", "/api/batch"} {
 		for _, tt := range tests {
@@ -207,9 +214,9 @@ func TestDocumentSubmissionRejectsOwnURLs(t *testing.T) {
 	for _, endpoint := range []string{"/api/add", "/api/batch"} {
 		t.Run(endpoint, func(t *testing.T) {
 			cfg := testutil.Config(t)
-			cfg.Server.BaseURL = "http://127.0.0.1:4433/hister"
+			cfg.Server.BaseURL = "http://127.0.0.1:4433/nogon"
 			idx := newServerTestIndexer(t, cfg)
-			for _, rawURL := range []string{"http://127.0.0.1:4433", "http://localhost:4433/elsewhere", "hister://search"} {
+			for _, rawURL := range []string{"http://127.0.0.1:4433", "http://localhost:4433/elsewhere", "nogon://search", "hister://search"} {
 				d := document.Document{URL: rawURL, Text: "note", Processed: true}
 				d.SetIgnoreSkipRules(true)
 				result := submitTestDocuments(t, webContext{Config: cfg, Indexer: idx}, endpoint, nil, d)[0]
@@ -218,7 +225,7 @@ func TestDocumentSubmissionRejectsOwnURLs(t *testing.T) {
 				}
 			}
 			if idx.Total() != 0 {
-				t.Error("indexed a URL belonging to this Hister server")
+				t.Error("indexed a URL belonging to this Nogon server")
 			}
 		})
 	}

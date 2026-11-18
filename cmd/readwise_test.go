@@ -153,7 +153,7 @@ func TestImportReadwiseFiltersBeforeFetching(t *testing.T) {
 	var batches [][]*document.Document
 	var checked, fetched []string
 	batchTransport := raindropTestTransport(t, &batches)
-	target := client.New("http://hister.example", client.WithMaxBatchBodyBytes(40<<20), client.WithHTTPClient(&http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+	target := client.New("http://nogon.example", client.WithMaxBatchBodyBytes(40<<20), client.WithHTTPClient(&http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		if req.Method == http.MethodHead {
 			rawURL := req.URL.Query().Get("url")
 			checked = append(checked, rawURL)

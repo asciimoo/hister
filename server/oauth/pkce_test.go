@@ -36,7 +36,7 @@ func TestProviderPKCE(t *testing.T) {
 	// RFC 7636, Appendix B.
 	const verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
 	const challenge = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
-	const callback = "https://hister.example/api/oauth/callback"
+	const callback = "https://nogon.example/api/oauth/callback"
 	for name, create := range map[string]func(*http.Client) Provider{
 		"github": func(client *http.Client) Provider {
 			return GitHubOAuth{AuthURL: "https://provider.example/auth", TokenURL: "https://provider.example/token", Client: client}

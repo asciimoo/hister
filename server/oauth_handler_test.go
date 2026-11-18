@@ -24,7 +24,7 @@ import (
 func TestOAuthAdminGroupsSync(t *testing.T) {
 	cfg, handler := newOAuthTestServer(t)
 	entry := cfg.Server.OAuth["oidc"]
-	if err := yaml.Unmarshal([]byte("admin_groups: [hister-admins]\n"), entry); err != nil {
+	if err := yaml.Unmarshal([]byte("admin_groups: [nogon-admins]\n"), entry); err != nil {
 		t.Fatal(err)
 	}
 	var userInfo atomic.Value
@@ -46,10 +46,10 @@ func TestOAuthAdminGroupsSync(t *testing.T) {
 		revision uint64
 	}{
 		{`,"groups":["users"]`, false, 1},
-		{`,"groups":["users","hister-admins"]`, true, 2},
-		{`,"groups":["hister-admins"]`, true, 2},
+		{`,"groups":["users","nogon-admins"]`, true, 2},
+		{`,"groups":["nogon-admins"]`, true, 2},
 		{`,"groups":["users"]`, false, 3},
-		{`,"groups":["hister-admins"]`, true, 4},
+		{`,"groups":["nogon-admins"]`, true, 4},
 		{"", false, 5},
 	} {
 		userInfo.Store(`{"email":"alice@example.com"` + step.groups + `}`)
@@ -76,7 +76,7 @@ func TestOAuthAdminGroupsSync(t *testing.T) {
 		}
 		// Both existing browser sessions and API tokens must use the new role.
 		for _, existing := range cookies {
-			for _, path := range []string{"/hister/api/users", "/hister/api/settings"} {
+			for _, path := range []string{"/nogon/api/users", "/nogon/api/settings"} {
 				req := httptest.NewRequest(http.MethodGet, path, nil)
 				req.AddCookie(existing)
 				result := httptest.NewRecorder()
@@ -86,7 +86,7 @@ func TestOAuthAdminGroupsSync(t *testing.T) {
 				}
 			}
 		}
-		result := testutil.ServeHTTP(t, handler, http.MethodGet, "/hister/api/users", nil, map[string]string{"Authorization": "Bearer " + user.Token})
+		result := testutil.ServeHTTP(t, handler, http.MethodGet, "/nogon/api/users", nil, map[string]string{"Authorization": "Bearer " + user.Token})
 		if result.Code != wantStatus {
 			t.Fatalf("token admin access = %d, want %d", result.Code, wantStatus)
 		}
@@ -99,22 +99,22 @@ func TestOAuthAdminGroupClaims(t *testing.T) {
 		existingAdmin, admin   bool
 		invalid, discovery     bool
 	}{
-		{name: "new administrator", settings: "admin_groups: [operators, hister-admins]\n", claims: `,"groups":["hister-admins"]`, admin: true},
-		{name: "custom claim", settings: "admin_groups: [hister-admins]\ngroups_claim: roles\n", claims: `,"roles":["hister-admins"]`, admin: true},
-		{name: "discovery preserves mapping", settings: "admin_groups: [hister-admins]\ngroups_claim: roles\n", claims: `,"roles":["hister-admins"]`, admin: true, discovery: true},
-		{name: "discovery cannot grant access", settings: "admin_groups: [hister-admins]\ngroups_claim: roles\n", claims: `,"groups":["intruders"]`, discovery: true},
-		{name: "literal dotted claim", settings: "admin_groups: [hister-admins]\ngroups_claim: app.roles\n", claims: `,"app.roles":["hister-admins"],"app":{"roles":[]}`, admin: true},
-		{name: "URI claim", settings: "admin_groups: [hister-admins]\ngroups_claim: https://example.com/roles\n", claims: `,"https://example.com/roles":["hister-admins"]`, admin: true},
-		{name: "no fallback to groups", settings: "admin_groups: [hister-admins]\ngroups_claim: roles\n", claims: `,"groups":["hister-admins"]`, existingAdmin: true},
-		{name: "exact matching", settings: "admin_groups: [hister-admins]\n", claims: `,"groups":["HISTER-ADMINS","hister-admins-extra"," hister-admins","/hister-admins"]`, existingAdmin: true},
-		{name: "empty groups", settings: "admin_groups: [hister-admins]\n", claims: `,"groups":[]`, existingAdmin: true},
-		{name: "null groups", settings: "admin_groups: [hister-admins]\n", claims: `,"groups":null`, existingAdmin: true},
-		{name: "mapping disabled", claims: `,"groups":["hister-admins"]`},
+		{name: "new administrator", settings: "admin_groups: [operators, nogon-admins]\n", claims: `,"groups":["nogon-admins"]`, admin: true},
+		{name: "custom claim", settings: "admin_groups: [nogon-admins]\ngroups_claim: roles\n", claims: `,"roles":["nogon-admins"]`, admin: true},
+		{name: "discovery preserves mapping", settings: "admin_groups: [nogon-admins]\ngroups_claim: roles\n", claims: `,"roles":["nogon-admins"]`, admin: true, discovery: true},
+		{name: "discovery cannot grant access", settings: "admin_groups: [nogon-admins]\ngroups_claim: roles\n", claims: `,"groups":["intruders"]`, discovery: true},
+		{name: "literal dotted claim", settings: "admin_groups: [nogon-admins]\ngroups_claim: app.roles\n", claims: `,"app.roles":["nogon-admins"],"app":{"roles":[]}`, admin: true},
+		{name: "URI claim", settings: "admin_groups: [nogon-admins]\ngroups_claim: https://example.com/roles\n", claims: `,"https://example.com/roles":["nogon-admins"]`, admin: true},
+		{name: "no fallback to groups", settings: "admin_groups: [nogon-admins]\ngroups_claim: roles\n", claims: `,"groups":["nogon-admins"]`, existingAdmin: true},
+		{name: "exact matching", settings: "admin_groups: [nogon-admins]\n", claims: `,"groups":["NOGON-ADMINS","nogon-admins-extra"," nogon-admins","/nogon-admins"]`, existingAdmin: true},
+		{name: "empty groups", settings: "admin_groups: [nogon-admins]\n", claims: `,"groups":[]`, existingAdmin: true},
+		{name: "null groups", settings: "admin_groups: [nogon-admins]\n", claims: `,"groups":null`, existingAdmin: true},
+		{name: "mapping disabled", claims: `,"groups":["nogon-admins"]`},
 		{name: "preserve manual administrator", claims: `,"groups":123`, existingAdmin: true, admin: true},
-		{name: "string groups", settings: "admin_groups: [hister-admins]\n", claims: `,"groups":"hister-admins"`, invalid: true},
-		{name: "object groups", settings: "admin_groups: [hister-admins]\n", claims: `,"groups":{"hister-admins":true}`, invalid: true},
-		{name: "mixed groups", settings: "admin_groups: [hister-admins]\n", claims: `,"groups":["hister-admins",123]`, invalid: true},
-		{name: "null group member", settings: "admin_groups: [hister-admins]\n", claims: `,"groups":["hister-admins",null]`, invalid: true},
+		{name: "string groups", settings: "admin_groups: [nogon-admins]\n", claims: `,"groups":"nogon-admins"`, invalid: true},
+		{name: "object groups", settings: "admin_groups: [nogon-admins]\n", claims: `,"groups":{"nogon-admins":true}`, invalid: true},
+		{name: "mixed groups", settings: "admin_groups: [nogon-admins]\n", claims: `,"groups":["nogon-admins",123]`, invalid: true},
+		{name: "null group member", settings: "admin_groups: [nogon-admins]\n", claims: `,"groups":["nogon-admins",null]`, invalid: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			cfg, handler := newOAuthTestServer(t)
@@ -187,7 +187,7 @@ func newOAuthTestServer(t *testing.T) (*config.Config, http.Handler) {
 		"oidc":   {ClientID: "hister", ClientSecret: "secret", AuthURL: "https://provider.example/auth", TokenURL: "https://provider.example/token", UserInfoURL: "https://provider.example/userinfo"},
 		"google": {ClientID: "google-client", ClientSecret: "google-secret"},
 	}
-	if err := cfg.UpdateBaseURL("http://hister.example/hister"); err != nil {
+	if err := cfg.UpdateBaseURL("http://nogon.example/nogon"); err != nil {
 		t.Fatal(err)
 	}
 	previousStore := sessionStore
@@ -202,7 +202,7 @@ func startOAuthLogin(t *testing.T, handler http.Handler, cookie *http.Cookie, re
 	if len(returnTo) > 0 {
 		params.Set("return_to", returnTo[0])
 	}
-	req := httptest.NewRequest(http.MethodGet, "/hister/api/oauth?"+params.Encode(), nil)
+	req := httptest.NewRequest(http.MethodGet, "/nogon/api/oauth?"+params.Encode(), nil)
 	if cookie != nil {
 		req.AddCookie(cookie)
 	}
@@ -219,7 +219,7 @@ func startOAuthLogin(t *testing.T, handler http.Handler, cookie *http.Cookie, re
 }
 
 func oauthCallback(handler http.Handler, cookie *http.Cookie, query url.Values) *httptest.ResponseRecorder {
-	req := httptest.NewRequest(http.MethodGet, "/hister/api/oauth/callback?"+query.Encode(), nil)
+	req := httptest.NewRequest(http.MethodGet, "/nogon/api/oauth/callback?"+query.Encode(), nil)
 	if cookie != nil {
 		req.AddCookie(cookie)
 	}
@@ -263,23 +263,23 @@ func TestOAuthReturnDestination(t *testing.T) {
 	for _, tc := range []struct {
 		name, target, want string
 	}{
-		{"preview", "/hister/preview?id=https%3A%2F%2Fexample.com%2Farticle#saved-section", "/preview?id=https%3A%2F%2Fexample.com%2Farticle#saved-section"},
-		{"search", "/hister/?q=needle+label%3Aresearch#results", "/?q=needle+label%3Aresearch#results"},
-		{"rules", "/hister/rules#aliases", "/rules#aliases"},
-		{"settings", "/hister/settings#server", "/settings#server"},
+		{"preview", "/nogon/preview?id=https%3A%2F%2Fexample.com%2Farticle#saved-section", "/preview?id=https%3A%2F%2Fexample.com%2Farticle#saved-section"},
+		{"search", "/nogon/?q=needle+label%3Aresearch#results", "/?q=needle+label%3Aresearch#results"},
+		{"rules", "/nogon/rules#aliases", "/rules#aliases"},
+		{"settings", "/nogon/settings#server", "/settings#server"},
 		{"default", "", "/"},
 		{"external", "https://outside.example/", "/"},
 		{"scheme relative", "//outside.example/", "/"},
 		{"backslash", `/\outside.example/`, "/"},
 		{"outside base", "/preview", "/"},
-		{"base sibling", "/hister-other/preview", "/"},
-		{"traversal", "/hister/../preview", "/"},
-		{"encoded traversal", "/hister/%2e%2e/preview", "/"},
-		{"encoded separator", "/hister/%2f%2foutside.example", "/"},
-		{"auth loop", "/hister/auth?return_to=/hister/auth", "/"},
-		{"API endpoint", "/hister/api/oauth?provider=oidc", "/"},
-		{"invalid escape", "/hister/%xx", "/"},
-		{"control character", "/hister/preview\r\nLocation: https://outside.example/", "/"},
+		{"base sibling", "/nogon-other/preview", "/"},
+		{"traversal", "/nogon/../preview", "/"},
+		{"encoded traversal", "/nogon/%2e%2e/preview", "/"},
+		{"encoded separator", "/nogon/%2f%2foutside.example", "/"},
+		{"auth loop", "/nogon/auth?return_to=/nogon/auth", "/"},
+		{"API endpoint", "/nogon/api/oauth?provider=oidc", "/"},
+		{"invalid escape", "/nogon/%xx", "/"},
+		{"control character", "/nogon/preview\r\nLocation: https://outside.example/", "/"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			cfg, handler := newOAuthTestServer(t)
@@ -289,7 +289,7 @@ func TestOAuthReturnDestination(t *testing.T) {
 			if query.Has("return_to") {
 				t.Fatal("return destination was exposed to the OAuth provider")
 			}
-			callback := url.Values{"provider": {"oidc"}, "state": {query.Get("state")}, "code": {"code"}, "return_to": {"/hister/about"}}
+			callback := url.Values{"provider": {"oidc"}, "state": {query.Get("state")}, "code": {"code"}, "return_to": {"/nogon/about"}}
 			rec := oauthCallback(handler, cookie, callback)
 			if rec.Code != http.StatusFound || rec.Header().Get("Location") != cfg.BaseURL(tc.want) {
 				t.Fatalf("callback status = %d, location = %q, want %q; body = %s", rec.Code, rec.Header().Get("Location"), cfg.BaseURL(tc.want), rec.Body.String())
@@ -417,7 +417,7 @@ func TestOAuthPKCEFlow(t *testing.T) {
 					t.Fatalf("replayed callback status = %d", got)
 				}
 				profile := func() int {
-					req := httptest.NewRequest(http.MethodGet, "/hister/api/profile", nil)
+					req := httptest.NewRequest(http.MethodGet, "/nogon/api/profile", nil)
 					req.AddCookie(cookie)
 					rec := httptest.NewRecorder()
 					handler.ServeHTTP(rec, req)
@@ -464,7 +464,7 @@ func TestOAuthCallbackFailures(t *testing.T) {
 			t.Cleanup(provider.Close)
 			cfg.Server.OAuth["oidc"].TokenURL = provider.URL + "/token"
 			cfg.Server.OAuth["oidc"].UserInfoURL = provider.URL + "/userinfo"
-			cookie, query := startOAuthLogin(t, handler, nil, "/hister/preview?id=article")
+			cookie, query := startOAuthLogin(t, handler, nil, "/nogon/preview?id=article")
 			callback := url.Values{"provider": {"oidc"}, "state": {query.Get("state")}, "code": {"code"}}
 			wantStatus := http.StatusBadRequest
 			wantCalls := int32(0)
@@ -523,7 +523,7 @@ func TestOAuthCallbackFailures(t *testing.T) {
 
 func TestOAuthNewLoginReplacesPendingFlow(t *testing.T) {
 	_, handler := newOAuthTestServer(t)
-	cookie, first := startOAuthLogin(t, handler, nil, "/hister/preview?id=article")
+	cookie, first := startOAuthLogin(t, handler, nil, "/nogon/preview?id=article")
 	cookie, second := startOAuthLogin(t, handler, cookie)
 	if first.Get("state") == second.Get("state") || first.Get("code_challenge") == second.Get("code_challenge") {
 		t.Fatal("new login reused state or verifier")
@@ -535,7 +535,7 @@ func TestOAuthNewLoginReplacesPendingFlow(t *testing.T) {
 	if oauthSessionValues(t, cookie)[oauthStateKey] != second.Get("state") {
 		t.Fatal("invalid callback consumed the current flow")
 	}
-	if got := oauthSessionValues(t, cookie)[oauthReturnToKey]; got != "/hister/" {
+	if got := oauthSessionValues(t, cookie)[oauthReturnToKey]; got != "/nogon/" {
 		t.Fatalf("new login retained the previous return destination: %v", got)
 	}
 }

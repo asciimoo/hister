@@ -96,7 +96,7 @@ func writeExportFile(path string, c *client.Client, query client.SearchQuery) (c
 	if info != nil && !info.Mode().IsRegular() {
 		return 0, errors.New("export destination must be a regular file; use '-' to stream to stdout")
 	}
-	f, err := os.CreateTemp(filepath.Dir(path), ".hister-export-*")
+	f, err := os.CreateTemp(filepath.Dir(path), ".nogon-export-*")
 	if err != nil {
 		return 0, fmt.Errorf("create temporary export: %w", err)
 	}
@@ -524,17 +524,17 @@ func writeImportSummary(out io.Writer, format string, imported, skipped, errCoun
 	return w.Close()
 }
 
-func isHisterJSONExport(inputFile string) (bool, error) {
+func isNogonJSONExport(inputFile string) (bool, error) {
 	f, err := os.Open(inputFile)
 	if err != nil {
 		return false, err
 	}
 	defer func() { _ = f.Close() }()
 
-	return isHisterJSONExportReader(f), nil
+	return isNogonJSONExportReader(f), nil
 }
 
-func isHisterJSONExportReader(reader io.Reader) bool {
+func isNogonJSONExportReader(reader io.Reader) bool {
 	// Export documents already have a line size limit. Inspect at most one
 	// such document plus its opening array delimiter and newline.
 	decoder := json.NewDecoder(io.LimitReader(reader, maxJSONExportLineSize+2))

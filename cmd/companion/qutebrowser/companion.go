@@ -22,7 +22,7 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-const isolatedWorldName = "hister-companion"
+const isolatedWorldName = "nogon-companion"
 
 type companion struct {
 	options       normalizedOptions
@@ -138,7 +138,7 @@ func (c *companion) runConnection(ctx context.Context) error {
 	m := &monitor{
 		companion:   c,
 		client:      client,
-		bindingName: "__histerCompanionChanged_" + hex.EncodeToString(bindingSuffix),
+		bindingName: "__nogonCompanionChanged_" + hex.EncodeToString(bindingSuffix),
 		pages:       make(map[string]*pageState),
 		targets:     make(map[string]string),
 		extraction:  make(chan extractionDue, 256),
@@ -709,7 +709,7 @@ func (c *companion) extractAndSubmit(
 		result.ignored = true
 		return result
 	}
-	if c.isHisterPage(pageURL) {
+	if c.isNogonPage(pageURL) {
 		result.ignored = true
 		return result
 	}
@@ -741,11 +741,11 @@ func pageFingerprint(data pageData) string {
 	return hex.EncodeToString(hash.Sum(nil))
 }
 
-func (c *companion) isHisterPage(pageURL *url.URL) bool {
-	if !sameOrigin(pageURL, c.options.histerURL) {
+func (c *companion) isNogonPage(pageURL *url.URL) bool {
+	if !sameOrigin(pageURL, c.options.nogonURL) {
 		return false
 	}
-	basePath := strings.TrimSuffix(c.options.histerURL.EscapedPath(), "/")
+	basePath := strings.TrimSuffix(c.options.nogonURL.EscapedPath(), "/")
 	pagePath := pageURL.EscapedPath()
 	return pagePath == basePath || strings.HasPrefix(pagePath, basePath+"/")
 }

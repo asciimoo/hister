@@ -2,7 +2,7 @@
   config,
   lib,
   pkgs,
-  histerEnv,
+  nogonEnv,
   ...
 }:
 {
@@ -26,7 +26,7 @@
           WorkingDirectory = lib.mkIf (config.services.hister.dataDir != null) config.services.hister.dataDir;
 
           Environment = lib.mapAttrsToList (name: value: "${name}=${value}") (
-            histerEnv config.services.hister
+            nogonEnv config.services.hister
           );
 
           EnvironmentFile = lib.mkIf (
@@ -57,7 +57,7 @@
           ProcessType = "Background";
           WorkingDirectory = lib.mkIf (config.services.hister.dataDir != null) config.services.hister.dataDir;
 
-          EnvironmentVariables = histerEnv config.services.hister;
+          EnvironmentVariables = nogonEnv config.services.hister;
         };
       };
     };

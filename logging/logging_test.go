@@ -50,7 +50,7 @@ func TestClearLogFileReturnsToStderr(t *testing.T) {
 	var stderr bytes.Buffer
 	m := testManager(t, &stderr)
 	logger := zerolog.New(m)
-	path := filepath.Join(t.TempDir(), "hister.log")
+	path := filepath.Join(t.TempDir(), "nogon.log")
 	applyLogging(t, m, config.App{LogFile: path, LogFormat: "json", LogLevel: "info"})
 	logger.Info().Msg("file-message")
 	applyLogging(t, m, config.App{LogFormat: "text", LogLevel: "info"})

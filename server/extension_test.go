@@ -191,3 +191,35 @@ func TestExtensionCSRFAllowsSafariHistoryAndProfile(t *testing.T) {
 		t.Fatalf("GET /api/profile ACAO = %q, want %q", got, origin)
 	}
 }
+
+func TestCommandLineOriginCompatibility(t *testing.T) {
+	_, handler := newTokenTestServer(t, false)
+	for _, origin := range []string{"nogon://", "hister://"} {
+		for _, token := range []string{"secret", "incorrect"} {
+			t.Run(origin+token, func(t *testing.T) {
+				response := testutil.ServeHTTP(t, handler, http.MethodPost, "/api/add", strings.NewReader(`{"url":"https://example.com/cli","title":"CLI page","text":"A page submitted from the CLI."}`), map[string]string{
+					"Content-Type": "application/json", "Origin": origin, "X-Access-Token": token,
+				})
+				want := http.StatusCreated
+				if token != "secret" {
+					want = http.StatusForbidden
+				}
+				if response.Code != want {
+					t.Fatalf("status = %d, want %d; body=%s", response.Code, want, response.Body)
+				}
+			})
+		}
+	}
+}
+
+func TestExtensionCORSAllowsNogonAndLegacyHeaders(t *testing.T) {
+	_, handler := newTokenTestServer(t, false)
+	response := testutil.ServeHTTP(t, handler, http.MethodOptions, "/api/add", nil, map[string]string{
+		"Origin": chromeExtensionOrigin, "Access-Control-Request-Method": "POST",
+	})
+	for _, name := range []string{"X-Nogon-Public", "X-Hister-Public"} {
+		if !strings.Contains(response.Header().Get("Access-Control-Allow-Headers"), name) {
+			t.Errorf("CORS does not allow %s", name)
+		}
+	}
+}

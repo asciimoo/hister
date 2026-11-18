@@ -123,7 +123,7 @@ func closeBody(resp *http.Response, errp *error) {
 	}
 }
 
-// builds an http.Request with Origin: hister:// set for CSRF bypass.
+// newRequest retains the legacy CLI origin so requests also work with older servers.
 func (c *Client) newRequest(method, path string, body io.Reader) (*http.Request, error) {
 	req, err := http.NewRequest(method, c.baseURL+path, body)
 	if err != nil {
@@ -138,6 +138,8 @@ func (c *Client) newRequest(method, path string, body io.Reader) (*http.Request,
 	}
 	if c.targetUserID != nil {
 		req.Header.Set(targetUserIDHeader, strconv.FormatUint(uint64(*c.targetUserID), 10))
+		// Older servers only recognize the compatibility header.
+		req.Header.Set("X-Hister-Target-User-ID", req.Header.Get(targetUserIDHeader))
 	}
 	return req, nil
 }

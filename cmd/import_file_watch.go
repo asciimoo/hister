@@ -171,7 +171,7 @@ func (i *fileImporter) importWatchedFile(ctx context.Context, input importFileIn
 	if err != nil {
 		return false, err
 	}
-	if ext == ".json" && isHisterJSONExportReader(bytes.NewReader(content)) {
+	if ext == ".json" && isNogonJSONExportReader(bytes.NewReader(content)) {
 		log.Warn().Str("file", input.Path).Msg("Watch mode skips Nogon exports")
 		return true, nil
 	}

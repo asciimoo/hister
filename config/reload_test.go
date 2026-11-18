@@ -338,7 +338,7 @@ func TestManagedConfigurationSourcesAndReset(t *testing.T) {
 	const web = "app:\n  title: Web title\n"
 	var running *Config
 	for _, tc := range []struct{ main, web, title, source string }{
-		{"app:\n  title: Hister\n", web, "Hister", "file"},
+		{"app:\n  title: Nogon\n", web, "Nogon", "file"},
 		{"# no authoritative title\n", web, "Web title", "web"},
 		{"# no authoritative title\n", "{}\n", "Nogon", "default"},
 	} {

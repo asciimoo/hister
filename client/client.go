@@ -17,7 +17,7 @@ import (
 // targetUserIDHeader is sent by admin CLI callers to request a specific user_id
 // for indexed documents. The server only honours it for admin users in
 // multiuser mode.
-const targetUserIDHeader = "X-Hister-Target-User-ID"
+const targetUserIDHeader = "X-Nogon-Target-User-ID"
 
 type Client struct {
 	baseURL        string

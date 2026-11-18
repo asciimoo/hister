@@ -40,9 +40,9 @@ func TestBrowserWebSocketURLKeepsConfiguredHost(t *testing.T) {
 	}
 }
 
-func TestHisterPageDetectionRespectsBasePath(t *testing.T) {
+func TestNogonPageDetectionRespectsBasePath(t *testing.T) {
 	input := DefaultOptions()
-	input.HisterURL = "https://example.com/hister/"
+	input.NogonURL = "https://example.com/nogon/"
 	opts, err := normalizeOptions(input)
 	if err != nil {
 		t.Fatal(err)
@@ -52,14 +52,14 @@ func TestHisterPageDetectionRespectsBasePath(t *testing.T) {
 		rawURL string
 		want   bool
 	}{
-		{"https://example.com/hister/", true},
-		{"https://example.com/hister/history", true},
-		{"https://example.com/hister-other", false},
-		{"https://other.example/hister/", false},
+		{"https://example.com/nogon/", true},
+		{"https://example.com/nogon/history", true},
+		{"https://example.com/nogon-other", false},
+		{"https://other.example/nogon/", false},
 	}
 	for _, test := range tests {
-		if got := app.isHisterPage(mustURL(t, test.rawURL)); got != test.want {
-			t.Errorf("isHisterPage(%q) = %t, want %t", test.rawURL, got, test.want)
+		if got := app.isNogonPage(mustURL(t, test.rawURL)); got != test.want {
+			t.Errorf("isNogonPage(%q) = %t, want %t", test.rawURL, got, test.want)
 		}
 	}
 }
@@ -86,7 +86,7 @@ func TestSameOriginUsesEffectivePorts(t *testing.T) {
 	}
 }
 
-func TestSubmitBuildsHisterDocument(t *testing.T) {
+func TestSubmitBuildsNogonDocument(t *testing.T) {
 	opts, err := normalizeOptions(DefaultOptions())
 	if err != nil {
 		t.Fatal(err)

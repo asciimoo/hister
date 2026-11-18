@@ -738,7 +738,7 @@ func Test_build_metadata_alternation(t *testing.T) {
 
 // Test for issue #274: field:(a|b) alternation syntax
 func Test_build_domain_alternation(t *testing.T) {
-	bq := buildBoolQ(t, "domain:(hister.org|docs.hister.org)")
+	bq := buildBoolQ(t, "domain:(nogon.eu|docs.nogon.eu)")
 	clauses := mustClauses(t, bq)
 	if len(clauses) != 1 {
 		t.Fatalf("expected 1 must clause, got %d", len(clauses))
@@ -748,15 +748,15 @@ func Test_build_domain_alternation(t *testing.T) {
 		t.Fatalf("expected 2 disjuncts, got %d", len(dq.Disjuncts))
 	}
 	tq0 := asTerm(t, dq.Disjuncts[0])
-	if tq0.Term != "hister.org" {
-		t.Fatalf("expected term %q, got %q", "hister.org", tq0.Term)
+	if tq0.Term != "nogon.eu" {
+		t.Fatalf("expected term %q, got %q", "nogon.eu", tq0.Term)
 	}
 	if tq0.FieldVal != "domain" {
 		t.Fatalf("expected field %q, got %q", "domain", tq0.FieldVal)
 	}
 	tq1 := asTerm(t, dq.Disjuncts[1])
-	if tq1.Term != "docs.hister.org" {
-		t.Fatalf("expected term %q, got %q", "docs.hister.org", tq1.Term)
+	if tq1.Term != "docs.nogon.eu" {
+		t.Fatalf("expected term %q, got %q", "docs.nogon.eu", tq1.Term)
 	}
 	if tq1.FieldVal != "domain" {
 		t.Fatalf("expected field %q, got %q", "domain", tq1.FieldVal)
@@ -764,7 +764,7 @@ func Test_build_domain_alternation(t *testing.T) {
 }
 
 func Test_build_domain_alternation_with_wildcard(t *testing.T) {
-	bq := buildBoolQ(t, "domain:(hister.org|*.hister.org)")
+	bq := buildBoolQ(t, "domain:(nogon.eu|*.nogon.eu)")
 	clauses := mustClauses(t, bq)
 	if len(clauses) != 1 {
 		t.Fatalf("expected 1 must clause, got %d", len(clauses))
@@ -775,13 +775,13 @@ func Test_build_domain_alternation_with_wildcard(t *testing.T) {
 	}
 	// First part has no wildcard: TermQuery
 	tq := asTerm(t, dq.Disjuncts[0])
-	if tq.Term != "hister.org" {
-		t.Fatalf("expected term %q, got %q", "hister.org", tq.Term)
+	if tq.Term != "nogon.eu" {
+		t.Fatalf("expected term %q, got %q", "nogon.eu", tq.Term)
 	}
 	// Second part has wildcard: WildcardQuery
 	wq := asWildcard(t, dq.Disjuncts[1])
-	if wq.Wildcard != "*.hister.org" {
-		t.Fatalf("expected wildcard %q, got %q", "*.hister.org", wq.Wildcard)
+	if wq.Wildcard != "*.nogon.eu" {
+		t.Fatalf("expected wildcard %q, got %q", "*.nogon.eu", wq.Wildcard)
 	}
 	if wq.FieldVal != "domain" {
 		t.Fatalf("expected field %q, got %q", "domain", wq.FieldVal)
@@ -790,14 +790,14 @@ func Test_build_domain_alternation_with_wildcard(t *testing.T) {
 
 func Test_build_domain_alternation_single_part(t *testing.T) {
 	// A single-part group should be equivalent to a plain domain query.
-	bq := buildBoolQ(t, "domain:(hister.org)")
+	bq := buildBoolQ(t, "domain:(nogon.eu)")
 	clauses := mustClauses(t, bq)
 	if len(clauses) != 1 {
 		t.Fatalf("expected 1 must clause, got %d", len(clauses))
 	}
 	tq := asTerm(t, clauses[0])
-	if tq.Term != "hister.org" {
-		t.Fatalf("expected term %q, got %q", "hister.org", tq.Term)
+	if tq.Term != "nogon.eu" {
+		t.Fatalf("expected term %q, got %q", "nogon.eu", tq.Term)
 	}
 	if tq.FieldVal != "domain" {
 		t.Fatalf("expected field %q, got %q", "domain", tq.FieldVal)

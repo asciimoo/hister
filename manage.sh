@@ -61,8 +61,8 @@ run_unit_tests() {
 }
 
 run_extractor_tests() {
-    HISTER_LIVE_CASE="${HISTER_LIVE_CASE:-$1}" \
-    HISTER_LIVE_ARTIFACT_DIR="${HISTER_LIVE_ARTIFACT_DIR:-/tmp/hister-live-extractors}" \
+    NOGON_LIVE_CASE="${NOGON_LIVE_CASE-${HISTER_LIVE_CASE:-$1}}" \
+    NOGON_LIVE_ARTIFACT_DIR="${NOGON_LIVE_ARTIFACT_DIR-${HISTER_LIVE_ARTIFACT_DIR:-/tmp/nogon-live-extractors}}" \
     go test -count=1 -tags=live -run '^TestLiveExtractors$' -v ./server/extractor
 }
 

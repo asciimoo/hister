@@ -155,7 +155,7 @@ func TestBidiProxyCapability(t *testing.T) {
 }
 
 func TestRobotsCacheUsesConfiguredProxy(t *testing.T) {
-	cache, err := NewRobotsCacheWithProxy("Hister", "socks5://proxy.example:1080")
+	cache, err := NewRobotsCacheWithProxy("Nogon", "socks5://proxy.example:1080")
 	if err != nil {
 		t.Fatal(err)
 	}

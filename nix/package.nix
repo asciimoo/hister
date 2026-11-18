@@ -8,7 +8,7 @@
   yt-dlp,
   makeBinaryWrapper,
   pkg-config,
-  histerRev ? "unknown",
+  nogonRev ? "unknown",
 }:
 let
   version = (builtins.fromJSON (builtins.readFile ../webui/app/package.json)).version;
@@ -71,7 +71,7 @@ buildGoModule (finalAttrs: {
     "-s"
     "-w"
     "-X main.version=${finalAttrs.version}"
-    "-X main.commit=${histerRev}"
+    "-X main.commit=${nogonRev}"
   ];
 
   subPackages = [ "." ];

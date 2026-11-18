@@ -1540,7 +1540,7 @@ func TestDraftFieldStatesAndRestrictions(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HISTER_DATA_DIR", dir)
 	filename := filepath.Join(dir, "config.yml")
-	const main = "app:\n  title: Hister\n  access_token: private-credential\n  search_url: https://search.example/?q={query}&lang=en\n"
+	const main = "app:\n  title: Nogon\n  access_token: private-credential\n  search_url: https://search.example/?q={query}&lang=en\n"
 	if err := os.WriteFile(filename, []byte(main), 0o600); err != nil {
 		t.Fatal(err)
 	}

@@ -114,10 +114,10 @@ func TestOAuthEndpointURLs(t *testing.T) {
 }
 
 func TestOAuthAdminGroupConfig(t *testing.T) {
-	const raw = "server:\n  oauth:\n    oidc:\n      client_id: hister\n      client_secret: secret\n      configuration_url: https://provider.example/discovery\n      admin_groups: [hister-admins, operators]\n      groups_claim: roles\n"
+	const raw = "server:\n  oauth:\n    oidc:\n      client_id: nogon\n      client_secret: secret\n      configuration_url: https://provider.example/discovery\n      admin_groups: [nogon-admins, operators]\n      groups_claim: roles\n"
 	for _, environment := range []bool{false, true} {
 		t.Run(map[bool]string{false: "YAML", true: "environment"}[environment], func(t *testing.T) {
-			wantGroups, wantClaim := []string{"hister-admins", "operators"}, "roles"
+			wantGroups, wantClaim := []string{"nogon-admins", "operators"}, "roles"
 			if environment {
 				t.Setenv("HISTER__SERVER__OAUTH__OIDC__ADMIN_GROUPS", "admins,staff")
 				t.Setenv("HISTER__SERVER__OAUTH__OIDC__GROUPS_CLAIM", "app.roles")
@@ -158,8 +158,8 @@ func TestValidateOAuthAdminGroups(t *testing.T) {
 	}{
 		{},
 		{settings: "admin_groups: []"},
-		{settings: "admin_groups: [hister-admins, 'Hister Admins']"},
-		{settings: "admin_groups: [hister-admins]\ngroups_claim: roles"},
+		{settings: "admin_groups: [nogon-admins, 'Nogon Admins']"},
+		{settings: "admin_groups: [nogon-admins]\ngroups_claim: roles"},
 		{settings: "groups_claim: https://example.com/roles"},
 		{settings: "admin_groups: ['']", wantErr: "admin_groups"},
 		{settings: "admin_groups: ['   ']", wantErr: "admin_groups"},
@@ -195,7 +195,7 @@ func TestValidateOAuthAdminGroups(t *testing.T) {
 }
 
 func TestOAuthPKCEConfig(t *testing.T) {
-	const raw = "server:\n  oauth:\n    oidc:\n      client_id: hister\n      client_secret: secret\n      configuration_url: https://provider.example/discovery\n"
+	const raw = "server:\n  oauth:\n    oidc:\n      client_id: nogon\n      client_secret: secret\n      configuration_url: https://provider.example/discovery\n"
 	for _, setting := range []string{"", "      disable_pkce: false\n", "      disable_pkce: true\n"} {
 		cfg, err := parseConfig([]byte(raw + setting))
 		if err != nil {
@@ -230,7 +230,7 @@ func TestOAuthPKCEConfig(t *testing.T) {
 }
 
 func TestOAuthIdentityClaimConfig(t *testing.T) {
-	const raw = "server:\n  oauth:\n    oidc:\n      client_id: hister\n      client_secret: secret\n      configuration_url: https://provider.example/discovery\n"
+	const raw = "server:\n  oauth:\n    oidc:\n      client_id: nogon\n      client_secret: secret\n      configuration_url: https://provider.example/discovery\n"
 	for _, claim := range []string{"", "email", "sub", "https://example.com/subject"} {
 		t.Run(claim, func(t *testing.T) {
 			cfg, err := parseConfig([]byte(raw + "      identity_claim: '" + claim + "'\n"))

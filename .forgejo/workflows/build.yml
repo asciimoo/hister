@@ -4,7 +4,7 @@ on:
   pull_request:
 
 jobs:
-  hister:
+  nogon:
     name: Nogon binary build
     runs-on: codeberg-tiny
     steps:

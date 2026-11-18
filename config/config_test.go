@@ -754,7 +754,7 @@ func TestConfigurationSourcesPreserveExplicitValues(t *testing.T) {
 	t.Setenv("HISTER_DATA_DIR", dir)
 	filename := filepath.Join(dir, "config.yml")
 	const raw = `app:
-  title: Hister
+  title: Nogon
   subtitle: ''
   show_suggestions: false
 crawler:
@@ -788,7 +788,7 @@ extractors:
 			t.Errorf("omitted %s source = %+v, want unlocked defaults", path, source)
 		}
 	}
-	if c.App.Title != "Hister" || c.App.Subtitle != "" || c.App.ShowSuggestions || c.Crawler.Delay != 0 || len(c.Crawler.Headers) != 0 || len(c.Indexer.Languages) != 0 {
+	if c.App.Title != "Nogon" || c.App.Subtitle != "" || c.App.ShowSuggestions || c.Crawler.Delay != 0 || len(c.Crawler.Headers) != 0 || len(c.Indexer.Languages) != 0 {
 		t.Fatal("source tracking changed explicit values")
 	}
 	entries, err := os.ReadDir(dir)
@@ -956,7 +956,7 @@ func TestLoadRequiresRequestedFile(t *testing.T) {
 func TestConfigurationSourcesIgnoreEmptyContainers(t *testing.T) {
 	t.Setenv("HISTER_DATA_DIR", t.TempDir())
 	for _, raw := range []string{
-		"# app:\n#   title: Hister\n",
+		"# app:\n#   title: Nogon\n",
 		"{}\n",
 		"app: {}\nserver:\n  oauth:\n    github: {}\nextractors:\n  ytdlp:\n    options: {}\n",
 	} {
@@ -1110,7 +1110,7 @@ func TestListenAddressOverridesPrecedeValidation(t *testing.T) {
 			t.Setenv("HISTER_DATA_DIR", filepath.Join(dir, "data"))
 			t.Setenv("HISTER_PORT", tc.port)
 			filename := filepath.Join(dir, "config.yml")
-			raw := fmt.Sprintf("server:\n  address: %q\n  base_url: https://hister.example\n", tc.address)
+			raw := fmt.Sprintf("server:\n  address: %q\n  base_url: https://nogon.example\n", tc.address)
 			if err := os.WriteFile(filename, []byte(raw), 0o600); err != nil {
 				t.Fatal(err)
 			}

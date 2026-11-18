@@ -89,7 +89,7 @@ In particular, some, like [Caddy] or [Traefik], have built-in support for automa
    ```yaml
    server:
      address: 127.0.0.1:4433
-     base_url: https://hister.example.com
+     base_url: https://nogon.example.com
    ```
 2. (Re)start the Nogon server to apply the change.
 3. Set up your favourite reverse proxy. Here are some examples:
@@ -107,7 +107,7 @@ app:
 
 server:
   address: 127.0.0.1:4433
-  base_url: https://hister.example.com
+  base_url: https://nogon.example.com
 ```
 
 You can also start a configured authenticated server with:
@@ -125,7 +125,7 @@ Only index content intended for public access. Local files, stored previews, and
 In your `Caddyfile`:
 
 ```
-hister.example.com {
+nogon.example.com {
     reverse_proxy localhost:4433
 }
 ```
@@ -133,7 +133,7 @@ hister.example.com {
 Alternatively, if running Caddy solely for Nogon:
 
 ```bash
-caddy reverse-proxy --from hister.example.com --to localhost:4433
+caddy reverse-proxy --from nogon.example.com --to localhost:4433
 ```
 
 ### Nginx
@@ -150,7 +150,7 @@ This example uses HTTP/2. To enable HTTP/3, follow the optional setup below.
 # https://letsencrypt.org/docs/client-options/
 
 server {
-	server_name hister.example.com;
+	server_name nogon.example.com;
 	listen 443 ssl; listen [::]:443 ssl;
 	http2 on;
 
@@ -174,7 +174,7 @@ server {
 
 		# Configuration necessary for the /search endpoint.
 		proxy_set_header   Upgrade    $http_upgrade;
-		proxy_set_header   Connection $hister_connection; # This variable is defined in a `map` below.
+		proxy_set_header   Connection $nogon_connection; # This variable is defined in a `map` below.
 		proxy_read_timeout 86400;
 
 		# Some pages are larger than the default of 1 MiB, causing `413` errors.
@@ -184,14 +184,14 @@ server {
 }
 # Optionally: add an extra `server` block to redirect HTTP to HTTPS.
 server {
-	server_name hister.example.com;
+	server_name nogon.example.com;
 	listen 80;
 	listen [::]:80;
 	# Redirect HTTP to HTTPS.
 	return 301 https://$host$request_uri;
 }
 # This is used to upgrade WebSocket connections on the `/search` endpoint.
-map $uri $hister_connection {
+map $uri $nogon_connection {
 	/search upgrade;
 	default close;
 }
@@ -226,7 +226,7 @@ http3 on;
 add_header Alt-Svc 'h3=":443"; ma=300' always;
 ```
 
-Keep `Alt-Svc` inside each site configured for HTTP/3, rather than setting it globally. Other sites can remain on HTTP/2. Use the short five minute advertisement while validating the setup, then increase `ma` if desired. Run `nginx -t` before reloading Nginx and check that each hostname reaches its intended site. With an HTTP/3 capable curl build, test Nogon using `curl --http3-only https://hister.example.com/`.
+Keep `Alt-Svc` inside each site configured for HTTP/3, rather than setting it globally. Other sites can remain on HTTP/2. Use the short five minute advertisement while validating the setup, then increase `ma` if desired. Run `nginx -t` before reloading Nginx and check that each hostname reaches its intended site. With an HTTP/3 capable curl build, test Nogon using `curl --http3-only https://nogon.example.com/`.
 
 To disable HTTP/3, remove Nogon's QUIC listeners and `http3 on` directive, and temporarily replace its `Alt-Svc` advertisement with `add_header Alt-Svc 'clear' always;`. This clears previously cached advertisements when clients receive the response; removing the old header alone does not clear them immediately.
 
@@ -237,16 +237,16 @@ On systems with Unix socket support, Nogon can serve HTTP through a filesystem s
 ```yaml
 server:
   address: unix:/run/hister/hister.sock
-  base_url: https://hister.example.com
+  base_url: https://nogon.example.com
 ```
 
 The equivalent command line options are:
 
 ```bash
-nogon listen --address unix:/run/hister/hister.sock --server-url https://hister.example.com
+nogon listen --address unix:/run/hister/hister.sock --server-url https://nogon.example.com
 ```
 
-You can also set `NOGON__SERVER__ADDRESS=unix:/run/hister/hister.sock` and `NOGON__SERVER__BASE_URL=https://hister.example.com`. `NOGON_PORT` and legacy `HISTER_PORT` are ignored for Unix socket addresses.
+You can also set `NOGON__SERVER__ADDRESS=unix:/run/hister/hister.sock` and `NOGON__SERVER__BASE_URL=https://nogon.example.com`. `NOGON_PORT` and legacy `HISTER_PORT` are ignored for Unix socket addresses.
 
 An explicit `base_url` is required because a socket path cannot provide the public HTTP URL. Browsers, the extension, and Nogon CLI clients connect through the reverse proxy at that URL.
 
@@ -255,7 +255,7 @@ Create the parent directory before starting Nogon. Its owner must be able to cre
 For [Caddy](https://caddyserver.com/docs/caddyfile/directives/reverse_proxy#upstream-addresses), use the socket as the upstream:
 
 ```text
-hister.example.com {
+nogon.example.com {
     reverse_proxy unix//run/hister/hister.sock
 }
 ```

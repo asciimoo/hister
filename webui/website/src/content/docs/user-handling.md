@@ -109,7 +109,7 @@ Unicode character may occupy multiple bytes.
 nogon user create USERNAME [--admin] [--offline]
 
 # Create an account on a remote server
-nogon --server-url https://hister.example --token YOUR_ADMIN_TOKEN user create alice
+nogon --server-url https://nogon.example --token YOUR_ADMIN_TOKEN user create alice
 ```
 
 | Flag        | Description                                                                         |
@@ -143,7 +143,7 @@ If the user owns indexed documents, the command refuses to continue unless `--pu
 nogon user delete USERNAME [--purge]
 
 # Delete an account and its indexed documents on a remote server
-nogon --server-url https://hister.example --token YOUR_ADMIN_TOKEN user delete alice --purge
+nogon --server-url https://nogon.example --token YOUR_ADMIN_TOKEN user delete alice --purge
 ```
 
 | Flag      | Description                                                      |
@@ -160,10 +160,10 @@ Display information about a user account on the configured running server. The s
 nogon user show USERNAME [--show-token]
 
 # Inspect a user on a remote server
-nogon --server-url https://hister.example --token YOUR_ADMIN_TOKEN user show alice
+nogon --server-url https://nogon.example --token YOUR_ADMIN_TOKEN user show alice
 
 # Also retrieve the user's existing access token
-nogon --server-url https://hister.example --token YOUR_ADMIN_TOKEN user show alice --show-token
+nogon --server-url https://nogon.example --token YOUR_ADMIN_TOKEN user show alice --show-token
 ```
 
 | Flag           | Description                                                         |
@@ -199,7 +199,7 @@ change must be requested.
 nogon user update USERNAME [--username NEW] [--password] [--regen-token] [--toggle-admin]
 
 # Rename an account and change its password together on a remote server
-nogon --server-url https://hister.example --token YOUR_ADMIN_TOKEN user update alice --username alice-new --password
+nogon --server-url https://nogon.example --token YOUR_ADMIN_TOKEN user update alice --username alice-new --password
 ```
 
 | Flag             | Description                                                        |

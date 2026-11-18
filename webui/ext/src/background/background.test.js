@@ -20,6 +20,7 @@ const script = bundle.output.find((entry) => entry.type === 'chunk').code;
 
 function browser({
   rules = {},
+  submitPublicDocuments = false,
   contentScript = true,
   indexingEnabled = true,
   sourceURL = 'https://example.com/visited?tracking=true',
@@ -30,6 +31,7 @@ function browser({
 } = {}) {
   const canonicalURL = 'https://example.com/clean';
   const documents = [];
+  const submissionHeaders = [];
   const lookups = [];
   const pdfDocuments = [];
   const pageMessages = [];
@@ -47,14 +49,15 @@ function browser({
   let onHeadersReceived;
   let onStorageChanged;
   const storage = {
-    histerURL: 'https://hister.example/',
+    histerURL: 'https://nogon.example/',
+    submitPublicDocuments,
     showIndexedBadge: true,
     indexingEnabled,
   };
   const action = (_, callback) => callback?.();
   const runtime = {
     onMessage: { addListener: (fn) => (onMessage = fn) },
-    getURL: (path) => `chrome-extension://hister/${path}`,
+    getURL: (path) => `chrome-extension://nogon/${path}`,
   };
   const flush = () => new Promise((resolve) => setImmediate(resolve));
   vm.runInNewContext(script, {
@@ -169,6 +172,7 @@ function browser({
       if (parsed.pathname === '/api/rules') return Response.json(rules);
       if (parsed.pathname === '/api/add') {
         documents.push(JSON.parse(options.body));
+        submissionHeaders.push(options.headers);
         return new Response('', { status: 201 });
       }
       if (parsed.pathname === '/api/add_pdf') {
@@ -191,6 +195,7 @@ function browser({
     sourceURL,
     canonicalURL,
     documents,
+    submissionHeaders,
     lookups,
     pdfDocuments,
     pageMessages,
@@ -575,4 +580,16 @@ test('manual PDF detection works without session storage and tab close clears st
   await reused.indexCurrent();
   assert.equal(reused.pageMessages.length, 1);
   assert.equal(reused.pdfDocuments.length, 0);
+});
+
+test('public submissions send Nogon and legacy headers for both server versions', async () => {
+  for (const submitPublicDocuments of [false, true]) {
+    const b = browser({ submitPublicDocuments });
+    const response = await b.submit();
+    assert.equal(response.status_code, 201);
+    const headers = new Headers(b.submissionHeaders[0]);
+    for (const name of ['X-Nogon-Public', 'X-Hister-Public']) {
+      assert.equal(headers.get(name), submitPublicDocuments ? '1' : null);
+    }
+  }
 });

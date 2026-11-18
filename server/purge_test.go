@@ -45,7 +45,7 @@ func TestPurgeVersionsPreviewsAndPreservesCurrentDocuments(t *testing.T) {
 		dryRun := attempt.dryRun
 		body := fmt.Sprintf(`{"versions":true,"before":%q,"dry_run":%t}`, attempt.before, dryRun)
 		rec := testutil.ServeHTTP(t, handler, http.MethodPost, "/api/purge", strings.NewReader(body), map[string]string{
-			"Authorization": "Bearer secret", "Content-Type": "application/json", "Origin": "hister://",
+			"Authorization": "Bearer secret", "Content-Type": "application/json", "Origin": "nogon://",
 		})
 		if rec.Code != http.StatusOK {
 			t.Fatalf("purge dry=%t status=%d: %s", dryRun, rec.Code, rec.Body)
@@ -118,7 +118,7 @@ func TestPurgeHistoryPreservesPinnedRecentAndSharedRecords(t *testing.T) {
 	for _, dryRun := range []bool{true, false} {
 		body := fmt.Sprintf(`{"versions":true,"history":true,"before":"2026-01-01T00:00:00Z","dry_run":%t}`, dryRun)
 		rec := testutil.ServeHTTP(t, handler, http.MethodPost, "/api/purge", strings.NewReader(body), map[string]string{
-			"Authorization": "Bearer secret", "Content-Type": "application/json", "Origin": "hister://",
+			"Authorization": "Bearer secret", "Content-Type": "application/json", "Origin": "nogon://",
 		})
 		if rec.Code != http.StatusOK {
 			t.Fatalf("purge status=%d: %s", rec.Code, rec.Body)
@@ -191,7 +191,7 @@ func TestPurgeCrawlJobsPreservesResumableWork(t *testing.T) {
 	for _, dryRun := range []bool{true, false} {
 		body := fmt.Sprintf(`{"crawl_jobs":true,"before":"2026-01-01T00:00:00Z","dry_run":%t}`, dryRun)
 		rec := testutil.ServeHTTP(t, handler, http.MethodPost, "/api/purge", strings.NewReader(body), map[string]string{
-			"Authorization": "Bearer secret", "Content-Type": "application/json", "Origin": "hister://",
+			"Authorization": "Bearer secret", "Content-Type": "application/json", "Origin": "nogon://",
 		})
 		if rec.Code != http.StatusOK {
 			t.Fatalf("purge status=%d: %s", rec.Code, rec.Body)
@@ -234,17 +234,17 @@ func TestPurgeRequiresAdminAndCSRF(t *testing.T) {
 		token, origin string
 		want          int
 	}{
-		{"", "hister://", http.StatusForbidden},
-		{alice.Token, "hister://", http.StatusForbidden},
+		{"", "nogon://", http.StatusForbidden},
+		{alice.Token, "nogon://", http.StatusForbidden},
 		{admin.Token, "https://other.example", http.StatusForbidden},
-		{admin.Token, "hister://", http.StatusOK},
+		{admin.Token, "nogon://", http.StatusOK},
 	} {
 		rec := testutil.ServeHTTP(t, handler, http.MethodPost, "/api/purge", strings.NewReader(body), map[string]string{"Authorization": "Bearer " + tc.token, "Origin": tc.origin})
 		if rec.Code != tc.want {
 			t.Fatalf("purge authorization status=%d, want %d: %s", rec.Code, tc.want, rec.Body)
 		}
 	}
-	login := testutil.ServeHTTP(t, handler, http.MethodPost, "/api/login", strings.NewReader(`{"username":"admin","password":"password123"}`), map[string]string{"Origin": "hister://"})
+	login := testutil.ServeHTTP(t, handler, http.MethodPost, "/api/login", strings.NewReader(`{"username":"admin","password":"password123"}`), map[string]string{"Origin": "nogon://"})
 	cookie := responseSessionCookie(t, login)
 	for _, csrf := range []bool{false, true} {
 		req := httptest.NewRequest(http.MethodPost, "/api/purge", strings.NewReader(body))
@@ -279,7 +279,7 @@ func TestPurgeRejectsInvalidRequests(t *testing.T) {
 		`{"versions":true,"before":"2026-01-01T00:00:00Z","unknown":true}`,
 		`{"versions":true,"before":"2026-01-01T00:00:00Z"} {}`,
 	} {
-		rec := testutil.ServeHTTP(t, handler, http.MethodPost, "/api/purge", strings.NewReader(body), map[string]string{"Authorization": "Bearer secret", "Origin": "hister://"})
+		rec := testutil.ServeHTTP(t, handler, http.MethodPost, "/api/purge", strings.NewReader(body), map[string]string{"Authorization": "Bearer secret", "Origin": "nogon://"})
 		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("purge %s status=%d, want 400: %s", body, rec.Code, rec.Body)
 		}
@@ -287,7 +287,7 @@ func TestPurgeRejectsInvalidRequests(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/purge", strings.NewReader(strings.Repeat(" ", int(maxRequestBodyBytes)+1)+`{}`))
 	req.ContentLength = -1
 	req.Header.Set("Authorization", "Bearer secret")
-	req.Header.Set("Origin", "hister://")
+	req.Header.Set("Origin", "nogon://")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusRequestEntityTooLarge {
@@ -312,7 +312,7 @@ func TestPurgeRollsBackEveryCategoryOnDatabaseFailure(t *testing.T) {
 	if err := model.DB.Exec("CREATE TRIGGER reject_purge BEFORE DELETE ON histories BEGIN SELECT RAISE(ABORT, 'purge test failure'); END").Error; err != nil {
 		t.Fatal(err)
 	}
-	rec := testutil.ServeHTTP(t, handler, http.MethodPost, "/api/purge", strings.NewReader(`{"versions":true,"history":true,"before":"2026-01-01T00:00:00Z"}`), map[string]string{"Authorization": "Bearer secret", "Origin": "hister://"})
+	rec := testutil.ServeHTTP(t, handler, http.MethodPost, "/api/purge", strings.NewReader(`{"versions":true,"history":true,"before":"2026-01-01T00:00:00Z"}`), map[string]string{"Authorization": "Bearer secret", "Origin": "nogon://"})
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("purge failure status=%d: %s", rec.Code, rec.Body)
 	}

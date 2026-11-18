@@ -62,13 +62,13 @@ func TestRequestFormatsAndHeaders(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			body := &trackedResponseBody{Reader: strings.NewReader(`{"htmlRemoved":3,"id":7,"username":"alice","deleted_documents":2}`)}
 			calls := 0
-			c := New("http://hister.test/prefix/", WithAccessToken("secret"), WithUserAgent("Nogon/test"), WithTargetUserID(7), WithHTTPClient(&http.Client{
+			c := New("http://nogon.test/prefix/", WithAccessToken("secret"), WithUserAgent("Nogon/test"), WithTargetUserID(7), WithHTTPClient(&http.Client{
 				Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 					calls++
 					if r.Method != tt.method || r.URL.RequestURI() != "/prefix"+tt.path {
 						t.Errorf("request = %s %s", r.Method, r.URL)
 					}
-					for key, want := range map[string]string{"Content-Type": tt.contentType, "Origin": "hister://", "X-Access-Token": "secret", "User-Agent": "Nogon/test", "X-Hister-Target-User-ID": "7"} {
+					for key, want := range map[string]string{"Content-Type": tt.contentType, "Origin": "hister://", "X-Access-Token": "secret", "User-Agent": "Nogon/test", "X-Nogon-Target-User-ID": "7", "X-Hister-Target-User-ID": "7"} {
 						if got := r.Header.Get(key); got != want {
 							t.Errorf("header %s = %q, want %q", key, got, want)
 						}
@@ -115,17 +115,17 @@ func TestRequestRedirectOrigins(t *testing.T) {
 		anonymous     bool
 		blocked       bool
 	}{
-		{name: "relative", baseURL: "https://hister.test", locations: []string{"/redirected"}},
-		{name: "same origin", baseURL: "https://hister.test", locations: []string{"https://HISTER.test/redirected"}},
-		{name: "default HTTPS port", baseURL: "https://hister.test", locations: []string{"https://hister.test:443/redirected"}},
-		{name: "default HTTP port", baseURL: "http://hister.test:80", locations: []string{"http://hister.test/redirected"}},
-		{name: "different host", baseURL: "https://hister.test", locations: []string{"https://other.test/redirected"}, blocked: true},
-		{name: "subdomain", baseURL: "https://hister.test", locations: []string{"https://other.hister.test/redirected"}, blocked: true},
-		{name: "different port", baseURL: "https://hister.test", locations: []string{"https://hister.test:8443/redirected"}, blocked: true},
-		{name: "HTTPS downgrade", baseURL: "https://hister.test", locations: []string{"http://hister.test/redirected"}, blocked: true},
-		{name: "HTTP upgrade", baseURL: "http://hister.test", locations: []string{"https://hister.test/redirected"}, blocked: true},
-		{name: "later origin change", baseURL: "https://hister.test", locations: []string{"/redirected", "https://other.test/final"}, blocked: true},
-		{name: "anonymous", baseURL: "https://hister.test", locations: []string{"https://other.test/redirected"}, anonymous: true},
+		{name: "relative", baseURL: "https://nogon.test", locations: []string{"/redirected"}},
+		{name: "same origin", baseURL: "https://nogon.test", locations: []string{"https://NOGON.test/redirected"}},
+		{name: "default HTTPS port", baseURL: "https://nogon.test", locations: []string{"https://nogon.test:443/redirected"}},
+		{name: "default HTTP port", baseURL: "http://nogon.test:80", locations: []string{"http://nogon.test/redirected"}},
+		{name: "different host", baseURL: "https://nogon.test", locations: []string{"https://other.test/redirected"}, blocked: true},
+		{name: "subdomain", baseURL: "https://nogon.test", locations: []string{"https://other.nogon.test/redirected"}, blocked: true},
+		{name: "different port", baseURL: "https://nogon.test", locations: []string{"https://nogon.test:8443/redirected"}, blocked: true},
+		{name: "HTTPS downgrade", baseURL: "https://nogon.test", locations: []string{"http://nogon.test/redirected"}, blocked: true},
+		{name: "HTTP upgrade", baseURL: "http://nogon.test", locations: []string{"https://nogon.test/redirected"}, blocked: true},
+		{name: "later origin change", baseURL: "https://nogon.test", locations: []string{"/redirected", "https://other.test/final"}, blocked: true},
+		{name: "anonymous", baseURL: "https://nogon.test", locations: []string{"https://other.test/redirected"}, anonymous: true},
 	} {
 		for _, method := range []string{http.MethodGet, http.MethodPost} {
 			t.Run(tt.name+"/"+method, func(t *testing.T) {
@@ -210,7 +210,7 @@ func TestRequestRedirectPolicy(t *testing.T) {
 					return response, nil
 				}),
 			}
-			c := New("https://hister.test", WithAccessToken("secret"), WithHTTPClient(hc))
+			c := New("https://nogon.test", WithAccessToken("secret"), WithHTTPClient(hc))
 			_, err := c.Search(&SearchQuery{})
 			if tt.wantErr != nil {
 				if !errors.Is(err, tt.wantErr) {
@@ -230,7 +230,7 @@ func TestRequestRedirectPolicy(t *testing.T) {
 			// unrelated anonymous requests.
 			if tt.location == "https://other.test/redirected" {
 				calls = 0
-				response, err := hc.Get("https://hister.test/search")
+				response, err := hc.Get("https://nogon.test/search")
 				if err != nil {
 					t.Fatalf("original HTTP client's redirect policy changed: %v", err)
 				}
@@ -264,7 +264,7 @@ func TestRequestResponseErrorsAndCleanup(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			body := &trackedResponseBody{Reader: strings.NewReader(tt.body), closeErr: tt.closeErr}
-			c := New("http://hister.test", WithHTTPClient(&http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			c := New("http://nogon.test", WithHTTPClient(&http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 				return &http.Response{StatusCode: tt.status, Body: body}, nil
 			})}))
 			preview, err := c.FetchPreview("https://example.com")
@@ -317,7 +317,7 @@ func TestRequestCancellation(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			cancel()
-			c := New("http://hister.test", WithHTTPClient(&http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			c := New("http://nogon.test", WithHTTPClient(&http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 				if r.Context().Err() == nil {
 					return nil, errors.New("request lost caller cancellation")
 				}
@@ -349,7 +349,7 @@ func TestGetUserResponse(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			body := &trackedResponseBody{Reader: strings.NewReader(tc.response)}
-			c := New("https://hister.test/prefix", WithAccessToken("admin-token"), WithHTTPClient(&http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			c := New("https://nogon.test/prefix", WithAccessToken("admin-token"), WithHTTPClient(&http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 				if req.Method != http.MethodGet || req.URL.Path != "/prefix/api/users" || req.URL.Query().Get("username") != username || req.URL.Query().Get("limit") != "1" || len(req.URL.Query()) != 2 {
 					t.Errorf("request = %s %s", req.Method, req.URL)
 				}
@@ -392,7 +392,7 @@ func TestCreateUserResponse(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			body := &trackedResponseBody{Reader: strings.NewReader(tc.response)}
 			calls := 0
-			c := New("https://hister.test/prefix", WithAccessToken("admin-token"), WithHTTPClient(&http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			c := New("https://nogon.test/prefix", WithAccessToken("admin-token"), WithHTTPClient(&http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 				calls++
 				if req.Method != http.MethodPost || req.URL.Path != "/prefix/api/users" || req.URL.RawQuery != "" || req.Header.Get("X-Access-Token") != "admin-token" || req.Header.Get("Origin") != "hister://" || req.Header.Get("Content-Type") != "application/json" {
 					t.Errorf("unexpected creation request: %s %s", req.Method, req.URL)
@@ -426,7 +426,7 @@ func TestCreateUserDoesNotRedirectPassword(t *testing.T) {
 		t.Run(http.StatusText(status), func(t *testing.T) {
 			calls := 0
 			// Passwords need protection even when no administrator token was supplied.
-			c := New("https://hister.test", WithHTTPClient(&http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			c := New("https://nogon.test", WithHTTPClient(&http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 				calls++
 				if calls == 1 {
 					return &http.Response{StatusCode: status, Header: http.Header{"Location": {"https://other.test/api/users"}}, Body: io.NopCloser(strings.NewReader(""))}, nil
@@ -455,7 +455,7 @@ func TestGetUserTokenResponse(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			body := &trackedResponseBody{Reader: strings.NewReader(tc.response)}
-			c := New("https://hister.test/prefix", WithAccessToken("admin-token"), WithHTTPClient(&http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			c := New("https://nogon.test/prefix", WithAccessToken("admin-token"), WithHTTPClient(&http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 				if req.Method != http.MethodGet || req.URL.Path != "/prefix/api/users/7/token" || req.URL.RawQuery != "" || req.Header.Get("X-Access-Token") != "admin-token" {
 					t.Errorf("unexpected token request: %s %s", req.Method, req.URL)
 				}
@@ -476,7 +476,7 @@ func TestDocumentExistsResponseHandling(t *testing.T) {
 	for _, status := range []int{http.StatusOK, http.StatusNoContent, http.StatusNotFound, http.StatusForbidden} {
 		t.Run(http.StatusText(status), func(t *testing.T) {
 			body := &trackedResponseBody{Reader: strings.NewReader("")}
-			c := New("http://hister.test", WithHTTPClient(&http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			c := New("http://nogon.test", WithHTTPClient(&http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 				if r.Method != http.MethodHead || r.URL.Query().Get("url") != "https://example.com/?a=1&b=2" {
 					t.Errorf("request = %s %s", r.Method, r.URL)
 				}
@@ -498,7 +498,7 @@ func TestSearchRequestAndResponse(t *testing.T) {
 	for _, response := range []string{`{"total":2}`, `null`, `{"total":2}invalid`} {
 		t.Run(response, func(t *testing.T) {
 			body := &trackedResponseBody{Reader: strings.NewReader(response)}
-			c := New("http://hister.test", WithHTTPClient(&http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			c := New("http://nogon.test", WithHTTPClient(&http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 				var got SearchQuery
 				if err := json.Unmarshal([]byte(r.URL.Query().Get("query")), &got); err != nil {
 					t.Fatal(err)
@@ -533,7 +533,7 @@ func TestSearchRequestAndResponse(t *testing.T) {
 func TestBatchRequestSplittingPreservesResults(t *testing.T) {
 	var sizes []int
 	var bodies []*trackedResponseBody
-	c := New("http://hister.test", WithMaxBatchBodyBytes(1<<20), WithAllowSensitive(), WithIgnoreRules(), WithHTTPClient(&http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+	c := New("http://nogon.test", WithMaxBatchBodyBytes(1<<20), WithAllowSensitive(), WithIgnoreRules(), WithHTTPClient(&http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		var request struct {
 			Ops []addDocumentOperation `json:"ops"`
 		}
@@ -589,7 +589,7 @@ func TestBatchCapabilityDiscovery(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			body := &trackedResponseBody{Reader: strings.NewReader(tt.body), closeErr: errors.New("close failed")}
 			calls := 0
-			c := New("http://hister.test", WithHTTPClient(&http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			c := New("http://nogon.test", WithHTTPClient(&http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 				calls++
 				return &http.Response{StatusCode: tt.status, Body: body}, nil
 			})}))
@@ -608,7 +608,7 @@ func TestBatchCapabilityDiscovery(t *testing.T) {
 func TestRequestEncodingAndTransportErrors(t *testing.T) {
 	transportErr := errors.New("transport unavailable")
 	calls := 0
-	c := New("http://hister.test", WithHTTPClient(&http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+	c := New("http://nogon.test", WithHTTPClient(&http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		calls++
 		return nil, transportErr
 	})}))
@@ -640,7 +640,7 @@ func TestBatchRequestResponseValidation(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			body := &trackedResponseBody{Reader: strings.NewReader(tt.response), closeErr: errors.New("close failed")}
 			calls := 0
-			c := New("http://hister.test", WithMaxBatchBodyBytes(1<<20), WithHTTPClient(&http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			c := New("http://nogon.test", WithMaxBatchBodyBytes(1<<20), WithHTTPClient(&http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 				calls++
 				return &http.Response{StatusCode: tt.status, Body: body}, nil
 			})}))
@@ -684,7 +684,7 @@ func TestDeleteUserResponse(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			body := &trackedResponseBody{Reader: strings.NewReader(tc.response)}
 			calls := 0
-			c := New("https://hister.test/prefix", WithAccessToken("admin-token"), WithHTTPClient(&http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			c := New("https://nogon.test/prefix", WithAccessToken("admin-token"), WithHTTPClient(&http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 				calls++
 				query := ""
 				if tc.purge {
@@ -720,7 +720,7 @@ func TestDeleteUserResponse(t *testing.T) {
 }
 
 func TestDeleteUserRequiresID(t *testing.T) {
-	c := New("https://hister.test", WithHTTPClient(&http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+	c := New("https://nogon.test", WithHTTPClient(&http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 		t.Error("invalid user ID contacted the server")
 		return nil, errors.New("unexpected request")
 	})}))
@@ -752,7 +752,7 @@ func TestUpdateUserResponse(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			body := &trackedResponseBody{Reader: strings.NewReader(tc.response)}
 			calls := 0
-			c := New("https://hister.test/prefix", WithAccessToken("admin-token"), WithHTTPClient(&http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			c := New("https://nogon.test/prefix", WithAccessToken("admin-token"), WithHTTPClient(&http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 				calls++
 				if req.Method != http.MethodPatch || req.URL.Path != "/prefix/api/users/7" || req.URL.RawQuery != "" || req.Header.Get("X-Access-Token") != "admin-token" || req.Header.Get("Origin") != "hister://" || req.Header.Get("Content-Type") != "application/json" {
 					t.Errorf("unexpected update: %s %s", req.Method, req.URL)
@@ -792,7 +792,7 @@ func TestUpdateUserPartialRequest(t *testing.T) {
 		`{"id":7,"username":"renamed","is_admin":false,"revision":5}`,
 		`{"id":7,"username":"renamed","is_admin":false,"revision":5,"token":"unexpected-secret"}`,
 	} {
-		c := New("https://hister.test", WithHTTPClient(&http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		c := New("https://nogon.test", WithHTTPClient(&http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 			var payload map[string]any
 			if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
 				t.Fatal(err)
@@ -813,7 +813,7 @@ func TestUpdateUserDoesNotRedirectPassword(t *testing.T) {
 	for _, status := range []int{http.StatusTemporaryRedirect, http.StatusPermanentRedirect} {
 		t.Run(http.StatusText(status), func(t *testing.T) {
 			calls := 0
-			c := New("https://hister.test", WithHTTPClient(&http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			c := New("https://nogon.test", WithHTTPClient(&http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 				calls++
 				return &http.Response{StatusCode: status, Header: http.Header{"Location": {"https://other.test/api/users/7"}}, Body: io.NopCloser(strings.NewReader(""))}, nil
 			})}))
@@ -830,7 +830,7 @@ func TestUpdateUserRequiresIDAndRevision(t *testing.T) {
 		id       uint
 		revision uint64
 	}{{0, 1}, {7, 0}, {7, 9223372036854775807}, {7, 18446744073709551615}} {
-		c := New("https://hister.test", WithHTTPClient(&http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		c := New("https://nogon.test", WithHTTPClient(&http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 			t.Error("invalid update identifiers contacted the server")
 			return nil, errors.New("unexpected request")
 		})}))

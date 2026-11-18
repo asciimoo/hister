@@ -303,7 +303,7 @@ func TestRenderedTweetBodyOverridesSemanticShortLinks(t *testing.T) {
 			<meta content="Read https://t.co/PHxDYjim09 - https://t.co/o2eq7M3JBw" itemprop="articleBody">
 			<div itemprop="author"><meta content="Searx_engine" itemprop="alternateName"><meta content="Searx_engine" itemprop="name"></div>
 			<div dir="auto" class="font-chirp">
-				<span>Read </span><a href="https://github.com/asciimoo/hister">github.com/asciimoo/hister</a><span> - </span><a href="https://hister.org/">hister.org</a>
+				<span>Read </span><a href="https://github.com/asciimoo/nogon">github.com/asciimoo/nogon</a><span> - </span><a href="https://nogon.eu/">nogon.eu</a>
 			</div>
 		</article>`,
 	}
@@ -318,12 +318,12 @@ func TestRenderedTweetBodyOverridesSemanticShortLinks(t *testing.T) {
 
 	tweet := d.ExtraDocuments[0]
 	if strings.Contains(tweet.Text, "t.co") ||
-		!strings.Contains(tweet.Text, "github.com/asciimoo/hister") ||
-		!strings.Contains(tweet.Text, "hister.org") {
+		!strings.Contains(tweet.Text, "github.com/asciimoo/nogon") ||
+		!strings.Contains(tweet.Text, "nogon.eu") {
 		t.Fatalf("tweet text does not use the rendered links: %q", tweet.Text)
 	}
-	if !strings.Contains(tweet.HTML, `href="https://github.com/asciimoo/hister"`) ||
-		!strings.Contains(tweet.HTML, `href="https://hister.org/"`) ||
+	if !strings.Contains(tweet.HTML, `href="https://github.com/asciimoo/nogon"`) ||
+		!strings.Contains(tweet.HTML, `href="https://nogon.eu/"`) ||
 		strings.Contains(tweet.HTML, "t.co") {
 		t.Fatalf("tweet HTML does not use the rendered links: %s", tweet.HTML)
 	}

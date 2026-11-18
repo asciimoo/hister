@@ -65,7 +65,7 @@ func TestReloadCommandHelp(t *testing.T) {
 }
 
 func TestListenConfigOverridesPreservedForReload(t *testing.T) {
-	for name, value := range map[string]string{"log-level": "debug", "search-url": "https://search.example/?q={query}", "server-url": "https://hister.example/base", "token": "startup-token", "address": "127.0.0.1:5544", "public": "true"} {
+	for name, value := range map[string]string{"log-level": "debug", "search-url": "https://search.example/?q={query}", "server-url": "https://nogon.example/base", "token": "startup-token", "address": "127.0.0.1:5544", "public": "true"} {
 		flags := rootCmd.PersistentFlags()
 		if name == "address" || name == "public" {
 			flags = listenCmd.Flags()
@@ -96,7 +96,7 @@ func TestListenConfigOverridesPreservedForReload(t *testing.T) {
 	if err := c.Validate(); err != nil {
 		t.Fatal(err)
 	}
-	if c.App.AccessToken != "startup-token" || !c.App.Public || c.App.LogLevel != "debug" || c.App.SearchURL != "https://search.example/?q={query}" || c.Server.Address != "127.0.0.1:5544" || c.BaseURL("") != "https://hister.example/base" {
+	if c.App.AccessToken != "startup-token" || !c.App.Public || c.App.LogLevel != "debug" || c.App.SearchURL != "https://search.example/?q={query}" || c.Server.Address != "127.0.0.1:5544" || c.BaseURL("") != "https://nogon.example/base" {
 		t.Fatalf("startup overrides not preserved: %+v", c)
 	}
 }

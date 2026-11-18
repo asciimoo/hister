@@ -21,7 +21,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const configPathAnnotation = "hister_config_path"
+const configPathAnnotation = "nogon_config_path"
 
 func bindConfigFlag(flags *pflag.FlagSet, name, path string) {
 	flag := flags.Lookup(name)

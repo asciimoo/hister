@@ -352,10 +352,20 @@ func canConfigure(c *webContext) bool {
 	return canWrite(c)
 }
 
+// documentHeader prefers the Nogon spelling, including an explicitly empty
+// value, so a legacy header cannot override the caller's ownership choice.
+func documentHeader(r *http.Request, suffix string) string {
+	name := "X-Nogon-" + suffix
+	if _, present := r.Header[http.CanonicalHeaderKey(name)]; present {
+		return r.Header.Get(name)
+	}
+	return r.Header.Get("X-Hister-" + suffix)
+}
+
 func targetUserID(c *webContext) uint {
 	uid := c.UserID
 	if c.Config.App.UserHandling && c.IsAdmin {
-		if h := c.Request.Header.Get("X-Hister-Target-User-ID"); h != "" {
+		if h := documentHeader(c.Request, "Target-User-ID"); h != "" {
 			if parsed, err := strconv.ParseUint(h, 10, 64); err == nil {
 				uid = uint(parsed)
 			}
@@ -368,7 +378,7 @@ func publicDocumentRequested(c *webContext) bool {
 	if c.UserID == 0 {
 		return false
 	}
-	h := strings.TrimSpace(c.Request.Header.Get("X-Hister-Public"))
+	h := strings.TrimSpace(documentHeader(c.Request, "Public"))
 	if h == "" || h == "0" || strings.EqualFold(h, "false") || strings.EqualFold(h, "no") {
 		return false
 	}
@@ -385,7 +395,7 @@ func submittedDocumentUserID(c *webContext) uint {
 func withCSRF(handler endpointHandler) endpointHandler {
 	return func(c *webContext) {
 		// Allow requests coming from the command line
-		if c.Request.Header.Get("Origin") == "hister://" {
+		if origin := c.Request.Header.Get("Origin"); origin == "nogon://" || origin == "hister://" {
 			handler(c)
 			return
 		}

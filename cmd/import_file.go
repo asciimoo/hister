@@ -85,7 +85,7 @@ func (i *fileImporter) importFile(ctx context.Context, input importFileInput, op
 	case ".7z":
 		return importJSONFile(i.client, input.Path, opts.SkipExisting, opts.StartDate, opts.EndDate, opts.BatchSize, opts.Label)
 	case ".json":
-		isExport, err := isHisterJSONExport(input.Path)
+		isExport, err := isNogonJSONExport(input.Path)
 		if err != nil {
 			log.Warn().Err(err).Str("file", input.Path).Msg("Failed to inspect JSON file")
 			return 0, 0, 1

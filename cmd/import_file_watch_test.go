@@ -34,7 +34,7 @@ func TestImportWatchedPDFUsesClientParser(t *testing.T) {
 		t.Fatal(err)
 	}
 	var received document.Document
-	c := client.New("http://hister.test", client.WithHTTPClient(&http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+	c := client.New("http://nogon.test", client.WithHTTPClient(&http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		if err := json.NewDecoder(r.Body).Decode(&received); err != nil {
 			return nil, err
 		}
@@ -72,8 +72,8 @@ func TestWatchImportFilesUpdatesExistingAndNewSnapshots(t *testing.T) {
 	}
 	checked := make(chan string, 8)
 	submitted := make(chan document.Document, 8)
-	c := client.New("http://hister.test", client.WithTargetUserID(42), client.WithAllowSensitive(), client.WithHTTPClient(&http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
-		if got := r.Header.Get("X-Hister-Target-User-ID"); got != "42" {
+	c := client.New("http://nogon.test", client.WithTargetUserID(42), client.WithAllowSensitive(), client.WithHTTPClient(&http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		if got := r.Header.Get("X-Nogon-Target-User-ID"); got != "42" {
 			t.Errorf("owner header = %q", got)
 		}
 		if r.Method == http.MethodHead {
@@ -149,7 +149,7 @@ func TestWatchImportFilesRetriesAndCancelsRequests(t *testing.T) {
 			}
 			requests := make(chan int, 8)
 			var attempts atomic.Int32
-			c := client.New("http://hister.test", client.WithHTTPClient(&http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			c := client.New("http://nogon.test", client.WithHTTPClient(&http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 				n := int(attempts.Add(1))
 				requests <- n
 				if mode == "cancel" {
@@ -214,7 +214,7 @@ func TestImportWatchedFileFormatsAndLimits(t *testing.T) {
 				t.Fatal(err)
 			}
 			requests := 0
-			c := client.New("http://hister.test", client.WithHTTPClient(&http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			c := client.New("http://nogon.test", client.WithHTTPClient(&http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 				requests++
 				var d document.Document
 				if err := json.NewDecoder(r.Body).Decode(&d); err != nil {

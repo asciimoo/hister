@@ -28,7 +28,7 @@ func TestProviderRegistry(t *testing.T) {
 				if !ok || provider == nil {
 					t.Fatalf("registered provider %q cannot be constructed", name)
 				}
-				u, err := url.Parse(provider.GetRedirectURL(NewRedirectURIRequest("client", "https://hister.example/callback", "state", nil)))
+				u, err := url.Parse(provider.GetRedirectURL(NewRedirectURIRequest("client", "https://nogon.example/callback", "state", nil)))
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -122,7 +122,7 @@ func TestRedirectURLScopes(t *testing.T) {
 
 			redirectURL := test.provider.GetRedirectURL(NewRedirectURIRequest(
 				"client-id",
-				"https://hister.example/api/oauth/callback",
+				"https://nogon.example/api/oauth/callback",
 				"state-token",
 				test.configured,
 			))
@@ -138,7 +138,7 @@ func TestRedirectURLScopes(t *testing.T) {
 			if got := query.Get("client_id"); got != "client-id" {
 				t.Errorf("client_id = %q, want %q", got, "client-id")
 			}
-			if got := query.Get("redirect_uri"); got != "https://hister.example/api/oauth/callback" {
+			if got := query.Get("redirect_uri"); got != "https://nogon.example/api/oauth/callback" {
 				t.Errorf("redirect_uri = %q", got)
 			}
 			if got := query.Get("response_type"); got != responseTypeCode.String() {

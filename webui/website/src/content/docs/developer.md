@@ -106,9 +106,15 @@ Preserve these when changing visible branding:
 | Published content          | Post slugs, old heading anchors, RSS GUIDs, historical examples and fixtures             | Preserve links, subscriptions, and regression coverage.                      |
 
 Internal helper symbols, temporary file prefixes, cache names, and test controls
-can retain their existing spellings. The live extractor and optional ZIM fixture
-controls below still use `HISTER_*` names. Repository and package links should
-change only when their replacement destinations are available.
+use Nogon names. Test controls prefer `NOGON_*` and accept legacy `HISTER_*`
+aliases. Repository and package links should change only when their replacement
+destinations are available.
+
+The server accepts `nogon://`, `X-Nogon-Public`, and
+`X-Nogon-Target-User-ID` alongside the legacy identifiers. Nogon ownership headers
+take precedence when both spellings are present, even when the Nogon value is
+empty. Clients send both ownership header spellings for older servers. The CLI
+retains the legacy origin so it can also connect to those servers.
 
 ### Dataset utilities
 
@@ -456,7 +462,7 @@ URL discovery reads canonical, Open Graph, and Twitter metadata, or absolute ent
 
 The importer makes two passes. The first retains entry indices, source URLs, and redirect targets; the second prepares documents and rewrites relative article links through that lookup. This handles forward links and archive paths that differ from website paths without retaining all HTML in memory. Redirect traversal is bounded, unresolved links are disabled, and page URL metadata remains absolute after removing HTML base elements. Normal authenticated submission and server extraction handle the prepared documents. Importer metadata retains only `source` and a nonempty `zim_collection`. The archive publication date is stored in `Added`; entry paths remain local to link resolution and warnings.
 
-`go test ./cmd -run TestZIM` always runs integration tests against the checked in archives in `cmd/testdata/zim`. These fixtures were generated from the test articles with libzim 3.13.1. The legacy fixture converts the article namespace and cluster compression to XZ and was verified with libzim. Tests also cover operation with an empty executable path and malformed file offsets. Set `HISTER_ZIM_LEGACY_FIXTURE` to `data/withns/small.zim` from the [official ZIM testing suite](https://github.com/openzim/zim-testing-suite) for an additional compatibility check.
+`go test ./cmd -run TestZIM` always runs integration tests against the checked in archives in `cmd/testdata/zim`. These fixtures were generated from the test articles with libzim 3.13.1. The legacy fixture converts the article namespace and cluster compression to XZ and was verified with libzim. Tests also cover operation with an empty executable path and malformed file offsets. Set `NOGON_ZIM_LEGACY_FIXTURE` to `data/withns/small.zim` from the [official ZIM testing suite](https://github.com/openzim/zim-testing-suite) for an additional compatibility check.
 
 ## HTTP API Development
 
@@ -1098,8 +1104,8 @@ network requests. Validation also requires at least one positive live case for
 every registered extractor.
 
 When a live case fails, the fetched HTML, extracted documents, preview, and a
-summary are saved under `/tmp/hister-live-extractors`. Set
-`HISTER_LIVE_ARTIFACT_DIR` to use another directory. These artifacts help
+summary are saved under `/tmp/nogon-live-extractors`. Set
+`NOGON_LIVE_ARTIFACT_DIR` to use another directory. These artifacts help
 distinguish a website structure change from a transient fetch failure.
 
 ## MCP Protocol Testing

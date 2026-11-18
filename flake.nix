@@ -27,7 +27,7 @@
           ...
         }:
         let
-          nogonPackage = pkgs.callPackage ./nix/package.nix { histerRev = inputs.self.rev or "unknown"; };
+          nogonPackage = pkgs.callPackage ./nix/package.nix { nogonRev = inputs.self.rev or "unknown"; };
         in
         {
           packages.default = nogonPackage;

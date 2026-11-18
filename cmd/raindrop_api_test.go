@@ -142,7 +142,7 @@ func TestImportRaindropAPIRetriesOlderFailedBookmarks(t *testing.T) {
 	var batches [][]*document.Document
 	transport := raindropTestTransport(t, &batches)
 	fail := true
-	target := client.New("http://hister.example", client.WithMaxBatchBodyBytes(40<<20), client.WithHTTPClient(&http.Client{
+	target := client.New("http://nogon.example", client.WithMaxBatchBodyBytes(40<<20), client.WithHTTPClient(&http.Client{
 		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 			response, err := transport.RoundTrip(req)
 			if err != nil || !fail {

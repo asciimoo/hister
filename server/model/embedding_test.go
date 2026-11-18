@@ -150,7 +150,7 @@ func TestEmbeddingJobRetryAndRecovery(t *testing.T) {
 func TestEmbeddingJobRetryPostgresTimestampTypes(t *testing.T) {
 	// Inspect the prepared SQL rather than interpolated logs: PostgreSQL must
 	// resolve the CASE result to a timestamp before any values are bound.
-	db, err := gorm.Open(postgres.Open("host=localhost user=hister dbname=hister sslmode=disable"), &gorm.Config{
+	db, err := gorm.Open(postgres.Open("host=localhost user=nogon dbname=nogon sslmode=disable"), &gorm.Config{
 		DryRun:                 true,
 		DisableAutomaticPing:   true,
 		SkipDefaultTransaction: true,

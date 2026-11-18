@@ -79,7 +79,7 @@ func newMCPTestSessionVersion(t *testing.T, cfg *config.Config, handler http.Han
 		})
 	}
 
-	client := mcp.NewClient(&mcp.Implementation{Name: "hister-test", Version: "1"}, nil)
+	client := mcp.NewClient(&mcp.Implementation{Name: "nogon-test", Version: "1"}, nil)
 	ctx := context.Background()
 	session, err := client.Connect(ctx, &mcp.StreamableClientTransport{
 		Endpoint:             server.URL + cfg.BasePathPrefix() + "/mcp",
@@ -1214,8 +1214,9 @@ func TestMCPOriginValidation(t *testing.T) {
 		{name: "empty", origins: []string{""}},
 		{name: "malformed", origins: []string{"http://["}},
 		{name: "relative", origins: []string{"//127.0.0.1:4433"}},
-		{name: "CLI scheme", origins: []string{"hister://"}, allowed: true},
-		{name: "renamed product does not add a trusted scheme", origins: []string{"nogon://"}},
+		{name: "CLI scheme", origins: []string{"nogon://"}, allowed: true},
+		{name: "legacy CLI scheme", origins: []string{"hister://"}, allowed: true},
+		{name: "unrelated custom scheme", origins: []string{"other://"}},
 		{name: "extension scheme", origins: []string{chromeExtensionOrigin}},
 		{name: "multiple origins", origins: []string{"http://127.0.0.1:4433 https://untrusted.example"}},
 		{name: "duplicate headers", origins: []string{"http://127.0.0.1:4433", "https://untrusted.example"}},
@@ -1260,7 +1261,7 @@ func TestMCPOriginValidation(t *testing.T) {
 func TestMCPAllowsProxiedHostOnLoopback(t *testing.T) {
 	_, handler := newPublicTokenTestServer(t)
 	req := newMCPTestRequest(http.MethodPost, "/mcp", `{"jsonrpc":"2.0","id":1,"method":"ping"}`)
-	req.Host = "hister.example"
+	req.Host = "nogon.example"
 	req.Header.Set("Authorization", "Bearer secret")
 	loopback := &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 4433}
 	req = req.WithContext(context.WithValue(req.Context(), http.LocalAddrContextKey, loopback))
@@ -1278,14 +1279,14 @@ func TestMCPOriginUsesConfiguredBaseURL(t *testing.T) {
 		origin  string
 		allowed bool
 	}{
-		{name: "HTTPS base path", baseURL: "https://hister.example/hister", origin: "https://hister.example", allowed: true},
-		{name: "explicit HTTPS port", baseURL: "https://hister.example:443/hister", origin: "https://hister.example:443", allowed: true},
-		{name: "HTTP base path", baseURL: "http://hister.example/hister", origin: "http://hister.example", allowed: true},
-		{name: "explicit HTTP port", baseURL: "http://hister.example:80/hister", origin: "http://hister.example:80", allowed: true},
-		{name: "loopback alias", baseURL: "http://localhost:4433/hister", origin: "http://127.0.0.1:4433", allowed: true},
-		{name: "IPv6", baseURL: "http://[::1]:4433/hister", origin: "http://[::1]:4433", allowed: true},
-		{name: "different scheme", baseURL: "https://hister.example/hister", origin: "http://hister.example"},
-		{name: "different port", baseURL: "https://hister.example:8443/hister", origin: "https://hister.example"},
+		{name: "HTTPS base path", baseURL: "https://nogon.example/nogon", origin: "https://nogon.example", allowed: true},
+		{name: "explicit HTTPS port", baseURL: "https://nogon.example:443/nogon", origin: "https://nogon.example:443", allowed: true},
+		{name: "HTTP base path", baseURL: "http://nogon.example/nogon", origin: "http://nogon.example", allowed: true},
+		{name: "explicit HTTP port", baseURL: "http://nogon.example:80/nogon", origin: "http://nogon.example:80", allowed: true},
+		{name: "loopback alias", baseURL: "http://localhost:4433/nogon", origin: "http://127.0.0.1:4433", allowed: true},
+		{name: "IPv6", baseURL: "http://[::1]:4433/nogon", origin: "http://[::1]:4433", allowed: true},
+		{name: "different scheme", baseURL: "https://nogon.example/nogon", origin: "http://nogon.example"},
+		{name: "different port", baseURL: "https://nogon.example:8443/nogon", origin: "https://nogon.example"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1295,7 +1296,7 @@ func TestMCPOriginUsesConfiguredBaseURL(t *testing.T) {
 			}
 			// Ping needs no indexer. Register again to apply the base path.
 			handler := registerEndpoints(cfg, nil)
-			rec := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"ping"}`), mcpTestHeaders(map[string]string{"Origin": tt.origin}))
+			rec := testutil.ServeHTTP(t, handler, http.MethodPost, "/nogon/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"ping"}`), mcpTestHeaders(map[string]string{"Origin": tt.origin}))
 			want := http.StatusForbidden
 			if tt.allowed {
 				want = http.StatusOK

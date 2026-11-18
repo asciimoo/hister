@@ -69,7 +69,7 @@ func extensionCORSAllowHeaders(r *http.Request) string {
 	if requested := r.Header.Get("Access-Control-Request-Headers"); requested != "" {
 		return requested
 	}
-	return "Content-Type, X-Access-Token, X-Hister-Public, X-CSRF-Token, Authorization"
+	return "Content-Type, X-Access-Token, X-Nogon-Public, X-Hister-Public, X-CSRF-Token, Authorization"
 }
 
 // withExtensionCORS answers CORS preflight and attaches CORS headers for
@@ -78,8 +78,8 @@ func extensionCORSAllowHeaders(r *http.Request) string {
 //
 // Chrome and Firefox exempt extension background fetches from CORS, but
 // Safari still preflights JSON / custom-header requests from the popup and
-// options pages. Without this, those pages cannot talk to a stock Hister
-// server (see asciimoo/hister#49).
+// options pages. Without this, those pages cannot talk to a stock Nogon
+// server (see asciimoo/nogon#49).
 func withExtensionCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")

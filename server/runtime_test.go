@@ -113,7 +113,7 @@ func TestSettingsPendingCancellationPreservesRules(t *testing.T) {
 	pending := activateTestPendingSettings(t, r, headers)
 	ruleHeaders := maps.Clone(headers)
 	ruleHeaders["Content-Type"] = "application/x-www-form-urlencoded"
-	response := testutil.ServeHTTP(t, r, http.MethodPost, "/hister/api/rules", strings.NewReader(url.Values{"skip": {"pending-rule"}}.Encode()), ruleHeaders)
+	response := testutil.ServeHTTP(t, r, http.MethodPost, "/nogon/api/rules", strings.NewReader(url.Values{"skip": {"pending-rule"}}.Encode()), ruleHeaders)
 	if response.Code != http.StatusOK {
 		t.Fatalf("rule write during temporary activation: %d %s", response.Code, response.Body)
 	}
@@ -124,7 +124,7 @@ func TestSettingsPendingCancellationPreservesRules(t *testing.T) {
 	if values["app.subtitle"].Value != cfg.App.Subtitle {
 		t.Fatal("cancellation did not restore confirmed settings")
 	}
-	rules := testutil.ServeHTTP(t, r, http.MethodGet, "/hister/api/rules", nil, headers)
+	rules := testutil.ServeHTTP(t, r, http.MethodGet, "/nogon/api/rules", nil, headers)
 	if rules.Code != http.StatusOK || !strings.Contains(rules.Body.String(), "pending-rule") {
 		t.Fatalf("rollback lost a rule write: %d %s", rules.Code, rules.Body)
 	}
@@ -144,7 +144,7 @@ func TestSettingsPendingTimeoutRestoresConfiguration(t *testing.T) {
 	pending := activateTestPendingSettings(t, r, headers)
 	deadline := time.Now().Add(5 * time.Second)
 	for {
-		response := testutil.ServeHTTP(t, r, http.MethodGet, "/hister/api/config", nil, nil)
+		response := testutil.ServeHTTP(t, r, http.MethodGet, "/nogon/api/config", nil, nil)
 		var active struct{ Subtitle string }
 		if response.Code == http.StatusOK && json.Unmarshal(response.Body.Bytes(), &active) == nil && active.Subtitle == cfg.App.Subtitle {
 			break
@@ -170,9 +170,9 @@ func TestSettingsPendingRejectsCompetingWrites(t *testing.T) {
 			r := handler.(*serverRuntime)
 			pending := activateTestPendingSettings(t, r, headers)
 			revision, _ := readConfigurationState(t, r, headers)
-			path, body := "/hister/api/reload", ""
+			path, body := "/nogon/api/reload", ""
 			if operation == "save" {
-				path = "/hister/api/settings/apply"
+				path = "/nogon/api/settings/apply"
 				body = fmt.Sprintf(`{"revision":%q,"edits":[{"path":"app.subtitle","action":"set","value":"Competing settings"}]}`, revision)
 			}
 			response := testutil.ServeHTTP(t, r, http.MethodPost, path, strings.NewReader(body), headers)
@@ -334,7 +334,7 @@ func TestSettingsPendingListenerRestoration(t *testing.T) {
 			defer client.CloseIdleConnections()
 			check := func(address string) {
 				t.Helper()
-				response, err := client.Get("http://" + address + "/hister/api/config")
+				response, err := client.Get("http://" + address + "/nogon/api/config")
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -356,7 +356,7 @@ func TestSettingsPendingListenerRestoration(t *testing.T) {
 				if status != http.StatusServiceUnavailable || err == nil || !strings.Contains(err.Error(), "restart") {
 					t.Fatalf("failed recovery was not reported: %d %v", status, err)
 				}
-				response := testutil.ServeHTTP(t, r, http.MethodGet, "/hister/api/config", nil, nil)
+				response := testutil.ServeHTTP(t, r, http.MethodGet, "/nogon/api/config", nil, nil)
 				if response.Code != http.StatusServiceUnavailable {
 					t.Fatal("failed recovery continued serving the unconfirmed configuration")
 				}
@@ -389,7 +389,7 @@ func TestSettingsPendingConfirmationExpiresWhileDraining(t *testing.T) {
 	r.confirmationTimeout = 250 * time.Millisecond
 	pending := activateTestPendingSettings(t, r, headers)
 	held := make(chan struct{})
-	go func() { testutil.ServeHTTP(t, r, http.MethodGet, "/hister/api/test-held", nil, headers); close(held) }()
+	go func() { testutil.ServeHTTP(t, r, http.MethodGet, "/nogon/api/test-held", nil, headers); close(held) }()
 	<-entered
 	lease := pendingTestLease(r, headers)
 	done := make(chan int, 1)
@@ -473,7 +473,7 @@ func TestSettingsPendingActivationRechecksAdministrator(t *testing.T) {
 	}
 	held := make(chan struct{})
 	go func() {
-		testutil.ServeHTTP(t, r, http.MethodGet, "/hister/api/test-remove-administrator", nil, headers)
+		testutil.ServeHTTP(t, r, http.MethodGet, "/nogon/api/test-remove-administrator", nil, headers)
 		close(held)
 	}()
 	<-entered
@@ -526,7 +526,7 @@ func TestSettingsOrdinaryAppAndServerApply(t *testing.T) {
 				}
 				ordinaryToken = ordinary.Token
 			}
-			headers := map[string]string{"Origin": "hister://", "X-Access-Token": token, "Content-Type": "application/json"}
+			headers := map[string]string{"Origin": "nogon://", "X-Access-Token": token, "Content-Type": "application/json"}
 			mainBefore, err := os.ReadFile(cfg.Filename())
 			if err != nil {
 				t.Fatal(err)
@@ -563,7 +563,7 @@ func TestSettingsOrdinaryAppAndServerApply(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", bytes.NewReader(body), headers)
+				response := testutil.ServeHTTP(t, handler, http.MethodPost, "/nogon/api/settings/apply", bytes.NewReader(body), headers)
 				if response.Code != http.StatusOK {
 					t.Fatalf("%s: %d %s", action, response.Code, response.Body)
 				}
@@ -583,7 +583,7 @@ func TestSettingsOrdinaryAppAndServerApply(t *testing.T) {
 						t.Fatalf("%s did not persist %s: %+v", action, path, values[path])
 					}
 				}
-				public := testutil.ServeHTTP(t, handler, http.MethodGet, "/hister/api/config", nil, nil)
+				public := testutil.ServeHTTP(t, handler, http.MethodGet, "/nogon/api/config", nil, nil)
 				var active struct {
 					SearchURL         string `json:"searchUrl"`
 					Version           string `json:"version"`
@@ -602,7 +602,7 @@ func TestSettingsOrdinaryAppAndServerApply(t *testing.T) {
 				if active.SearchURL != wantURL || active.SearchURL != loaded.App.SearchURL || active.MaxBatchBodyBytes != loaded.Server.MaxBatchBodyBytes() || (active.Version != "") != (action == "enable") {
 					t.Fatalf("public configuration did not refresh: %s", public.Body)
 				}
-				batch := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/batch", strings.NewReader(`{"ops":[{"op":"get","url":"https://example.com"}]}`+strings.Repeat(" ", 1<<20)), headers)
+				batch := testutil.ServeHTTP(t, handler, http.MethodPost, "/nogon/api/batch", strings.NewReader(`{"ops":[{"op":"get","url":"https://example.com"}]}`+strings.Repeat(" ", 1<<20)), headers)
 				wantBatch := http.StatusRequestEntityTooLarge
 				if action == "reset" {
 					wantBatch = http.StatusOK
@@ -611,13 +611,13 @@ func TestSettingsOrdinaryAppAndServerApply(t *testing.T) {
 					t.Fatalf("batch limit not applied: %d %s", batch.Code, batch.Body)
 				}
 				for _, path := range []string{"/metrics", "/debug/pprof/"} {
-					response := testutil.ServeHTTP(t, handler, http.MethodGet, "/hister"+path, nil, headers)
+					response := testutil.ServeHTTP(t, handler, http.MethodGet, "/nogon"+path, nil, headers)
 					if action == "enable" {
 						if response.Code != http.StatusOK || strings.Contains(response.Body.String(), "<title>Nogon") {
 							t.Fatalf("monitoring unavailable: %s %d", path, response.Code)
 						}
 						for _, denied := range []string{"", ordinaryToken} {
-							response := testutil.ServeHTTP(t, handler, http.MethodGet, "/hister"+path, nil, map[string]string{"X-Access-Token": denied})
+							response := testutil.ServeHTTP(t, handler, http.MethodGet, "/nogon"+path, nil, map[string]string{"X-Access-Token": denied})
 							if response.Code != http.StatusForbidden {
 								t.Fatalf("monitoring exposed to nonadministrative visitor: %s %d", path, response.Code)
 							}
@@ -626,7 +626,7 @@ func TestSettingsOrdinaryAppAndServerApply(t *testing.T) {
 						t.Fatalf("disabled monitoring still served at %s", path)
 					}
 				}
-				extractors := testutil.ServeHTTP(t, handler, http.MethodGet, "/hister/api/extractors", nil, headers)
+				extractors := testutil.ServeHTTP(t, handler, http.MethodGet, "/nogon/api/extractors", nil, headers)
 				if strings.Contains(extractors.Body.String(), `"timeout"`) != (action == "enable") {
 					t.Fatal("extractor option visibility did not change")
 				}
@@ -641,13 +641,13 @@ func TestSettingsOrdinaryAppAndServerApply(t *testing.T) {
 
 func TestSettingsSensitivePatternApply(t *testing.T) {
 	cfg, handler, _ := newReloadTestServer(t, false)
-	headers := map[string]string{"Origin": "hister://", "X-Access-Token": "secret", "Content-Type": "application/json"}
+	headers := map[string]string{"Origin": "nogon://", "X-Access-Token": "secret", "Content-Type": "application/json"}
 	mainBefore, err := os.ReadFile(cfg.Filename())
 	if err != nil {
 		t.Fatal(err)
 	}
 	revision, _ := readConfigurationState(t, handler, headers)
-	invalid := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":[{"path":"sensitive_content_patterns","action":"set","value":{"private":"[private-credential"}}]}`, revision)), headers)
+	invalid := testutil.ServeHTTP(t, handler, http.MethodPost, "/nogon/api/settings/apply", strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":[{"path":"sensitive_content_patterns","action":"set","value":{"private":"[private-credential"}}]}`, revision)), headers)
 	if invalid.Code != http.StatusUnprocessableEntity || strings.Contains(invalid.Body.String(), "private-credential") {
 		t.Fatalf("invalid pattern was saved or exposed: %d %s", invalid.Code, invalid.Body)
 	}
@@ -675,7 +675,7 @@ func TestSettingsSensitivePatternApply(t *testing.T) {
 				extra = fmt.Sprintf(`,"acknowledgment":%q`, settingsReview(t, handler, headers, revision, edits))
 			}
 			body := fmt.Sprintf(`{"revision":%q,"edits":%s%s}`, revision, edits, extra)
-			response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(body), headers)
+			response := testutil.ServeHTTP(t, handler, http.MethodPost, "/nogon/api/settings/apply", strings.NewReader(body), headers)
 			if response.Code != http.StatusOK {
 				t.Fatalf("apply patterns: %d %s", response.Code, response.Body)
 			}
@@ -689,7 +689,7 @@ func TestSettingsSensitivePatternApply(t *testing.T) {
 				}
 				for i, content := range []string{"ordinary text", "private-123", "-----BEGIN OPENSSH PRIVATE KEY-----"} {
 					body := fmt.Sprintf(`{"url":"https://example.com/%s/%t/%d","html":%q,"title":"Test document"}`, tc.name, reload, i, "<html><body><p>"+content+"</p></body></html>")
-					added := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/add", strings.NewReader(body), headers)
+					added := testutil.ServeHTTP(t, handler, http.MethodPost, "/nogon/api/add", strings.NewReader(body), headers)
 					if content == tc.blocked {
 						if added.Code != http.StatusUnprocessableEntity || !strings.Contains(added.Body.String(), "sensitive") {
 							t.Fatalf("pattern did not block matching document: %d %s", added.Code, added.Body)
@@ -705,7 +705,7 @@ func TestSettingsSensitivePatternApply(t *testing.T) {
 			if err != nil || marshalErr != nil || string(got) != string(want) {
 				t.Fatalf("reloaded patterns: %s, want %s", got, want)
 			}
-			public := testutil.ServeHTTP(t, handler, http.MethodGet, "/hister/api/config", nil, nil)
+			public := testutil.ServeHTTP(t, handler, http.MethodGet, "/nogon/api/config", nil, nil)
 			if strings.Contains(public.Body.String(), "private-[0-9]+") || !strings.Contains(public.Body.String(), "Pattern draft") {
 				t.Fatal("public configuration exposed patterns or lost the mixed draft")
 			}
@@ -719,13 +719,13 @@ func TestSettingsSensitivePatternApply(t *testing.T) {
 
 func TestSettingsWebHotkeyApply(t *testing.T) {
 	cfg, handler, _ := newReloadTestServer(t, false)
-	headers := map[string]string{"Origin": "hister://", "X-Access-Token": "secret"}
+	headers := map[string]string{"Origin": "nogon://", "X-Access-Token": "secret"}
 	mainBefore, err := os.ReadFile(cfg.Filename())
 	if err != nil {
 		t.Fatal(err)
 	}
 	revision, _ := readConfigurationState(t, handler, headers)
-	invalid := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":[{"path":"hotkeys.web","action":"set","value":{"ALT+X":"show_hotkeys"}}]}`, revision)), headers)
+	invalid := testutil.ServeHTTP(t, handler, http.MethodPost, "/nogon/api/settings/apply", strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":[{"path":"hotkeys.web","action":"set","value":{"ALT+X":"show_hotkeys"}}]}`, revision)), headers)
 	if invalid.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("invalid shortcut saved: %d %s", invalid.Code, invalid.Body)
 	}
@@ -747,12 +747,12 @@ func TestSettingsWebHotkeyApply(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			revision, _ := readConfigurationState(t, handler, headers)
 			body := fmt.Sprintf(`{"revision":%q,"edits":[{"path":"hotkeys.web",%s}]}`, revision, tc.edit)
-			response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(body), headers)
+			response := testutil.ServeHTTP(t, handler, http.MethodPost, "/nogon/api/settings/apply", strings.NewReader(body), headers)
 			if response.Code != http.StatusOK {
 				t.Fatalf("apply shortcuts: %d %s", response.Code, response.Body)
 			}
 			// The public response drives keyboard handling, including anonymous search.
-			public := testutil.ServeHTTP(t, handler, http.MethodGet, "/hister/api/config", nil, nil)
+			public := testutil.ServeHTTP(t, handler, http.MethodGet, "/nogon/api/config", nil, nil)
 			var active struct {
 				Hotkeys map[string]string `json:"hotkeys"`
 			}
@@ -793,8 +793,8 @@ func TestSettingsExtractionAndSemanticApply(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	headers := map[string]string{"Origin": "hister://", "X-Access-Token": "secret", "Content-Type": "application/json"}
-	added := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/add", strings.NewReader(`{"url":"https://example.com/existing","text":"Existing document without embeddings"}`), headers)
+	headers := map[string]string{"Origin": "nogon://", "X-Access-Token": "secret", "Content-Type": "application/json"}
+	added := testutil.ServeHTTP(t, handler, http.MethodPost, "/nogon/api/add", strings.NewReader(`{"url":"https://example.com/existing","text":"Existing document without embeddings"}`), headers)
 	if added.Code != http.StatusCreated {
 		t.Fatalf("add existing document: %d %s", added.Code, added.Body)
 	}
@@ -815,7 +815,7 @@ func TestSettingsExtractionAndSemanticApply(t *testing.T) {
 		if operation == "apply" {
 			extra = fmt.Sprintf(`,"acknowledgment":%q`, acknowledgment)
 		}
-		response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/"+operation, strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":%s%s}`, revision, edits, extra)), headers)
+		response := testutil.ServeHTTP(t, handler, http.MethodPost, "/nogon/api/settings/"+operation, strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":%s%s}`, revision, edits, extra)), headers)
 		if response.Code != http.StatusOK || strings.Contains(response.Body.String(), "private-") {
 			t.Fatalf("%s: %d %s", operation, response.Code, response.Body)
 		}
@@ -837,7 +837,7 @@ func TestSettingsExtractionAndSemanticApply(t *testing.T) {
 		t.Fatal("mixed settings draft was not activated")
 	}
 	for _, path := range []string{"/api/settings", "/api/config", "/api/extractors"} {
-		response := testutil.ServeHTTP(t, handler, http.MethodGet, "/hister"+path, nil, headers)
+		response := testutil.ServeHTTP(t, handler, http.MethodGet, "/nogon"+path, nil, headers)
 		if response.Code != http.StatusOK || strings.Contains(response.Body.String(), "private-") {
 			t.Fatalf("stored credential exposed by %s: %d %s", path, response.Code, response.Body)
 		}
@@ -883,18 +883,18 @@ func TestSettingsDirectoryOwnerRemovedWhileDraining(t *testing.T) {
 	if _, err := model.CreateUser("directory-owner", "password123", false); err != nil {
 		t.Fatal(err)
 	}
-	headers := map[string]string{"Origin": "hister://", "X-Access-Token": admin.Token}
+	headers := map[string]string{"Origin": "nogon://", "X-Access-Token": admin.Token}
 	revision, _ := readConfigurationState(t, handler, headers)
 	held := make(chan struct{})
 	go func() {
-		testutil.ServeHTTP(t, handler, http.MethodGet, "/hister/api/test-remove-owner", nil, headers)
+		testutil.ServeHTTP(t, handler, http.MethodGet, "/nogon/api/test-remove-owner", nil, headers)
 		close(held)
 	}()
 	<-entered
 	body := fmt.Sprintf(`{"revision":%q,"edits":[{"path":"indexer.directories","action":"set","value":[{"path":%q,"user":"directory-owner"}]}]}`, revision, t.TempDir())
 	result := make(chan *httptest.ResponseRecorder, 1)
 	go func() {
-		result <- testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(body), headers)
+		result <- testutil.ServeHTTP(t, handler, http.MethodPost, "/nogon/api/settings/apply", strings.NewReader(body), headers)
 	}()
 	waitRuntimePause(t, handler)
 	unblock()
@@ -914,7 +914,7 @@ func TestSettingsDirectoryOwnerRemovedWhileDraining(t *testing.T) {
 
 func TestSettingsDirectoryValidation(t *testing.T) {
 	cfg, handler, _ := newReloadTestServer(t, false)
-	headers := map[string]string{"Origin": "hister://", "X-Access-Token": "secret"}
+	headers := map[string]string{"Origin": "nogon://", "X-Access-Token": "secret"}
 	revision, _ := readConfigurationState(t, handler, headers)
 	dir := t.TempDir()
 	file := filepath.Join(dir, "note.txt")
@@ -932,7 +932,7 @@ func TestSettingsDirectoryValidation(t *testing.T) {
 			t.Fatal(err)
 		}
 		for _, op := range []string{"validate", "apply"} {
-			response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/"+op, strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":%s}`, revision, edits)), headers)
+			response := testutil.ServeHTTP(t, handler, http.MethodPost, "/nogon/api/settings/"+op, strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":%s}`, revision, edits)), headers)
 			if response.Code != http.StatusUnprocessableEntity || !strings.Contains(response.Body.String(), `"path":"indexer.directories"`) {
 				t.Errorf("%s accepted invalid directories: %d %s", op, response.Code, response.Body)
 			}
@@ -959,7 +959,7 @@ func TestSettingsCrawlerSecretPersistence(t *testing.T) {
 	if status := reloadRequest(t, handler, "secret"); status != http.StatusOK {
 		t.Fatalf("reload: %d", status)
 	}
-	headers := map[string]string{"Origin": "hister://", "X-Access-Token": "secret"}
+	headers := map[string]string{"Origin": "nogon://", "X-Access-Token": "secret"}
 	revision, states := readConfigurationState(t, handler, headers)
 	values := states["crawler.headers"].Value.(map[string]any)
 	delete(values, "x-remove")
@@ -968,7 +968,7 @@ func TestSettingsCrawlerSecretPersistence(t *testing.T) {
 	cookieJSON, _ := json.Marshal(states["crawler.cookies"].Value)
 	body := fmt.Sprintf(`{"revision":%q,"edits":[{"path":"crawler.headers","action":"set","value":%s},{"path":"crawler.cookies","action":"set","value":%s},{"path":"crawler.timeout","action":"set","value":12}]}`, revision, headerJSON, cookieJSON)
 	for _, op := range []string{"validate", "apply"} {
-		response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/"+op, strings.NewReader(body), headers)
+		response := testutil.ServeHTTP(t, handler, http.MethodPost, "/nogon/api/settings/"+op, strings.NewReader(body), headers)
 		if response.Code != http.StatusOK {
 			t.Fatalf("%s: %d %s", op, response.Code, response.Body)
 		}
@@ -985,7 +985,7 @@ func TestSettingsCrawlerSecretPersistence(t *testing.T) {
 	fresh, _ := readConfigurationState(t, handler, headers)
 	// Updating the request revision cannot make an old secret reference valid.
 	stale := strings.Replace(body, revision, fresh, 1)
-	response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(stale), headers)
+	response := testutil.ServeHTTP(t, handler, http.MethodPost, "/nogon/api/settings/apply", strings.NewReader(stale), headers)
 	if response.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("stale credential accepted: %d %s", response.Code, response.Body)
 	}
@@ -995,7 +995,7 @@ func TestSettingsCrawlerSecretPersistence(t *testing.T) {
 		if action == "reset" {
 			edits = `[{"path":"crawler.headers","action":"reset"},{"path":"crawler.cookies","action":"reset"}]`
 		}
-		response = testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":%s}`, revision, edits)), headers)
+		response = testutil.ServeHTTP(t, handler, http.MethodPost, "/nogon/api/settings/apply", strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":%s}`, revision, edits)), headers)
 		if response.Code != http.StatusOK {
 			t.Fatalf("%s: %d %s", action, response.Code, response.Body)
 		}
@@ -1017,7 +1017,7 @@ func TestSettingsIndexerPersistenceAndWatching(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	headers := map[string]string{"Origin": "hister://", "X-Access-Token": "secret"}
+	headers := map[string]string{"Origin": "nogon://", "X-Access-Token": "secret"}
 	dir := t.TempDir()
 	filename := filepath.Join(dir, "note.txt")
 	if err := os.WriteFile(filename, []byte("Saved watcher content"), 0o600); err != nil {
@@ -1026,7 +1026,7 @@ func TestSettingsIndexerPersistenceAndWatching(t *testing.T) {
 	save := func(edits string) {
 		t.Helper()
 		revision, _ := readConfigurationState(t, handler, headers)
-		response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":%s}`, revision, edits)), headers)
+		response := testutil.ServeHTTP(t, handler, http.MethodPost, "/nogon/api/settings/apply", strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":%s}`, revision, edits)), headers)
 		if response.Code != http.StatusOK {
 			t.Fatalf("save: %d %s", response.Code, response.Body)
 		}
@@ -1036,7 +1036,7 @@ func TestSettingsIndexerPersistenceAndWatching(t *testing.T) {
 	if err != nil || len(loaded.Indexer.Directories) != 1 || loaded.Indexer.Directories[0].Path != dir || !loaded.Indexer.Directories[0].DeleteOnRemove || loaded.Indexer.MaxFileSize != 8 || !slices.Equal(loaded.Indexer.Languages, []string{"en", "hu"}) {
 		t.Fatalf("restart lost indexer settings: %v", err)
 	}
-	path := "/hister/api/document?url=" + url.QueryEscape(files.PathToFileURL(filename))
+	path := "/nogon/api/document?url=" + url.QueryEscape(files.PathToFileURL(filename))
 	waitDocument := func(present bool) {
 		t.Helper()
 		deadline := time.Now().Add(5 * time.Second)
@@ -1089,8 +1089,8 @@ func TestSettingsSavePersistsAndResets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	headers := map[string]string{"Origin": "hister://", "X-Access-Token": "secret"}
-	login := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/token-login", strings.NewReader(`{"token":"secret"}`), headers)
+	headers := map[string]string{"Origin": "nogon://", "X-Access-Token": "secret"}
+	login := testutil.ServeHTTP(t, handler, http.MethodPost, "/nogon/api/token-login", strings.NewReader(`{"token":"secret"}`), headers)
 	if login.Code != http.StatusOK {
 		t.Fatalf("login: %d %s", login.Code, login.Body)
 	}
@@ -1101,7 +1101,7 @@ func TestSettingsSavePersistsAndResets(t *testing.T) {
 		`[{"path":"app.title","action":"reset"}]`,
 	} {
 		body := fmt.Sprintf(`{"revision":%q,"edits":%s}`, revision, edits)
-		response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(body), headers)
+		response := testutil.ServeHTTP(t, handler, http.MethodPost, "/nogon/api/settings/apply", strings.NewReader(body), headers)
 		if response.Code != http.StatusOK {
 			t.Fatalf("save: %d %s", response.Code, response.Body)
 		}
@@ -1110,7 +1110,7 @@ func TestSettingsSavePersistsAndResets(t *testing.T) {
 			t.Fatalf("save did not publish a new configuration: %s %+v", fresh, values["app.disable_previews"])
 		}
 		// A client that lost the response must read state, not replay its old draft.
-		replay := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(body), headers)
+		replay := testutil.ServeHTTP(t, handler, http.MethodPost, "/nogon/api/settings/apply", strings.NewReader(body), headers)
 		if replay.Code != http.StatusConflict {
 			t.Fatalf("replayed save: %d %s", replay.Code, replay.Body)
 		}
@@ -1122,7 +1122,7 @@ func TestSettingsSavePersistsAndResets(t *testing.T) {
 		if err != nil || (runtime.GOOS != "windows" && info.Mode().Perm() != 0o600) {
 			t.Fatalf("managed file must be private: %v", err)
 		}
-		session := testutil.ServeHTTP(t, handler, http.MethodGet, "/hister/api/history", nil, map[string]string{"Cookie": cookie.String()})
+		session := testutil.ServeHTTP(t, handler, http.MethodGet, "/nogon/api/history", nil, map[string]string{"Cookie": cookie.String()})
 		if session.Code != http.StatusOK {
 			t.Fatalf("save invalidated the authenticated session: %d %s", session.Code, session.Body)
 		}
@@ -1168,11 +1168,11 @@ func TestSettingsSaveSkipsUnchangedSelections(t *testing.T) {
 			if status := reloadRequest(t, handler, "secret"); status != http.StatusOK {
 				t.Fatalf("reload: %d", status)
 			}
-			headers := map[string]string{"Origin": "hister://", "X-Access-Token": "secret"}
+			headers := map[string]string{"Origin": "nogon://", "X-Access-Token": "secret"}
 			revision, _ := readConfigurationState(t, handler, headers)
 			server := httptest.NewServer(handler)
 			defer server.Close()
-			conn, resp, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(server.URL, "http")+"/hister/search", http.Header{"Origin": {cfg.Server.BaseURL}, "X-Access-Token": {"secret"}})
+			conn, resp, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(server.URL, "http")+"/nogon/search", http.Header{"Origin": {cfg.Server.BaseURL}, "X-Access-Token": {"secret"}})
 			if resp != nil {
 				defer func() { _ = resp.Body.Close() }()
 			}
@@ -1180,7 +1180,7 @@ func TestSettingsSaveSkipsUnchangedSelections(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer func() { _ = conn.Close() }()
-			response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":%s}`, revision, tc.edits)), headers)
+			response := testutil.ServeHTTP(t, handler, http.MethodPost, "/nogon/api/settings/apply", strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":%s}`, revision, tc.edits)), headers)
 			if response.Code != http.StatusOK {
 				t.Fatalf("unchanged save: %d %s", response.Code, response.Body)
 			}
@@ -1222,7 +1222,7 @@ func TestSettingsSavePersistsDefaultSelections(t *testing.T) {
 	if status := reloadRequest(t, handler, "secret"); status != http.StatusOK {
 		t.Fatalf("reload: %d", status)
 	}
-	headers := map[string]string{"Origin": "hister://", "X-Access-Token": "secret"}
+	headers := map[string]string{"Origin": "nogon://", "X-Access-Token": "secret"}
 	revision, values := readConfigurationState(t, handler, headers)
 	title := values["app.title"].Value
 	for _, action := range []string{"set", "reset"} {
@@ -1234,7 +1234,7 @@ func TestSettingsSavePersistsDefaultSelections(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(string(raw)), headers)
+		response := testutil.ServeHTTP(t, handler, http.MethodPost, "/nogon/api/settings/apply", strings.NewReader(string(raw)), headers)
 		if response.Code != http.StatusOK {
 			t.Fatalf("%s default selection: %d %s", action, response.Code, response.Body)
 		}
@@ -1253,7 +1253,7 @@ func TestSettingsSavePersistsDefaultSelections(t *testing.T) {
 
 func TestSettingsConcurrentSavesAndReloads(t *testing.T) {
 	cfg, handler, _ := newReloadTestServer(t, false)
-	headers := map[string]string{"Origin": "hister://", "X-Access-Token": "secret"}
+	headers := map[string]string{"Origin": "nogon://", "X-Access-Token": "secret"}
 	for round := range 4 {
 		revision, _ := readConfigurationState(t, handler, headers)
 		start := make(chan struct{})
@@ -1261,9 +1261,9 @@ func TestSettingsConcurrentSavesAndReloads(t *testing.T) {
 		for worker := range 3 {
 			go func() {
 				<-start
-				path, body := "/hister/api/reload", ""
+				path, body := "/nogon/api/reload", ""
 				if worker != 2 {
-					path = "/hister/api/settings/apply"
+					path = "/nogon/api/settings/apply"
 					body = fmt.Sprintf(`{"revision":%q,"edits":[{"path":"app.subtitle","action":"set","value":"Round %d worker %d"}]}`, revision, round, worker)
 				}
 				response := testutil.ServeHTTP(t, handler, http.MethodPost, path, strings.NewReader(body), headers)
@@ -1320,17 +1320,17 @@ func TestFullReloadAllowsMissingRecoveryAdministrator(t *testing.T) {
 				raw = []byte(strings.Replace(string(raw), "user_handling: false", "user_handling: true", 1))
 			}
 			if account == "oidc administrator" {
-				raw = []byte(strings.Replace(string(raw), "server:\n", "server:\n  oauth_only: true\n  oauth:\n    oidc:\n      client_id: hister\n      client_secret: secret\n      auth_url: https://provider.example/auth\n      token_url: https://provider.example/token\n      userinfo_url: https://provider.example/userinfo\n      admin_groups: [owners]\n", 1))
+				raw = []byte(strings.Replace(string(raw), "server:\n", "server:\n  oauth_only: true\n  oauth:\n    oidc:\n      client_id: nogon\n      client_secret: secret\n      auth_url: https://provider.example/auth\n      token_url: https://provider.example/token\n      userinfo_url: https://provider.example/userinfo\n      admin_groups: [owners]\n", 1))
 			}
 			if err := os.WriteFile(cfg.Filename(), raw, 0o600); err != nil {
 				t.Fatal(err)
 			}
-			response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/reload", nil, map[string]string{"Origin": "hister://", "X-Access-Token": "secret"})
+			response := testutil.ServeHTTP(t, handler, http.MethodPost, "/nogon/api/reload", nil, map[string]string{"Origin": "nogon://", "X-Access-Token": "secret"})
 			if response.Code != http.StatusOK {
 				t.Fatalf("missing recovery access must not prevent reload: %d %s", response.Code, response.Body)
 			}
 			for _, token := range []string{"", "secret"} {
-				denied := testutil.ServeHTTP(t, handler, http.MethodGet, "/hister/api/users", nil, map[string]string{"X-Access-Token": token})
+				denied := testutil.ServeHTTP(t, handler, http.MethodGet, "/nogon/api/users", nil, map[string]string{"X-Access-Token": token})
 				if denied.Code != http.StatusForbidden {
 					t.Fatalf("reload exposed administration to an anonymous or instance token caller: %d", denied.Code)
 				}
@@ -1338,9 +1338,9 @@ func TestFullReloadAllowsMissingRecoveryAdministrator(t *testing.T) {
 			if admin == nil {
 				return
 			}
-			headers := map[string]string{"Origin": "hister://", "X-Access-Token": admin.Token}
+			headers := map[string]string{"Origin": "nogon://", "X-Access-Token": admin.Token}
 			if !admin.IsAdmin {
-				denied := testutil.ServeHTTP(t, handler, http.MethodGet, "/hister/api/users", nil, headers)
+				denied := testutil.ServeHTTP(t, handler, http.MethodGet, "/nogon/api/users", nil, headers)
 				if denied.Code != http.StatusForbidden {
 					t.Fatalf("reload granted administrator access to an ordinary user: %d", denied.Code)
 				}
@@ -1348,7 +1348,7 @@ func TestFullReloadAllowsMissingRecoveryAdministrator(t *testing.T) {
 			}
 			// Existing OIDC deployments can also apply unrelated web settings.
 			revision, _ := readConfigurationState(t, handler, headers)
-			response = testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":[{"path":"app.subtitle","action":"set","value":"Still multiuser"}]}`, revision)), headers)
+			response = testutil.ServeHTTP(t, handler, http.MethodPost, "/nogon/api/settings/apply", strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":[{"path":"app.subtitle","action":"set","value":"Still multiuser"}]}`, revision)), headers)
 			if response.Code != http.StatusOK {
 				t.Fatalf("ordinary multiuser save: %d %s", response.Code, response.Body)
 			}
@@ -1513,17 +1513,17 @@ func TestSettingsSaveRechecksActorAfterDraining(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			headers := map[string]string{"Origin": "hister://", "X-Access-Token": actor.Token}
+			headers := map[string]string{"Origin": "nogon://", "X-Access-Token": actor.Token}
 			revision, _ := readConfigurationState(t, handler, headers)
 			held := make(chan struct{})
 			go func() {
-				testutil.ServeHTTP(t, handler, http.MethodGet, "/hister/api/test-demote", nil, headers)
+				testutil.ServeHTTP(t, handler, http.MethodGet, "/nogon/api/test-demote", nil, headers)
 				close(held)
 			}()
 			<-entered
 			result := make(chan *httptest.ResponseRecorder, 1)
 			go func() {
-				result <- testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":[{"path":"app.subtitle","action":"set","value":"Unauthorized"}]}`, revision)), headers)
+				result <- testutil.ServeHTTP(t, handler, http.MethodPost, "/nogon/api/settings/apply", strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":[{"path":"app.subtitle","action":"set","value":"Unauthorized"}]}`, revision)), headers)
 			}()
 			waitRuntimePause(t, handler)
 			unblock()
@@ -1571,7 +1571,7 @@ func TestReloadRejectsRevokedCredentialsAfterDraining(t *testing.T) {
 			})
 			t.Cleanup(func() { Endpoints = oldEndpoints })
 			_, handler, write := newReloadTestServer(t, method != "instance session")
-			headers := map[string]string{"Origin": "hister://", "X-Access-Token": "secret"}
+			headers := map[string]string{"Origin": "nogon://", "X-Access-Token": "secret"}
 			if method != "instance session" {
 				actor, err := model.GetUser("runtime-owner")
 				if err != nil {
@@ -1580,25 +1580,25 @@ func TestReloadRejectsRevokedCredentialsAfterDraining(t *testing.T) {
 				headers["X-Access-Token"] = actor.Token
 			}
 			if method != "user token" {
-				path, body := "/hister/api/login", `{"username":"runtime-owner","password":"password123"}`
+				path, body := "/nogon/api/login", `{"username":"runtime-owner","password":"password123"}`
 				if method == "instance session" {
-					path, body = "/hister/api/token-login", `{"token":"secret"}`
+					path, body = "/nogon/api/token-login", `{"token":"secret"}`
 				}
 				login := testutil.ServeHTTP(t, handler, http.MethodPost, path, strings.NewReader(body), headers)
 				if login.Code != http.StatusOK {
 					t.Fatalf("login: %d %s", login.Code, login.Body)
 				}
-				headers = map[string]string{"Origin": "hister://", "Cookie": responseSessionCookie(t, login).String()}
+				headers = map[string]string{"Origin": "nogon://", "Cookie": responseSessionCookie(t, login).String()}
 			}
 			write("  title: Unauthorized reload\n")
 			held := make(chan *httptest.ResponseRecorder, 1)
 			go func() {
-				held <- testutil.ServeHTTP(t, handler, http.MethodGet, "/hister/api/test-revoke", nil, headers)
+				held <- testutil.ServeHTTP(t, handler, http.MethodGet, "/nogon/api/test-revoke", nil, headers)
 			}()
 			<-entered
 			result := make(chan *httptest.ResponseRecorder, 1)
 			go func() {
-				result <- testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/reload", nil, headers)
+				result <- testutil.ServeHTTP(t, handler, http.MethodPost, "/nogon/api/reload", nil, headers)
 			}()
 			waitRuntimePause(t, handler)
 			unblock()
@@ -1608,10 +1608,10 @@ func TestReloadRejectsRevokedCredentialsAfterDraining(t *testing.T) {
 			if response := <-result; response.Code != http.StatusForbidden {
 				t.Errorf("revoked credential reloaded configuration: %d %s", response.Code, response.Body)
 			}
-			if response := testutil.ServeHTTP(t, handler, http.MethodGet, "/hister/api/settings", nil, headers); response.Code != http.StatusForbidden {
+			if response := testutil.ServeHTTP(t, handler, http.MethodGet, "/nogon/api/settings", nil, headers); response.Code != http.StatusForbidden {
 				t.Errorf("revoked credential remains authorized: %d", response.Code)
 			}
-			response := testutil.ServeHTTP(t, handler, http.MethodGet, "/hister/api/config", nil, nil)
+			response := testutil.ServeHTTP(t, handler, http.MethodGet, "/nogon/api/config", nil, nil)
 			var current struct{ Title string }
 			if err := json.Unmarshal(response.Body.Bytes(), &current); err != nil || response.Code != http.StatusOK || current.Title != "Original" {
 				t.Fatalf("denied reload did not retain active configuration: %d %s (%v)", response.Code, response.Body, err)
@@ -1624,7 +1624,7 @@ func waitRuntimePause(t *testing.T, handler http.Handler) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
 	for {
-		if response := testutil.ServeHTTP(t, handler, http.MethodGet, "/hister/health", nil, nil); response.Code == http.StatusServiceUnavailable {
+		if response := testutil.ServeHTTP(t, handler, http.MethodGet, "/nogon/health", nil, nil); response.Code == http.StatusServiceUnavailable {
 			return
 		}
 		if time.Now().After(deadline) {
@@ -1656,17 +1656,17 @@ func TestSettingsSaveDrainingAndRecovery(t *testing.T) {
 			})
 			t.Cleanup(func() { Endpoints = oldEndpoints })
 			cfg, handler, _ := newReloadTestServer(t, false)
-			headers := map[string]string{"Origin": "hister://", "X-Access-Token": "secret"}
+			headers := map[string]string{"Origin": "nogon://", "X-Access-Token": "secret"}
 			revision, _ := readConfigurationState(t, handler, headers)
 			held := make(chan struct{})
 			go func() {
-				testutil.ServeHTTP(t, handler, http.MethodGet, "/hister/api/test-held", nil, headers)
+				testutil.ServeHTTP(t, handler, http.MethodGet, "/nogon/api/test-held", nil, headers)
 				close(held)
 			}()
 			<-entered
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
-			request := httptest.NewRequest(http.MethodPost, "/hister/api/settings/apply", strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":[{"path":"app.subtitle","action":"set","value":"Saved subtitle"}]}`, revision))).WithContext(ctx)
+			request := httptest.NewRequest(http.MethodPost, "/nogon/api/settings/apply", strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":[{"path":"app.subtitle","action":"set","value":"Saved subtitle"}]}`, revision))).WithContext(ctx)
 			for key, value := range headers {
 				request.Header.Set(key, value)
 			}
@@ -1691,7 +1691,7 @@ func TestSettingsSaveDrainingAndRecovery(t *testing.T) {
 				if path != "/api/settings" {
 					method = http.MethodPost
 				}
-				if reply := testutil.ServeHTTP(t, handler, method, "/hister"+path, nil, headers); reply.Code != http.StatusServiceUnavailable {
+				if reply := testutil.ServeHTTP(t, handler, method, "/nogon"+path, nil, headers); reply.Code != http.StatusServiceUnavailable {
 					t.Fatalf("request observed partial apply: %s %d", path, reply.Code)
 				}
 			}
@@ -1744,7 +1744,7 @@ func TestSettingsSaveDrainingAndRecovery(t *testing.T) {
 				if !strings.Contains(response.Body.String(), "recovery failed") || !strings.Contains(response.Body.String(), "restart") {
 					t.Fatal("response promised recovery that did not happen")
 				}
-				if reply := testutil.ServeHTTP(t, handler, http.MethodGet, "/hister/health", nil, nil); reply.Code != http.StatusServiceUnavailable {
+				if reply := testutil.ServeHTTP(t, handler, http.MethodGet, "/nogon/health", nil, nil); reply.Code != http.StatusServiceUnavailable {
 					t.Fatal("failed runtime still accepts requests")
 				}
 			} else {
@@ -1752,7 +1752,7 @@ func TestSettingsSaveDrainingAndRecovery(t *testing.T) {
 				if (values["app.subtitle"].Value == "Saved subtitle") != (scenario == "lost response") {
 					t.Fatalf("unexpected active subtitle: %+v", values["app.subtitle"])
 				}
-				rules := testutil.ServeHTTP(t, handler, http.MethodGet, "/hister/api/rules", nil, headers)
+				rules := testutil.ServeHTTP(t, handler, http.MethodGet, "/nogon/api/rules", nil, headers)
 				if rules.Code != http.StatusOK || !strings.Contains(rules.Body.String(), "rule update") {
 					t.Fatalf("lost drained rule write: %d %s", rules.Code, rules.Body)
 				}
@@ -1777,7 +1777,7 @@ func TestSettingsSaveWithoutMainFile(t *testing.T) {
 			t.Setenv("XDG_CONFIG_HOME", dir)
 			t.Setenv("LOCALAPPDATA", dir)
 			t.Setenv("HISTER__SERVER__ADDRESS", "127.0.0.1:0")
-			t.Setenv("HISTER__SERVER__BASE_URL", "http://127.0.0.1:4433/hister")
+			t.Setenv("HISTER__SERVER__BASE_URL", "http://127.0.0.1:4433/nogon")
 			t.Setenv("HISTER__APP__ACCESS_TOKEN", token)
 			t.Setenv("HISTER__INDEXER__DETECT_LANGUAGES", "false")
 			cfg, err := config.Load("")
@@ -1786,9 +1786,9 @@ func TestSettingsSaveWithoutMainFile(t *testing.T) {
 			}
 			testutil.InitModelWithConfig(t, cfg)
 			handler := startReloadTestRuntime(t, cfg)
-			headers := map[string]string{"Origin": "hister://", "X-Access-Token": token}
+			headers := map[string]string{"Origin": "nogon://", "X-Access-Token": token}
 			revision, _ := readConfigurationState(t, handler, headers)
-			response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":[{"path":"app.title","action":"set","value":"No main file"}]}`, revision)), headers)
+			response := testutil.ServeHTTP(t, handler, http.MethodPost, "/nogon/api/settings/apply", strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":[{"path":"app.title","action":"set","value":"No main file"}]}`, revision)), headers)
 			if response.Code != http.StatusOK {
 				t.Fatalf("save: %d %s", response.Code, response.Body)
 			}
@@ -1805,7 +1805,7 @@ func TestSettingsSaveWithoutMainFile(t *testing.T) {
 
 func TestSettingsSaveRejectsInvalidDraftsAndDiskFailures(t *testing.T) {
 	cfg, handler, _ := newReloadTestServer(t, false)
-	headers := map[string]string{"Origin": "hister://", "X-Access-Token": "secret"}
+	headers := map[string]string{"Origin": "nogon://", "X-Access-Token": "secret"}
 	revision, before := readConfigurationState(t, handler, headers)
 	for _, edits := range []string{
 		`[{"path":"app.title","action":"set","value":"Locked"}]`,
@@ -1816,7 +1816,7 @@ func TestSettingsSaveRejectsInvalidDraftsAndDiskFailures(t *testing.T) {
 		`[{"path":"app","action":"set","value":{"subtitle":"Bypass"}}]`,
 		`[{"path":"app.subtitle","action":"reset"},{"path":"app.subtitle","action":"set","value":"Duplicate"}]`,
 	} {
-		response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":%s}`, revision, edits)), headers)
+		response := testutil.ServeHTTP(t, handler, http.MethodPost, "/nogon/api/settings/apply", strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":%s}`, revision, edits)), headers)
 		if response.Code != http.StatusUnprocessableEntity {
 			t.Fatalf("invalid save: %d %s", response.Code, response.Body)
 		}
@@ -1829,7 +1829,7 @@ func TestSettingsSaveRejectsInvalidDraftsAndDiskFailures(t *testing.T) {
 			t.Fatal(err)
 		}
 		t.Cleanup(func() { _ = os.Chmod(cfg.App.Directory, 0o700) })
-		response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":[{"path":"app.subtitle","action":"set","value":"Cannot stage"}]}`, revision)), headers)
+		response := testutil.ServeHTTP(t, handler, http.MethodPost, "/nogon/api/settings/apply", strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":[{"path":"app.subtitle","action":"set","value":"Cannot stage"}]}`, revision)), headers)
 		if response.Code != http.StatusInternalServerError || !strings.Contains(response.Body.String(), "persistence_failed") {
 			t.Fatalf("staging failure: %d %s", response.Code, response.Body)
 		}
@@ -1845,13 +1845,13 @@ func TestSettingsSaveRejectsInvalidDraftsAndDiskFailures(t *testing.T) {
 
 func TestSettingsSaveReportsOtherApplyFailures(t *testing.T) {
 	cfg, handler, _ := newReloadTestServer(t, false)
-	headers := map[string]string{"Origin": "hister://", "X-Access-Token": "secret"}
+	headers := map[string]string{"Origin": "nogon://", "X-Access-Token": "secret"}
 	revision, before := readConfigurationState(t, handler, headers)
 	// Rules are read during activation, after the managed file has been staged.
 	if err := os.Remove(cfg.RulesPath()); err != nil {
 		t.Fatal(err)
 	}
-	response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/settings/apply", strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":[{"path":"app.subtitle","action":"set","value":"Candidate"}]}`, revision)), headers)
+	response := testutil.ServeHTTP(t, handler, http.MethodPost, "/nogon/api/settings/apply", strings.NewReader(fmt.Sprintf(`{"revision":%q,"edits":[{"path":"app.subtitle","action":"set","value":"Candidate"}]}`, revision)), headers)
 	var failure struct{ Code string }
 	if err := json.Unmarshal(response.Body.Bytes(), &failure); err != nil || response.Code != http.StatusBadRequest || failure.Code != "apply_failed" {
 		t.Fatalf("activation failure misclassified: %d %s (%v)", response.Code, response.Body, err)
@@ -1950,7 +1950,7 @@ func startRuntimeTestServer(t *testing.T) (*config.Config, func(), func(string, 
 		if err != nil {
 			t.Fatal(err)
 		}
-		req.Header.Set("Origin", "hister://")
+		req.Header.Set("Origin", "nogon://")
 		req.Header.Set("X-Access-Token", token)
 		req.Header.Set("Content-Type", "application/json")
 		resp, err := hc.Do(req)

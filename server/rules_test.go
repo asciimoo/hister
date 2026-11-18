@@ -30,7 +30,7 @@ func TestSaveRulesPreservesOmittedRuleGroups(t *testing.T) {
 		strings.NewReader(url.Values{"skip": {"new-skip"}}.Encode()),
 		map[string]string{
 			"Content-Type":   "application/x-www-form-urlencoded",
-			"Origin":         "hister://",
+			"Origin":         "nogon://",
 			"X-Access-Token": "secret",
 		})
 	if rec.Code != http.StatusOK {
@@ -56,7 +56,7 @@ func TestSaveRulesClearsExplicitEmptyRuleGroup(t *testing.T) {
 		strings.NewReader(url.Values{"versioning": {""}}.Encode()),
 		map[string]string{
 			"Content-Type":   "application/x-www-form-urlencoded",
-			"Origin":         "hister://",
+			"Origin":         "nogon://",
 			"X-Access-Token": "secret",
 		})
 	if rec.Code != http.StatusOK {
@@ -101,7 +101,7 @@ func TestSaveUserRulesPreservesOmittedRuleGroups(t *testing.T) {
 		strings.NewReader(url.Values{"skip": {"new-skip"}}.Encode()),
 		map[string]string{
 			"Content-Type":   "application/x-www-form-urlencoded",
-			"Origin":         "hister://",
+			"Origin":         "nogon://",
 			"X-Access-Token": user.Token,
 		})
 	if rec.Code != http.StatusOK {
@@ -120,7 +120,7 @@ func TestSaveUserRulesPreservesOmittedRuleGroups(t *testing.T) {
 
 func TestSaveAllowRules(t *testing.T) {
 	cfg, handler := newTokenTestServer(t, false)
-	headers := map[string]string{"Content-Type": "application/x-www-form-urlencoded", "Origin": "hister://", "X-Access-Token": "secret"}
+	headers := map[string]string{"Content-Type": "application/x-www-form-urlencoded", "Origin": "nogon://", "X-Access-Token": "secret"}
 	for _, tc := range []struct {
 		patterns string
 		status   int
@@ -151,7 +151,7 @@ func TestSaveAllowRules(t *testing.T) {
 
 func TestAllowRulesApplyToSubmissionsAndReindex(t *testing.T) {
 	cfg, handler := newTokenTestServer(t, false)
-	headers := map[string]string{"Content-Type": "application/json", "Origin": "hister://", "X-Access-Token": "secret"}
+	headers := map[string]string{"Content-Type": "application/json", "Origin": "nogon://", "X-Access-Token": "secret"}
 	docs := []struct {
 		url    string
 		manual bool
@@ -265,7 +265,7 @@ func TestIndexingRulesFilterExtractedDocuments(t *testing.T) {
 				}
 				idx := newServerTestIndexer(t, cfg)
 				handler := registerEndpoints(cfg, idx)
-				headers := map[string]string{"Content-Type": "application/json", "Origin": "hister://", "X-Access-Token": token}
+				headers := map[string]string{"Content-Type": "application/json", "Origin": "nogon://", "X-Access-Token": token}
 				const rootURL = "https://bsky.app/profile/alice.test/post/root"
 				urls := []string{
 					rootURL,

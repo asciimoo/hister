@@ -42,7 +42,7 @@ func TestReindexReportsDimensionMismatch(t *testing.T) {
 	idx = newServerTestIndexer(t, cfg)
 	response := testutil.ServeHTTP(t, registerEndpoints(cfg, idx), http.MethodPost, "/api/reindex", strings.NewReader(`{}`), map[string]string{
 		"X-Access-Token": "secret",
-		"Origin":         "hister://",
+		"Origin":         "nogon://",
 		"Content-Type":   "application/json",
 	})
 	if response.Code != http.StatusUnprocessableEntity || !strings.Contains(response.Body.String(), "expected 2000, got 2") || !strings.Contains(response.Body.String(), "semantic_search.dimensions") {
@@ -73,7 +73,7 @@ func TestRequestBodyLimits(t *testing.T) {
 				req := httptest.NewRequest(http.MethodPost, tc.path, strings.NewReader(tc.body))
 				req.Header.Set("Content-Type", tc.contentType)
 				req.Header.Set("Accept", "application/json, text/event-stream")
-				req.Header.Set("Origin", "hister://")
+				req.Header.Set("Origin", "nogon://")
 				req.Header.Set("X-Access-Token", tc.token)
 				if chunked {
 					req.ContentLength = -1
@@ -170,7 +170,7 @@ func TestRulePreviewBodyLimitBoundary(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, "/api/rules/preview", strings.NewReader(body))
 			req.ContentLength = -1
 			req.Header.Set("Content-Type", "application/json")
-			req.Header.Set("Origin", "hister://")
+			req.Header.Set("Origin", "nogon://")
 			req.Header.Set("X-Access-Token", "secret")
 			rec := httptest.NewRecorder()
 			handler.ServeHTTP(rec, req)
@@ -228,7 +228,7 @@ func TestDocumentBodyLimitsPreserveConfiguredAllowance(t *testing.T) {
 				req := httptest.NewRequest(http.MethodPost, tc.path, strings.NewReader(tc.body))
 				req.ContentLength = -1
 				req.Header.Set("Content-Type", "application/json")
-				req.Header.Set("Origin", "hister://")
+				req.Header.Set("Origin", "nogon://")
 				req.Header.Set("X-Access-Token", "secret")
 				rec := httptest.NewRecorder()
 				handler.ServeHTTP(rec, req)

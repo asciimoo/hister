@@ -30,7 +30,7 @@ func TestProviderTokenRequestRejectsUnsuccessfulResponse(t *testing.T) {
 			t.Parallel()
 
 			resp, err := provider.GetToken(context.Background(), NewTokenRequest(
-				"client-id", "client-secret", "code", "https://hister.example/callback",
+				"client-id", "client-secret", "code", "https://nogon.example/callback",
 			))
 			if err == nil {
 				t.Fatal("GetToken returned no error")
@@ -95,7 +95,7 @@ func TestProviderHTTPClientTimeout(t *testing.T) {
 	}
 	started := time.Now()
 	resp, err := provider.GetToken(context.Background(), NewTokenRequest(
-		"client-id", "client-secret", "code", "https://hister.example/callback",
+		"client-id", "client-secret", "code", "https://nogon.example/callback",
 	))
 	if err == nil {
 		t.Fatal("GetToken returned no error")

@@ -1,7 +1,7 @@
 {
   config,
   lib,
-  histerEnv,
+  nogonEnv,
   ...
 }:
 {
@@ -25,7 +25,7 @@
         RunAtLoad = true;
         ProcessType = "Background";
         WorkingDirectory = lib.mkIf (config.services.hister.dataDir != null) config.services.hister.dataDir;
-        EnvironmentVariables = histerEnv config.services.hister;
+        EnvironmentVariables = nogonEnv config.services.hister;
       };
       managedBy = "services.hister.enable";
     };

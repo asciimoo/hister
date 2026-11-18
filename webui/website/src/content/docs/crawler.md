@@ -285,9 +285,9 @@ Start Firefox with a dedicated profile so the command creates a separate browser
 Linux example creates the profile directory and runs without a graphical display:
 
 ```bash
-mkdir -p "$HOME/.local/share/hister-firefox"
+mkdir -p "$HOME/.local/share/nogon-firefox"
 firefox --headless --no-remote \
-  --profile "$HOME/.local/share/hister-firefox" \
+  --profile "$HOME/.local/share/nogon-firefox" \
   --remote-debugging-port 9222
 ```
 

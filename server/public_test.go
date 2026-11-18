@@ -157,7 +157,7 @@ func TestMetricsRequiresTokenAndHonorsBasePath(t *testing.T) {
 	cfg.App.AccessToken = "secret"
 	cfg.Server.Metrics = true
 	cfg.Server.Database = "test.sqlite3"
-	if err := cfg.UpdateBaseURL("http://127.0.0.1:4433/hister"); err != nil {
+	if err := cfg.UpdateBaseURL("http://127.0.0.1:4433/nogon"); err != nil {
 		t.Fatal(err)
 	}
 	if err := cfg.SaveRules(); err != nil {
@@ -179,8 +179,8 @@ func TestMetricsRequiresTokenAndHonorsBasePath(t *testing.T) {
 		status int
 	}{
 		{name: "unprefixed", target: "/metrics", status: http.StatusNotFound},
-		{name: "anonymous", target: "/hister/metrics", status: http.StatusForbidden},
-		{name: "authenticated", target: "/hister/metrics", token: "secret", status: http.StatusOK},
+		{name: "anonymous", target: "/nogon/metrics", status: http.StatusForbidden},
+		{name: "authenticated", target: "/nogon/metrics", token: "secret", status: http.StatusOK},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			headers := map[string]string{}
@@ -194,7 +194,7 @@ func TestMetricsRequiresTokenAndHonorsBasePath(t *testing.T) {
 		})
 	}
 
-	docs := testutil.ServeHTTP(t, handler, http.MethodGet, "/hister/api", nil, map[string]string{"Authorization": "Bearer secret"})
+	docs := testutil.ServeHTTP(t, handler, http.MethodGet, "/nogon/api", nil, map[string]string{"Authorization": "Bearer secret"})
 	if !apiDocsContain(t, docs.Body.Bytes(), "Metrics") {
 		t.Fatal("API documentation does not include enabled Metrics endpoint")
 	}
@@ -283,7 +283,7 @@ func TestPublicModeProtectsWriteRoutes(t *testing.T) {
 func TestPublicModeAllowsAuthenticatedProtectedRoutes(t *testing.T) {
 	_, handler := newPublicTokenTestServer(t)
 	rec := testutil.ServeHTTP(t, handler, http.MethodGet, "/api/profile", nil, map[string]string{
-		"Origin":         "hister://",
+		"Origin":         "nogon://",
 		"X-Access-Token": "secret",
 	})
 
@@ -296,7 +296,7 @@ func TestTokenLoginSetsHttpOnlySessionCookieAndAuthenticates(t *testing.T) {
 	_, handler := newPublicTokenTestServer(t)
 	loginReq := httptest.NewRequest(http.MethodPost, "/api/token-login", strings.NewReader(`{"token":"secret"}`))
 	loginReq.Header.Set("Content-Type", "application/json")
-	loginReq.Header.Set("Origin", "hister://")
+	loginReq.Header.Set("Origin", "nogon://")
 	loginRec := httptest.NewRecorder()
 
 	handler.ServeHTTP(loginRec, loginReq)
@@ -383,7 +383,7 @@ func TestTokenLoginSetsHttpOnlySessionCookieAndAuthenticates(t *testing.T) {
 func TestPublicModeEnablesHistoryForAuthenticatedCallers(t *testing.T) {
 	_, handler := newPublicTokenTestServer(t)
 	anonymousRec := testutil.ServeHTTP(t, handler, http.MethodPost, "/api/history", strings.NewReader(`{"query":"q","url":"https://example.com","title":"Example"}`), map[string]string{
-		"Origin": "hister://",
+		"Origin": "nogon://",
 	})
 
 	if anonymousRec.Code != http.StatusForbidden {
@@ -399,7 +399,7 @@ func TestPublicModeEnablesHistoryForAuthenticatedCallers(t *testing.T) {
 	}
 
 	rec := testutil.ServeHTTP(t, handler, http.MethodPost, "/api/history", strings.NewReader(`{"query":"q","url":"https://example.com","title":"Example"}`), map[string]string{
-		"Origin":         "hister://",
+		"Origin":         "nogon://",
 		"X-Access-Token": "secret",
 	})
 
@@ -449,7 +449,7 @@ func TestPublicModeEnablesHistoryForAuthenticatedCallers(t *testing.T) {
 
 func TestMCPGetHistoryOpenedMode(t *testing.T) {
 	cfg, handler := newTokenTestServer(t, false)
-	if err := model.UpdateHistory(0, "hister mcp", "https://example.com/mcp", "MCP result"); err != nil {
+	if err := model.UpdateHistory(0, "nogon mcp", "https://example.com/mcp", "MCP result"); err != nil {
 		t.Fatal(err)
 	}
 	if err := model.UpdateHistory(0, "history view", "https://example.com/history", "History result"); err != nil {
@@ -482,7 +482,7 @@ func TestMCPGetHistoryOpenedMode(t *testing.T) {
 	textContent := string(encodedContent)
 	for _, want := range []string{
 		`"trust":"untrusted"`,
-		`"query":"hister mcp"`,
+		`"query":"nogon mcp"`,
 		`"url":"https://example.com/mcp"`,
 		`"query":"history view"`,
 		`"url":"https://example.com/history"`,

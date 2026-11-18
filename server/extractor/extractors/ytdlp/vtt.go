@@ -53,7 +53,7 @@ func downloadSubtitleForLang(ctx context.Context, e *YtdlpExtractor, info *video
 		return ""
 	}
 
-	dir, err := os.MkdirTemp("", "hister-subs-*")
+	dir, err := os.MkdirTemp("", "nogon-subs-*")
 	if err != nil {
 		return ""
 	}

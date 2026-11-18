@@ -93,7 +93,7 @@ func addQutebrowserCompanionFlags(cmd *cobra.Command) {
 func qutebrowserCompanionOptions(cmd *cobra.Command) qutebrowsercompanion.Options {
 	opts := qutebrowsercompanion.DefaultOptions()
 	opts.DevToolsURL, _ = cmd.Flags().GetString("devtools-url")
-	opts.HisterURL = cfg.BaseURL("")
+	opts.NogonURL = cfg.BaseURL("")
 	opts.Label, _ = cmd.Flags().GetString("label")
 	opts.InitialDelay, _ = cmd.Flags().GetDuration("initial-delay")
 	opts.Debounce, _ = cmd.Flags().GetDuration("debounce")

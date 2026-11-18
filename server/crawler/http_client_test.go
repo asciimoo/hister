@@ -160,10 +160,10 @@ func TestRobotsCacheBoundsDownloads(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			body := &trackedResponseBody{Reader: strings.NewReader(tc.body)}
 			requests := 0
-			cache := NewRobotsCache("Hister")
+			cache := NewRobotsCache("Nogon")
 			cache.client.Transport = httpTestTransport(func(req *http.Request) (*http.Response, error) {
 				requests++
-				if req.URL.Path != "/robots.txt" || req.Header.Get("User-Agent") != "Hister" {
+				if req.URL.Path != "/robots.txt" || req.Header.Get("User-Agent") != "Nogon" {
 					t.Errorf("unexpected robots request: %s, agent=%q", req.URL, req.Header.Get("User-Agent"))
 				}
 				return &http.Response{
@@ -212,7 +212,7 @@ func TestRobotsCacheLimitsDecompressedResponse(t *testing.T) {
 		}
 	}))
 	defer server.Close()
-	cache := NewRobotsCache("Hister")
+	cache := NewRobotsCache("Nogon")
 	defer cache.client.CloseIdleConnections()
 	if cache.Allowed(t.Context(), server.URL+"/public") {
 		t.Fatal("oversized decompressed robots.txt allowed crawling")

@@ -31,7 +31,7 @@ func TestLanguageOverridesRefreshEmbeddingContext(t *testing.T) {
 	defer server.Close()
 	cfg := testutil.Config(t)
 	cfg.Indexer.DetectLanguages = false
-	cfg.Server.Database = "hister-test.sqlite3"
+	cfg.Server.Database = "nogon-test.sqlite3"
 	cfg.SemanticSearch.Enable = true
 	cfg.SemanticSearch.EmbeddingEndpoint = server.URL
 	cfg.SemanticSearch.EmbeddingModel = "test"
@@ -150,7 +150,7 @@ func TestEmbeddingQueueSkipsUnchangedDocumentText(t *testing.T) {
 	defer server.Close()
 
 	cfg := testutil.Config(t)
-	cfg.Server.Database = "hister-test.sqlite3"
+	cfg.Server.Database = "nogon-test.sqlite3"
 	cfg.SemanticSearch.Enable = true
 	cfg.SemanticSearch.EmbeddingEndpoint = server.URL
 	cfg.SemanticSearch.EmbeddingModel = "test"
@@ -647,7 +647,7 @@ func TestEmbeddingQueueReprocessesDocumentChangedWhileActive(t *testing.T) {
 	defer server.Close()
 
 	cfg := testutil.Config(t)
-	cfg.Server.Database = "hister-active-test.sqlite3"
+	cfg.Server.Database = "nogon-active-test.sqlite3"
 	cfg.SemanticSearch.Enable = true
 	cfg.SemanticSearch.EmbeddingEndpoint = server.URL
 	cfg.SemanticSearch.EmbeddingModel = "test"
@@ -700,7 +700,7 @@ func TestDeleteCancelsActiveEmbeddingJob(t *testing.T) {
 	}()
 
 	cfg := testutil.Config(t)
-	cfg.Server.Database = "hister-delete-test.sqlite3"
+	cfg.Server.Database = "nogon-delete-test.sqlite3"
 	cfg.SemanticSearch.Enable = true
 	cfg.SemanticSearch.EmbeddingEndpoint = server.URL
 	cfg.SemanticSearch.EmbeddingModel = "test"

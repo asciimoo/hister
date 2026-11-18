@@ -30,7 +30,7 @@ func TestSessionCookieSecurityFollowsBaseURL(t *testing.T) {
 		secure  bool
 	}{
 		{name: "HTTP", baseURL: "http://127.0.0.1:4433", secure: false},
-		{name: "HTTPS", baseURL: "https://hister.example", secure: true},
+		{name: "HTTPS", baseURL: "https://nogon.example", secure: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -62,7 +62,7 @@ func TestTokenSessionRotationAndLogoutRevokeSession(t *testing.T) {
 	assertSessionAccepted(t, handler, secondCookie)
 
 	logoutReq := httptest.NewRequest(http.MethodPost, "/api/logout", nil)
-	logoutReq.Header.Set("Origin", "hister://")
+	logoutReq.Header.Set("Origin", "nogon://")
 	logoutReq.AddCookie(secondCookie)
 	logoutRec := httptest.NewRecorder()
 	handler.ServeHTTP(logoutRec, logoutReq)
@@ -150,7 +150,7 @@ func TestTokenChangeInvalidatesBrowserSession(t *testing.T) {
 func TestHeaderTokenDoesNotCreateBrowserSession(t *testing.T) {
 	_, handler := newTokenTestServer(t, false)
 	rec := testutil.ServeHTTP(t, handler, http.MethodGet, "/api/profile", nil, map[string]string{
-		"Origin":         "hister://",
+		"Origin":         "nogon://",
 		"X-Access-Token": "secret",
 	})
 	if rec.Code != http.StatusOK {
@@ -225,7 +225,7 @@ func TestUserSessionStoresAccountReferenceAndRejectsDeletedUser(t *testing.T) {
 
 	loginReq := httptest.NewRequest(http.MethodPost, "/api/login", strings.NewReader(`{"username":"alice","password":"password123"}`))
 	loginReq.Header.Set("Content-Type", "application/json")
-	loginReq.Header.Set("Origin", "hister://")
+	loginReq.Header.Set("Origin", "nogon://")
 	loginRec := httptest.NewRecorder()
 	handler.ServeHTTP(loginRec, loginReq)
 	if loginRec.Code != http.StatusOK {
@@ -285,7 +285,7 @@ func TestPasswordResetRevokesUserSessions(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		return testutil.ServeHTTP(t, handler, http.MethodPost, "/api/login", strings.NewReader(string(body)), map[string]string{"Origin": "hister://", "Content-Type": "application/json"})
+		return testutil.ServeHTTP(t, handler, http.MethodPost, "/api/login", strings.NewReader(string(body)), map[string]string{"Origin": "nogon://", "Content-Type": "application/json"})
 	}
 	profile := func(cookie *http.Cookie, want int) {
 		t.Helper()
@@ -378,7 +378,7 @@ func TestPasswordResetRevokesLegacyUserSession(t *testing.T) {
 func TestFailedPasswordResetPreservesSession(t *testing.T) {
 	_, handler, _, _ := newUserDeletionTestServer(t)
 	testutil.CreateUser(t, "alice")
-	login := testutil.ServeHTTP(t, handler, http.MethodPost, "/api/login", strings.NewReader(`{"username":"alice","password":"password123"}`), map[string]string{"Origin": "hister://"})
+	login := testutil.ServeHTTP(t, handler, http.MethodPost, "/api/login", strings.NewReader(`{"username":"alice","password":"password123"}`), map[string]string{"Origin": "nogon://"})
 	cookie := responseSessionCookie(t, login)
 	for _, password := range []string{"", strings.Repeat("x", 73)} {
 		if err := model.UpdatePassword("alice", password); err == nil {
@@ -433,7 +433,7 @@ func TestRemovedDeleteUserEndpoint(t *testing.T) {
 		t.Fatal(err)
 	}
 	response := testutil.ServeHTTP(t, handler, http.MethodPost, "/api/delete_user", strings.NewReader(`{"username":"alice","purge":true}`), map[string]string{
-		"Authorization": "Bearer " + admin.Token, "Origin": "hister://", "Content-Type": "application/json",
+		"Authorization": "Bearer " + admin.Token, "Origin": "nogon://", "Content-Type": "application/json",
 	})
 	if response.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("removed endpoint status = %d, want 405: %s", response.Code, response.Body)
@@ -465,7 +465,7 @@ func TestRemovedDeleteUserEndpoint(t *testing.T) {
 
 func TestDeleteUserByIDAPI(t *testing.T) {
 	cfg, _, idx, admin := newUserDeletionTestServer(t)
-	if err := cfg.UpdateBaseURL("http://127.0.0.1:4433/hister"); err != nil {
+	if err := cfg.UpdateBaseURL("http://127.0.0.1:4433/nogon"); err != nil {
 		t.Fatal(err)
 	}
 	handler := registerEndpoints(cfg, idx)
@@ -487,10 +487,10 @@ func TestDeleteUserByIDAPI(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	login := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/login", strings.NewReader(`{"username":"alice","password":"password123"}`), map[string]string{"Origin": "hister://"})
+	login := testutil.ServeHTTP(t, handler, http.MethodPost, "/nogon/api/login", strings.NewReader(`{"username":"alice","password":"password123"}`), map[string]string{"Origin": "nogon://"})
 	cookie := responseSessionCookie(t, login)
-	path := fmt.Sprintf("/hister/api/users/%d", alice.ID)
-	headers := map[string]string{"Authorization": "Bearer " + admin.Token, "Origin": "hister://"}
+	path := fmt.Sprintf("/nogon/api/users/%d", alice.ID)
+	headers := map[string]string{"Authorization": "Bearer " + admin.Token, "Origin": "nogon://"}
 	for _, query := range []string{"", "?purge=false"} {
 		response := testutil.ServeHTTP(t, handler, http.MethodDelete, path+query, nil, headers)
 		assertUserDeletionError(t, response, http.StatusConflict, "purge_required")
@@ -544,7 +544,7 @@ func TestDeleteUserByIDAPI(t *testing.T) {
 		}
 	}
 	for _, tokenAuth := range []bool{false, true} {
-		req := httptest.NewRequest(http.MethodGet, "/hister/api/profile", nil)
+		req := httptest.NewRequest(http.MethodGet, "/nogon/api/profile", nil)
 		if tokenAuth {
 			req.Header.Set("Authorization", "Bearer "+alice.Token)
 		} else {
@@ -585,7 +585,7 @@ func TestDeleteUserByIDAPIValidation(t *testing.T) {
 		{path + "?purge=true;ignored=false", "invalid_request", http.StatusBadRequest},
 	} {
 		t.Run(tc.path, func(t *testing.T) {
-			response := testutil.ServeHTTP(t, handler, http.MethodDelete, tc.path, nil, map[string]string{"X-Access-Token": admin.Token, "Origin": "hister://"})
+			response := testutil.ServeHTTP(t, handler, http.MethodDelete, tc.path, nil, map[string]string{"X-Access-Token": admin.Token, "Origin": "nogon://"})
 			assertUserDeletionError(t, response, tc.status, tc.code)
 			if user, err := model.GetUserByID(alice.ID); err != nil || *user != *alice {
 				t.Fatalf("invalid request changed account: %v", err)
@@ -603,10 +603,10 @@ func TestDeleteUserByIDAPIAuthorization(t *testing.T) {
 	bob := testutil.CreateUser(t, "bob")
 	path := fmt.Sprintf("/api/users/%d", alice.ID)
 	for _, tc := range []struct{ token, origin string }{
-		{"", "hister://"},
-		{"invalid", "hister://"},
-		{alice.Token, "hister://"},
-		{bob.Token, "hister://"},
+		{"", "nogon://"},
+		{"invalid", "nogon://"},
+		{alice.Token, "nogon://"},
+		{bob.Token, "nogon://"},
 		{admin.Token, "https://other.example"},
 	} {
 		response := testutil.ServeHTTP(t, handler, http.MethodDelete, path+"?purge=true", nil, map[string]string{"Authorization": "Bearer " + tc.token, "Origin": tc.origin})
@@ -617,7 +617,7 @@ func TestDeleteUserByIDAPIAuthorization(t *testing.T) {
 			t.Fatalf("unauthorized request deleted account: %v", err)
 		}
 	}
-	login := testutil.ServeHTTP(t, handler, http.MethodPost, "/api/login", strings.NewReader(`{"username":"admin","password":"password123"}`), map[string]string{"Origin": "hister://"})
+	login := testutil.ServeHTTP(t, handler, http.MethodPost, "/api/login", strings.NewReader(`{"username":"admin","password":"password123"}`), map[string]string{"Origin": "nogon://"})
 	cookie := responseSessionCookie(t, login)
 	for _, csrf := range []bool{false, true} {
 		req := httptest.NewRequest(http.MethodDelete, path, nil)
@@ -656,7 +656,7 @@ func TestDeleteUserByIDAPILastAdmin(t *testing.T) {
 		t.Fatal(err)
 	}
 	path := fmt.Sprintf("/api/users/%d?purge=true", admin.ID)
-	headers := map[string]string{"Authorization": "Bearer " + admin.Token, "Origin": "hister://"}
+	headers := map[string]string{"Authorization": "Bearer " + admin.Token, "Origin": "nogon://"}
 	response := testutil.ServeHTTP(t, handler, http.MethodDelete, path, nil, headers)
 	assertUserDeletionError(t, response, http.StatusConflict, "last_admin")
 	if user, err := model.GetUserByID(admin.ID); err != nil || *user != *admin {
@@ -677,7 +677,7 @@ func TestDeleteUserByIDAPILastAdmin(t *testing.T) {
 func TestDeleteUserByIDAPIRequiresUserHandling(t *testing.T) {
 	_, handler := newTokenTestServer(t, false)
 	alice := testutil.CreateUser(t, "alice")
-	response := testutil.ServeHTTP(t, handler, http.MethodDelete, fmt.Sprintf("/api/users/%d?purge=true", alice.ID), nil, map[string]string{"X-Access-Token": "secret", "Origin": "hister://"})
+	response := testutil.ServeHTTP(t, handler, http.MethodDelete, fmt.Sprintf("/api/users/%d?purge=true", alice.ID), nil, map[string]string{"X-Access-Token": "secret", "Origin": "nogon://"})
 	assertUserDeletionError(t, response, http.StatusBadRequest, "user_handling_disabled")
 	if _, err := model.GetUserByID(alice.ID); err != nil {
 		t.Fatalf("disabled user handling request deleted account: %v", err)
@@ -695,7 +695,7 @@ func TestDeleteUserByIDAPIFailures(t *testing.T) {
 				t.Fatal(err)
 			}
 			for _, query := range []string{"", "?purge=true"} {
-				response := testutil.ServeHTTP(t, handler, http.MethodDelete, fmt.Sprintf("/api/users/%d%s", alice.ID, query), nil, map[string]string{"X-Access-Token": admin.Token, "Origin": "hister://"})
+				response := testutil.ServeHTTP(t, handler, http.MethodDelete, fmt.Sprintf("/api/users/%d%s", alice.ID, query), nil, map[string]string{"X-Access-Token": admin.Token, "Origin": "nogon://"})
 				assertUserDeletionError(t, response, http.StatusInternalServerError, "internal_error")
 				if strings.Contains(response.Body.String(), "private database error") {
 					t.Fatal("failed deletion exposed private database details")
@@ -721,7 +721,7 @@ func assertUserDeletionError(t *testing.T, response *httptest.ResponseRecorder, 
 
 func TestUserReadAPI(t *testing.T) {
 	cfg, _, idx, admin := newUserDeletionTestServer(t)
-	if err := cfg.UpdateBaseURL("http://127.0.0.1:4433/hister"); err != nil {
+	if err := cfg.UpdateBaseURL("http://127.0.0.1:4433/nogon"); err != nil {
 		t.Fatal(err)
 	}
 	handler := registerEndpoints(cfg, idx)
@@ -734,7 +734,7 @@ func TestUserReadAPI(t *testing.T) {
 	}
 	request := func(path string) *httptest.ResponseRecorder {
 		t.Helper()
-		response := testutil.ServeHTTP(t, handler, http.MethodGet, "/hister"+path, nil, map[string]string{"Authorization": "Bearer " + admin.Token})
+		response := testutil.ServeHTTP(t, handler, http.MethodGet, "/nogon"+path, nil, map[string]string{"Authorization": "Bearer " + admin.Token})
 		if response.Code != http.StatusOK {
 			t.Fatalf("GET %s: %d %s", path, response.Code, response.Body)
 		}
@@ -841,7 +841,7 @@ func TestUserReadAPI(t *testing.T) {
 func TestUserReadAPIAuthorization(t *testing.T) {
 	_, handler, _, admin := newUserDeletionTestServer(t)
 	user := testutil.CreateUser(t, "alice")
-	login := testutil.ServeHTTP(t, handler, http.MethodPost, "/api/login", strings.NewReader(`{"username":"admin","password":"password123"}`), map[string]string{"Origin": "hister://"})
+	login := testutil.ServeHTTP(t, handler, http.MethodPost, "/api/login", strings.NewReader(`{"username":"admin","password":"password123"}`), map[string]string{"Origin": "nogon://"})
 	if login.Code != http.StatusOK {
 		t.Fatalf("admin login: %d %s", login.Code, login.Body)
 	}
@@ -963,7 +963,7 @@ func TestUserReadAPIDatabaseErrors(t *testing.T) {
 
 func TestCreateUserAPI(t *testing.T) {
 	cfg, _, idx, admin := newUserDeletionTestServer(t)
-	if err := cfg.UpdateBaseURL("http://127.0.0.1:4433/hister"); err != nil {
+	if err := cfg.UpdateBaseURL("http://127.0.0.1:4433/nogon"); err != nil {
 		t.Fatal(err)
 	}
 	handler := registerEndpoints(cfg, idx)
@@ -980,8 +980,8 @@ func TestCreateUserAPI(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			response := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/users", strings.NewReader(string(body)), map[string]string{
-				"Authorization": "Bearer " + admin.Token, "Origin": "hister://", "Content-Type": "application/json",
+			response := testutil.ServeHTTP(t, handler, http.MethodPost, "/nogon/api/users", strings.NewReader(string(body)), map[string]string{
+				"Authorization": "Bearer " + admin.Token, "Origin": "nogon://", "Content-Type": "application/json",
 			})
 			if response.Code != http.StatusCreated {
 				t.Fatalf("create status = %d, want 201: %s", response.Code, response.Body)
@@ -1008,7 +1008,7 @@ func TestCreateUserAPI(t *testing.T) {
 				t.Fatal("creation response may be cached")
 			}
 			location, err := url.Parse(response.Header().Get("Location"))
-			if err != nil || location.Path != fmt.Sprintf("/hister/api/users/%d", user.ID) {
+			if err != nil || location.Path != fmt.Sprintf("/nogon/api/users/%d", user.ID) {
 				t.Fatalf("incorrect resource location: %q", response.Header().Get("Location"))
 			}
 			lookup := testutil.ServeHTTP(t, handler, http.MethodGet, location.RequestURI(), nil, map[string]string{"Authorization": "Bearer " + admin.Token})
@@ -1045,7 +1045,7 @@ func TestCreateUserAPIValidation(t *testing.T) {
 		{"trailing garbage", `{"username":"alice","password":"password123"} secret`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			response := testutil.ServeHTTP(t, handler, http.MethodPost, "/api/users", strings.NewReader(tc.body), map[string]string{"X-Access-Token": admin.Token, "Origin": "hister://"})
+			response := testutil.ServeHTTP(t, handler, http.MethodPost, "/api/users", strings.NewReader(tc.body), map[string]string{"X-Access-Token": admin.Token, "Origin": "nogon://"})
 			var result map[string]string
 			if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil || response.Code != http.StatusBadRequest || result["code"] != "invalid_request" || result["error"] == "" {
 				t.Fatalf("invalid request: status = %d, body = %s, decode error = %v", response.Code, response.Body, err)
@@ -1063,7 +1063,7 @@ func TestCreateUserAPIValidation(t *testing.T) {
 
 func TestCreateUserAPIDuplicate(t *testing.T) {
 	_, handler, _, admin := newUserDeletionTestServer(t)
-	response := testutil.ServeHTTP(t, handler, http.MethodPost, "/api/users", strings.NewReader(`{"username":"admin","password":"replacement","is_admin":false}`), map[string]string{"X-Access-Token": admin.Token, "Origin": "hister://"})
+	response := testutil.ServeHTTP(t, handler, http.MethodPost, "/api/users", strings.NewReader(`{"username":"admin","password":"replacement","is_admin":false}`), map[string]string{"X-Access-Token": admin.Token, "Origin": "nogon://"})
 	var result map[string]string
 	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil || response.Code != http.StatusConflict || result["code"] != "username_exists" {
 		t.Fatalf("duplicate request: status = %d, body = %s, decode error = %v", response.Code, response.Body, err)
@@ -1078,7 +1078,7 @@ func TestCreateUserAPIAuthorization(t *testing.T) {
 	_, handler, _, admin := newUserDeletionTestServer(t)
 	user := testutil.CreateUser(t, "alice")
 	for _, token := range []string{"", "invalid", user.Token} {
-		response := testutil.ServeHTTP(t, handler, http.MethodPost, "/api/users", strings.NewReader(`{"username":"unauthorized","password":"password123","is_admin":true}`), map[string]string{"Authorization": "Bearer " + token, "Origin": "hister://"})
+		response := testutil.ServeHTTP(t, handler, http.MethodPost, "/api/users", strings.NewReader(`{"username":"unauthorized","password":"password123","is_admin":true}`), map[string]string{"Authorization": "Bearer " + token, "Origin": "nogon://"})
 		if response.Code != http.StatusForbidden {
 			t.Fatalf("unauthorized creation: status = %d, want 403: %s", response.Code, response.Body)
 		}
@@ -1087,7 +1087,7 @@ func TestCreateUserAPIAuthorization(t *testing.T) {
 		t.Fatalf("unauthorized creation changed accounts: %v", err)
 	}
 	// A session must pass CSRF validation before it can create even an ordinary account.
-	login := testutil.ServeHTTP(t, handler, http.MethodPost, "/api/login", strings.NewReader(`{"username":"admin","password":"password123"}`), map[string]string{"Origin": "hister://"})
+	login := testutil.ServeHTTP(t, handler, http.MethodPost, "/api/login", strings.NewReader(`{"username":"admin","password":"password123"}`), map[string]string{"Origin": "nogon://"})
 	if login.Code != http.StatusOK {
 		t.Fatalf("login: %d %s", login.Code, login.Body)
 	}
@@ -1126,7 +1126,7 @@ func TestCreateUserAPIAuthorization(t *testing.T) {
 
 func TestCreateUserAPIRequiresUserHandling(t *testing.T) {
 	_, handler := newTokenTestServer(t, false)
-	response := testutil.ServeHTTP(t, handler, http.MethodPost, "/api/users", strings.NewReader(`{"username":"alice","password":"password123","is_admin":true}`), map[string]string{"X-Access-Token": "secret", "Origin": "hister://"})
+	response := testutil.ServeHTTP(t, handler, http.MethodPost, "/api/users", strings.NewReader(`{"username":"alice","password":"password123","is_admin":true}`), map[string]string{"X-Access-Token": "secret", "Origin": "nogon://"})
 	var result map[string]string
 	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil || response.Code != http.StatusBadRequest || result["code"] != "user_handling_disabled" {
 		t.Fatalf("single user creation: status = %d, body = %s, decode error = %v", response.Code, response.Body, err)
@@ -1142,7 +1142,7 @@ func TestCreateUserAPIBodyLimit(t *testing.T) {
 		// Trailing whitespace must still count toward the limit before an account is created.
 		req := httptest.NewRequest(http.MethodPost, "/api/users", strings.NewReader(`{"username":"alice","password":"password123"}`+strings.Repeat(" ", int(maxRequestBodyBytes))))
 		req.Header.Set("X-Access-Token", admin.Token)
-		req.Header.Set("Origin", "hister://")
+		req.Header.Set("Origin", "nogon://")
 		if !knownLength {
 			req.ContentLength = -1
 		}
@@ -1191,7 +1191,7 @@ func tokenLoginCookie(t *testing.T, handler http.Handler, current *http.Cookie) 
 	t.Helper()
 	req := httptest.NewRequest(http.MethodPost, "/api/token-login", strings.NewReader(`{"token":"secret"}`))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Origin", "hister://")
+	req.Header.Set("Origin", "nogon://")
 	if current != nil {
 		req.AddCookie(current)
 	}
@@ -1243,10 +1243,10 @@ func assertSessionRejected(t *testing.T, handler http.Handler, cookie *http.Cook
 func TestUpdateUserAPI(t *testing.T) {
 	_, handler, _, admin := newUserDeletionTestServer(t)
 	alice := testutil.CreateUser(t, "alice")
-	login := testutil.ServeHTTP(t, handler, http.MethodPost, "/api/login", strings.NewReader(`{"username":"alice","password":"password123"}`), map[string]string{"Origin": "hister://"})
+	login := testutil.ServeHTTP(t, handler, http.MethodPost, "/api/login", strings.NewReader(`{"username":"alice","password":"password123"}`), map[string]string{"Origin": "nogon://"})
 	cookie := responseSessionCookie(t, login)
 	path := fmt.Sprintf("/api/users/%d", alice.ID)
-	response := testutil.ServeHTTP(t, handler, http.MethodPatch, path, strings.NewReader(`{"revision":1,"username":"renamed","password":"replacement123","is_admin":true,"regenerate_token":true}`), map[string]string{"Authorization": "Bearer " + admin.Token, "Origin": "hister://"})
+	response := testutil.ServeHTTP(t, handler, http.MethodPatch, path, strings.NewReader(`{"revision":1,"username":"renamed","password":"replacement123","is_admin":true,"regenerate_token":true}`), map[string]string{"Authorization": "Bearer " + admin.Token, "Origin": "nogon://"})
 	if response.Code != http.StatusOK {
 		t.Fatalf("update: %d %s", response.Code, response.Body)
 	}
@@ -1292,7 +1292,7 @@ func TestUpdateUserAPI(t *testing.T) {
 	}
 
 	// An explicit false value demotes, and omitted fields keep their values.
-	response = testutil.ServeHTTP(t, handler, http.MethodPatch, path, strings.NewReader(`{"revision":2,"is_admin":false}`), map[string]string{"X-Access-Token": admin.Token, "Origin": "hister://"})
+	response = testutil.ServeHTTP(t, handler, http.MethodPatch, path, strings.NewReader(`{"revision":2,"is_admin":false}`), map[string]string{"X-Access-Token": admin.Token, "Origin": "nogon://"})
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(response.Body.Bytes(), &fields); err != nil || response.Code != http.StatusOK || len(fields) != 6 || string(fields["revision"]) != "3" {
 		t.Fatalf("partial update: %d %s, error %v", response.Code, response.Body, err)
@@ -1335,7 +1335,7 @@ func TestUpdateUserAPIRejectedChanges(t *testing.T) {
 		{`{"revision":1,"username":"admin","password":"replacement123","is_admin":true,"regenerate_token":true}`, "username_exists", 409},
 	} {
 		t.Run(tc.body, func(t *testing.T) {
-			response := testutil.ServeHTTP(t, handler, http.MethodPatch, fmt.Sprintf("/api/users/%d", alice.ID), strings.NewReader(tc.body), map[string]string{"X-Access-Token": admin.Token, "Origin": "hister://"})
+			response := testutil.ServeHTTP(t, handler, http.MethodPatch, fmt.Sprintf("/api/users/%d", alice.ID), strings.NewReader(tc.body), map[string]string{"X-Access-Token": admin.Token, "Origin": "nogon://"})
 			var result map[string]string
 			if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil || response.Code != tc.status || result["code"] != tc.code {
 				t.Fatalf("rejected update: %d %s, error %v", response.Code, response.Body, err)
@@ -1354,7 +1354,7 @@ func TestUpdateUserAPIRejectedChanges(t *testing.T) {
 func TestUpdateUserAPILastAdmin(t *testing.T) {
 	_, handler, _, admin := newUserDeletionTestServer(t)
 	body := `{"revision":1,"is_admin":false,"password":"replacement123","regenerate_token":true}`
-	response := testutil.ServeHTTP(t, handler, http.MethodPatch, fmt.Sprintf("/api/users/%d", admin.ID), strings.NewReader(body), map[string]string{"X-Access-Token": admin.Token, "Origin": "hister://"})
+	response := testutil.ServeHTTP(t, handler, http.MethodPatch, fmt.Sprintf("/api/users/%d", admin.ID), strings.NewReader(body), map[string]string{"X-Access-Token": admin.Token, "Origin": "nogon://"})
 	var result map[string]string
 	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil || response.Code != http.StatusConflict || result["code"] != "last_admin" {
 		t.Fatalf("last admin removal: %d %s, error %v", response.Code, response.Body, err)
@@ -1371,12 +1371,12 @@ func TestUpdateUserAPIAuthorization(t *testing.T) {
 	path := fmt.Sprintf("/api/users/%d", alice.ID)
 	body := `{"revision":1,"is_admin":true}`
 	for _, token := range []string{"", "invalid", alice.Token} {
-		response := testutil.ServeHTTP(t, handler, http.MethodPatch, path, strings.NewReader(body), map[string]string{"Authorization": "Bearer " + token, "Origin": "hister://"})
+		response := testutil.ServeHTTP(t, handler, http.MethodPatch, path, strings.NewReader(body), map[string]string{"Authorization": "Bearer " + token, "Origin": "nogon://"})
 		if response.Code != http.StatusForbidden {
 			t.Fatalf("unauthorized update: %d %s", response.Code, response.Body)
 		}
 	}
-	login := testutil.ServeHTTP(t, handler, http.MethodPost, "/api/login", strings.NewReader(`{"username":"admin","password":"password123"}`), map[string]string{"Origin": "hister://"})
+	login := testutil.ServeHTTP(t, handler, http.MethodPost, "/api/login", strings.NewReader(`{"username":"admin","password":"password123"}`), map[string]string{"Origin": "nogon://"})
 	cookie := responseSessionCookie(t, login)
 	for _, csrf := range []bool{false, true} {
 		req := httptest.NewRequest(http.MethodPatch, path, strings.NewReader(body))
@@ -1406,7 +1406,7 @@ func TestUpdateUserAPIAuthorization(t *testing.T) {
 		}
 	}
 	// Self rotation must return a usable replacement for the token being revoked.
-	response := testutil.ServeHTTP(t, handler, http.MethodPatch, fmt.Sprintf("/api/users/%d", admin.ID), strings.NewReader(`{"revision":1,"regenerate_token":true}`), map[string]string{"Authorization": "Bearer " + admin.Token, "Origin": "hister://"})
+	response := testutil.ServeHTTP(t, handler, http.MethodPatch, fmt.Sprintf("/api/users/%d", admin.ID), strings.NewReader(`{"revision":1,"regenerate_token":true}`), map[string]string{"Authorization": "Bearer " + admin.Token, "Origin": "nogon://"})
 	var rotated struct{ Token string }
 	if err := json.Unmarshal(response.Body.Bytes(), &rotated); err != nil || response.Code != http.StatusOK || rotated.Token == "" || rotated.Token == admin.Token {
 		t.Fatalf("self rotation: %d %s, error %v", response.Code, response.Body, err)
@@ -1427,7 +1427,7 @@ func TestUpdateUserAPIRequestLimits(t *testing.T) {
 	_, handler, _, admin := newUserDeletionTestServer(t)
 	path := fmt.Sprintf("/api/users/%d", admin.ID)
 	for _, id := range []string{"0", "-1", "abc", "999999", "18446744073709551616"} {
-		response := testutil.ServeHTTP(t, handler, http.MethodPatch, "/api/users/"+id, strings.NewReader(`{"revision":1,"username":"renamed"}`), map[string]string{"X-Access-Token": admin.Token, "Origin": "hister://"})
+		response := testutil.ServeHTTP(t, handler, http.MethodPatch, "/api/users/"+id, strings.NewReader(`{"revision":1,"username":"renamed"}`), map[string]string{"X-Access-Token": admin.Token, "Origin": "nogon://"})
 		var result struct{ Code string }
 		want, code := http.StatusBadRequest, "invalid_request"
 		if id == "999999" {
@@ -1440,7 +1440,7 @@ func TestUpdateUserAPIRequestLimits(t *testing.T) {
 	for _, knownLength := range []bool{true, false} {
 		req := httptest.NewRequest(http.MethodPatch, path, strings.NewReader(`{"revision":1,"username":"renamed"}`+strings.Repeat(" ", int(maxRequestBodyBytes))))
 		req.Header.Set("X-Access-Token", admin.Token)
-		req.Header.Set("Origin", "hister://")
+		req.Header.Set("Origin", "nogon://")
 		if !knownLength {
 			req.ContentLength = -1
 		}
@@ -1458,7 +1458,7 @@ func TestUpdateUserAPIRequestLimits(t *testing.T) {
 
 func TestUpdateUserAPIRequiresUserHandling(t *testing.T) {
 	_, handler := newTokenTestServer(t, false)
-	response := testutil.ServeHTTP(t, handler, http.MethodPatch, "/api/users/1", strings.NewReader(`{"revision":1,"username":"renamed"}`), map[string]string{"X-Access-Token": "secret", "Origin": "hister://"})
+	response := testutil.ServeHTTP(t, handler, http.MethodPatch, "/api/users/1", strings.NewReader(`{"revision":1,"username":"renamed"}`), map[string]string{"X-Access-Token": "secret", "Origin": "nogon://"})
 	var result struct{ Code string }
 	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil || response.Code != http.StatusBadRequest || result.Code != "user_handling_disabled" {
 		t.Fatalf("single user update: %d %s, error %v", response.Code, response.Body, err)
@@ -1471,7 +1471,7 @@ func TestUpdateUserAPIDatabaseFailure(t *testing.T) {
 	if err := model.DB.Exec(`CREATE TRIGGER reject_user_update BEFORE UPDATE OF password ON users BEGIN SELECT RAISE(ABORT, 'private database error'); END`).Error; err != nil {
 		t.Fatal(err)
 	}
-	response := testutil.ServeHTTP(t, handler, http.MethodPatch, fmt.Sprintf("/api/users/%d", alice.ID), strings.NewReader(`{"revision":1,"username":"renamed","password":"replacement123","is_admin":true,"regenerate_token":true}`), map[string]string{"X-Access-Token": admin.Token, "Origin": "hister://"})
+	response := testutil.ServeHTTP(t, handler, http.MethodPatch, fmt.Sprintf("/api/users/%d", alice.ID), strings.NewReader(`{"revision":1,"username":"renamed","password":"replacement123","is_admin":true,"regenerate_token":true}`), map[string]string{"X-Access-Token": admin.Token, "Origin": "nogon://"})
 	var result struct{ Code string }
 	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil || response.Code != http.StatusInternalServerError || result.Code != "internal_error" {
 		t.Fatalf("failed update: %d %s, error %v", response.Code, response.Body, err)
@@ -1487,15 +1487,15 @@ func TestUpdateUserAPIDatabaseFailure(t *testing.T) {
 
 func TestRotateUserTokenAPI(t *testing.T) {
 	cfg, _, idx, admin := newUserDeletionTestServer(t)
-	if err := cfg.UpdateBaseURL("http://127.0.0.1:4433/hister"); err != nil {
+	if err := cfg.UpdateBaseURL("http://127.0.0.1:4433/nogon"); err != nil {
 		t.Fatal(err)
 	}
 	handler := registerEndpoints(cfg, idx)
 	alice := testutil.CreateUser(t, "alice")
-	login := testutil.ServeHTTP(t, handler, http.MethodPost, "/hister/api/login", strings.NewReader(`{"username":"alice","password":"password123"}`), map[string]string{"Origin": "hister://"})
+	login := testutil.ServeHTTP(t, handler, http.MethodPost, "/nogon/api/login", strings.NewReader(`{"username":"alice","password":"password123"}`), map[string]string{"Origin": "nogon://"})
 	cookie := responseSessionCookie(t, login)
-	path := fmt.Sprintf("/hister/api/users/%d/token", alice.ID)
-	response := testutil.ServeHTTP(t, handler, http.MethodPost, path, strings.NewReader(`{"revision":1}`), map[string]string{"Authorization": "Bearer " + admin.Token, "Origin": "hister://"})
+	path := fmt.Sprintf("/nogon/api/users/%d/token", alice.ID)
+	response := testutil.ServeHTTP(t, handler, http.MethodPost, path, strings.NewReader(`{"revision":1}`), map[string]string{"Authorization": "Bearer " + admin.Token, "Origin": "nogon://"})
 	var result struct {
 		Token    string
 		Revision uint64
@@ -1521,7 +1521,7 @@ func TestRotateUserTokenAPI(t *testing.T) {
 		t.Fatal("rotation changed other account fields")
 	}
 	for _, token := range []string{alice.Token, result.Token} {
-		profile := testutil.ServeHTTP(t, handler, http.MethodGet, "/hister/api/profile", nil, map[string]string{"Authorization": "Bearer " + token})
+		profile := testutil.ServeHTTP(t, handler, http.MethodGet, "/nogon/api/profile", nil, map[string]string{"Authorization": "Bearer " + token})
 		want := http.StatusForbidden
 		if token == result.Token {
 			want = http.StatusOK
@@ -1530,7 +1530,7 @@ func TestRotateUserTokenAPI(t *testing.T) {
 			t.Fatalf("token authentication = %d, want %d", profile.Code, want)
 		}
 	}
-	req := httptest.NewRequest(http.MethodGet, "/hister/api/profile", nil)
+	req := httptest.NewRequest(http.MethodGet, "/nogon/api/profile", nil)
 	req.AddCookie(cookie)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -1538,7 +1538,7 @@ func TestRotateUserTokenAPI(t *testing.T) {
 		t.Fatalf("rotation revoked the browser session: %d %s", rec.Code, rec.Body)
 	}
 	// Replaying the old revision must not invalidate the token just returned.
-	response = testutil.ServeHTTP(t, handler, http.MethodPost, path, strings.NewReader(`{"revision":1}`), map[string]string{"X-Access-Token": admin.Token, "Origin": "hister://"})
+	response = testutil.ServeHTTP(t, handler, http.MethodPost, path, strings.NewReader(`{"revision":1}`), map[string]string{"X-Access-Token": admin.Token, "Origin": "nogon://"})
 	var conflict struct{ Code string }
 	if err := json.Unmarshal(response.Body.Bytes(), &conflict); err != nil || response.Code != http.StatusConflict || conflict.Code != "stale_revision" {
 		t.Fatalf("stale rotation: %d %s, error %v", response.Code, response.Body, err)
@@ -1548,7 +1548,7 @@ func TestRotateUserTokenAPI(t *testing.T) {
 	if err := json.Unmarshal(read.Body.Bytes(), &current); err != nil || read.Code != http.StatusOK || current.Token != result.Token {
 		t.Fatalf("stale rotation replaced the token: %d %s, error %v", read.Code, read.Body, err)
 	}
-	response = testutil.ServeHTTP(t, handler, http.MethodPost, path, strings.NewReader(`{"revision":2}`), map[string]string{"X-Access-Token": admin.Token, "Origin": "hister://"})
+	response = testutil.ServeHTTP(t, handler, http.MethodPost, path, strings.NewReader(`{"revision":2}`), map[string]string{"X-Access-Token": admin.Token, "Origin": "nogon://"})
 	var next struct {
 		Token    string
 		Revision uint64
@@ -1570,7 +1570,7 @@ func TestRotateUserTokenAPIInvalidRequest(t *testing.T) {
 		`{"revision":1,"is_admin":true}`, `{"revision":1,"regenerate_token":false}`,
 	} {
 		t.Run(body, func(t *testing.T) {
-			response := testutil.ServeHTTP(t, handler, http.MethodPost, path, strings.NewReader(body), map[string]string{"X-Access-Token": admin.Token, "Origin": "hister://"})
+			response := testutil.ServeHTTP(t, handler, http.MethodPost, path, strings.NewReader(body), map[string]string{"X-Access-Token": admin.Token, "Origin": "nogon://"})
 			var result struct{ Code string }
 			if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil || response.Code != http.StatusBadRequest || result.Code != "invalid_request" {
 				t.Fatalf("invalid rotation: %d %s, error %v", response.Code, response.Body, err)
@@ -1594,7 +1594,7 @@ func TestRotateUserTokenAPIAuthorization(t *testing.T) {
 			if id == alice.ID && token == alice.Token {
 				continue
 			}
-			response := testutil.ServeHTTP(t, handler, http.MethodPost, fmt.Sprintf("/api/users/%d/token", id), strings.NewReader(`{"revision":1}`), map[string]string{"Authorization": "Bearer " + token, "Origin": "hister://"})
+			response := testutil.ServeHTTP(t, handler, http.MethodPost, fmt.Sprintf("/api/users/%d/token", id), strings.NewReader(`{"revision":1}`), map[string]string{"Authorization": "Bearer " + token, "Origin": "nogon://"})
 			if response.Code != http.StatusForbidden {
 				t.Fatalf("unauthorized rotation: %d %s", response.Code, response.Body)
 			}
@@ -1612,7 +1612,7 @@ func TestRotateUserTokenAPIAuthorization(t *testing.T) {
 		}
 	}
 	// Session authentication still requires CSRF validation.
-	login := testutil.ServeHTTP(t, handler, http.MethodPost, "/api/login", strings.NewReader(`{"username":"admin","password":"password123"}`), map[string]string{"Origin": "hister://"})
+	login := testutil.ServeHTTP(t, handler, http.MethodPost, "/api/login", strings.NewReader(`{"username":"admin","password":"password123"}`), map[string]string{"Origin": "nogon://"})
 	cookie := responseSessionCookie(t, login)
 	for _, csrf := range []bool{false, true} {
 		req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/users/%d/token", alice.ID), strings.NewReader(`{"revision":1}`))
@@ -1642,7 +1642,7 @@ func TestRotateUserTokenAPIAuthorization(t *testing.T) {
 		}
 	}
 	// A caller rotating its own token receives a usable replacement in this response.
-	response := testutil.ServeHTTP(t, handler, http.MethodPost, fmt.Sprintf("/api/users/%d/token", admin.ID), strings.NewReader(`{"revision":1}`), map[string]string{"X-Access-Token": admin.Token, "Origin": "hister://"})
+	response := testutil.ServeHTTP(t, handler, http.MethodPost, fmt.Sprintf("/api/users/%d/token", admin.ID), strings.NewReader(`{"revision":1}`), map[string]string{"X-Access-Token": admin.Token, "Origin": "nogon://"})
 	var result struct{ Token string }
 	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil || response.Code != http.StatusOK || result.Token == "" || result.Token == admin.Token {
 		t.Fatalf("self rotation: %d %s, error %v", response.Code, response.Body, err)
@@ -1662,7 +1662,7 @@ func TestRotateUserTokenAPIAuthorization(t *testing.T) {
 func TestRotateUserTokenAPIRequestLimits(t *testing.T) {
 	_, handler, _, admin := newUserDeletionTestServer(t)
 	for _, id := range []string{"0", "-1", "abc", "999999", "18446744073709551616"} {
-		response := testutil.ServeHTTP(t, handler, http.MethodPost, "/api/users/"+id+"/token", strings.NewReader(`{"revision":1}`), map[string]string{"X-Access-Token": admin.Token, "Origin": "hister://"})
+		response := testutil.ServeHTTP(t, handler, http.MethodPost, "/api/users/"+id+"/token", strings.NewReader(`{"revision":1}`), map[string]string{"X-Access-Token": admin.Token, "Origin": "nogon://"})
 		want, code := http.StatusBadRequest, "invalid_request"
 		if id == "999999" {
 			want, code = http.StatusNotFound, "user_not_found"
@@ -1675,7 +1675,7 @@ func TestRotateUserTokenAPIRequestLimits(t *testing.T) {
 	for _, knownLength := range []bool{true, false} {
 		req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/users/%d/token", admin.ID), strings.NewReader(`{"revision":1}`+strings.Repeat(" ", int(maxRequestBodyBytes))))
 		req.Header.Set("X-Access-Token", admin.Token)
-		req.Header.Set("Origin", "hister://")
+		req.Header.Set("Origin", "nogon://")
 		if !knownLength {
 			req.ContentLength = -1
 		}
@@ -1693,7 +1693,7 @@ func TestRotateUserTokenAPIRequestLimits(t *testing.T) {
 
 func TestRotateUserTokenAPIRequiresUserHandling(t *testing.T) {
 	_, handler := newTokenTestServer(t, false)
-	response := testutil.ServeHTTP(t, handler, http.MethodPost, "/api/users/1/token", strings.NewReader(`{"revision":1}`), map[string]string{"X-Access-Token": "secret", "Origin": "hister://"})
+	response := testutil.ServeHTTP(t, handler, http.MethodPost, "/api/users/1/token", strings.NewReader(`{"revision":1}`), map[string]string{"X-Access-Token": "secret", "Origin": "nogon://"})
 	var result struct{ Code string }
 	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil || response.Code != http.StatusBadRequest || result.Code != "user_handling_disabled" {
 		t.Fatalf("single user rotation: %d %s, error %v", response.Code, response.Body, err)
@@ -1706,7 +1706,7 @@ func TestRotateUserTokenAPIDatabaseFailure(t *testing.T) {
 	if err := model.DB.Exec(`CREATE TRIGGER reject_token_rotation BEFORE UPDATE OF token ON users BEGIN SELECT RAISE(ABORT, 'private database error'); END`).Error; err != nil {
 		t.Fatal(err)
 	}
-	response := testutil.ServeHTTP(t, handler, http.MethodPost, fmt.Sprintf("/api/users/%d/token", alice.ID), strings.NewReader(`{"revision":1}`), map[string]string{"X-Access-Token": admin.Token, "Origin": "hister://"})
+	response := testutil.ServeHTTP(t, handler, http.MethodPost, fmt.Sprintf("/api/users/%d/token", alice.ID), strings.NewReader(`{"revision":1}`), map[string]string{"X-Access-Token": admin.Token, "Origin": "nogon://"})
 	var result struct{ Code string }
 	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil || response.Code != http.StatusInternalServerError || result.Code != "internal_error" {
 		t.Fatalf("failed rotation: %d %s, error %v", response.Code, response.Body, err)
@@ -1754,7 +1754,7 @@ func TestRotateOwnUserTokenAPI(t *testing.T) {
 			alice := testutil.CreateUser(t, "alice")
 			var cookie *http.Cookie
 			if sessionAuth {
-				login := testutil.ServeHTTP(t, handler, http.MethodPost, "/api/login", strings.NewReader(`{"username":"alice","password":"password123"}`), map[string]string{"Origin": "hister://"})
+				login := testutil.ServeHTTP(t, handler, http.MethodPost, "/api/login", strings.NewReader(`{"username":"alice","password":"password123"}`), map[string]string{"Origin": "nogon://"})
 				cookie = responseSessionCookie(t, login)
 			}
 			request := func(method, path, body string, csrf bool) *httptest.ResponseRecorder {
@@ -1774,7 +1774,7 @@ func TestRotateOwnUserTokenAPI(t *testing.T) {
 					}
 				} else {
 					req.Header.Set("Authorization", "Bearer "+alice.Token)
-					req.Header.Set("Origin", "hister://")
+					req.Header.Set("Origin", "nogon://")
 				}
 				response := httptest.NewRecorder()
 				handler.ServeHTTP(response, req)
@@ -1835,7 +1835,7 @@ func TestRemovedProfileTokenEndpoint(t *testing.T) {
 	t.Cleanup(func() { staticTextFiles = previousFiles })
 	_, handler, _, _ := newUserDeletionTestServer(t)
 	alice := testutil.CreateUser(t, "alice")
-	response := testutil.ServeHTTP(t, handler, http.MethodPost, "/api/profile/token", nil, map[string]string{"X-Access-Token": alice.Token, "Origin": "hister://"})
+	response := testutil.ServeHTTP(t, handler, http.MethodPost, "/api/profile/token", nil, map[string]string{"X-Access-Token": alice.Token, "Origin": "nogon://"})
 	if response.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("removed endpoint still succeeded: %d %s", response.Code, response.Body)
 	}

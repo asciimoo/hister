@@ -77,7 +77,7 @@ func TestClientSearchJSONContract(t *testing.T) {
 	} {
 		response := contractJSON(t, result)
 		queryJSON := contractJSON(t, query)
-		c := client.New("http://hister.test", client.WithHTTPClient(&http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		c := client.New("http://nogon.test", client.WithHTTPClient(&http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 			assertContractJSON(t, []byte(r.URL.Query().Get("query")), queryJSON)
 			return jsonHTTPResponse(r, http.StatusOK, string(response)), nil
 		})}))
@@ -101,7 +101,7 @@ func TestClientSearchJSONContract(t *testing.T) {
 func TestClientDocumentSubmissionJSONContract(t *testing.T) {
 	for _, doc := range []*document.Document{nil, {}, contractDocument()} {
 		payload := contractJSON(t, doc)
-		c := client.New("http://hister.test", client.WithHTTPClient(&http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		c := client.New("http://nogon.test", client.WithHTTPClient(&http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 			body, err := io.ReadAll(r.Body)
 			if err != nil {
 				t.Fatal(err)

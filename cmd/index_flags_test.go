@@ -47,7 +47,7 @@ func TestIndexSubmissionFlags(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				switch r.URL.Path {
 				case "/api/document", "/api/add":
-					if got := r.Header.Get("X-Hister-Target-User-ID"); got != tc.owner {
+					if got := r.Header.Get("X-Nogon-Target-User-ID"); got != tc.owner {
 						t.Errorf("target user = %q, want %q", got, tc.owner)
 					}
 					if r.URL.Path == "/api/document" {

@@ -14,7 +14,7 @@ import (
 
 const (
 	defaultDevToolsURL = "http://127.0.0.1:9222"
-	defaultHisterURL   = "http://127.0.0.1:4433/"
+	defaultNogonURL    = "http://127.0.0.1:4433/"
 )
 
 // DocumentSubmitter sends an extracted page to Nogon.
@@ -25,7 +25,7 @@ type DocumentSubmitter interface {
 // Options configures qutebrowser monitoring and page submission.
 type Options struct {
 	DevToolsURL     string
-	HisterURL       string
+	NogonURL        string
 	Label           string
 	InitialDelay    time.Duration
 	Debounce        time.Duration
@@ -40,7 +40,7 @@ type Options struct {
 
 type normalizedOptions struct {
 	devToolsURL     *url.URL
-	histerURL       *url.URL
+	nogonURL        *url.URL
 	label           string
 	initialDelay    time.Duration
 	debounce        time.Duration
@@ -57,7 +57,7 @@ type normalizedOptions struct {
 func DefaultOptions() Options {
 	return Options{
 		DevToolsURL:     defaultDevToolsURL,
-		HisterURL:       defaultHisterURL,
+		NogonURL:        defaultNogonURL,
 		InitialDelay:    time.Second,
 		Debounce:        10 * time.Second,
 		MaxWait:         30 * time.Second,
@@ -83,15 +83,15 @@ func normalizeOptions(input Options) (normalizedOptions, error) {
 			"the DevTools endpoint must use localhost or a loopback IP address",
 		)
 	}
-	normalized.histerURL, err = parseHTTPURL("Nogon", input.HisterURL)
+	normalized.nogonURL, err = parseHTTPURL("Nogon", input.NogonURL)
 	if err != nil {
 		return normalizedOptions{}, err
 	}
-	if !strings.HasSuffix(normalized.histerURL.Path, "/") {
-		normalized.histerURL.Path += "/"
+	if !strings.HasSuffix(normalized.nogonURL.Path, "/") {
+		normalized.nogonURL.Path += "/"
 	}
-	normalized.histerURL.RawQuery = ""
-	normalized.histerURL.Fragment = ""
+	normalized.nogonURL.RawQuery = ""
+	normalized.nogonURL.Fragment = ""
 
 	switch {
 	case input.InitialDelay < 0:

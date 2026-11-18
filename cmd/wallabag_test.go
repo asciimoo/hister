@@ -118,7 +118,7 @@ func TestImportWallabagAuthenticatesPaginatesAndMapsContent(t *testing.T) {
 	var receivedDocs []*document.Document
 	targetHTTPClient := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		if req.Method != http.MethodPost || req.URL.Path != "/api/batch" {
-			return nil, fmt.Errorf("unexpected Hister request %s %s", req.Method, req.URL.Path)
+			return nil, fmt.Errorf("unexpected Nogon request %s %s", req.Method, req.URL.Path)
 		}
 		var body struct {
 			Ops []struct {
@@ -139,7 +139,7 @@ func TestImportWallabagAuthenticatesPaginatesAndMapsContent(t *testing.T) {
 		}
 		return jsonHTTPResponse(req, http.StatusOK, response.String()), nil
 	})}
-	target := client.New("http://hister.example", client.WithHTTPClient(targetHTTPClient), client.WithMaxBatchBodyBytes(40<<20))
+	target := client.New("http://nogon.example", client.WithHTTPClient(targetHTTPClient), client.WithMaxBatchBodyBytes(40<<20))
 
 	stats, err := importWallabag(
 		context.Background(),

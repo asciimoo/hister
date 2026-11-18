@@ -120,7 +120,7 @@ func TestSitemapReaderExpandsIndexesAndDeduplicates(t *testing.T) {
 	var server *httptest.Server
 	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		requests[req.URL.Path]++
-		if req.Header.Get("User-Agent") != "Hister sitemap test" || req.Header.Get("X-Test") != "sitemap" {
+		if req.Header.Get("User-Agent") != "Nogon sitemap test" || req.Header.Get("X-Test") != "sitemap" {
 			t.Error("crawler headers missing from sitemap request")
 		}
 		if cookie, err := req.Cookie("session"); err != nil || cookie.Value != "test" {
@@ -147,7 +147,7 @@ func TestSitemapReaderExpandsIndexesAndDeduplicates(t *testing.T) {
 	}))
 	defer server.Close()
 	reader, err := newSitemapReader(&config.CrawlerConfig{
-		UserAgent: "Hister sitemap test",
+		UserAgent: "Nogon sitemap test",
 		Headers:   map[string]string{"X-Test": "sitemap"},
 		Cookies:   []config.CrawlerCookie{{Name: "session", Value: "test", Domain: "127.0.0.1", Path: "/"}},
 		Backend:   "bidi", BackendOptions: map[string]any{"endpoint": "unused for XML"},
@@ -184,7 +184,7 @@ func TestSitemapReaderErrors(t *testing.T) {
 		http.Error(w, "missing", http.StatusNotFound)
 	}))
 	defer server.Close()
-	reader, err := newSitemapReader(&config.CrawlerConfig{}, crawler.NewRobotsCache("Hister"))
+	reader, err := newSitemapReader(&config.CrawlerConfig{}, crawler.NewRobotsCache("Nogon"))
 	if err != nil {
 		t.Fatal(err)
 	}

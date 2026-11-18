@@ -9,8 +9,8 @@ import (
 type executionScope string
 
 const (
-	executionScopeAnnotation  = "hister_execution_scope"
-	applicableFlagsAnnotation = "hister_applicable_global_flags"
+	executionScopeAnnotation  = "nogon_execution_scope"
+	applicableFlagsAnnotation = "nogon_applicable_global_flags"
 
 	executionScopeLocal  executionScope = "local"
 	executionScopeRemote executionScope = "remote"

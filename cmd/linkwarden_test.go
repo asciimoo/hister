@@ -98,7 +98,7 @@ func TestImportLinkwardenPaginatesAndMapsDocuments(t *testing.T) {
 	var batchSizes []int
 	targetHTTPClient := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		if req.Method != http.MethodPost || req.URL.Path != "/api/batch" {
-			return nil, fmt.Errorf("unexpected Hister request %s %s", req.Method, req.URL.Path)
+			return nil, fmt.Errorf("unexpected Nogon request %s %s", req.Method, req.URL.Path)
 		}
 		var body struct {
 			Ops []struct {
@@ -124,7 +124,7 @@ func TestImportLinkwardenPaginatesAndMapsDocuments(t *testing.T) {
 		}
 		return jsonHTTPResponse(req, http.StatusOK, response.String()), nil
 	})}
-	target := client.New("http://hister.example", client.WithHTTPClient(targetHTTPClient), client.WithMaxBatchBodyBytes(40<<20))
+	target := client.New("http://nogon.example", client.WithHTTPClient(targetHTTPClient), client.WithMaxBatchBodyBytes(40<<20))
 
 	stats, err := importLinkwarden(context.Background(), source, target, document.NewNullLanguageDetector(), nil, serviceImportOptions{BatchSize: 2})
 	if err != nil {
@@ -228,7 +228,7 @@ func TestImportLinkwardenDownloadsMissingURLContent(t *testing.T) {
 		received = body.Ops[0].Document
 		return jsonHTTPResponse(req, http.StatusOK, `{"results":[{"status":201}]}`), nil
 	})}
-	target := client.New("http://hister.example", client.WithHTTPClient(targetHTTPClient), client.WithMaxBatchBodyBytes(40<<20))
+	target := client.New("http://nogon.example", client.WithHTTPClient(targetHTTPClient), client.WithMaxBatchBodyBytes(40<<20))
 
 	stats, err := importLinkwarden(
 		context.Background(),
@@ -285,18 +285,18 @@ func TestLatestLinkwardenUpdatedConfiguresSourceFilter(t *testing.T) {
 	const latestUpdated = int64(1641092645)
 	targetHTTPClient := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		if req.Method != http.MethodGet || req.URL.Path != "/search" {
-			return nil, fmt.Errorf("unexpected Hister request %s %s", req.Method, req.URL.Path)
+			return nil, fmt.Errorf("unexpected Nogon request %s %s", req.Method, req.URL.Path)
 		}
 		var query indexer.Query
 		if err := json.Unmarshal([]byte(req.URL.Query().Get("query")), &query); err != nil {
-			return nil, fmt.Errorf("decode Hister query: %w", err)
+			return nil, fmt.Errorf("decode Nogon query: %w", err)
 		}
 		if query.Text != "metadata.source:linkwarden" || query.Sort != "date" || query.Limit != 1 {
-			t.Errorf("Hister query = %+v", query)
+			t.Errorf("Nogon query = %+v", query)
 		}
 		return jsonHTTPResponse(req, http.StatusOK, fmt.Sprintf(`{"documents":[{"updated":%d}]}`, latestUpdated)), nil
 	})}
-	updatedAfter, err := latestServiceUpdated(client.New("http://hister.example", client.WithHTTPClient(targetHTTPClient)), linkwardenSourceMetadataValue)
+	updatedAfter, err := latestServiceUpdated(client.New("http://nogon.example", client.WithHTTPClient(targetHTTPClient)), linkwardenSourceMetadataValue)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -335,14 +335,14 @@ func TestImportLinkwardenSkipsExistingNormalizedURL(t *testing.T) {
 	}
 	targetHTTPClient := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		if req.Method != http.MethodHead || req.URL.Path != "/api/document" {
-			return nil, fmt.Errorf("unexpected Hister request %s %s", req.Method, req.URL.Path)
+			return nil, fmt.Errorf("unexpected Nogon request %s %s", req.Method, req.URL.Path)
 		}
 		if got := req.URL.Query().Get("url"); got != "https://example.com/page" {
 			t.Errorf("existence check URL = %q, want normalized URL", got)
 		}
 		return jsonHTTPResponse(req, http.StatusOK, ""), nil
 	})}
-	target := client.New("http://hister.example", client.WithHTTPClient(targetHTTPClient), client.WithMaxBatchBodyBytes(40<<20))
+	target := client.New("http://nogon.example", client.WithHTTPClient(targetHTTPClient), client.WithMaxBatchBodyBytes(40<<20))
 
 	stats, err := importLinkwarden(context.Background(), source, target, document.NewNullLanguageDetector(), nil, serviceImportOptions{
 		BatchSize:    10,
@@ -364,7 +364,7 @@ func TestImportLinkwardenRejectsRepeatedCursor(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	target := client.New("http://hister.example")
+	target := client.New("http://nogon.example")
 	_, err = importLinkwarden(context.Background(), source, target, document.NewNullLanguageDetector(), nil, serviceImportOptions{BatchSize: 10})
 	if err == nil || !strings.Contains(err.Error(), "repeated pagination cursor 7") {
 		t.Fatalf("import error = %v, want repeated cursor error", err)

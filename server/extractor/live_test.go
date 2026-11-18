@@ -21,7 +21,15 @@ import (
 	"github.com/asciimoo/nogon/server/extractor/sdk"
 )
 
-const liveUserAgent = "HisterLiveExtractorTest/1.0 (+https://github.com/asciimoo/nogon)"
+const liveUserAgent = "NogonLiveExtractorTest/1.0 (+https://github.com/asciimoo/nogon)"
+
+// liveEnvironment keeps existing automation working while preferring Nogon controls.
+func liveEnvironment(suffix string) string {
+	if value, set := os.LookupEnv("NOGON_" + suffix); set {
+		return value
+	}
+	return os.Getenv("HISTER_" + suffix)
+}
 
 func TestLiveExtractors(t *testing.T) {
 	manifest, err := loadLiveManifest()
@@ -32,7 +40,7 @@ func TestLiveExtractors(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	filter := strings.ToLower(strings.TrimSpace(os.Getenv("HISTER_LIVE_CASE")))
+	filter := strings.ToLower(strings.TrimSpace(liveEnvironment("LIVE_CASE")))
 	robots := crawler.NewRobotsCache(liveUserAgent)
 	pageCache := make(map[string]*document.Document)
 	runCount := 0
@@ -46,7 +54,7 @@ func TestLiveExtractors(t *testing.T) {
 		})
 	}
 	if runCount == 0 {
-		t.Fatalf("no live extractor case matched HISTER_LIVE_CASE=%q", filter)
+		t.Fatalf("no live extractor case matched NOGON_LIVE_CASE=%q", filter)
 	}
 }
 
@@ -331,9 +339,9 @@ func writeLiveArtifacts(
 	matching []string,
 ) {
 	t.Helper()
-	root := strings.TrimSpace(os.Getenv("HISTER_LIVE_ARTIFACT_DIR"))
+	root := strings.TrimSpace(liveEnvironment("LIVE_ARTIFACT_DIR"))
 	if root == "" {
-		root = filepath.Join(os.TempDir(), "hister-live-extractors")
+		root = filepath.Join(os.TempDir(), "nogon-live-extractors")
 	}
 	stamp := time.Now().UTC().Format("20060102T150405.000000000Z")
 	directory := filepath.Join(root, safeLiveName(testCase.Name)+"_"+stamp)

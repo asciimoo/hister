@@ -1400,7 +1400,7 @@ func (c *Config) IsSameHost(h string) bool {
 	if err != nil {
 		return false
 	}
-	if ru.Scheme == "hister" {
+	if ru.Scheme == "nogon" || ru.Scheme == "hister" {
 		return true
 	}
 	if ru.Scheme != bu.Scheme {

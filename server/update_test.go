@@ -56,7 +56,7 @@ func TestUpdateDocumentsAuthorizationScopeAndVersionMove(t *testing.T) {
 	labelBody, _ := json.Marshal(labelRequest)
 	labelRec := testutil.ServeHTTP(t, handler, http.MethodPost, "/api/update", strings.NewReader(string(labelBody)), map[string]string{
 		"Content-Type":   "application/json",
-		"Origin":         "hister://",
+		"Origin":         "nogon://",
 		"X-Access-Token": alice.Token,
 	})
 	if labelRec.Code != http.StatusOK {
@@ -80,7 +80,7 @@ func TestUpdateDocumentsAuthorizationScopeAndVersionMove(t *testing.T) {
 	}
 	resubmit := testutil.ServeHTTP(t, handler, http.MethodPost, "/api/add",
 		strings.NewReader(fmt.Sprintf(`{"url":%q,"text":"Updated content"}`, ownedURL)), map[string]string{
-			"Content-Type": "application/json", "Origin": "hister://", "X-Access-Token": alice.Token,
+			"Content-Type": "application/json", "Origin": "nogon://", "X-Access-Token": alice.Token,
 		})
 	if resubmit.Code != http.StatusCreated {
 		t.Fatalf("resubmission status = %d: %s", resubmit.Code, resubmit.Body)
@@ -92,7 +92,7 @@ func TestUpdateDocumentsAuthorizationScopeAndVersionMove(t *testing.T) {
 	unauthorizedRequest := fmt.Sprintf(`{"query":"*","changes":{"user_id":%d}}`, target.ID)
 	unauthorizedRec := testutil.ServeHTTP(t, handler, http.MethodPost, "/api/update", strings.NewReader(unauthorizedRequest), map[string]string{
 		"Content-Type":   "application/json",
-		"Origin":         "hister://",
+		"Origin":         "nogon://",
 		"X-Access-Token": alice.Token,
 	})
 	if unauthorizedRec.Code != http.StatusForbidden {
@@ -105,7 +105,7 @@ func TestUpdateDocumentsAuthorizationScopeAndVersionMove(t *testing.T) {
 	moveRequest := fmt.Sprintf(`{"query":"user_id:%d","changes":{"user_id":%d}}`, alice.ID, target.ID)
 	moveRec := testutil.ServeHTTP(t, handler, http.MethodPost, "/api/update", strings.NewReader(moveRequest), map[string]string{
 		"Content-Type":   "application/json",
-		"Origin":         "hister://",
+		"Origin":         "nogon://",
 		"X-Access-Token": admin.Token,
 	})
 	if moveRec.Code != http.StatusOK {

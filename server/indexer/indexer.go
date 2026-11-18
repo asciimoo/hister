@@ -125,7 +125,7 @@ const (
 	updatedBackfillKey      = "hister.updated_backfill_complete"
 	updatedBackfillSize     = 200
 	priorityScoreBoost      = 100
-	bleveAsyncErrorCallback = "hister_background_error"
+	bleveAsyncErrorCallback = "nogon_background_error"
 	bleveErrorRetryDelay    = time.Second
 )
 
@@ -818,7 +818,7 @@ func (idx *Indexer) reindex(ctx context.Context, basePath string, rules *config.
 	if idx.vectorStore != nil && idx.embedder != nil {
 		// Validate the endpoint before discarding usable vectors. A configured
 		// dimension count does not guarantee that the model can produce it.
-		if _, err := idx.embedder.ChunkAndEmbed(ctx, "hister", vectorstore.DocumentContext{}); err != nil {
+		if _, err := idx.embedder.ChunkAndEmbed(ctx, "nogon", vectorstore.DocumentContext{}); err != nil {
 			return abortReindex(fmt.Errorf("validate embeddings before reindex: %w", err))
 		}
 		if err := idx.vectorStore.Clear(); err != nil {

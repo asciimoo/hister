@@ -97,10 +97,10 @@ func TestRankingPrefersPhraseAndBaseURLMatches(t *testing.T) {
 		},
 		{
 			name:  "base URL",
-			query: "hister",
+			query: "nogon",
 			docs: map[string]map[string]string{
-				"preferred": {"url": "https://hister.org/", "domain": "hister.org"},
-				"other":     {"title": "hister", "url": "https://example.com/article"},
+				"preferred": {"url": "https://nogon.eu/", "domain": "nogon.eu"},
+				"other":     {"title": "nogon", "url": "https://example.com/article"},
 				"unrelated": {"title": "other page", "url": "https://example.com/"},
 			},
 		},

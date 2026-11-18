@@ -56,7 +56,7 @@ func TestDownloadFaviconBoundsBodyReads(t *testing.T) {
 			previousTransport := http.DefaultTransport
 			t.Cleanup(func() { http.DefaultTransport = previousTransport })
 			http.DefaultTransport = faviconTestTransport(func(req *http.Request) (*http.Response, error) {
-				if req.URL.Path != "/favicon.ico" || req.Header.Get("User-Agent") != "Hister" {
+				if req.URL.Path != "/favicon.ico" || req.Header.Get("User-Agent") != "Nogon" {
 					t.Errorf("unexpected favicon request: %s, agent=%q", req.URL, req.Header.Get("User-Agent"))
 				}
 				return &http.Response{
@@ -68,7 +68,7 @@ func TestDownloadFaviconBoundsBodyReads(t *testing.T) {
 				}, nil
 			})
 			d := &Document{URL: "https://example.com/page", Favicon: "previous favicon"}
-			if err := d.DownloadFavicon("Hister"); err == nil || d.Favicon != "previous favicon" {
+			if err := d.DownloadFavicon("Nogon"); err == nil || d.Favicon != "previous favicon" {
 				t.Fatalf("oversized favicon was not rejected: %v", err)
 			}
 			if body.read != tc.wantRead || !body.closed {
@@ -114,7 +114,7 @@ func TestDownloadFaviconLimitsResponseSize(t *testing.T) {
 	for _, path := range []string{"/exact", "/known", "/chunked", "/gzip"} {
 		t.Run(path, func(t *testing.T) {
 			d := &Document{URL: server.URL, faviconURL: server.URL + path, Favicon: "previous favicon"}
-			err := d.DownloadFavicon("Hister")
+			err := d.DownloadFavicon("Nogon")
 			if path != "/exact" {
 				if err == nil || !strings.Contains(err.Error(), "8 MiB") {
 					t.Errorf("oversized favicon error = %v, want size limit error", err)

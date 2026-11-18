@@ -18,14 +18,14 @@ import (
 func raindropTestClient(t *testing.T, batches *[][]*document.Document) *client.Client {
 	t.Helper()
 	httpClient := &http.Client{Transport: raindropTestTransport(t, batches)}
-	return client.New("http://hister.example", client.WithHTTPClient(httpClient), client.WithMaxBatchBodyBytes(40<<20))
+	return client.New("http://nogon.example", client.WithHTTPClient(httpClient), client.WithMaxBatchBodyBytes(40<<20))
 }
 
 func raindropTestTransport(t *testing.T, batches *[][]*document.Document) roundTripFunc {
 	t.Helper()
 	return roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		if req.Method != http.MethodPost || req.URL.Path != "/api/batch" {
-			return nil, fmt.Errorf("unexpected Hister request: %s %s", req.Method, req.URL)
+			return nil, fmt.Errorf("unexpected Nogon request: %s %s", req.Method, req.URL)
 		}
 		var body struct {
 			Ops []*document.Document `json:"ops"`
@@ -178,7 +178,7 @@ https://example.com/article,Article,2024-01-03
 	var batches [][]*document.Document
 	batchTransport := raindropTestTransport(t, &batches)
 	var checkedURLs []string
-	target := client.New("http://hister.example", client.WithMaxBatchBodyBytes(40<<20), client.WithHTTPClient(&http.Client{
+	target := client.New("http://nogon.example", client.WithMaxBatchBodyBytes(40<<20), client.WithHTTPClient(&http.Client{
 		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 			if req.Method == http.MethodHead && req.URL.Path == "/api/document" {
 				rawURL := req.URL.Query().Get("url")

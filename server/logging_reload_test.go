@@ -41,7 +41,7 @@ func TestFullReloadLogFileAndFormat(t *testing.T) {
 	dir := t.TempDir()
 	useReloadLogger(t)
 	c, write, request := startRuntimeTestServer(t)
-	c.App.LogFile = filepath.Join(dir, "hister.log")
+	c.App.LogFile = filepath.Join(dir, "nogon.log")
 	c.App.LogFormat = "json"
 	write()
 	if status, body := request(c.Server.BaseURL, "/api/reload", "secret", ""); status != http.StatusOK {
@@ -105,7 +105,7 @@ func TestFullReloadRetainsLoggingOnFailure(t *testing.T) {
 			c.App.LogFile = filepath.Join(dir, "candidate.log")
 			want := http.StatusInternalServerError
 			if failure == "log file" {
-				c.App.LogFile = filepath.Join(dir, "missing", "hister.log")
+				c.App.LogFile = filepath.Join(dir, "missing", "nogon.log")
 				want = http.StatusBadRequest
 			} else {
 				c.Server.Database = filepath.Join("missing", "db.sqlite3")

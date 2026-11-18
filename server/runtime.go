@@ -273,7 +273,7 @@ func (pending *pendingAccessChange) destinationVerified(req *http.Request, liste
 	if err != nil || req == nil || !sameConfigurationAuthority(req.Host, destination) || req.URL.Path != destination.Path {
 		return false
 	}
-	if origin := req.Header.Get("Origin"); origin != "" && origin != "hister://" && origin != "same-origin" {
+	if origin := req.Header.Get("Origin"); origin != "" && origin != "nogon://" && origin != "hister://" && origin != "same-origin" {
 		parsed, err := url.Parse(origin)
 		if err != nil || parsed.Scheme != destination.Scheme || parsed.User != nil || parsed.Path != "" || parsed.RawQuery != "" || parsed.Fragment != "" || !sameConfigurationAuthority(parsed.Host, destination) {
 			return false

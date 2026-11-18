@@ -55,7 +55,7 @@ func TestServiceImportCommands(t *testing.T) {
 				t.Cleanup(func() { cfg, http.DefaultTransport = oldCfg, oldTransport })
 				cfg = config.CreateDefaultConfig()
 				cfg.Indexer.DetectLanguages = false
-				cfg.Server.BaseURL = "https://hister.example/base"
+				cfg.Server.BaseURL = "https://nogon.example/base"
 				cfg.App.AccessToken = "destination-token"
 				t.Setenv(source.env, " environment-token ")
 				t.Setenv(legacyEnv, " legacy-token ")
@@ -99,7 +99,7 @@ func TestServiceImportCommands(t *testing.T) {
 				}
 				lookups, sourceRequests := 0, 0
 				http.DefaultTransport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
-					if req.URL.Host == "hister.example" {
+					if req.URL.Host == "nogon.example" {
 						lookups++
 						if req.URL.Path != "/base/search" || req.Header.Get("X-Access-Token") != "destination-token" || req.Header.Get("Authorization") != "" {
 							t.Errorf("unexpected destination request: %s, headers %v", req.URL, req.Header)
@@ -311,7 +311,7 @@ func TestServiceImportBufferDownloadsMissingFavicon(t *testing.T) {
 		received = body.Ops[0].Document
 		return jsonHTTPResponse(req, http.StatusOK, `{"results":[{"status":201}]}`), nil
 	})}
-	target := client.New("http://hister.example", client.WithHTTPClient(targetHTTPClient), client.WithMaxBatchBodyBytes(40<<20))
+	target := client.New("http://nogon.example", client.WithHTTPClient(targetHTTPClient), client.WithMaxBatchBodyBytes(40<<20))
 	buffer, err := newServiceImportBuffer(
 		"test",
 		target,

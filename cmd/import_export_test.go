@@ -52,7 +52,7 @@ func TestImportRSS(t *testing.T) {
 <entry><link href="%[1]s/existing"/></entry>
 <entry><link href="%[1]s/blocked"/></entry>
 <entry><title>No link</title></entry>
-<entry><link href="file:///nonexistent-hister-feed-entry"/></entry>
+<entry><link href="file:///nonexistent-nogon-feed-entry"/></entry>
 <entry><link href="javascript:alert(1)"/></entry>
 <entry><link href="http://user:secret@127.0.0.1:1/private"/></entry></feed>`,
 			flags: []string{"--force", "--label=news", "--ignore-rules"}, label: "news", count: 2,
@@ -78,12 +78,12 @@ func TestImportRSS(t *testing.T) {
 			cfg.Crawler.Delay = 0
 			cfg.Crawler.Timeout = 2
 			cfg.Crawler.Headers = map[string]string{"X-Feed-Test": "configured"}
-			cfg.App.AccessToken = "hister-only"
+			cfg.App.AccessToken = "nogon-only"
 			var submitted []document.Document
 			var server *httptest.Server
 			server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if !strings.HasPrefix(r.URL.Path, "/api/") && r.Header.Get("Authorization") != "" {
-					t.Error("Hister token sent to feed or article")
+					t.Error("Nogon token sent to feed or article")
 				}
 				switch r.URL.Path {
 				case "/feed.xml":
@@ -222,7 +222,7 @@ func TestImportRSSRejectsInvalidFeeds(t *testing.T) {
 				t.Errorf("cancellation not preserved: %v", err)
 			}
 			if model.DB != nil {
-				t.Error("invalid feed opened the Hister database")
+				t.Error("invalid feed opened the Nogon database")
 				db, dbErr := model.DB.DB()
 				if dbErr != nil {
 					t.Fatal(dbErr)
@@ -318,7 +318,7 @@ func newExportTestCommand(t *testing.T, transport roundTripFunc) *cobra.Command 
 	previousConfig, previousTransport := cfg, http.DefaultTransport
 	t.Cleanup(func() { cfg, http.DefaultTransport = previousConfig, previousTransport })
 	cfg = config.CreateDefaultConfig()
-	if err := cfg.UpdateBaseURL("https://hister.test"); err != nil {
+	if err := cfg.UpdateBaseURL("https://nogon.test"); err != nil {
 		t.Fatal(err)
 	}
 	http.DefaultTransport = transport
@@ -678,7 +678,7 @@ func TestImportHTMLFileWithoutSourceURLUsesAddEndpoint(t *testing.T) {
 	}
 
 	importer := newFileImporter(
-		client.New("http://hister.test", client.WithHTTPClient(httpClient), client.WithMaxBatchBodyBytes(40<<20)),
+		client.New("http://nogon.test", client.WithHTTPClient(httpClient), client.WithMaxBatchBodyBytes(40<<20)),
 		config.Indexer{},
 	)
 	imported, skipped, errCount := importer.importHTMLFile(
@@ -719,7 +719,7 @@ func TestImportFileSizeLimit(t *testing.T) {
 					t.Fatal(err)
 				}
 				requests := 0
-				c := client.New("http://hister.test", client.WithHTTPClient(&http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+				c := client.New("http://nogon.test", client.WithHTTPClient(&http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 					requests++
 					if r.URL.Path == "/api/batch" {
 						return jsonHTTPResponse(r, http.StatusOK, `{"results":[{"status":201}]}`), nil
@@ -745,13 +745,13 @@ func TestImportFileSizeLimit(t *testing.T) {
 	}
 }
 
-func TestIsHisterJSONExportBoundsInspection(t *testing.T) {
+func TestIsNogonJSONExportBoundsInspection(t *testing.T) {
 	const maxProbe = maxJSONExportLineSize + 2
 	for _, prefix := range []string{"", `[{"text":"`} {
 		t.Run(fmt.Sprintf("prefix=%q", prefix), func(t *testing.T) {
 			reader := io.MultiReader(strings.NewReader(prefix), io.LimitReader(exportProbePadding{}, maxProbe+4096))
 			counted := &countingExportProbe{Reader: reader}
-			if isHisterJSONExportReader(counted) {
+			if isNogonJSONExportReader(counted) {
 				t.Fatal("incomplete oversized input was recognized as an export")
 			}
 			if counted.bytes > maxProbe {
@@ -805,7 +805,7 @@ func TestExpandImportInputsUsesWatchedDirectoryRules(t *testing.T) {
 	}
 }
 
-func TestIsHisterJSONExport(t *testing.T) {
+func TestIsNogonJSONExport(t *testing.T) {
 	dir := t.TempDir()
 	tests := []struct {
 		name    string
@@ -818,7 +818,7 @@ func TestIsHisterJSONExport(t *testing.T) {
 		{name: "ordinary array", content: "[1,2,3]", want: false},
 		{name: "ordinary URL array", content: "[{\"url\":\"https://example.com\"}]", want: false},
 		{name: "plain text", content: "Notes for tomorrow", want: false},
-		{name: "markdown link", content: "[Hister](https://hister.org)", want: false},
+		{name: "markdown link", content: "[Nogon](https://nogon.eu)", want: false},
 		{name: "binary", content: "\xff\x00", want: false},
 	}
 	for _, tt := range tests {
@@ -827,12 +827,12 @@ func TestIsHisterJSONExport(t *testing.T) {
 			if err := os.WriteFile(path, []byte(tt.content), 0o600); err != nil {
 				t.Fatal(err)
 			}
-			got, err := isHisterJSONExport(path)
+			got, err := isNogonJSONExport(path)
 			if err != nil {
 				t.Fatal(err)
 			}
 			if got != tt.want {
-				t.Fatalf("isHisterJSONExport() = %t, want %t", got, tt.want)
+				t.Fatalf("isNogonJSONExport() = %t, want %t", got, tt.want)
 			}
 		})
 	}
@@ -911,7 +911,7 @@ func TestImportJSONFileUsesConfiguredBatchSize(t *testing.T) {
 	}
 
 	imported, skipped, errCount := importJSONFile(
-		client.New("http://hister.test", client.WithHTTPClient(httpClient), client.WithMaxBatchBodyBytes(40<<20)),
+		client.New("http://nogon.test", client.WithHTTPClient(httpClient), client.WithMaxBatchBodyBytes(40<<20)),
 		inputFile,
 		false,
 		0,
@@ -966,7 +966,7 @@ func TestImportJSONFileReportsInvalidInput(t *testing.T) {
 				t.Fatal(err)
 			}
 			submitted := 0
-			c := client.New("http://hister.test", client.WithMaxBatchBodyBytes(40<<20), client.WithHTTPClient(&http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			c := client.New("http://nogon.test", client.WithMaxBatchBodyBytes(40<<20), client.WithHTTPClient(&http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 				if r.URL.Path != "/api/batch" {
 					t.Fatalf("unexpected request to %s", r.URL.Path)
 				}
@@ -1080,7 +1080,7 @@ func TestSubmissionOverrideInheritedByImports(t *testing.T) {
 				}
 				return jsonHTTPResponse(r, http.StatusCreated, ""), nil
 			})}))
-			c := client.New("http://hister.test", opts...)
+			c := client.New("http://nogon.test", opts...)
 			if err := c.AddDocumentJSON(&client.Document{URL: "https://example.com"}); err != nil {
 				t.Fatal(err)
 			}

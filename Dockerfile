@@ -9,7 +9,7 @@ COPY package.json package-lock.json ./
 COPY webui/app/package.json webui/app/
 COPY webui/components/package.json webui/components/
 
-RUN --mount=type=cache,id=hister-npm,target=/root/.npm,sharing=locked \
+RUN --mount=type=cache,id=nogon-npm,target=/root/.npm,sharing=locked \
     npm ci \
       --workspace=@nogon/app \
       --workspace=@nogon/components
@@ -28,14 +28,14 @@ RUN apk add --no-cache gcc musl-dev
 WORKDIR /app
 
 COPY go.mod go.sum ./
-RUN --mount=type=cache,id=hister-go-mod,target=/go/pkg/mod,sharing=locked \
+RUN --mount=type=cache,id=nogon-go-mod,target=/go/pkg/mod,sharing=locked \
     go mod download
 
 COPY . .
 COPY --link --from=frontend /app/webui/app/build/ server/static/app/
 
-RUN --mount=type=cache,id=hister-go-mod,target=/go/pkg/mod,sharing=locked \
-    --mount=type=cache,id=hister-go-build,target=/root/.cache/go-build,sharing=locked \
+RUN --mount=type=cache,id=nogon-go-mod,target=/go/pkg/mod,sharing=locked \
+    --mount=type=cache,id=nogon-go-build,target=/root/.cache/go-build,sharing=locked \
     set -eux; \
     LISTEN_ADDRESS="0.0.0.0:4433"; \
     BASE_URL="http://localhost:4433"; \
