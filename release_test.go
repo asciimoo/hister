@@ -558,6 +558,118 @@ func TestRollingReleaseCopies(t *testing.T) {
 	}
 }
 
+func TestNixHashUpdateWorkflow(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Nix hash updates run in a Unix shell")
+	}
+	bash, err := exec.LookPath("bash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const oldHash = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+	const newHash = "sha256-AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE="
+	for _, provider := range []string{"github", "forgejo"} {
+		var cfg struct {
+			Jobs map[string]struct {
+				Steps []struct {
+					Name string
+					Run  string
+				}
+			}
+		}
+		readReleaseYAML(t, filepath.Join("."+provider, "workflows", "update-nix-vendor-hash.yml"), &cfg)
+		var script string
+		for _, step := range cfg.Jobs["update-hashes"].Steps {
+			if step.Name == "Update Nix hashes" {
+				script = step.Run
+			}
+		}
+		if script == "" {
+			t.Fatal("missing Nix hash update step")
+		}
+		for _, tc := range []struct {
+			name        string
+			initial     string
+			buildError  string
+			buildExit   int
+			wantError   bool
+			verifyError bool
+		}{
+			{"changed", oldHash, "error: hash mismatch in fixed-output derivation:\n  got:    " + newHash, 1, false, false},
+			{"unchanged", newHash, "error: hash mismatch in fixed-output derivation:\n  got:    " + newHash, 1, false, false},
+			{"download failure", oldHash, "error: downloading Go modules failed", 1, true, false},
+			{"multiple hashes", oldHash, "  got:    " + newHash + "\n  got:    " + oldHash, 1, true, false},
+			{"unexpected success", oldHash, "", 0, true, false},
+			{"verification failure", oldHash, "error: hash mismatch in fixed-output derivation:\n  got:    " + newHash, 1, true, true},
+		} {
+			t.Run(provider+"/"+tc.name, func(t *testing.T) {
+				root := t.TempDir()
+				if err := os.Mkdir(filepath.Join(root, "nix"), 0o700); err != nil {
+					t.Fatal(err)
+				}
+				packageFile := filepath.Join(root, "nix", "package.nix")
+				original := "{\n  vendorHash = \"" + tc.initial + "\";\n  otherHash = \"" + tc.initial + "\";\n}\n"
+				if err := os.WriteFile(packageFile, []byte(original), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				// Replay Nix's dependency build responses at the workflow boundary.
+				// The old updater fails before reaching a dependency build on Nix 2.35.
+				stub := `nix() {
+  case "$1" in
+    run)
+      echo 'error: opening file "/nix/store/missing-source": No such file or directory' >&2
+      return 1
+      ;;
+    build)
+      for arg in "$@"; do
+        if [[ "$arg" == --expr ]]; then
+          printf '%s\n' "$NIX_TEST_BUILD_ERROR" >&2
+          return "$NIX_TEST_BUILD_EXIT"
+        fi
+      done
+      if [[ " $* " == *" .#nogon "* ]]; then
+        cp nix/package.nix verified-package.nix
+        if [[ "$NIX_TEST_VERIFY_ERROR" == true ]]; then
+          echo 'error: package build failed' >&2
+          return 1
+        fi
+        return 0
+      fi
+      ;;
+  esac
+  echo "unexpected Nix invocation: $*" >&2
+  return 1
+}
+`
+				cmd := exec.Command(bash, "--noprofile", "--norc", "-e", "-o", "pipefail", "-c", stub+script)
+				cmd.Dir = root
+				cmd.Env = append(os.Environ(), "NIX_TEST_BUILD_ERROR="+tc.buildError,
+					fmt.Sprintf("NIX_TEST_BUILD_EXIT=%d", tc.buildExit), fmt.Sprintf("NIX_TEST_VERIFY_ERROR=%t", tc.verifyError))
+				output, err := cmd.CombinedOutput()
+				if (err != nil) != tc.wantError {
+					t.Fatalf("hash update error = %v, want error %v\n%s", err, tc.wantError, output)
+				}
+				want := original
+				if !tc.wantError || tc.verifyError {
+					want = strings.Replace(original, "vendorHash = \""+tc.initial, "vendorHash = \""+newHash, 1)
+				}
+				got, err := os.ReadFile(packageFile)
+				if err != nil || string(got) != want {
+					t.Fatalf("package after hash update = %q, want %q: %v", got, want, err)
+				}
+				verified, err := os.ReadFile(filepath.Join(root, "verified-package.nix"))
+				if tc.wantError && !tc.verifyError {
+					if !os.IsNotExist(err) {
+						t.Fatalf("must stop before verification when hash discovery fails: %v", err)
+					}
+				} else if err != nil || string(verified) != want {
+					t.Fatalf("must build the package with the updated hash: %v\n%s", err, output)
+				}
+			})
+		}
+	}
+}
+
 func TestReleaseWorkflowRepositoryGuards(t *testing.T) {
 	for _, provider := range []string{"github", "forgejo"} {
 		for workflow, job := range map[string]string{

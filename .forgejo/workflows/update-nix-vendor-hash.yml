@@ -20,9 +20,32 @@ jobs:
         uses: cachix/install-nix-action@v31.10.6
 
       - name: Update Nix hashes
-        env:
-          NIX_PATH: nixpkgs=flake:nixpkgs
-        run: nix run nixpkgs#nix-update -- --flake --use-update-script nogon
+        shell: bash
+        run: |
+          # Evaluate the checkout directly. Nix 2.35 flake metadata can return
+          # source paths that have not been copied into the store.
+          log=$(mktemp)
+          trap 'rm -f "$log"' EXIT
+          if nix build --impure --no-link --expr '
+            let
+              flake = builtins.getFlake ("git+file://" + toString ./.);
+              package = flake.packages.${builtins.currentSystem}.nogon;
+            in package.goModules.overrideAttrs (_: {
+              outputHash = "";
+              outputHashAlgo = "sha256";
+            })
+          ' 2>"$log"; then
+            echo "Expected the dependency build to report its hash" >&2
+            exit 1
+          fi
+          cat "$log"
+          hash=$(sed -nE 's/^[[:space:]]+got:[[:space:]]+(sha256-[A-Za-z0-9+/]{43}=)[[:space:]]*$/\1/p' "$log")
+          if [[ ! "$hash" =~ ^sha256-[A-Za-z0-9+/]{43}=$ ]]; then
+            echo "Could not determine a single Go vendor hash" >&2
+            exit 1
+          fi
+          sed -i -E "s|^(  vendorHash = \")[^\"]*(\";)$|\1$hash\2|" nix/package.nix
+          nix build --no-link .#nogon
 
       - name: Check package and service compatibility
         run: nix build --no-link .#checks.x86_64-linux.compatibility
@@ -42,10 +65,10 @@ jobs:
         with:
           token: ${{ secrets.FORGEJO_TOKEN }}
           branch: update-nix-hashes
-          commit-message: '[chore] update Nix hashes for Go/NPM changes'
+          commit-message: '[chore] update Nix vendor hash'
           title: 'Update Nix hashes'
           body: |
-            [chore] update nix/package.nix hashes (vendorHash and/or npmDepsHash)
+            [chore] update vendorHash in nix/package.nix and verify the package build
 
             Triggered by: ${{ forgejo.repository }}@${{ forgejo.sha }}
           delete-branch: true
