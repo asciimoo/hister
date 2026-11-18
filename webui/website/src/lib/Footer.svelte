@@ -33,7 +33,7 @@
     {
       title: 'Community',
       links: [
-        { label: 'Mastodon', href: 'https://chaos.social/@hister' },
+        { label: 'Mastodon', href: 'https://chaos.social/@nogon' },
         { label: 'Discord', href: 'https://discord.gg/beEyuHxRSs' },
         { label: 'IRCNet: #hister', href: '' },
       ],
