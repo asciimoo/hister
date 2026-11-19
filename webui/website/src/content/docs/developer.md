@@ -357,38 +357,16 @@ goreleaser build --snapshot --single-target --clean -f .goreleaser-rolling.yml
 
 ## Package Manager Rename Handoff
 
-The package definitions were checked on 2026-11-17. Keep the current package
-identities for the first Nogon release so existing installations can upgrade.
-
 ### Homebrew
 
-`contrib/homebrew/hister.patch` prepares the
-[upstream Hister formula](https://github.com/Homebrew/homebrew-core/blob/0327e6fbacec9c84b5768d01850823da396d2d4f/Formula/h/hister.rb)
-for the first Nogon source release. It uses `@nogon/app`, installs `nogon` with
-a `hister` alias, and preserves completions for both commands. Its tests use
-`config create --full` and exercise both names. The formula name, service command,
-`HISTER_DATA_DIR`, working directory, and log paths stay unchanged.
+Homebrew maintains the [Nogon formula](https://github.com/Homebrew/homebrew-core/blob/HEAD/Formula/n/nogon.rb).
+Version 0.22.0 renamed the formula, executable, and shell completions to `nogon`.
+Homebrew maps the old formula name `hister` to `nogon` for upgrades. See the
+[merged rename](https://github.com/Homebrew/homebrew-core/pull/326543).
 
-Apply the patch in a Homebrew core checkout together with the new source version,
-checksum, and bottle updates. The existing v0.21.0 source lacks the renamed
-workspace and current config command, so the patch is not a standalone update
-to that release. Check it against the current formula before applying:
-
-```bash
-git apply --check /path/to/nogon/contrib/homebrew/hister.patch
-git apply /path/to/nogon/contrib/homebrew/hister.patch
-```
-
-After updating release metadata, build with Homebrew, run `brew audit --strict
-hister` and `brew test hister`, and verify an existing `brew services` installation
-keeps its data and service identity. Ruby syntax and the formula's test block
-have been checked locally against the current native executable; a full Homebrew
-build and service upgrade still need verification.
-
-A later formula rename also requires Homebrew's
-[rename mapping and migration checks](https://docs.brew.sh/Rename-A-Formula).
-Do not introduce a second independent formula or service for this compatibility
-release.
+The service runs `nogon listen` under its existing `sh.brew.hister` identity on
+macOS and Linux. It still uses Homebrew's `var/hister` as both its working
+directory and `HISTER_DATA_DIR`, and writes logs to `var/log/hister.log`.
 
 ### WinGet
 

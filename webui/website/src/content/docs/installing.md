@@ -81,14 +81,13 @@ selected. Keep your existing file or select it explicitly with `--config`.
 See [configuration locations](configuration#default-config-locations).
 
 For managed installations, keep existing service identities and storage paths.
-Follow the [Docker upgrade instructions](docker#upgrading-an-existing-container),
-[Systemd](#systemd), or [Nix](#nix) instructions for your setup. Existing repository,
+Follow the [Homebrew](#homebrew), [Docker](docker#upgrading-an-existing-container),
+[Systemd](#systemd), or [Nix](#nix) upgrade instructions for your setup. Existing repository,
 download, and extension store links may still contain `hister`.
 
 Older Hister releases do not gain Nogon configuration options when you rename their
 executable. Keep their `HISTER_` settings until you install a build that supports
-the rename. Homebrew and WinGet compatibility changes are prepared for publication;
-the available commands depend on the package version you install.
+the rename. On WinGet, the available command depends on the package version you install.
 
 ## Building from source
 
@@ -104,13 +103,23 @@ The build produces a `nogon` binary in the repository root. Source is also mirro
 
 ## Homebrew
 
-If you use Homebrew, getting started with Nogon is quick and easy to do:
+For a new installation, install Nogon and start the server.
 
 ```bash
-brew install hister
+brew install nogon
+nogon listen
 ```
 
-The formula currently installs the `hister` command. Start the server with `hister listen`.
+If you already installed Hister with Homebrew, upgrade it in place.
+
+```bash
+brew update
+brew upgrade nogon
+```
+
+Update any scripts that call `hister` to use `nogon`. If you ran Hister with
+`brew services`, run `brew services restart nogon` after upgrading. The service
+keeps using your existing data directory.
 
 ## Docker
 

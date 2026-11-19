@@ -38,7 +38,7 @@ No configuration is required for a local personal setup. See the [complete quick
 
 To search existing content, [import browser history](https://nogon.eu/docs/import#importing-browser-history), [import browser bookmarks](https://nogon.eu/docs/import#importing-browser-bookmarks), [index local directories](https://nogon.eu/docs/configuration#local-directory-indexing), or [import files](https://nogon.eu/docs/import#importing-files).
 
-Alternative installation methods include Homebrew (`brew install hister`), Docker, and Nix. See the [installation guide](https://nogon.eu/docs/installing) for instructions.
+Alternative installation methods include Homebrew (`brew install nogon`), Docker, and Nix. See the [installation guide](https://nogon.eu/docs/installing) for instructions.
 
 ## Features
 
