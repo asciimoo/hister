@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Research Jobs</title>
+<style>
+:root { --bg:#f7f7f5; --fg:#1d1d1b; --muted:#6b6b66; --card:#fff; --line:#ddddd8; --accent:#2f5d8a; --ok:#2e7d4f; --warn:#a46a00; --bad:#b3261e; }
+@media (prefers-color-scheme: dark) { :root { --bg:#161615; --fg:#ececea; --muted:#9a9a94; --card:#20201f; --line:#34342f; --accent:#7fb0e0; --ok:#6cc08f; --warn:#e0b04f; --bad:#f08a80; } }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.45 system-ui, sans-serif; }
+main { max-width:1000px; margin:0 auto; padding:16px; }
+h1 { font-size:22px; margin:8px 0 16px; } h2 { font-size:17px; margin:0 0 10px; }
+section { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:14px; margin-bottom:14px; }
+input[type=text] { padding:7px 9px; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--fg); min-width:0; flex:1; }
+button { padding:7px 12px; border:1px solid var(--accent); border-radius:6px; background:var(--accent); color:#fff; cursor:pointer; }
+button.secondary { background:transparent; color:var(--accent); }
+.row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+.jobs { list-style:none; margin:0; padding:0; }
+.jobs li { padding:8px; border-radius:6px; cursor:pointer; display:flex; justify-content:space-between; gap:8px; }
+.jobs li:hover, .jobs li.active { background:var(--bg); }
+.muted { color:var(--muted); font-size:13px; }
+#drop { border:2px dashed var(--line); border-radius:8px; padding:22px; text-align:center; margin:10px 0; }
+#drop.over { border-color:var(--accent); }
+table { width:100%; border-collapse:collapse; font-size:13px; }
+th, td { text-align:left; padding:5px 6px; border-bottom:1px solid var(--line); vertical-align:top; word-break:break-word; }
+.indexed { color:var(--ok); } .failed { color:var(--bad); } .dup { color:var(--warn); }
+code { font-size:12px; }
+.hit { padding:8px 0; border-bottom:1px solid var(--line); } .hit:last-child { border:0; }
+.hidden { display:none; }
+</style>
+</head>
+<body>
+<main>
+<h1>Research jobs</h1>
+<section>
+  <h2>New job</h2>
+  <form id="newjob" class="row">
+    <input type="text" id="jobname" placeholder="Job name" maxlength="200" required>
+    <input type="text" id="jobdesc" placeholder="Description (optional)">
+    <button type="submit">Create job</button>
+  </form>
+  <ul class="jobs" id="jobs"></ul>
+</section>
+
+<section id="jobview" class="hidden">
+  <h2 id="jobtitle"></h2>
+  <div class="muted" id="jobmeta"></div>
+  <div id="drop">Drop files or folders here, or
+    <label><input type="file" id="pickfiles" multiple hidden><button type="button" class="secondary" id="btnfiles">choose files</button></label>
+    <label><input type="file" id="pickdir" webkitdirectory multiple hidden><button type="button" class="secondary" id="btndir">choose folder</button></label>
+    <div class="muted" id="uploadstatus"></div>
+  </div>
+  <form id="search" class="row">
+    <input type="text" id="q" placeholder="Search this job">
+    <button type="submit">Search</button>
+  </form>
+  <div id="results"></div>
+  <h2 style="margin-top:14px">Source receipts</h2>
+  <table><thead><tr><th>File</th><th>SHA-256</th><th>Size</th><th>Status</th></tr></thead><tbody id="sources"></tbody></table>
+</section>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+let current = null;
+
+async function api(path, opts = {}) {
+  const r = await fetch(path, { credentials: 'same-origin', headers: { Accept: 'application/json', ...(opts.headers || {}) }, ...opts });
+  if (!r.ok) throw new Error((await r.text()).trim() || r.statusText);
+  return r.json();
+}
+function el(tag, text, cls) { const e = document.createElement(tag); if (text != null) e.textContent = text; if (cls) e.className = cls; return e; }
+function size(n) { if (n < 0) return '-'; if (n < 1024) return n + ' B'; if (n < 1048576) return (n / 1024).toFixed(1) + ' KB'; return (n / 1048576).toFixed(1) + ' MB'; }
+
+async function loadJobs() {
+  const { jobs } = await api('/api/research/jobs');
+  const ul = $('jobs'); ul.replaceChildren();
+  if (!jobs.length) ul.append(el('li', 'No jobs yet.', 'muted'));
+  for (const j of jobs) {
+    const li = el('li'); if (current === j.id) li.className = 'active';
+    li.append(el('span', j.name));
+    li.append(el('span', `${j.sources} files · ${j.indexed} indexed · ${j.duplicates} duplicates · ${j.failed} failed`, 'muted'));
+    li.onclick = () => openJob(j.id);
+    ul.append(li);
+  }
+}
+
+async function openJob(id) {
+  current = id;
+  const { job, sources } = await api(`/api/research/jobs/${id}`);
+  $('jobview').classList.remove('hidden');
+  $('jobtitle').textContent = job.name;
+  $('jobmeta').textContent = (job.description ? job.description + ' · ' : '') + 'created ' + new Date(job.created_at).toLocaleString();
+  const tb = $('sources'); tb.replaceChildren();
+  for (const s of sources) {
+    const tr = el('tr');
+    const name = el('td'); name.append(el('div', s.relative_path || s.original_name));
+    tr.append(name);
+    const h = el('td'); h.append(el('code', s.sha256 ? s.sha256.slice(0, 16) + '…' : '-')); h.title = s.sha256; tr.append(h);
+    tr.append(el('td', size(s.size)));
+    const st = el('td', s.status, s.status);
+    if (s.duplicate_kind) st.append(el('div', s.duplicate_kind === 'exact_in_job' ? 'exact duplicate in this job' : 'exact duplicate from another job', 'dup'));
+    if (s.error) st.append(el('div', s.error, 'muted'));
+    tr.append(st);
+    tb.append(tr);
+  }
+  $('results').replaceChildren();
+  loadJobs();
+}
+
+$('newjob').onsubmit = async (e) => {
+  e.preventDefault();
+  try {
+    const job = await api('/api/research/jobs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: $('jobname').value, description: $('jobdesc').value }) });
+    $('jobname').value = ''; $('jobdesc').value = '';
+    openJob(job.id);
+  } catch (err) { alert(err.message); }
+};
+
+async function upload(entries) {
+  if (!current || !entries.length) return;
+  const batchSize = 20; let done = 0;
+  for (let i = 0; i < entries.length; i += batchSize) {
+    const fd = new FormData();
+    const batch = entries.slice(i, i + batchSize);
+    for (const { path } of batch) fd.append('paths', path);
+    for (const { file } of batch) fd.append('files', file, file.name);
+    $('uploadstatus').textContent = `Uploading ${done}/${entries.length}…`;
+    try { await api(`/api/research/jobs/${current}/files`, { method: 'POST', body: fd }); }
+    catch (err) { $('uploadstatus').textContent = 'Upload failed: ' + err.message; return; }
+    done += batch.length;
+  }
+  $('uploadstatus').textContent = `Uploaded ${done} file(s).`;
+  openJob(current);
+}
+
+function fromFileList(list) { return Array.from(list).map((f) => ({ file: f, path: f.webkitRelativePath || f.name })); }
+$('btnfiles').onclick = () => $('pickfiles').click();
+$('btndir').onclick = () => $('pickdir').click();
+$('pickfiles').onchange = (e) => upload(fromFileList(e.target.files));
+$('pickdir').onchange = (e) => upload(fromFileList(e.target.files));
+
+async function walk(entry, prefix, out) {
+  if (entry.isFile) { out.push({ file: await new Promise((res, rej) => entry.file(res, rej)), path: prefix + entry.name }); return; }
+  if (entry.isDirectory) {
+    const reader = entry.createReader();
+    let batch;
+    do { batch = await new Promise((res, rej) => reader.readEntries(res, rej)); for (const c of batch) await walk(c, prefix + entry.name + '/', out); } while (batch.length);
+  }
+}
+const drop = $('drop');
+drop.ondragover = (e) => { e.preventDefault(); drop.classList.add('over'); };
+drop.ondragleave = () => drop.classList.remove('over');
+drop.ondrop = async (e) => {
+  e.preventDefault(); drop.classList.remove('over');
+  const out = [];
+  const items = Array.from(e.dataTransfer.items || []).map((i) => i.webkitGetAsEntry && i.webkitGetAsEntry()).filter(Boolean);
+  if (items.length) { for (const it of items) await walk(it, '', out); } else out.push(...fromFileList(e.dataTransfer.files));
+  upload(out);
+};
+
+$('search').onsubmit = async (e) => {
+  e.preventDefault();
+  const q = $('q').value.trim(); if (!q || !current) return;
+  const box = $('results'); box.replaceChildren(el('div', 'Searching…', 'muted'));
+  try {
+    const { results } = await api(`/api/research/jobs/${current}/search?q=${encodeURIComponent(q)}`);
+    box.replaceChildren();
+    if (!results.length) box.append(el('div', 'No matches in this job.', 'muted'));
+    for (const r of results) { const d = el('div', null, 'hit'); d.append(el('strong', r.title)); d.append(el('div', r.snippet, 'muted')); box.append(d); }
+  } catch (err) { box.replaceChildren(el('div', err.message, 'failed')); }
+};
+
+loadJobs().catch((err) => { $('jobs').replaceChildren(el('li', 'Could not load jobs: ' + err.message, 'failed')); });
+</script>
+</body>
+</html>
