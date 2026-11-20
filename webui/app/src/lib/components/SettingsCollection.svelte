@@ -42,7 +42,8 @@
           Array.isArray(item.filetypes) && item.filetypes.length
             ? item.filetypes.join(', ')
             : 'All file types',
-          item.user ? `Owner: ${item.user}` : 'Everyone with search access',
+          Object.hasOwn(item, 'user') &&
+            (item.user ? `Owner: ${item.user}` : 'Everyone with search access'),
           item.label ? `Label: ${item.label}` : '',
         ]
           .filter(Boolean)
@@ -160,7 +161,12 @@
   }
 
   function summary(name: string, value: unknown, index: number) {
-    if (presentation.summary) return presentation.summary(value as Record<string, unknown>);
+    if (presentation.summary && schema.type === 'object') {
+      const item = value as Record<string, unknown>;
+      return presentation.summary(
+        Object.fromEntries(schema.properties.map(({ name }) => [name, item[name]])),
+      );
+    }
     return {
       title: dictionary ? name : `${field.label} ${index + 1}`,
       detail: valueSummary(schema, value),

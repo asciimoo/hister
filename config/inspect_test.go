@@ -127,6 +127,14 @@ func TestFieldCatalogPreservesEditorContract(t *testing.T) {
 			t.Errorf("%s must explain how to enable editing and retain the saved value when detection is off", path)
 		}
 	}
+	properties := fields["indexer.directories"].Schema.Items.Properties
+	owner := slices.IndexFunc(properties, func(p SettingProperty) bool { return p.Name == "user" })
+	if owner < 0 {
+		t.Fatal("missing watched directory owner")
+	}
+	if when := properties[owner].AvailableWhen; when == nil || !slices.Equal(when.AnyOf, []string{"app.user_handling"}) || when.ResetWhenUnavailable {
+		t.Error("directory ownership must follow User handling without clearing the owner")
+	}
 	searchURL := fields["app.search_url"]
 	if searchURL.Schema.Sensitivity != "none" || searchURL.Schema.Control != "url" || searchURL.Default != CreateDefaultConfig().App.SearchURL {
 		t.Fatal("search URL must expose its default as an ordinary URL field")

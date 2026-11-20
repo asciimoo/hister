@@ -701,7 +701,7 @@ func FieldCatalog() []FieldMetadata {
 			Effect:        "reindex",
 		},
 		{Path: "indexer.keep_stopwords", Group: groupLanguageAndText, Label: "Keep stopwords", Description: "Keep common words in the search index. Reindex to update existing documents.", Schema: SettingSchema{Sensitivity: "none"}, Effect: "reindex"},
-		{Path: "indexer.directories", Group: groupLocalFiles, Label: "Watched directories", Description: "Server directories to scan and watch after saving. Blank owner makes files visible to everyone with search access. Removing a row stops watching but retains indexed documents.", Schema: directorySchema()},
+		{Path: "indexer.directories", Group: groupLocalFiles, Label: "Watched directories", Description: "Server directories to scan and watch after saving. Removing a row stops watching but retains indexed documents.", Schema: directorySchema()},
 		{Path: "indexer.max_file_size_mb", Group: groupLocalFiles, Label: "Maximum file size", Description: "Maximum file size in MiB. Applies to subsequent file processing.", Schema: SettingSchema{Sensitivity: "none", Min: &minFileSize, Max: &maxFileSize}, Effect: "runtime"},
 		fileManagedField("indexer.pdf_parser.command", groupPDFExtraction, "PDF parser command", "Optional executable used to extract PDF text."),
 		fileManagedField("indexer.pdf_parser.args", groupPDFExtraction, "PDF parser arguments", "Arguments passed to the PDF parser command."),
@@ -879,7 +879,7 @@ func directorySchema() SettingSchema {
 			Type: "object", Control: "object", Collection: "none", Sensitivity: "none", Properties: []SettingProperty{
 				{Name: "path", Label: "Path", Description: "Existing absolute server path or ~/ path. Directories must not overlap.", Required: true, Schema: text},
 				{Name: "label", Label: "Label", Description: "Label assigned to indexed files.", Schema: text},
-				{Name: "user", Label: "Owner", Description: "Existing username in multi user mode. Leave empty for global files.", Schema: text},
+				{Name: "user", Label: "Owner", Description: "Enter an existing username. Leave empty to make files visible to everyone with search access.", AvailableWhen: &SettingAvailability{AnyOf: []string{"app.user_handling"}}, Schema: text},
 				{Name: "filetypes", Label: "File types", Description: "Extensions without a dot, one per line. Empty allows every file type.", Schema: list},
 				{Name: "patterns", Label: "Include patterns", Description: "File name glob patterns, one per line. Empty includes all names.", Schema: list},
 				{Name: "excludes", Label: "Exclude patterns", Description: "File and directory name glob patterns, one per line.", Schema: list},

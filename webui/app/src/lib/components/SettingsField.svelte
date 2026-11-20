@@ -12,6 +12,7 @@
     sourceLabel,
     type SettingField,
     type SettingCondition,
+    type SettingSchema,
     type SettingValue,
     type SettingEdit,
     type SettingItemEditor,
@@ -60,37 +61,39 @@
   let sourceOpen = $state(false);
   const readOnly = $derived(preview || !canEditSetting(field, active));
   const editable = $derived(available && !readOnly);
+  function visibleObjectSchema(schema: SettingSchema) {
+    if (schema?.type !== 'object' || !Array.isArray(schema.properties)) return schema;
+    return {
+      ...schema,
+      properties: schema.properties.filter((property) => isAvailable(property.available_when)),
+    };
+  }
+  const inputSchema = $derived(
+    field.schema.type === 'list' || field.schema.type === 'dictionary'
+      ? { ...field.schema, items: visibleObjectSchema(field.schema.items) }
+      : visibleObjectSchema(field.schema),
+  );
   const collection = $derived(
-    field.schema.type === 'dictionary' ||
-      (field.schema.type === 'list' && field.schema.items?.type === 'object')
-      ? { ...field, schema: field.schema }
+    inputSchema.type === 'dictionary' ||
+      (inputSchema.type === 'list' && inputSchema.items?.type === 'object')
+      ? { ...field, schema: inputSchema }
       : null,
   );
   const directories = $derived(
     !editable &&
       field.path === 'indexer.directories' &&
-      field.schema.type === 'list' &&
-      field.schema.items?.type === 'object' &&
-      Array.isArray(field.schema.items.properties) &&
-      field.schema.sensitivity === 'none' &&
+      inputSchema.type === 'list' &&
+      inputSchema.items?.type === 'object' &&
+      Array.isArray(inputSchema.items.properties) &&
+      inputSchema.sensitivity === 'none' &&
       (Array.isArray(active.value) || active.value === null)
       ? {
           values: (active.value ?? []) as Record<string, unknown>[],
-          properties: field.schema.items.properties,
+          properties: inputSchema.items.properties,
         }
       : undefined,
   );
   const value = $derived(draftSettingValue(field, active, inputEdit));
-  const inputSchema = $derived(
-    field.schema.type === 'object'
-      ? {
-          ...field.schema,
-          properties: field.schema.properties.filter((property) =>
-            isAvailable(property.available_when),
-          ),
-        }
-      : field.schema,
-  );
   const id = $derived(`${preview ? 'pending' : 'setting'}-${field.path}`);
   const description = $derived(
     `${id}-description${edit ? ` ${id}-status` : ''}${errors.length ? ` ${id}-errors` : ''}${conflict ? ` ${id}-conflict` : ''}`,

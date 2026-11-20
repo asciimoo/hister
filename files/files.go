@@ -104,7 +104,7 @@ func ValidateDirectorySettings(c *config.Config) []config.FieldError {
 		roots = append(roots, root)
 		if dir.User != "" {
 			if !c.App.UserHandling {
-				reject("An owner requires multi user mode. Leave the owner empty for global files.")
+				reject("An owner requires multi user mode. Clear the owner before turning off User handling, or remove this directory from the watch list.")
 			} else if _, err := model.GetUser(dir.User); err != nil {
 				reject("The owner could not be resolved. Choose an existing username.")
 			}

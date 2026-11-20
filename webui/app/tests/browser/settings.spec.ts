@@ -3662,7 +3662,7 @@ test('leaving an unsaved draft through the home link warns only once', async ({ 
   expect(warnings).toBe(1);
 });
 
-async function indexerSettingsAPI(page: Page) {
+async function indexerSettingsAPI(page: Page, userHandling = true) {
   const { state } = await settingsAPI(page);
   const text = {
     type: 'string',
@@ -3684,6 +3684,12 @@ async function indexerSettingsAPI(page: Page) {
     items: text,
   } satisfies SettingSchema;
   for (const field of [
+    {
+      path: 'app.user_handling',
+      label: 'User handling',
+      schema: toggle,
+      default: false,
+    },
     {
       path: 'indexer.languages',
       label: 'Languages',
@@ -3731,7 +3737,12 @@ async function indexerSettingsAPI(page: Page) {
               schema: text,
             },
             { name: 'label', label: 'Label', schema: text },
-            { name: 'user', label: 'Owner', schema: text },
+            {
+              name: 'user',
+              label: 'Owner',
+              schema: text,
+              available_when: { any_of: ['app.user_handling'] },
+            },
             { name: 'filetypes', label: 'File types', schema: list },
             { name: 'patterns', label: 'Include patterns', schema: list },
             { name: 'excludes', label: 'Exclude patterns', schema: list },
@@ -3744,14 +3755,14 @@ async function indexerSettingsAPI(page: Page) {
   ] satisfies Pick<SettingField, 'path' | 'label' | 'schema' | 'default'>[]) {
     state.fields.push({
       ...field,
-      category: 'indexer',
+      category: field.path.split('.')[0],
       description: 'Indexer setting.',
       effect: 'reindex',
       requires_confirmation: false,
     });
     state.values.push({
       path: field.path,
-      value: field.default,
+      value: field.path === 'app.user_handling' ? userHandling : field.default,
       editable: true,
       secret_present: false,
       source: { kind: 'default', locked: false, web_selected: false },
@@ -3759,6 +3770,79 @@ async function indexerSettingsAPI(page: Page) {
   }
   return state;
 }
+
+test('a directory owner follows the User handling draft without losing ownership', async ({
+  page,
+}) => {
+  const state = await indexerSettingsAPI(page);
+  const path = '/srv/notes';
+  state.values.find((field) => field.path === 'indexer.directories')!.value = [
+    { path, user: 'alice' },
+  ];
+  let draft: SettingsDraft | undefined;
+  await page.route('**/api/settings/validate', (route) => {
+    draft = route.request().postDataJSON();
+    return route.fulfill({
+      status: 422,
+      json: {
+        errors: [
+          {
+            path: 'indexer.directories',
+            code: 'invalid_value',
+            message: 'Directory 1: An owner requires multi user mode.',
+          },
+        ],
+      },
+    });
+  });
+  await page.goto('/settings?tab=indexer');
+  const row = page.getByRole('group', { name: 'Watched directories 1', exact: true });
+  const app = page.getByRole('tab', { name: 'App', exact: true });
+  const indexer = page.getByRole('tab', { name: 'Indexer', exact: true });
+  const users = page.getByRole('switch', { name: 'User handling', exact: true });
+  const owner = row.getByRole('textbox', { name: 'Owner', exact: true });
+  await expect(row).toContainText('Owner: alice');
+  await app.click();
+  await users.uncheck();
+  await indexer.click();
+  await expect(row).not.toContainText('alice');
+  await expect(row).not.toContainText('Everyone with search access');
+  await row.getByRole('button', { name: 'Edit' }).click();
+  await expect(owner).toHaveCount(0);
+  await row.getByRole('textbox', { name: 'Label', exact: true }).fill('notes');
+  await row.getByRole('button', { name: 'Done' }).click();
+  await expect(page.getByText('Directory 1: An owner requires multi user mode.')).toBeVisible();
+  expect(draft?.edits).toContainEqual({
+    path: 'indexer.directories',
+    action: 'set',
+    value: [{ path, user: 'alice', label: 'notes' }],
+  });
+  await app.click();
+  await users.check();
+  await page.getByRole('tab', { name: 'Indexer (1 error)', exact: true }).click();
+  await expect(owner).toHaveValue('alice');
+  await expect(row.getByRole('textbox', { name: 'Label', exact: true })).toHaveValue('notes');
+});
+
+test('single user mode hides ownership in new directory editors and locked directory details', async ({
+  page,
+}) => {
+  const state = await indexerSettingsAPI(page, false);
+  const directories = state.values.find((field) => field.path === 'indexer.directories')!;
+  await page.goto('/settings?tab=indexer');
+  const region = page.getByRole('region', { name: 'Watched directories', exact: true });
+  await region.getByRole('button', { name: 'Add directory' }).click();
+  await expect(region.getByRole('textbox', { name: 'Path', exact: true })).toBeVisible();
+  await expect(region.getByRole('textbox', { name: 'Owner', exact: true })).toHaveCount(0);
+  await region.getByRole('button', { name: 'Cancel', exact: true }).click();
+  directories.value = [{ path: '/srv/notes' }];
+  directories.editable = false;
+  Object.assign(directories.source, { kind: 'file', locked: true });
+  await page.reload();
+  await expect(region.getByRole('heading', { name: '/srv/notes' })).toBeVisible();
+  await expect(region.getByText('Owner', { exact: true })).toHaveCount(0);
+  await expect(region.getByText('Everyone with search access', { exact: true })).toHaveCount(0);
+});
 
 test('watched directory fields indicate which parameters are required or optional', async ({
   page,
