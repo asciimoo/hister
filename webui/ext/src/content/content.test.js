@@ -184,9 +184,11 @@ test('automatic and manual indexing prefer canonical URLs on the same hostname',
     assert.equal(b.messages.length, 0);
     b.advance(0);
     assert.equal(b.messages[0].request.pageData.url, expected, href);
+    assert.equal(b.messages[0].request.sourceURL, b.page.url, href);
     b.reindex();
     assert.equal(b.messages[1].request.action, 'reindex');
     assert.equal(b.messages[1].request.pageData.url, expected, href);
+    assert.equal(b.messages[1].request.sourceURL, b.page.url, href);
   }
 });
 
@@ -269,6 +271,44 @@ test('cosmetic HTML changes wait for the preview interval without repeated DOM s
   assert.equal(b.messages.length, 2);
   assert.equal(b.messages[1].at, 300_000);
   assert.equal(b.messages[1].request.pageData.html, b.page.html);
+});
+
+test('navigation from a skipped source retries even when the canonical URL is unchanged', () => {
+  const b = browser({ respond: false });
+  b.page.metadata = [metadata('LINK', { rel: 'canonical', href: '/clean' })];
+  b.page.url = 'https://example.com/?temporary-chat=true';
+  b.advance(0);
+  b.messages[0].callback({ status_code: 406 });
+  b.page.url = 'https://example.com/c/normal';
+  b.navigate();
+  b.advance(30_000);
+  assert.equal(b.messages.length, 2);
+  assert.equal(b.messages[1].request.sourceURL, b.page.url);
+  assert.equal(b.messages[1].request.pageData.url, 'https://example.com/clean');
+});
+
+test('delayed hidden captures retain their source URL after further navigation', () => {
+  const b = browser();
+  b.advance(0);
+  b.page.url = 'https://example.com/?temporary-chat=true';
+  b.hide();
+  b.page.url = 'https://example.com/c/normal';
+  b.advance(30_000);
+  assert.equal(b.messages.length, 2);
+  assert.equal(b.messages[1].request.sourceURL, 'https://example.com/?temporary-chat=true');
+  assert.equal(b.messages[1].request.pageData.url, 'https://example.com/?temporary-chat=true');
+});
+
+test('an old skip reply does not discard a hidden capture from a new source', () => {
+  const b = browser({ respond: false });
+  b.page.metadata = [metadata('LINK', { rel: 'canonical', href: '/clean' })];
+  b.advance(0);
+  b.page.url = 'https://example.com/c/normal';
+  b.hide();
+  b.messages[0].callback({ status_code: 406 });
+  b.advance(30_000);
+  assert.equal(b.messages.length, 2);
+  assert.equal(b.messages[1].request.sourceURL, b.page.url);
 });
 
 test('navigation bursts defer capture and submit only the latest page after the minimum interval', () => {
