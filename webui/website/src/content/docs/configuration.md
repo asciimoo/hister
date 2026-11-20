@@ -1518,6 +1518,8 @@ indexer:
 
 Use `languages` to limit detection to at least two distinct supported languages, `language_detection_accuracy: high` to improve detection of short text, or `keep_stopwords: true` to keep common words searchable. Regional codes and aliases count as the same language.
 
+In **Settings → Indexer**, turn on **Detect languages** to edit the language list and detection accuracy. Turning detection off keeps both saved choices for the next time you enable it.
+
 Setting `detect_languages: false` turns off automatic detection for newly processed documents. Existing documents remain searchable, and manual language pins are preserved. These settings also apply to service imports run from the command line.
 
 Restart after changing the server configuration. Reindex to apply the new settings to existing documents. Until then, those documents remain searchable with their previous settings.

@@ -117,6 +117,16 @@ func TestFieldCatalogPreservesEditorContract(t *testing.T) {
 	if toggle := fields["app.show_suggestions"]; toggle.Default != false || toggle.Schema.Control != "switch" {
 		t.Fatal("lost an explicit false default or boolean control")
 	}
+	for _, path := range []string{"indexer.languages", "indexer.language_detection_accuracy"} {
+		condition := fields[path].AvailableWhen
+		if condition == nil || !slices.Equal(condition.AnyOf, []string{"indexer.detect_languages"}) {
+			t.Errorf("%s must be available only when language detection is enabled", path)
+			continue
+		}
+		if condition.Message == "" || condition.ResetWhenUnavailable {
+			t.Errorf("%s must explain how to enable editing and retain the saved value when detection is off", path)
+		}
+	}
 	searchURL := fields["app.search_url"]
 	if searchURL.Schema.Sensitivity != "none" || searchURL.Schema.Control != "url" || searchURL.Default != CreateDefaultConfig().App.SearchURL {
 		t.Fatal("search URL must expose its default as an ordinary URL field")
