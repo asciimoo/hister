@@ -8,6 +8,7 @@
   import {
     canEditSetting,
     choiceLabel,
+    draftSettingValue,
     sourceLabel,
     type SettingField,
     type SettingValue,
@@ -19,6 +20,7 @@
   let {
     field,
     active,
+    available = true,
     edit,
     conflict,
     errors = [],
@@ -35,6 +37,7 @@
   }: {
     field: SettingField;
     active: SettingValue;
+    available?: boolean;
     edit?: SettingEdit;
     conflict?: string;
     errors?: string[];
@@ -50,7 +53,8 @@
     onEdit: (edit: SettingEdit | undefined) => void;
   } = $props();
   let sourceOpen = $state(false);
-  const editable = $derived(!preview && canEditSetting(field, active));
+  const readOnly = $derived(preview || !canEditSetting(field, active));
+  const editable = $derived(available && !readOnly);
   const collection = $derived(
     field.schema.type === 'dictionary' ||
       (field.schema.type === 'list' && field.schema.items?.type === 'object')
@@ -71,9 +75,7 @@
         }
       : undefined,
   );
-  const value = $derived(
-    edit?.action === 'set' ? edit.value : edit?.action === 'reset' ? field.default : active.value,
-  );
+  const value = $derived(draftSettingValue(field, active, edit));
   const id = $derived(`${preview ? 'pending' : 'setting'}-${field.path}`);
   const description = $derived(
     `${id}-description${edit ? ` ${id}-status` : ''}${errors.length ? ` ${id}-errors` : ''}${conflict ? ` ${id}-conflict` : ''}`,
@@ -133,17 +135,17 @@
           <Tooltip.Root bind:open={sourceOpen} disableCloseOnTriggerClick>
             <Tooltip.Trigger
               type="button"
-              aria-label={`${active.source.locked ? 'Locked: ' : !editable ? 'Read only: ' : ''}Source information for ${field.label}`}
+              aria-label={`${active.source.locked ? 'Locked: ' : readOnly ? 'Read only: ' : ''}Source information for ${field.label}`}
               onclick={() => (sourceOpen = true)}
               class="text-text-brand-muted hover:text-text-brand inline-flex h-8 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-sm {active
-                .source.locked || !editable
+                .source.locked || readOnly
                 ? 'px-1 text-xs'
                 : 'w-8'}"
             >
               {#if active.source.locked}
                 <Lock class="size-3.5" aria-hidden="true" />
                 Locked
-              {:else if !editable}
+              {:else if readOnly}
                 <Eye class="size-3.5" aria-hidden="true" />
                 Read only
               {:else}
@@ -182,16 +184,25 @@
         </div>
       {/if}
     </div>
-    <p id={`${id}-description`} class="text-text-brand-muted text-sm leading-relaxed">
-      {field.description}
-      {#if field.effect === 'reembed'}
-        <span class="mt-1 block">Reindex existing documents after changing this setting.</span>
-      {/if}
-    </p>
+    {#if available}<p
+        id={`${id}-description`}
+        class="text-text-brand-muted text-sm leading-relaxed"
+      >
+        {value === true && field.enabled_description
+          ? field.enabled_description
+          : field.description}
+        {#if field.effect === 'reembed'}
+          <span class="mt-1 block">Reindex existing documents after changing this setting.</span>
+        {/if}
+      </p>{/if}
   </div>
   <div class="min-w-0 space-y-2 break-words {directories ? 'lg:col-span-2' : ''}">
     <div class="flex min-h-8 items-center lg:justify-end">
-      {#if field.schema.sensitivity !== 'none' && !editable}
+      {#if !available}
+        <p id={`${id}-description`} class="text-text-brand-muted text-sm leading-relaxed">
+          {field.available_when?.message}
+        </p>
+      {:else if field.schema.sensitivity !== 'none' && !editable}
         <p {id} class="text-text-brand min-w-0 text-sm">
           {active.secret_present ? 'Value stored (hidden)' : 'No stored value'}
         </p>

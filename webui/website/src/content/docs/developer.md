@@ -166,6 +166,17 @@ permission or replace field validation.
 Field metadata includes a top level `category` and an optional display `group`.
 The backend catalog defines groups and field order; clients preserve that order
 when grouping fields within each category.
+
+A field can declare `available_when.any_of` with the paths of its prerequisites.
+A true switch, a populated string, or a stored credential satisfies the condition.
+The editor uses the current draft, including secret replacements, clears, and resets.
+It shows `available_when.message` in place of the control when no prerequisite applies.
+By default it omits drafts for unavailable fields and preserves their stored values.
+Set `reset_when_unavailable` inside the condition to include a reset of an editable web
+selection when the last prerequisite is removed. Undoing that edit restores the draft.
+Use `enabled_description` for switch help text that changes when enabled. Configuration
+validation enforces required combinations for all clients.
+
 Catalog entries declare a `ConfirmationPolicy` alongside the field schema.
 Its mode is `acknowledge` or `access`; its pure `Describe` function compares the
 current configuration with the validated candidate and returns an empty string

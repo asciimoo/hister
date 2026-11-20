@@ -334,6 +334,134 @@ async function activateAccess(page: Page) {
   await page.getByRole('dialog').getByRole('button', { name: 'Confirm sensitive changes' }).click();
 }
 
+function addAnonymousSearch(state: SettingsState, enabled = false) {
+  const label = 'Allow search without signing in';
+  state.fields.push({
+    path: 'app.public',
+    category: 'app',
+    label,
+    description: 'Visitors must sign in to search.',
+    enabled_description: 'Visitors can search shared documents and open their previews and files.',
+    available_when: {
+      any_of: ['app.user_handling', 'app.access_token', 'server.proxy_auth_header'],
+      message: 'Anyone who can reach this instance can search and make changes.',
+      reset_when_unavailable: true,
+    },
+    schema: { type: 'boolean', control: 'switch', sensitivity: 'none', collection: 'none' },
+    default: false,
+    effect: 'runtime',
+    requires_confirmation: true,
+  });
+  state.values.push({
+    path: 'app.public',
+    value: enabled,
+    editable: true,
+    secret_present: false,
+    source: { kind: enabled ? 'web' : 'default', locked: false, web_selected: enabled },
+  });
+  return label;
+}
+
+test('anonymous search follows unsaved credentials and explains who can search', async ({
+  page,
+}) => {
+  const { state, validations } = await accessSettingsAPI(page);
+  const label = addAnonymousSearch(state);
+  state.values.find((value) => value.path === 'app.user_handling')!.value = false;
+  state.fields.push({
+    path: 'app.access_token',
+    category: 'app',
+    label: 'Access token',
+    description: '',
+    schema: { type: 'string', control: 'secret', sensitivity: 'secret', collection: 'none' },
+    effect: 'runtime',
+    requires_confirmation: true,
+  });
+  state.values.push({
+    path: 'app.access_token',
+    editable: true,
+    secret_present: false,
+    source: { kind: 'default', locked: false, web_selected: false },
+  });
+  await page.goto('/settings');
+  const toggle = page.getByRole('switch', { name: label, exact: true });
+  await expect(
+    page.getByText('Anyone who can reach this instance can search and make changes.'),
+  ).toBeVisible();
+  await expect(toggle).toHaveCount(0);
+  const users = page.getByRole('switch', { name: 'User handling' });
+  await users.check();
+  await expect(toggle).toHaveAccessibleDescription('Visitors must sign in to search.');
+  await toggle.check();
+  await expect(toggle).toHaveAccessibleDescription(/open their previews and files/);
+  await users.uncheck();
+  await expect(toggle).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Save and apply' })).toBeDisabled();
+  await page
+    .getByRole('region', { name: 'Access token', exact: true })
+    .locator('input')
+    .fill('draft-token');
+  await expect(toggle).toBeChecked();
+  await page.getByRole('button', { name: 'Save and apply' }).click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  expect(validations[0].edits).toEqual(
+    expect.arrayContaining([
+      {
+        path: 'app.access_token',
+        action: 'set',
+        value: { action: 'replace', value: 'draft-token' },
+      },
+      { path: 'app.public', action: 'set', value: true },
+    ]),
+  );
+});
+
+test('removing the last authentication method reviews the dependent reset and undo restores it', async ({
+  page,
+}) => {
+  const { state, validations } = await accessSettingsAPI(page);
+  const label = addAnonymousSearch(state, true);
+  await page.goto('/settings');
+  const toggle = page.getByRole('switch', { name: label, exact: true });
+  await expect(toggle).toBeChecked();
+  await page.getByRole('button', { name: 'Reset User handling' }).click();
+  await expect(toggle).toHaveCount(0);
+  await page.getByRole('button', { name: 'Save and apply' }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toContainText(label);
+  expect(validations[0].edits).toEqual([
+    { path: 'app.user_handling', action: 'reset' },
+    { path: 'app.public', action: 'reset' },
+  ]);
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await page.getByRole('button', { name: 'Undo User handling' }).click();
+  await expect(toggle).toBeChecked();
+  await expect(page.getByRole('button', { name: 'Save and apply' })).toBeDisabled();
+});
+
+test('a dependent reset updates other conditional settings regardless of display order', async ({
+  page,
+}) => {
+  const { state } = await settingsAPI(page);
+  state.fields.find((field) => field.path === 'app.subtitle')!.available_when = {
+    any_of: ['app.show_suggestions'],
+    message: 'Enable suggestions to edit the subtitle.',
+  };
+  state.fields.find((field) => field.path === 'app.show_suggestions')!.available_when = {
+    any_of: ['app.title'],
+    message: 'Enter a title to enable suggestions.',
+    reset_when_unavailable: true,
+  };
+  await page.goto('/settings');
+  const subtitle = page.getByRole('textbox', { name: 'Subtitle', exact: true });
+  await expect(subtitle).toBeVisible();
+  await page.getByRole('button', { name: 'Clear Title', exact: true }).click();
+  await expect(subtitle).toHaveCount(0);
+  await expect(page.getByText('Enable suggestions to edit the subtitle.')).toBeVisible();
+  await page.getByRole('button', { name: 'Undo Title', exact: true }).click();
+  await expect(subtitle).toBeVisible();
+});
+
 for (const operation of ['confirm', 'cancel'] as const) {
   test(`temporary access changes ${operation} only after activation`, async ({ page }) => {
     const { completions } = await pendingAccessAPI(page);
@@ -798,6 +926,7 @@ test('sensitive review includes effective Reset and Clear changes with hidden se
   page,
 }) => {
   const { state, validations, applications } = await accessSettingsAPI(page);
+  const label = addAnonymousSearch(state, true);
   state.fields.push({
     path: 'app.access_token',
     category: 'app',
@@ -816,7 +945,10 @@ test('sensitive review includes effective Reset and Clear changes with hidden se
   });
   await page.goto('/settings');
   await page.getByRole('button', { name: 'Reset User handling', exact: true }).click();
+  const anonymousSearch = page.getByRole('switch', { name: label, exact: true });
+  await expect(anonymousSearch).toBeChecked();
   await page.getByRole('button', { name: 'Clear Instance token', exact: true }).click();
+  await expect(anonymousSearch).toHaveCount(0);
   await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Review sensitive changes' });
   await expect(dialog).toContainText('Before: true');
@@ -828,6 +960,7 @@ test('sensitive review includes effective Reset and Clear changes with hidden se
   expect(validations[0].edits).toEqual([
     { path: 'app.user_handling', action: 'reset' },
     { path: 'app.access_token', action: 'set', value: { action: 'clear' } },
+    { path: 'app.public', action: 'reset' },
   ]);
   expect(applications).toEqual([]);
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
@@ -835,6 +968,7 @@ test('sensitive review includes effective Reset and Clear changes with hidden se
     .getByRole('region', { name: 'Instance token', exact: true })
     .locator('input[type="password"]')
     .fill('replacement-private-token');
+  await expect(anonymousSearch).toBeChecked();
   await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
   await expect(dialog).toContainText('Replacement value (hidden)');
   await expect(dialog).not.toContainText('replacement-private-token');

@@ -810,6 +810,11 @@ Web configuration requires administrator access in multi user instances. Token p
 require signing in; instances without authentication need no login. Public search access does not
 grant anonymous visitors access to Settings on an authenticated instance.
 
+Under **App → Access**, **Allow search without signing in** appears when you set an access
+token or enable user accounts. You can change both in one save. With anonymous search enabled,
+visitors can search shared documents and open their previews and files. Without authentication,
+anyone who can reach the instance can also add or change documents.
+
 Saving briefly interrupts service. Changes made to configuration files require a
 [reload](#reloading-a-running-server). Invalid or unreadable files block saving.
 If another save or a file change causes a conflict, refresh settings and resolve conflicting fields

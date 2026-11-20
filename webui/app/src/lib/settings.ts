@@ -69,6 +69,12 @@ export interface SettingField {
   group?: string;
   label: string;
   description: string;
+  enabled_description?: string;
+  available_when?: {
+    any_of: string[];
+    message: string;
+    reset_when_unavailable?: boolean;
+  };
   schema: SettingSchema;
   default?: unknown;
   effect: string;
@@ -173,6 +179,63 @@ export async function reloadConfiguration(): Promise<void> {
 
 export type SettingEdit =
   { path: string; action: 'set'; value: unknown } | { path: string; action: 'reset' };
+
+export function draftSettingValue(field: SettingField, active: SettingValue, edit?: SettingEdit) {
+  if (edit?.action === 'reset') return field.default;
+  return edit?.action === 'set' ? edit.value : active.value;
+}
+
+// Project the submitted edits separately from the user's selections so undoing
+// a prerequisite edit also restores the dependent control and its draft.
+export function resolveSettingsDraft(
+  fields: SettingField[],
+  values: Map<string, SettingValue>,
+  edits: Record<string, SettingEdit>,
+) {
+  const submitted = { ...edits };
+  const unavailable = new Set<string>();
+  const byPath = new Map(fields.map((field) => [field.path, field]));
+
+  function isSet(path: string, edit?: SettingEdit) {
+    const field = byPath.get(path);
+    const active = values.get(path);
+    if (!field || !active) return false;
+    const value = draftSettingValue(field, active, edit);
+    if (field.schema.sensitivity === 'none')
+      return value === true || (typeof value === 'string' && value.length > 0);
+    if (!edit) return active.secret_present;
+    if (edit.action === 'reset') return false;
+    const secret = value as { action?: string; value?: string } | null;
+    if (secret?.action === 'keep') return active.secret_present;
+    return secret?.action === 'replace' && typeof secret.value === 'string' && secret.value !== '';
+  }
+
+  const visited = new Set<string>();
+  function resolve(field: SettingField) {
+    const condition = field.available_when;
+    if (!condition || visited.has(field.path)) return;
+    visited.add(field.path);
+    for (const path of condition.any_of) {
+      const prerequisite = byPath.get(path);
+      if (prerequisite) resolve(prerequisite);
+    }
+    if (condition.any_of.some((path) => isSet(path, submitted[path]))) return;
+    unavailable.add(field.path);
+    delete submitted[field.path];
+    const active = values.get(field.path);
+    if (
+      condition.reset_when_unavailable &&
+      active?.source.web_selected &&
+      canEditSetting(field, active) &&
+      condition.any_of.some((path) => isSet(path)) &&
+      JSON.stringify(active.value) !== JSON.stringify(field.default)
+    )
+      submitted[field.path] = { path: field.path, action: 'reset' };
+  }
+  fields.forEach(resolve);
+  return { edits: submitted, unavailable };
+}
+
 export interface SettingsDraft {
   revision: string;
   edits: SettingEdit[];

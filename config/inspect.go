@@ -208,7 +208,7 @@ func (c *Config) ValidateFields() []FieldError {
 	if err := candidate.UpdateBaseURL(candidate.Server.BaseURL); err != nil {
 		check("server.base_url", "Set a valid base URL for the configured listen address.", err)
 	}
-	check("app.public", "Public access requires a token or user handling.", candidate.ValidatePublicMode())
+	check("app.public", "To allow search without signing in, set an access token or enable user accounts, or turn off this setting.", candidate.ValidatePublicMode())
 	check("hotkeys.web", "Use supported key combinations and actions.", candidate.Hotkeys.Validate())
 	fields = append(fields, candidate.semanticSearchErrors()...)
 	check("indexer", "Check the indexer settings.", candidate.Indexer.Validate())

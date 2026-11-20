@@ -15,6 +15,7 @@
   import {
     categoryLabels,
     groupSettings,
+    resolveSettingsDraft,
     settingsRequest,
     readSettingsReview,
     reloadConfiguration,
@@ -79,14 +80,18 @@
   const category = $derived(
     categories.includes(requestedCategory) ? requestedCategory : (categories[0] ?? 'app'),
   );
-  const editedPaths = $derived(new Set([...Object.keys(edits), ...(editor ? [editor.path] : [])]));
+  const values = $derived(new Map(settings?.values.map((value) => [value.path, value]) ?? []));
+  const draftSettings = $derived(resolveSettingsDraft(settings?.fields ?? [], values, edits));
+  const editedPaths = $derived(
+    new Set([...Object.keys(draftSettings.edits), ...(editor ? [editor.path] : [])]),
+  );
   const editCount = $derived(editedPaths.size);
   const dirty = $derived(editCount > 0);
   const conflictCount = $derived(Object.keys(conflicts).length);
-  const values = $derived(new Map(settings?.values.map((value) => [value.path, value]) ?? []));
   const pendingValues = $derived(
     new Map(settings?.pending?.values?.map((value) => [value.path, value]) ?? []),
   );
+  const pendingSettings = $derived(resolveSettingsDraft(settings?.fields ?? [], pendingValues, {}));
   const localConfigFilename = $derived(
     [...(settings?.pending?.values ?? []), ...(settings?.values ?? [])]
       .find((value) => value.source.kind === 'file' && value.source.name)
@@ -413,8 +418,10 @@
     )
       return;
     const edit = collectionEdit(path, value);
-    const draft = Object.values(edits).filter((edit) => edit.path !== path);
-    if (edit) draft.push(edit);
+    const itemEdits = { ...edits };
+    if (edit) itemEdits[path] = edit;
+    else delete itemEdits[path];
+    const draft = Object.values(resolveSettingsDraft(settings.fields, values, itemEdits).edits);
     const finish = beginWork('checking');
     let otherErrors: SettingError[] = [];
     try {
@@ -525,7 +532,7 @@
       return;
     const draft: SettingsDraft = {
       revision: settings.revision,
-      edits: JSON.parse(JSON.stringify(Object.values(edits))),
+      edits: JSON.parse(JSON.stringify(Object.values(draftSettings.edits))),
     };
     if (accepted && JSON.stringify(accepted.draft) !== JSON.stringify(draft)) {
       dismissReview();
@@ -788,10 +795,14 @@
                       {#each group.fields as field (field.path)}
                         {@const active = values.get(field.path)}
                         {@const pending = pendingValues.get(field.path)}
+                        {@const available = !draftSettings.unavailable.has(field.path)}
+                        {@const pendingAvailable = !pendingSettings.unavailable.has(field.path)}
                         {#if active}<SettingsField
                             {field}
                             {active}
-                            edit={edits[field.path]}
+                            {available}
+                            edit={draftSettings.edits[field.path] ??
+                              (conflicts[field.path] ? edits[field.path] : undefined)}
                             conflict={conflicts[field.path]}
                             errors={errors
                               .filter((error) => error.path === field.path)
@@ -806,8 +817,14 @@
                             onUndoRemoval={undoRemoval}
                             onEdit={(edit) => update(field.path, edit)}
                           />{/if}
-                        {#if pending && !sameSetting(active, pending)}
-                          <SettingsField {field} active={pending} preview onEdit={() => {}} />
+                        {#if pending && (!sameSetting(active, pending) || available !== pendingAvailable)}
+                          <SettingsField
+                            {field}
+                            active={pending}
+                            available={pendingAvailable}
+                            preview
+                            onEdit={() => {}}
+                          />
                         {/if}
                       {/each}
                     </div>

@@ -129,6 +129,28 @@ func TestFieldCatalogPreservesEditorContract(t *testing.T) {
 			t.Fatalf("lost confirmation requirement for %s", path)
 		}
 	}
+	public := fields["app.public"]
+	if public.Label != "Allow search without signing in" {
+		t.Errorf("unexpected anonymous search label: %q", public.Label)
+	}
+	raw, err := json.Marshal(public)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var metadata struct {
+		AvailableWhen struct {
+			AnyOf                []string `json:"any_of"`
+			Message              string   `json:"message"`
+			ResetWhenUnavailable bool     `json:"reset_when_unavailable"`
+		} `json:"available_when"`
+	}
+	if err := json.Unmarshal(raw, &metadata); err != nil {
+		t.Fatal(err)
+	}
+	condition := metadata.AvailableWhen
+	if !slices.Equal(condition.AnyOf, []string{"app.access_token", "app.user_handling", "server.proxy_auth_header"}) || !condition.ResetWhenUnavailable || !strings.Contains(condition.Message, "search and make changes") {
+		t.Errorf("anonymous search is missing its authentication prerequisites or explanation: %+v", condition)
+	}
 	if fields["app.directory"].ReadOnlyReason == "" || fields["app.log_file"].ReadOnlyReason == "" {
 		t.Fatal("storage locations became editable")
 	}
@@ -145,12 +167,13 @@ func TestFieldCatalogDescribesConfirmationConsequences(t *testing.T) {
 	}{
 		{name: "enable users", path: "app.user_handling", users: true, want: "Sign in again as an administrator"},
 		{name: "disable users with token", path: "app.user_handling", token: "private-token", want: "Access will use the instance token"},
-		{name: "disable all authentication", path: "app.user_handling", want: "without signing in"},
+		{name: "disable all authentication", path: "app.user_handling", want: "search and make changes without signing in"},
 		{name: "replace token", path: "app.access_token", token: "private-token", want: "Clients using it must use the configured token"},
 		{name: "clear token with users", path: "app.access_token", users: true, want: "The instance token selection will change"},
-		{name: "clear last credential", path: "app.access_token", want: "without signing in"},
+		{name: "clear last credential", path: "app.access_token", want: "search and make changes without signing in"},
 		{name: "enable public search", path: "app.public", token: "private-token", public: true, want: "Anonymous visitors will be able to search public documents"},
-		{name: "disable public search", path: "app.public", want: "Anonymous public search will be disabled"},
+		{name: "disable public search", path: "app.public", token: "private-token", want: "Visitors will need to sign in to search"},
+		{name: "removing authentication already explains open search", path: "app.public"},
 		{name: "local IPv4", path: "server.address", address: "127.0.0.1:4433", want: "Only connections from this machine"},
 		{name: "local IPv6", path: "server.address", address: "[::1]:4433", want: "Only connections from this machine"},
 		{name: "external listener", path: "server.address", address: "0.0.0.0:4433", want: "connections from other machines"},
@@ -176,7 +199,7 @@ func TestFieldCatalogDescribesConfirmationConsequences(t *testing.T) {
 			current.App.AccessToken = "previous-private-token"
 			current.Server.Address = "192.0.2.1:4433"
 			message := field.Confirmation.Describe(current, candidate)
-			if !strings.Contains(message, tc.want) || strings.Contains(message, "private-token") {
+			if (tc.want == "" && message != "") || !strings.Contains(message, tc.want) || strings.Contains(message, "private-token") {
 				t.Fatalf("unsafe or inaccurate consequence for %s: %q", tc.path, message)
 			}
 			after, err := yaml.Marshal(candidate)

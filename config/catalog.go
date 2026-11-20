@@ -68,19 +68,29 @@ type ConfirmationPolicy struct {
 	Describe func(current, candidate *Config) string
 }
 
+// SettingAvailability controls the editor when any listed setting is enabled
+// or populated. Configuration validation remains authoritative for all clients.
+type SettingAvailability struct {
+	AnyOf                []string `json:"any_of"`
+	Message              string   `json:"message"`
+	ResetWhenUnavailable bool     `json:"reset_when_unavailable,omitempty"`
+}
+
 // FieldMetadata owns each setting's description and pure confirmation policy.
 // Runtime values and sources belong to FieldState, so secret data cannot
 // accidentally become a default.
 type FieldMetadata struct {
-	Path           string        `json:"path"`
-	Category       string        `json:"category"`
-	Group          string        `json:"group,omitempty"`
-	Label          string        `json:"label"`
-	Description    string        `json:"description"`
-	Schema         SettingSchema `json:"schema"`
-	Default        any           `json:"default,omitempty"`
-	Effect         string        `json:"effect"`
-	ReadOnlyReason string        `json:"read_only_reason,omitempty"`
+	Path               string               `json:"path"`
+	Category           string               `json:"category"`
+	Group              string               `json:"group,omitempty"`
+	Label              string               `json:"label"`
+	Description        string               `json:"description"`
+	EnabledDescription string               `json:"enabled_description,omitempty"`
+	AvailableWhen      *SettingAvailability `json:"available_when,omitempty"`
+	Schema             SettingSchema        `json:"schema"`
+	Default            any                  `json:"default,omitempty"`
+	Effect             string               `json:"effect"`
+	ReadOnlyReason     string               `json:"read_only_reason,omitempty"`
 	// Confirmation compares validated configurations without changing them or exposing secrets.
 	Confirmation *ConfirmationPolicy `json:"-"`
 	// RequiresConfirmation identifies fields that may need consent. Validation
@@ -520,7 +530,7 @@ func FieldCatalog() []FieldMetadata {
 					return ""
 				}
 				if candidate.App.AccessToken == "" && !candidate.App.UserHandling {
-					return "The instance token will be cleared. Anyone who can reach this instance can use it without signing in."
+					return "The instance token will be cleared. Anyone who can reach this instance can search and make changes without signing in."
 				}
 				return "The instance token selection will change. Clients using it must use the configured token."
 			}},
@@ -541,23 +551,32 @@ func FieldCatalog() []FieldMetadata {
 				if candidate.App.AccessToken != "" {
 					return "User accounts will no longer be required. Access will use the instance token."
 				}
-				return "User accounts will no longer be required. Anyone who can reach this instance can use it without signing in."
+				return "User accounts will no longer be required. Anyone who can reach this instance can search and make changes without signing in."
 			}},
 		},
 		{
-			Path:        "app.public",
-			Group:       groupAccess,
-			Label:       "Public access",
-			Description: "Allow anonymous visitors to search.",
-			Schema:      SettingSchema{Sensitivity: "none"},
+			Path:               "app.public",
+			Group:              groupAccess,
+			Label:              "Allow search without signing in",
+			Description:        "Visitors must sign in to search.",
+			EnabledDescription: "Visitors can search shared documents and open their previews and files. Adding or changing documents requires signing in.",
+			AvailableWhen: &SettingAvailability{
+				AnyOf:                []string{"app.access_token", "app.user_handling", "server.proxy_auth_header"},
+				Message:              "Anyone who can reach this instance can search and make changes. Set an access token or enable user accounts to restrict access.",
+				ResetWhenUnavailable: true,
+			},
+			Schema: SettingSchema{Sensitivity: "none"},
 			Confirmation: &ConfirmationPolicy{Mode: ConfirmAccess, Describe: func(current, candidate *Config) string {
 				if current.App.Public == candidate.App.Public {
 					return ""
 				}
 				if candidate.App.Public {
-					return "Anonymous visitors will be able to search public documents. Administrative access still requires authentication."
+					return "Anonymous visitors will be able to search public documents and open their previews and files. Changes still require signing in."
 				}
-				return "Anonymous public search will be disabled."
+				if candidate.App.AccessToken == "" && !candidate.App.UserHandling {
+					return ""
+				}
+				return "Visitors will need to sign in to search."
 			}},
 		},
 		{
