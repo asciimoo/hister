@@ -182,15 +182,28 @@ func (r *Registry) validateLocked(candidate Extractor) error {
 		return fmt.Errorf("%w: %s declares no capabilities", ErrInvalidExtractor, name)
 	}
 	if describer, ok := candidate.(sdk.OptionDescriber); ok {
-		seen := make(map[string]bool)
-		for _, option := range describer.OptionMetadata() {
+		options := describer.OptionMetadata()
+		byKey := make(map[string]sdk.OptionMetadata, len(options))
+		for _, option := range options {
 			if err := option.Validate(); err != nil {
 				return fmt.Errorf("%w: %s has invalid option metadata", ErrInvalidExtractor, name)
 			}
-			if seen[option.Key] {
+			if _, exists := byKey[option.Key]; exists {
 				return fmt.Errorf("%w: %s has duplicate option metadata", ErrInvalidExtractor, name)
 			}
-			seen[option.Key] = true
+			byKey[option.Key] = option
+		}
+		for _, option := range options {
+			seen := map[string]bool{option.Key: true}
+			for key := option.RequiresOption; key != ""; key = byKey[key].RequiresOption {
+				if byKey[key].Schema.Type != "boolean" {
+					return fmt.Errorf("%w: %s option %s requires an unknown or nonboolean switch %q", ErrInvalidExtractor, name, option.Key, key)
+				}
+				if seen[key] {
+					return fmt.Errorf("%w: %s has a cycle in option prerequisites at %q", ErrInvalidExtractor, name, key)
+				}
+				seen[key] = true
+			}
 		}
 	}
 	for _, registered := range r.extractors {
@@ -256,12 +269,16 @@ func (r *Registry) ConfigurationFields(cfgs map[string]*config.Extractor) []conf
 	var fields []config.FieldMetadata
 	for _, candidate := range r.extractors {
 		prefix := "extractors." + strings.ToLower(candidate.Name())
+		enabled := &config.SettingAvailability{AnyOf: []string{prefix + ".enable"}}
 		fields = append(fields, config.FieldMetadata{Path: prefix + ".enable", Category: "extractors", Group: candidate.Name(), Label: "Enable " + candidate.Name(), Description: candidate.Description(), Default: r.enabledDefaults[strings.ToLower(candidate.Name())], Schema: config.SettingSchema{Type: "boolean", Control: "switch", Collection: "none", Sensitivity: "none"}, Effect: "runtime"})
 		described := make(map[string]bool)
 		if describer, ok := candidate.(sdk.OptionDescriber); ok {
 			for _, option := range describer.OptionMetadata() {
 				described[option.Key] = true
-				field := config.FieldMetadata{Path: prefix + ".options." + option.Key, Category: "extractors", Group: candidate.Name(), Label: option.Label, Description: option.Description, Schema: option.Schema, Effect: option.Effect, ReadOnlyReason: option.ReadOnlyReason}
+				field := config.FieldMetadata{Path: prefix + ".options." + option.Key, Category: "extractors", Group: candidate.Name(), Label: option.Label, Description: option.Description, Schema: option.Schema, Effect: option.Effect, ReadOnlyReason: option.ReadOnlyReason, AvailableWhen: enabled}
+				if option.RequiresOption != "" {
+					field.AvailableWhen = &config.SettingAvailability{AnyOf: []string{prefix + ".options." + option.RequiresOption}}
+				}
 				if option.Schema.Sensitivity == "none" {
 					field.Default = option.Default
 				}
@@ -281,7 +298,7 @@ func (r *Registry) ConfigurationFields(cfgs map[string]*config.Extractor) []conf
 			if described[key] {
 				continue
 			}
-			fields = append(fields, config.FieldMetadata{Path: prefix + ".options." + key, Category: "extractors", Label: key, Description: "This option has no editing metadata.", Schema: config.SettingSchema{Type: "unknown", Control: "none", Collection: "unknown", Sensitivity: "unknown"}, ReadOnlyReason: "Undescribed options are file managed."})
+			fields = append(fields, config.FieldMetadata{Path: prefix + ".options." + key, Category: "extractors", Group: candidate.Name(), Label: key, Description: "This option has no editing metadata.", Schema: config.SettingSchema{Type: "unknown", Control: "none", Collection: "unknown", Sensitivity: "unknown"}, ReadOnlyReason: "Undescribed options are file managed.", AvailableWhen: enabled})
 		}
 	}
 	return fields

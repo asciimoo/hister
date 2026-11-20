@@ -194,6 +194,7 @@ export function resolveSettingsDraft(
 ) {
   const submitted = { ...edits };
   const unavailable = new Set<string>();
+  const initiallyUnavailable = new Set<string>();
   const byPath = new Map(fields.map((field) => [field.path, field]));
 
   function isSet(path: string, edit?: SettingEdit) {
@@ -219,7 +220,12 @@ export function resolveSettingsDraft(
       const prerequisite = byPath.get(path);
       if (prerequisite) resolve(prerequisite);
     }
-    if (condition.any_of.some((path) => isSet(path, submitted[path]))) return;
+    const wasAvailable = condition.any_of.some(
+      (path) => !initiallyUnavailable.has(path) && isSet(path),
+    );
+    if (!wasAvailable) initiallyUnavailable.add(field.path);
+    if (condition.any_of.some((path) => !unavailable.has(path) && isSet(path, submitted[path])))
+      return;
     unavailable.add(field.path);
     delete submitted[field.path];
     const active = values.get(field.path);
@@ -227,7 +233,7 @@ export function resolveSettingsDraft(
       condition.reset_when_unavailable &&
       active?.source.web_selected &&
       canEditSetting(field, active) &&
-      condition.any_of.some((path) => isSet(path)) &&
+      wasAvailable &&
       JSON.stringify(active.value) !== JSON.stringify(field.default)
     )
       submitted[field.path] = { path: field.path, action: 'reset' };

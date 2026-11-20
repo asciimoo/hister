@@ -1743,6 +1743,7 @@ async function extractionSettingsAPI(page: Page) {
     value: unknown;
     effect?: string;
     readOnly?: string;
+    requiresOption?: string;
   })[] = [
     {
       path: 'extractors.ytdlp.enable',
@@ -1755,6 +1756,19 @@ async function extractionSettingsAPI(page: Page) {
       label: 'Timeout (seconds)',
       schema: { ...ordinary, type: 'integer', control: 'number', min: 1 },
       value: 15,
+    },
+    {
+      path: 'extractors.ytdlp.options.fetch_subtitles',
+      label: 'Fetch subtitles',
+      schema: { ...ordinary, type: 'boolean', control: 'switch' },
+      value: false,
+    },
+    {
+      path: 'extractors.ytdlp.options.sub_language',
+      label: 'Subtitle language',
+      schema: { ...ordinary, type: 'string', control: 'text' },
+      value: 'auto',
+      requiresOption: 'extractors.ytdlp.options.fetch_subtitles',
     },
     {
       path: 'extractors.ytdlp.options.cookies_file',
@@ -1830,6 +1844,10 @@ async function extractionSettingsAPI(page: Page) {
       path: entry.path,
       label: entry.label,
       category: entry.path.split('.')[0],
+      group: entry.path.startsWith('extractors.') ? 'Ytdlp' : undefined,
+      ...(entry.path.startsWith('extractors.ytdlp.options.')
+        ? { available_when: { any_of: [entry.requiresOption ?? 'extractors.ytdlp.enable'] } }
+        : {}),
       ...(semanticTuning
         ? { group: 'Tuning', available_when: { any_of: ['semantic_search.enable'] } }
         : {}),
@@ -1854,6 +1872,70 @@ async function extractionSettingsAPI(page: Page) {
   }
   return state;
 }
+
+for (const parent of ['Enable Ytdlp', 'Fetch subtitles']) {
+  test(`turning off ${parent} hides subtitle language and preserves its saved value`, async ({
+    page,
+  }) => {
+    const state = await extractionSettingsAPI(page);
+    const values = new Map(state.values.map((value) => [value.path, value]));
+    const enabled = values.get('extractors.ytdlp.enable')!;
+    const subtitles = values.get('extractors.ytdlp.options.fetch_subtitles')!;
+    const language = values.get('extractors.ytdlp.options.sub_language')!;
+    enabled.value = subtitles.value = true;
+    language.value = 'hu';
+    language.source = { kind: 'web', locked: false, web_selected: true };
+    const changed = parent === 'Enable Ytdlp' ? enabled : subtitles;
+    let saved: SettingsDraft | undefined;
+    await page.route('**/api/settings/apply', (route) => {
+      saved = route.request().postDataJSON();
+      changed.value = false;
+      return route.fulfill({ json: { saved: true } });
+    });
+    await page.goto('/settings?tab=extractors');
+    const toggle = page.getByRole('switch', { name: parent, exact: true });
+    const input = page.getByRole('textbox', { name: 'Subtitle language', exact: true });
+    await expect(input).toHaveValue('hu');
+    await input.fill('de');
+    await toggle.uncheck();
+    await expect(page.getByRole('region', { name: 'Subtitle language', exact: true })).toHaveCount(
+      0,
+    );
+    await toggle.check();
+    await expect(input).toHaveValue('de');
+    await toggle.uncheck();
+    await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
+    await expect(page.getByRole('status')).toHaveText('Settings saved and applied.');
+    expect(saved?.edits).toEqual([{ path: changed.path, action: 'set', value: false }]);
+    await toggle.check();
+    await expect(input).toHaveValue('hu');
+  });
+}
+
+test('opening settings or undoing a toggle keeps an already unavailable nested option intact', async ({
+  page,
+}) => {
+  const state = await extractionSettingsAPI(page);
+  state.values.find((field) => field.path === 'extractors.ytdlp.options.fetch_subtitles')!.value =
+    true;
+  const language = state.values.find(
+    (field) => field.path === 'extractors.ytdlp.options.sub_language',
+  )!;
+  language.value = 'hu';
+  language.source = { kind: 'web', locked: false, web_selected: true };
+  state.fields.find(
+    (field) => field.path === language.path,
+  )!.available_when!.reset_when_unavailable = true;
+  await page.goto('/settings?tab=extractors');
+  const toggle = page.getByRole('switch', { name: 'Enable Ytdlp', exact: true });
+  await expect(toggle).not.toBeChecked();
+  const save = page.getByRole('button', { name: 'Save and apply', exact: true });
+  await expect(save).toBeDisabled();
+  await toggle.check();
+  await expect(page.getByRole('textbox', { name: 'Subtitle language' })).toHaveValue('hu');
+  await toggle.uncheck();
+  await expect(save).toBeDisabled();
+});
 
 test('turning semantic search off hides tuning and saves only the switch', async ({ page }) => {
   const state = await extractionSettingsAPI(page);
@@ -1955,7 +2037,10 @@ test('extractor and semantic controls share one draft with secrets and reindex g
     await route.fulfill({ json: { saved: true } });
   });
   await page.goto('/settings?tab=extractors');
-  await expect(page.getByRole('switch', { name: 'Enable Ytdlp', exact: true })).not.toBeChecked();
+  const enable = page.getByRole('switch', { name: 'Enable Ytdlp', exact: true });
+  await expect(enable).not.toBeChecked();
+  await expect(page.getByRole('region', { name: 'Executable', exact: true })).toHaveCount(0);
+  await enable.check();
   await expect(
     page.getByRole('spinbutton', { name: 'Timeout (seconds)', exact: true }),
   ).toHaveValue('15');
@@ -1992,6 +2077,7 @@ test('extractor and semantic controls share one draft with secrets and reindex g
   await expect(page.getByRole('status')).toHaveText('Settings saved and applied.');
   expect(draft.edits).toEqual(
     expect.arrayContaining([
+      { path: 'extractors.ytdlp.enable', action: 'set', value: true },
       { path: 'extractors.ytdlp.options.timeout', action: 'set', value: 10 },
       {
         path: 'extractors.ytdlp.options.cookies_file',
@@ -2012,7 +2098,7 @@ test('extractor and semantic controls share one draft with secrets and reindex g
       },
     ]),
   );
-  expect(draft.edits).toHaveLength(8);
+  expect(draft.edits).toHaveLength(9);
   expect(
     await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage })),
   ).not.toContain('private-');
@@ -2045,6 +2131,7 @@ test('semantic validation retains drafts and respects locked extractor options',
     }),
   );
   await page.goto('/settings?tab=extractors');
+  await page.getByRole('switch', { name: 'Enable Ytdlp', exact: true }).check();
   await expect(
     page.getByRole('spinbutton', { name: 'Timeout (seconds)', exact: true }),
   ).toHaveCount(0);

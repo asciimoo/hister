@@ -168,7 +168,8 @@ The backend catalog defines groups and field order; clients preserve that order
 when grouping fields within each category.
 
 A field can declare `available_when.any_of` with the paths of its prerequisites.
-A true switch, a populated string, or a stored credential satisfies the condition.
+A prerequisite must itself be available. A true switch, a populated string, or a stored
+credential satisfies the condition.
 The editor uses the current draft, including secret replacements, clears, and resets.
 It shows `available_when.message` in place of the control when no prerequisite applies.
 Omit the message to hide the row and any empty group. Rows with pending changes,
@@ -187,6 +188,8 @@ can require consent. Validation returns the decision for the actual draft.
 Read only preview permission is separate from confirmation and preserves source
 locks. The server owns acknowledgment binding and administrator checks.
 Extractor options implement `sdk.OptionDescriber`; their schemas and defaults stay with the extractor.
+An option can name a sibling boolean switch in `sdk.OptionMetadata.RequiresOption`.
+The registry resolves that key within the extractor and rejects missing switches and cycles.
 The built in registry registers editable field schemas with `config.RegisterExtractorSettings` during
 initialization so managed file loading uses the same types as draft validation without importing
 the extractor runtime into `config`. Undescribed options and executable controls remain file managed.

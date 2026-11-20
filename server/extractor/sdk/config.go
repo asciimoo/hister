@@ -18,6 +18,8 @@ type OptionMetadata struct {
 	Default        any
 	Effect         string
 	ReadOnlyReason string
+	// RequiresOption is the key of a switch in this extractor that enables this option.
+	RequiresOption string
 }
 
 // OptionDescriber is optional. Undescribed options remain hidden and read only.

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -55,6 +56,9 @@ func TestRegistryOptionMetadataControlsValidationAndExposure(t *testing.T) {
 	}
 	var foundLegacy bool
 	for _, field := range fields {
+		if field.Path != "extractors.custom.enable" && (field.AvailableWhen == nil || !slices.Equal(field.AvailableWhen.AnyOf, []string{"extractors.custom.enable"}) || field.AvailableWhen.ResetWhenUnavailable) {
+			t.Errorf("%s must follow its extractor switch and retain its saved value", field.Path)
+		}
 		if field.Path != "extractors.custom.options.legacy" && field.ReadOnlyReason != "" {
 			t.Fatal("described extractor fields remain read only")
 		}
@@ -97,6 +101,49 @@ func TestRegistryOptionMetadataControlsValidationAndExposure(t *testing.T) {
 	invalid := &describedExtractor{stubExtractor: &stubExtractor{name: "Invalid", capabilities: sdk.Capabilities{Extract: true}}, metadata: []sdk.OptionMetadata{{Key: "unsupported"}}}
 	if err := r.Register(invalid); err == nil {
 		t.Fatal("registered incomplete metadata")
+	}
+}
+
+func TestYtdlpSubtitleLanguageRequiresFetchSubtitles(t *testing.T) {
+	fields := NewDefaultRegistry().ConfigurationFields(nil)
+	for path, prerequisite := range map[string]string{
+		"extractors.ytdlp.options.fetch_subtitles": "extractors.ytdlp.enable",
+		"extractors.ytdlp.options.sub_language":    "extractors.ytdlp.options.fetch_subtitles",
+	} {
+		index := slices.IndexFunc(fields, func(field config.FieldMetadata) bool { return field.Path == path })
+		if index < 0 {
+			t.Fatalf("missing %s", path)
+		}
+		condition := fields[index].AvailableWhen
+		if condition == nil || !slices.Equal(condition.AnyOf, []string{prerequisite}) || condition.ResetWhenUnavailable {
+			t.Errorf("%s must follow %s and keep its saved value", path, prerequisite)
+		}
+	}
+}
+
+func TestRegistryRejectsInvalidOptionPrerequisites(t *testing.T) {
+	toggle := config.SettingSchema{Type: "boolean", Control: "switch", Collection: "none", Sensitivity: "none"}
+	text := config.SettingSchema{Type: "string", Control: "text", Collection: "none", Sensitivity: "none"}
+	for _, tc := range []struct {
+		name, required, parentRequired string
+		parentSchema                   config.SettingSchema
+	}{
+		{"unknown option", "missing", "", toggle},
+		{"text option", "parent", "", text},
+		{"cycle", "parent", "child", toggle},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := &describedExtractor{
+				stubExtractor: &stubExtractor{name: "Custom", capabilities: sdk.Capabilities{Extract: true}},
+				metadata: []sdk.OptionMetadata{
+					{Key: "child", Label: "Child", Description: "Child option.", Effect: "runtime", Schema: toggle, RequiresOption: tc.required},
+					{Key: "parent", Label: "Parent", Description: "Parent option.", Effect: "runtime", Schema: tc.parentSchema, RequiresOption: tc.parentRequired},
+				},
+			}
+			if _, err := NewRegistry(e); !errors.Is(err, ErrInvalidExtractor) {
+				t.Fatalf("registration returned %v, want ErrInvalidExtractor", err)
+			}
+		})
 	}
 }
 

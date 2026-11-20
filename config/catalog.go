@@ -68,8 +68,8 @@ type ConfirmationPolicy struct {
 	Describe func(current, candidate *Config) string
 }
 
-// SettingAvailability controls the editor when any listed setting is enabled
-// or populated. Configuration validation remains authoritative for all clients.
+// SettingAvailability requires an available prerequisite that is enabled or
+// populated. Configuration validation remains authoritative for all clients.
 type SettingAvailability struct {
 	AnyOf                []string `json:"any_of"`
 	Message              string   `json:"message,omitempty"`

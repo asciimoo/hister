@@ -872,7 +872,6 @@ Delete those documents separately if their previous visibility is no longer appr
 or renamed. It never deletes files from disk. An authoritative directory or language list locks the
 whole collection. PDF parser controls remain managed in the main configuration.
 
-Editing an extractor option does not enable the extractor.
 Executable paths, arbitrary arguments, and options without supported controls remain file managed.
 Changes apply to future extraction; fetch documents again to update previously extracted content.
 
