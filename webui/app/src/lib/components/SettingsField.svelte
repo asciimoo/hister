@@ -132,7 +132,10 @@
 </script>
 
 <section
+  id={`${id}-row`}
+  tabindex="-1"
   aria-label={preview ? `Pending ${field.label}` : field.label}
+  aria-describedby={errors.length ? `${id}-errors` : undefined}
   class="border-border-brand-muted grid gap-x-8 gap-y-3 border-b px-4 py-4 last:border-b-0 md:px-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] {edit
     ? 'bg-nogon-indigo/5'
     : ''}"

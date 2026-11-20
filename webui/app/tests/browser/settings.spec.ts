@@ -2140,7 +2140,9 @@ test('semantic validation retains drafts and respects locked extractor options',
   await page.getByRole('switch', { name: 'Semantic search', exact: true }).check();
   await page.getByRole('spinbutton', { name: 'Embedding dimensions', exact: true }).fill('0');
   await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
-  await expect(page.getByText('Use positive embedding dimensions.')).toBeVisible();
+  await expect(
+    page.getByRole('tabpanel').getByText('Use positive embedding dimensions.'),
+  ).toBeVisible();
   await expect(
     page.getByRole('spinbutton', { name: 'Embedding dimensions', exact: true }),
   ).toHaveValue('0');
@@ -3038,8 +3040,10 @@ test('reset removes a web selection while clear stores an explicit empty string'
   });
 });
 
-test('validation errors preserve the draft and clear when it is discarded', async ({ page }) => {
-  await settingsAPI(page);
+test('validation links focus the affected settings across tabs and preserve the draft', async ({
+  page,
+}) => {
+  await ordinarySettingsAPI(page);
   let applied = false;
   await page.route('**/api/settings/apply', (route) => {
     applied = true;
@@ -3052,6 +3056,11 @@ test('validation errors preserve the draft and clear when it is discarded', asyn
         code: 'invalid_settings',
         errors: [
           { path: 'app.snippet_length', code: 'invalid_value', message: 'Must be at least 1.' },
+          {
+            path: 'server.max_batch_body_size',
+            code: 'invalid_value',
+            message: 'Must be positive.',
+          },
         ],
       },
     }),
@@ -3060,9 +3069,24 @@ test('validation errors preserve the draft and clear when it is discarded', asyn
   await page.getByRole('textbox', { name: 'Title', exact: true }).fill('Keep this draft');
   await page.getByRole('spinbutton', { name: 'Snippet length', exact: true }).fill('0');
   await page.getByRole('tab', { name: 'Server', exact: true }).click();
+  const batchSize = page.getByRole('spinbutton', { name: 'Maximum batch size', exact: true });
+  await batchSize.fill('0');
   await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
   await expect(page.getByRole('tab', { name: 'App (1 error)', exact: true })).toBeVisible();
-  await page.getByRole('tab', { name: 'App (1 error)', exact: true }).click();
+  const summary = page.getByRole('alert');
+  const batchError = summary.getByRole('link', { name: /Maximum batch size.*Must be positive/ });
+  await batchError.click();
+  await expect(batchSize).toBeFocused();
+  await batchSize.fill('2');
+  await expect(batchError).toHaveCount(0);
+  const snippetError = summary.getByRole('link', { name: /Snippet length.*Must be at least 1/ });
+  await snippetError.focus();
+  await snippetError.press('Enter');
+  await expect(page.getByRole('tab', { name: 'App (1 error)', exact: true })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await expect(page.getByRole('spinbutton', { name: 'Snippet length', exact: true })).toBeFocused();
   await expect(
     page.getByRole('spinbutton', { name: 'Snippet length', exact: true }),
   ).toHaveAttribute('aria-invalid', 'true');
@@ -3811,7 +3835,8 @@ test('a directory owner follows the User handling draft without losing ownership
   await expect(owner).toHaveCount(0);
   await row.getByRole('textbox', { name: 'Label', exact: true }).fill('notes');
   await row.getByRole('button', { name: 'Done' }).click();
-  await expect(page.getByText('Directory 1: An owner requires multi user mode.')).toBeVisible();
+  const ownerError = 'Directory 1: An owner requires multi user mode.';
+  await expect(page.getByRole('tabpanel').getByText(ownerError)).toBeVisible();
   expect(draft?.edits).toContainEqual({
     path: 'indexer.directories',
     action: 'set',
@@ -3819,7 +3844,8 @@ test('a directory owner follows the User handling draft without losing ownership
   });
   await app.click();
   await users.check();
-  await page.getByRole('tab', { name: 'Indexer (1 error)', exact: true }).click();
+  await page.getByRole('link', { name: `Watched directories: ${ownerError}` }).click();
+  await expect(row.getByRole('textbox', { name: 'Path', exact: true })).toBeFocused();
   await expect(owner).toHaveValue('alice');
   await expect(row.getByRole('textbox', { name: 'Label', exact: true })).toHaveValue('notes');
 });

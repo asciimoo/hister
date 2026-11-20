@@ -391,7 +391,7 @@
             : 'Settings changed since you opened this page. Refresh settings before saving again.';
       } else {
         errors = error.fields;
-        problem = error.fields.length ? 'Please correct the highlighted settings.' : error.message;
+        problem = error.fields.length ? '' : error.message;
       }
     } else {
       problem = 'Could not reach the server. Please try again.';
@@ -508,11 +508,30 @@
     ].filter((error) => error.path.split('.')[0] === tab);
   }
 
-  function selectCategory(next: string) {
+  function categoryUrl(next: string, hash = '') {
     const url = new URL(settingsUrl.href);
     if (next === 'app') url.searchParams.delete('tab');
     else url.searchParams.set('tab', next);
-    if (url.href !== settingsUrl.href) void goto(url, { shallow: true });
+    url.hash = hash;
+    return url.href;
+  }
+
+  function selectCategory(next: string) {
+    const url = categoryUrl(next);
+    if (url !== settingsUrl.href) void goto(url, { shallow: true });
+  }
+
+  async function followErrorLink(event: MouseEvent & { currentTarget: HTMLAnchorElement }) {
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    const { href, hash } = event.currentTarget;
+    if (href !== settingsUrl.href) await goto(href, { shallow: true });
+    await tick();
+    const row = document.getElementById(decodeURIComponent(hash.slice(1)));
+    const control = row?.querySelector<HTMLElement>(
+      'input:enabled, select:enabled, textarea:enabled, button[role="switch"]:enabled',
+    );
+    (control ?? row)?.focus();
   }
 
   function tabKeydown(event: KeyboardEvent, index: number) {
@@ -656,12 +675,30 @@
         Configure appearance, search behavior, logging, indexing, crawling, extraction and web
         shortcuts. Other settings are shown for reference.
       </p>
-      {#if problem}<div role="alert" class="text-nogon-rose my-2 text-sm">
-          <p>{problem}{needsReload && dirty ? ' Your draft is still here.' : ''}</p>
-          {#each errors.filter((error) => !error.path || !categories.includes(error.path.split('.')[0])) as error}<p
-            >
-              {error.message}
-            </p>{/each}
+      {#if problem || errors.length}<div role="alert" class="text-nogon-rose my-2 text-sm">
+          <p>
+            {problem || 'Please correct the highlighted settings.'}{needsReload && dirty
+              ? ' Your draft is still here.'
+              : ''}
+          </p>
+          {#if errors.length}
+            <ul class="max-h-[25dvh] list-disc space-y-1 overflow-y-auto pl-5">
+              {#each errors as error}
+                {@const field = settings?.fields.find((field) => field.path === error.path)}
+                <li>
+                  {#if field && values.has(field.path)}
+                    <a
+                      href={categoryUrl(field.category, `setting-${field.path}-row`)}
+                      onclick={followErrorLink}
+                      class="underline underline-offset-2">{field.label}: {error.message}</a
+                    >
+                  {:else}
+                    {error.message}
+                  {/if}
+                </li>
+              {/each}
+            </ul>
+          {/if}
         </div>{/if}
       {#if !settings || denied}
         <p role="status" class="text-text-brand-muted my-2 text-sm">{message}</p>
