@@ -72,7 +72,7 @@ export interface SettingField {
   enabled_description?: string;
   available_when?: {
     any_of: string[];
-    message: string;
+    message?: string;
     reset_when_unavailable?: boolean;
   };
   schema: SettingSchema;

@@ -82,8 +82,11 @@
   );
   const values = $derived(new Map(settings?.values.map((value) => [value.path, value]) ?? []));
   const draftSettings = $derived(resolveSettingsDraft(settings?.fields ?? [], values, edits));
+  const visibleEditor = $derived(
+    editor && !draftSettings.unavailable.has(editor.path) ? editor : null,
+  );
   const editedPaths = $derived(
-    new Set([...Object.keys(draftSettings.edits), ...(editor ? [editor.path] : [])]),
+    new Set([...Object.keys(draftSettings.edits), ...(visibleEditor ? [visibleEditor.path] : [])]),
   );
   const editCount = $derived(editedPaths.size);
   const dirty = $derived(editCount > 0);
@@ -92,13 +95,36 @@
     new Map(settings?.pending?.values?.map((value) => [value.path, value]) ?? []),
   );
   const pendingSettings = $derived(resolveSettingsDraft(settings?.fields ?? [], pendingValues, {}));
+  const pendingChanges = $derived.by(() => {
+    if (!pendingValues.size) return pendingValues;
+    const active = resolveSettingsDraft(settings?.fields ?? [], values, {});
+    return new Map(
+      [...pendingValues].filter(
+        ([path, pending]) =>
+          !sameSetting(values.get(path), pending) ||
+          active.unavailable.has(path) !== pendingSettings.unavailable.has(path),
+      ),
+    );
+  });
   const localConfigFilename = $derived(
     [...(settings?.pending?.values ?? []), ...(settings?.values ?? [])]
       .find((value) => value.source.kind === 'file' && value.source.name)
       ?.source.name?.split(/[\\/]/)
       .pop(),
   );
-  const groups = $derived(groupSettings(settings?.fields ?? [], category));
+  // Keep rows with a pending change or an actionable error available for review.
+  const visibleFields = $derived(
+    settings?.fields.filter(
+      (field) =>
+        !draftSettings.unavailable.has(field.path) ||
+        field.available_when?.message ||
+        pendingChanges.has(field.path) ||
+        draftSettings.edits[field.path] ||
+        conflicts[field.path] ||
+        errors.some((error) => error.path === field.path),
+    ) ?? [],
+  );
+  const groups = $derived(groupSettings(visibleFields, category));
 
   onMount(() => {
     void load();
@@ -524,7 +550,7 @@
       access ||
       busy ||
       !dirty ||
-      editor ||
+      visibleEditor ||
       needsReload ||
       settings.pending ||
       conflictCount
@@ -794,7 +820,7 @@
                     <div>
                       {#each group.fields as field (field.path)}
                         {@const active = values.get(field.path)}
-                        {@const pending = pendingValues.get(field.path)}
+                        {@const pending = pendingChanges.get(field.path)}
                         {@const available = !draftSettings.unavailable.has(field.path)}
                         {@const pendingAvailable = !pendingSettings.unavailable.has(field.path)}
                         {#if active}<SettingsField
@@ -817,7 +843,7 @@
                             onUndoRemoval={undoRemoval}
                             onEdit={(edit) => update(field.path, edit)}
                           />{/if}
-                        {#if pending && (!sameSetting(active, pending) || available !== pendingAvailable)}
+                        {#if pending}
                           <SettingsField
                             {field}
                             active={pending}
@@ -846,23 +872,25 @@
               <div class="min-w-0 sm:flex-1">
                 {#if editor}
                   <p class="text-text-brand text-sm">
-                    Finish or cancel the open item before saving.
+                    {visibleEditor
+                      ? 'Finish or cancel the open item before saving.'
+                      : 'This unfinished item is hidden. Restore its prerequisite to keep editing, or cancel the item to edit another. Saving discards the unfinished item.'}
                   </p>
                   <div class="flex flex-wrap gap-2">
-                    <Button
-                      type="button"
-                      variant="link"
-                      size="sm"
-                      disabled={busy}
-                      onclick={async () => {
-                        if (!editor) return;
-                        selectCategory(editor.path.split('.')[0]);
-                        await tick();
-                        document
-                          .getElementById(`setting-${editor.path}`)
-                          ?.scrollIntoView({ block: 'nearest' });
-                      }}>Continue editing</Button
-                    >
+                    {#if visibleEditor}<Button
+                        type="button"
+                        variant="link"
+                        size="sm"
+                        disabled={busy}
+                        onclick={async () => {
+                          if (!editor) return;
+                          selectCategory(editor.path.split('.')[0]);
+                          await tick();
+                          document
+                            .getElementById(`setting-${editor.path}`)
+                            ?.scrollIntoView({ block: 'nearest' });
+                        }}>Continue editing</Button
+                      >{/if}
                     <Button
                       type="button"
                       variant="link"
@@ -901,7 +929,7 @@
                   type="submit"
                   disabled={busy ||
                     !dirty ||
-                    !!editor ||
+                    !!visibleEditor ||
                     needsReload ||
                     !!settings.pending ||
                     conflictCount > 0}

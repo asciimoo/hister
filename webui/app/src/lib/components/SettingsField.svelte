@@ -198,7 +198,7 @@
   </div>
   <div class="min-w-0 space-y-2 break-words {directories ? 'lg:col-span-2' : ''}">
     <div class="flex min-h-8 items-center lg:justify-end">
-      {#if !available}
+      {#if !available && field.available_when?.message}
         <p id={`${id}-description`} class="text-text-brand-muted text-sm leading-relaxed">
           {field.available_when?.message}
         </p>

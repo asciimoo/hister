@@ -1823,10 +1823,16 @@ async function extractionSettingsAPI(page: Page) {
     },
   ];
   for (const entry of definitions) {
+    const semanticTuning =
+      entry.path.startsWith('semantic_search.') &&
+      !['semantic_search.enable', 'semantic_search.embedding_endpoint'].includes(entry.path);
     state.fields.push({
       path: entry.path,
       label: entry.label,
       category: entry.path.split('.')[0],
+      ...(semanticTuning
+        ? { group: 'Tuning', available_when: { any_of: ['semantic_search.enable'] } }
+        : {}),
       description: `${entry.label} description.`,
       default: entry.schema.sensitivity === 'none' ? entry.value : undefined,
       schema: entry.schema,
@@ -1848,6 +1854,45 @@ async function extractionSettingsAPI(page: Page) {
   }
   return state;
 }
+
+test('turning semantic search off hides tuning and saves only the switch', async ({ page }) => {
+  const state = await extractionSettingsAPI(page);
+  const enabled = state.values.find((entry) => entry.path === 'semantic_search.enable')!;
+  enabled.value = true;
+  const modelState = state.values.find(
+    (entry) => entry.path === 'semantic_search.embedding_model',
+  )!;
+  modelState.value = 'saved-model';
+  modelState.source = { kind: 'web', locked: false, web_selected: true };
+  let saved: SettingsDraft | undefined;
+  await page.route('**/api/settings/apply', (route) => {
+    saved = route.request().postDataJSON();
+    enabled.value = false;
+    return route.fulfill({ json: { saved: true } });
+  });
+  await page.goto('/settings?tab=semantic_search');
+  const toggle = page.getByRole('switch', { name: 'Semantic search', exact: true });
+  const model = page.getByRole('textbox', { name: 'Embedding model', exact: true });
+  await expect(model).toHaveValue('saved-model');
+  await model.fill('draft-model');
+  await page.getByRole('button', { name: 'Add header', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Name', exact: true }).fill('x-draft');
+  await toggle.uncheck();
+  await expect(page.getByRole('heading', { name: 'Tuning' })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Embedding model', exact: true })).toHaveCount(0);
+  await expect(
+    page.getByRole('region', { name: 'Embedding endpoint', exact: true }).locator('input'),
+  ).toBeEditable();
+  await toggle.check();
+  await expect(model).toHaveValue('draft-model');
+  await expect(page.getByRole('textbox', { name: 'Name', exact: true })).toHaveValue('x-draft');
+  await toggle.uncheck();
+  await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
+  await expect(page.getByRole('status')).toHaveText('Settings saved and applied.');
+  expect(saved?.edits).toEqual([{ path: enabled.path, action: 'set', value: false }]);
+  await toggle.check();
+  await expect(model).toHaveValue('saved-model');
+});
 
 test('embedding endpoint is visible and saves and resets as an ordinary URL', async ({ page }) => {
   const state = await extractionSettingsAPI(page);
@@ -1884,6 +1929,22 @@ test('embedding endpoint is visible and saves and resets as an ordinary URL', as
   expect(drafts[1].edits).toEqual([{ path: value.path, action: 'reset' }]);
 });
 
+test('only semantic settings changed on disk appear in the pending preview', async ({ page }) => {
+  const state = await extractionSettingsAPI(page);
+  state.values.find((entry) => entry.path === 'semantic_search.enable')!.value = true;
+  const pending = structuredClone(state.values);
+  pending.find((entry) => entry.path === 'semantic_search.embedding_model')!.value = 'file-model';
+  state.pending = { status: 'changed', values: pending };
+  await page.goto('/settings?tab=semantic_search');
+  await page.getByRole('switch', { name: 'Semantic search', exact: true }).uncheck();
+  await expect(
+    page.getByRole('region', { name: 'Pending Embedding model', exact: true }),
+  ).toContainText('file-model');
+  await expect(
+    page.getByRole('region', { name: 'Pending Embedding dimensions', exact: true }),
+  ).toHaveCount(0);
+});
+
 test('extractor and semantic controls share one draft with secrets and reindex guidance', async ({
   page,
 }) => {
@@ -1909,6 +1970,7 @@ test('extractor and semantic controls share one draft with secrets and reindex g
     .locator('input')
     .fill('private-cookies-path');
   await page.getByRole('tab', { name: 'Semantic search', exact: true }).click();
+  await page.getByRole('switch', { name: 'Semantic search', exact: true }).check();
   await expect(page.getByRole('region', { name: 'Embedding model', exact: true })).toContainText(
     'Reindex existing documents after changing this setting.',
   );
@@ -1936,6 +1998,7 @@ test('extractor and semantic controls share one draft with secrets and reindex g
         action: 'set',
         value: { action: 'replace', value: 'private-cookies-path' },
       },
+      { path: 'semantic_search.enable', action: 'set', value: true },
       { path: 'semantic_search.embedding_model', action: 'set', value: 'small-model' },
       { path: 'semantic_search.dimensions', action: 'set', value: 128 },
       { path: 'semantic_search.semantic_weight', action: 'set', value: 0.65 },
@@ -1949,7 +2012,7 @@ test('extractor and semantic controls share one draft with secrets and reindex g
       },
     ]),
   );
-  expect(draft.edits).toHaveLength(7);
+  expect(draft.edits).toHaveLength(8);
   expect(
     await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage })),
   ).not.toContain('private-');
@@ -1987,6 +2050,7 @@ test('semantic validation retains drafts and respects locked extractor options',
   ).toHaveCount(0);
   await expect(page.getByRole('switch', { name: 'Enable Ytdlp', exact: true })).toBeEnabled();
   await page.getByRole('tab', { name: 'Semantic search', exact: true }).click();
+  await page.getByRole('switch', { name: 'Semantic search', exact: true }).check();
   await page.getByRole('spinbutton', { name: 'Embedding dimensions', exact: true }).fill('0');
   await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
   await expect(page.getByText('Use positive embedding dimensions.')).toBeVisible();

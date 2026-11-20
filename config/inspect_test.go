@@ -679,6 +679,25 @@ func TestEmbeddingEndpointRejectsCredentials(t *testing.T) {
 	}
 }
 
+func TestSemanticSearchSettingsAvailability(t *testing.T) {
+	for _, field := range FieldCatalog() {
+		if field.Category != "semantic_search" {
+			continue
+		}
+		switch field.Path {
+		case "semantic_search.enable", "semantic_search.embedding_endpoint":
+			if field.AvailableWhen != nil {
+				t.Errorf("%s must stay available while semantic search is off", field.Path)
+			}
+		default:
+			condition := field.AvailableWhen
+			if condition == nil || !slices.Equal(condition.AnyOf, []string{"semantic_search.enable"}) || condition.ResetWhenUnavailable {
+				t.Errorf("%s must follow semantic search and keep its saved value while off", field.Path)
+			}
+		}
+	}
+}
+
 func TestSemanticSearchDraftControls(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HISTER_DATA_DIR", dir)
