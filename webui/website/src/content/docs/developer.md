@@ -169,7 +169,9 @@ when grouping fields within each category.
 
 A field can declare `available_when.any_of` with the paths of its prerequisites.
 A prerequisite must itself be available. A true switch, a populated string, or a stored
-credential satisfies the condition.
+credential satisfies the condition. Set `available_when.values` to match specific string
+values of a prerequisite. Properties of a top level object can use the same condition.
+When the editor replaces an object, it retains the stored values of hidden properties.
 The editor uses the current draft, including secret replacements, clears, and resets.
 It shows `available_when.message` in place of the control when no prerequisite applies.
 Omit the message to hide the row and any empty group. Rows with pending changes,

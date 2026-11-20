@@ -4073,7 +4073,10 @@ async function crawlerSettingsAPI(page: Page) {
     sensitivity: 'none',
     min: 0,
   } satisfies SettingSchema;
-  const fields: (Pick<SettingField, 'path' | 'label' | 'schema'> & { value: unknown })[] = [
+  const bidi = { any_of: ['crawler.backend'], values: ['bidi'] };
+  const fields: (Pick<SettingField, 'path' | 'label' | 'schema' | 'available_when'> & {
+    value: unknown;
+  })[] = [
     { path: 'crawler.timeout', label: 'Crawler timeout', schema: number, value: 5 },
     {
       path: 'crawler.backend',
@@ -4084,6 +4087,7 @@ async function crawlerSettingsAPI(page: Page) {
     {
       path: 'crawler.backend_options',
       label: 'Crawler backend options',
+      available_when: { any_of: ['crawler.backend'], values: ['chromedp', 'bidi'] },
       schema: {
         type: 'object',
         control: 'object',
@@ -4095,8 +4099,19 @@ async function crawlerSettingsAPI(page: Page) {
             label: 'Capture delay',
             schema: { ...number, type: 'number', max: 86400 },
           },
-          { name: 'port', label: 'Browser port', schema: { ...number, min: 1, max: 65535 } },
-          { name: 'socket', label: 'Browser socket URL', schema: { ...secret, min_length: 1 } },
+          { name: 'host', label: 'Browser host', available_when: bidi, schema: text },
+          {
+            name: 'port',
+            label: 'Browser port',
+            available_when: bidi,
+            schema: { ...number, min: 1, max: 65535 },
+          },
+          {
+            name: 'socket',
+            label: 'Browser socket URL',
+            available_when: bidi,
+            schema: { ...secret, min_length: 1 },
+          },
         ],
       },
       value: {},
@@ -4438,6 +4453,80 @@ test('finishing a collection item keeps unrelated validation errors available', 
   await expect(page.getByText('Choose a positive timeout.', { exact: true })).toBeVisible();
 });
 
+test('crawler backend selection shows applicable controls and preserves inactive settings', async ({
+  page,
+}) => {
+  const state = await crawlerSettingsAPI(page);
+  const socket = { action: 'keep', ref: 'socket-reference' };
+  const stored = { port: 9223, host: 'localhost', socket, capture_delay: 1 };
+  state.values.find((field) => field.path === 'crawler.backend_options')!.value = stored;
+  let saved: SettingsDraft | undefined;
+  await page.route('**/api/settings/apply', (route) => {
+    saved = route.request().postDataJSON();
+    return route.fulfill({ json: { saved: true } });
+  });
+  await page.goto('/settings?tab=crawler');
+  const backend = page.getByRole('combobox', { name: 'Crawler backend', exact: true });
+  const options = page.getByRole('region', { name: 'Crawler backend options', exact: true });
+  const delay = options.getByRole('spinbutton', { name: 'Capture delay' });
+  const port = options.getByRole('spinbutton', { name: 'Browser port' });
+  await expect(backend).toHaveValue('http');
+  await expect(options).toHaveCount(0);
+  await backend.selectOption('bidi');
+  await expect(options.getByRole('textbox', { name: 'Browser host' })).toHaveValue('localhost');
+  await expect(port).toHaveValue('9223');
+  const action = options.getByLabel('Browser socket URL action', { exact: true });
+  await expect(action).toHaveValue('keep');
+  await action.selectOption('replace');
+  await options.getByLabel('Browser socket URL replacement').fill('ws://draft.example/session');
+  await port.fill('9444');
+  await backend.selectOption('chromedp');
+  await expect(delay).toHaveValue('1');
+  await expect(port).toHaveCount(0);
+  await expect(options.getByLabel('Browser host', { exact: true })).toHaveCount(0);
+  await expect(action).toHaveCount(0);
+  await delay.fill('0.25');
+  await backend.selectOption('bidi');
+  await expect(port).toHaveValue('9444');
+  await expect(options.getByLabel('Browser socket URL replacement')).toHaveValue(
+    'ws://draft.example/session',
+  );
+  await backend.selectOption('http');
+  await expect(page.getByRole('button', { name: 'Save and apply' })).toBeDisabled();
+  await backend.selectOption('chromedp');
+  await page.getByRole('button', { name: 'Save and apply' }).click();
+  await expect(page.getByRole('status')).toContainText('Settings saved and applied');
+  expect(saved?.edits).toHaveLength(2);
+  expect(saved?.edits).toEqual(
+    expect.arrayContaining([
+      { path: 'crawler.backend', action: 'set', value: 'chromedp' },
+      { path: 'crawler.backend_options', action: 'set', value: { ...stored, capture_delay: 0.25 } },
+    ]),
+  );
+});
+
+test('resetting Chrome options preserves saved BiDi connection settings', async ({ page }) => {
+  const state = await crawlerSettingsAPI(page);
+  state.values.find((field) => field.path === 'crawler.backend')!.value = 'chromedp';
+  const socket = { action: 'keep', ref: 'socket-reference' };
+  state.values.find((field) => field.path === 'crawler.backend_options')!.value = {
+    capture_delay: 2,
+    socket,
+  };
+  let saved: SettingsDraft | undefined;
+  await page.route('**/api/settings/apply', (route) => {
+    saved = route.request().postDataJSON();
+    return route.fulfill({ json: { saved: true } });
+  });
+  await page.goto('/settings?tab=crawler');
+  await page.getByRole('button', { name: 'Reset Crawler backend options' }).click();
+  await page.getByRole('button', { name: 'Save and apply' }).click();
+  await expect(page.getByRole('status')).toContainText('Settings saved and applied');
+  expect(saved?.edits).toEqual([
+    { path: 'crawler.backend_options', action: 'set', value: { socket } },
+  ]);
+});
+
 test('crawler controls preserve secret rows and submit one typed draft', async ({ page }) => {
   await crawlerSettingsAPI(page);
   let draft: any;
@@ -4559,6 +4648,10 @@ test('crawler source locks disable complete collections', async ({ page }) => {
   await expect(page.getByRole('combobox', { name: 'Crawler backend', exact: true })).toHaveValue(
     'http',
   );
+  await page.getByRole('combobox', { name: 'Crawler backend', exact: true }).selectOption('bidi');
+  await expect(
+    page.getByRole('region', { name: 'Crawler backend options', exact: true }),
+  ).toBeVisible();
   await expect(page.getByRole('button', { name: 'Add header', exact: true })).toHaveCount(0);
   await expect(
     page.getByRole('button', { name: 'Clear Crawler headers', exact: true }),
@@ -4569,7 +4662,8 @@ test('crawler source locks disable complete collections', async ({ page }) => {
 test('crawler optional socket accepts a new value and can remove its selection', async ({
   page,
 }) => {
-  await crawlerSettingsAPI(page);
+  const state = await crawlerSettingsAPI(page);
+  state.values.find((field) => field.path === 'crawler.backend')!.value = 'bidi';
   await page.goto('/settings?tab=crawler');
   const value = page.getByLabel('Browser socket URL', { exact: true });
   await expect(value).toHaveAttribute('type', 'password');

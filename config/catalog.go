@@ -47,11 +47,12 @@ type SettingSchema struct {
 
 // SettingProperty describes one member of a structured collection item.
 type SettingProperty struct {
-	Name        string        `json:"name"`
-	Label       string        `json:"label"`
-	Description string        `json:"description"`
-	Required    bool          `json:"required"`
-	Schema      SettingSchema `json:"schema"`
+	AvailableWhen *SettingAvailability `json:"available_when,omitempty"`
+	Name          string               `json:"name"`
+	Label         string               `json:"label"`
+	Description   string               `json:"description"`
+	Required      bool                 `json:"required"`
+	Schema        SettingSchema        `json:"schema"`
 }
 
 type ConfirmationMode string
@@ -72,6 +73,7 @@ type ConfirmationPolicy struct {
 // populated. Configuration validation remains authoritative for all clients.
 type SettingAvailability struct {
 	AnyOf                []string `json:"any_of"`
+	Values               []string `json:"values,omitempty"` // Match one of these string values instead of testing presence.
 	Message              string   `json:"message,omitempty"`
 	ResetWhenUnavailable bool     `json:"reset_when_unavailable,omitempty"`
 }
@@ -708,7 +710,7 @@ func FieldCatalog() []FieldMetadata {
 		{Path: "crawler.delay", Group: groupCrawlBehavior, Label: "Crawler delay", Description: "Delay in seconds between crawl requests. Zero disables the delay.", Schema: SettingSchema{Sensitivity: "none", Min: &minSeconds, Max: &maxSeconds}},
 		{Path: "crawler.no_robots", Group: groupCrawlBehavior, Label: "Ignore robots rules", Description: "Disable robots.txt checks for subsequent crawls.", Schema: SettingSchema{Sensitivity: "none"}},
 		{Path: "crawler.backend", Group: groupPageFetching, Label: "Crawler backend", Description: "Backend for subsequent crawls. Browser backends require an installed or running browser.", Schema: SettingSchema{Sensitivity: "none", Choices: []string{"http", "chromedp", "bidi"}}},
-		{Path: "crawler.backend_options", Group: groupPageFetching, Label: "Crawler backend options", Description: "Options replace the entire collection. Capture delay applies to browser backends. Host and port apply only to BiDi. Executable selections remain file managed.", Schema: crawlerBackendSchema()},
+		{Path: "crawler.backend_options", Group: groupPageFetching, Label: "Crawler backend options", Description: "Executable selections remain file managed.", AvailableWhen: crawlerBackendAvailability("capture_delay"), Schema: crawlerBackendSchema()},
 		{Path: "crawler.proxy", Group: groupRequests, Label: "Crawler proxy", Description: "HTTP or SOCKS5 proxy URL for subsequent crawls. Proxy credentials are not supported.", Schema: SettingSchema{Sensitivity: "secret", MaxLength: 4096}},
 		{Path: "crawler.user_agent", Group: groupRequests, Label: "Crawler user agent", Description: "User agent for HTTP and Chrome crawls. BiDi uses its browser settings. Empty uses the crawler default.", Schema: SettingSchema{Sensitivity: "none", MaxLength: 4096}},
 		{Path: "crawler.headers", Group: groupRequests, Label: "Crawler headers", Description: "Headers for HTTP and Chrome crawls. BiDi uses its browser settings. Values remain hidden.", Schema: SettingSchema{Type: "dictionary", Control: "dictionary", Collection: "replace", Sensitivity: "mixed", MaxItems: 128, Items: &SettingSchema{Type: "string", Control: "secret", Collection: "none", Sensitivity: "secret", MaxLength: 16384}}},
@@ -841,13 +843,17 @@ func FieldCatalog() []FieldMetadata {
 	return fields
 }
 
+func crawlerBackendAvailability(option string) *SettingAvailability {
+	return &SettingAvailability{AnyOf: []string{"crawler.backend"}, Values: slices.Clone(crawlerOptionBackends[option])}
+}
+
 func crawlerBackendSchema() SettingSchema {
 	zero, maxSeconds, minPort, maxPort := 0, 86400, 1, 65535
 	return SettingSchema{Type: "object", Control: "object", Collection: "replace", Sensitivity: "mixed", Properties: []SettingProperty{
-		{Name: "capture_delay", Label: "Capture delay", Description: "Seconds to wait after page load before capturing HTML. Browser backends only. Default: 0.", Schema: SettingSchema{Type: "number", Control: "number", Collection: "none", Sensitivity: "none", Min: &zero, Max: &maxSeconds}},
-		{Name: "host", Label: "Browser host", Description: "BiDi browser host. Default: 127.0.0.1.", Schema: SettingSchema{Type: "string", Control: "text", Collection: "none", Sensitivity: "none", MaxLength: 253}},
-		{Name: "port", Label: "Browser port", Description: "BiDi browser port. Default: 9222.", Schema: SettingSchema{Type: "integer", Control: "number", Collection: "none", Sensitivity: "none", Min: &minPort, Max: &maxPort}},
-		{Name: "socket", Label: "Browser socket URL", Description: "Full ws:// or wss:// BiDi URL. When selected, overrides host and port. Remove to use host and port.", Schema: SettingSchema{Type: "string", Control: "secret", Collection: "none", Sensitivity: "secret", MinLength: 1, MaxLength: 4096}},
+		{Name: "capture_delay", Label: "Capture delay", Description: "Seconds to wait after page load before capturing HTML. Default: 0.", Schema: SettingSchema{Type: "number", Control: "number", Collection: "none", Sensitivity: "none", Min: &zero, Max: &maxSeconds}},
+		{Name: "host", AvailableWhen: crawlerBackendAvailability("host"), Label: "Browser host", Description: "BiDi browser host. Default: 127.0.0.1.", Schema: SettingSchema{Type: "string", Control: "text", Collection: "none", Sensitivity: "none", MaxLength: 253}},
+		{Name: "port", AvailableWhen: crawlerBackendAvailability("port"), Label: "Browser port", Description: "BiDi browser port. Default: 9222.", Schema: SettingSchema{Type: "integer", Control: "number", Collection: "none", Sensitivity: "none", Min: &minPort, Max: &maxPort}},
+		{Name: "socket", AvailableWhen: crawlerBackendAvailability("socket"), Label: "Browser socket URL", Description: "Full ws:// or wss:// BiDi URL. When selected, overrides host and port. Remove to use host and port.", Schema: SettingSchema{Type: "string", Control: "secret", Collection: "none", Sensitivity: "secret", MinLength: 1, MaxLength: 4096}},
 	}}
 }
 

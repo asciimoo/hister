@@ -1341,8 +1341,25 @@ func TestCrawlerBackendOptionDrafts(t *testing.T) {
 			t.Errorf("accepted unsupported options %s: %v", value, errors)
 		}
 	}
-	if candidate, errors := loaded.PrepareDraft([]SettingEdit{{Path: "crawler.backend", Action: "set", Value: json.RawMessage(`"http"`)}}); candidate != nil || len(errors) == 0 {
-		t.Fatal("accepted options for the wrong backend")
+	for _, backend := range []string{"http", "chromedp", "bidi"} {
+		value, _ := json.Marshal(backend)
+		switched, errors := loaded.PrepareDraft([]SettingEdit{{Path: "crawler.backend", Action: "set", Value: value}})
+		if switched == nil || len(errors) > 0 || !maps.Equal(switched.Crawler.BackendOptions, next.Crawler.BackendOptions) {
+			t.Fatalf("switching to %s must retain saved backend options: %v", backend, errors)
+		}
+		write, err := switched.StageManaged()
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = write.Commit()
+		_ = write.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		loaded, _, err = LoadForInspection(filename, true)
+		if err != nil || loaded.Crawler.Backend != backend || !maps.Equal(loaded.Crawler.BackendOptions, next.Crawler.BackendOptions) {
+			t.Fatalf("reloading %s lost saved backend options: %v", backend, err)
+		}
 	}
 	cleared, fields := loaded.PrepareDraft([]SettingEdit{{Path: "crawler.backend", Action: "set", Value: json.RawMessage(`"http"`)}, {Path: "crawler.backend_options", Action: "set", Value: json.RawMessage(`{}`)}})
 	if cleared == nil || len(fields) > 0 || len(cleared.Crawler.BackendOptions) != 0 {
@@ -1356,6 +1373,35 @@ func TestCrawlerBackendOptionDrafts(t *testing.T) {
 			t.Fatal("managed file allowed restricted options")
 		}
 	}
+}
+
+func TestCrawlerBackendControlsFollowSelectedBackend(t *testing.T) {
+	for _, field := range FieldCatalog() {
+		if field.Path != "crawler.backend_options" {
+			continue
+		}
+		expected := map[string][]string{
+			"http":     {},
+			"chromedp": {"capture_delay"},
+			"bidi":     {"capture_delay", "host", "port", "socket"},
+		}
+		for backend, want := range expected {
+			matches := func(condition *SettingAvailability) bool {
+				return condition == nil || (slices.Equal(condition.AnyOf, []string{"crawler.backend"}) && slices.Contains(condition.Values, backend))
+			}
+			var visible []string
+			for _, property := range field.Schema.Properties {
+				if matches(field.AvailableWhen) && matches(property.AvailableWhen) {
+					visible = append(visible, property.Name)
+				}
+			}
+			if !slices.Equal(visible, want) {
+				t.Errorf("%s shows %v, want %v", backend, visible, want)
+			}
+		}
+		return
+	}
+	t.Fatal("backend options absent")
 }
 
 func TestCrawlerDraftSettings(t *testing.T) {

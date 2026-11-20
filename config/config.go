@@ -327,6 +327,21 @@ type CrawlerConfig struct {
 	NoRobots       bool              `yaml:"no_robots"       mapstructure:"no_robots"`
 }
 
+var crawlerOptionBackends = map[string][]string{
+	"capture_delay": {"chromedp", "bidi"},
+	"exec_path":     {"chromedp"},
+	"host":          {"bidi"},
+	"port":          {"bidi"},
+	"socket":        {"bidi"},
+}
+
+// InactiveBackendOption reports whether a recognized option belongs to another
+// backend. Unknown keys still reach the backend's normal validation.
+func (c *CrawlerConfig) InactiveBackendOption(name string) bool {
+	backends, known := crawlerOptionBackends[name]
+	return known && !slices.Contains(backends, c.Backend)
+}
+
 // ValidateFields checks crawler settings without opening a connection or browser.
 func (c *CrawlerConfig) ValidateFields() []FieldError {
 	var fields []FieldError
@@ -346,13 +361,6 @@ func (c *CrawlerConfig) ValidateFields() []FieldError {
 		}
 	}
 	for name, value := range c.BackendOptions {
-		allowed := (name == "capture_delay" && (c.Backend == "chromedp" || c.Backend == "bidi")) ||
-			((name == "host" || name == "port" || name == "socket") && c.Backend == "bidi") ||
-			(name == "exec_path" && c.Backend == "chromedp")
-		if !allowed {
-			reject("backend_options", "An option is unsupported by the selected backend.")
-			continue
-		}
 		switch name {
 		case "capture_delay":
 			// Main files retain duration string support used by the crawler.
@@ -384,6 +392,8 @@ func (c *CrawlerConfig) ValidateFields() []FieldError {
 			if _, ok := value.(string); !ok {
 				reject("backend_options", "The file managed executable path must be a string.")
 			}
+		default:
+			reject("backend_options", "Unknown crawler backend option.")
 		}
 	}
 	if !validHeaderValue(c.UserAgent) {

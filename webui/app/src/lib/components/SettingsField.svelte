@@ -11,6 +11,7 @@
     draftSettingValue,
     sourceLabel,
     type SettingField,
+    type SettingCondition,
     type SettingValue,
     type SettingEdit,
     type SettingItemEditor,
@@ -22,6 +23,8 @@
     active,
     available = true,
     edit,
+    inputEdit = edit,
+    isAvailable,
     conflict,
     errors = [],
     disabled = false,
@@ -39,6 +42,8 @@
     active: SettingValue;
     available?: boolean;
     edit?: SettingEdit;
+    inputEdit?: SettingEdit;
+    isAvailable: (condition?: SettingCondition) => boolean;
     conflict?: string;
     errors?: string[];
     disabled?: boolean;
@@ -75,7 +80,17 @@
         }
       : undefined,
   );
-  const value = $derived(draftSettingValue(field, active, edit));
+  const value = $derived(draftSettingValue(field, active, inputEdit));
+  const inputSchema = $derived(
+    field.schema.type === 'object'
+      ? {
+          ...field.schema,
+          properties: field.schema.properties.filter((property) =>
+            isAvailable(property.available_when),
+          ),
+        }
+      : field.schema,
+  );
   const id = $derived(`${preview ? 'pending' : 'setting'}-${field.path}`);
   const description = $derived(
     `${id}-description${edit ? ` ${id}-status` : ''}${errors.length ? ` ${id}-errors` : ''}${conflict ? ` ${id}-conflict` : ''}`,
@@ -291,7 +306,7 @@
         <SettingInput
           {id}
           label={field.label}
-          schema={field.schema}
+          schema={inputSchema}
           {value}
           {disabled}
           {description}

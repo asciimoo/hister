@@ -1652,7 +1652,7 @@ so Nogon never continues while silently ignoring the proxy.
 
 ### Crawler Backend Options
 
-The `backend_options` map passes configuration to the selected backend. Each backend validates its own options and rejects unknown keys.
+Switching backends preserves saved `backend_options`. Each backend uses the options it supports.
 
 **`http` backend**: no backend specific options supported.
 

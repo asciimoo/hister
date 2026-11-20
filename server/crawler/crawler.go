@@ -5,6 +5,7 @@ package crawler
 import (
 	"context"
 	"fmt"
+	"maps"
 	"net/url"
 	"strings"
 	"time"
@@ -68,20 +69,24 @@ type baseCrawler struct {
 // pass nil to disable robots.txt checks entirely.
 func New(cfg *config.CrawlerConfig, robots *RobotsCache, opts ...Option) (Crawler, error) {
 	o := applyOptions(opts...)
-	var f fetcher
-	var err error
-	switch cfg.Backend {
-	case "chromedp":
-		f, err = newChromedpFetcher(cfg)
-	case "bidi":
-		f, err = newBidiFetcher(cfg)
-	default:
-		f, err = newHTTPFetcher(cfg)
-	}
+	f, err := newFetcher(*cfg)
 	if err != nil {
 		return nil, fmt.Errorf("%s backend: %w", crawlerBackendName(cfg), err)
 	}
 	return &baseCrawler{fetcher: f, cfg: cfg, robots: robots, skipURLChecker: o.skipURLChecker}, nil
+}
+
+func newFetcher(cfg config.CrawlerConfig) (fetcher, error) {
+	cfg.BackendOptions = maps.Clone(cfg.BackendOptions)
+	maps.DeleteFunc(cfg.BackendOptions, func(name string, _ any) bool { return cfg.InactiveBackendOption(name) })
+	switch cfg.Backend {
+	case "chromedp":
+		return newChromedpFetcher(&cfg)
+	case "bidi":
+		return newBidiFetcher(&cfg)
+	default:
+		return newHTTPFetcher(&cfg)
+	}
 }
 
 func crawlerBackendName(cfg *config.CrawlerConfig) string {

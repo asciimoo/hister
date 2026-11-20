@@ -827,6 +827,8 @@
                             {field}
                             {active}
                             {available}
+                            isAvailable={draftSettings.isAvailable}
+                            inputEdit={edits[field.path]}
                             edit={draftSettings.edits[field.path] ??
                               (conflicts[field.path] ? edits[field.path] : undefined)}
                             conflict={conflicts[field.path]}
@@ -848,6 +850,7 @@
                             {field}
                             active={pending}
                             available={pendingAvailable}
+                            isAvailable={pendingSettings.isAvailable}
                             preview
                             onEdit={() => {}}
                           />

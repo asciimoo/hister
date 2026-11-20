@@ -31,16 +31,7 @@ type PersistentCrawler struct {
 // Pass a non-nil RobotsCache to enforce robots.txt rules; pass nil to disable.
 func NewPersistent(cfg *config.CrawlerConfig, jobID string, robots *RobotsCache, opts ...Option) (*PersistentCrawler, error) {
 	o := applyOptions(opts...)
-	var f fetcher
-	var err error
-	switch cfg.Backend {
-	case "chromedp":
-		f, err = newChromedpFetcher(cfg)
-	case "bidi":
-		f, err = newBidiFetcher(cfg)
-	default:
-		f, err = newHTTPFetcher(cfg)
-	}
+	f, err := newFetcher(*cfg)
 	if err != nil {
 		return nil, fmt.Errorf("%s backend: %w", crawlerBackendName(cfg), err)
 	}

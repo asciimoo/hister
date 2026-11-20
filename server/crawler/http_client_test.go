@@ -43,6 +43,31 @@ func (b *trackedResponseBody) Close() error {
 	return nil
 }
 
+func TestCrawlerStartsWithSavedOptionsForOtherBackends(t *testing.T) {
+	for _, backend := range []string{"http", "chromedp"} {
+		cfg := &config.CrawlerConfig{Backend: backend, BackendOptions: map[string]any{
+			"port": 9223, "capture_delay": 0.25, "socket": "ws://localhost:9223/session",
+		}}
+		cr, err := New(cfg, nil)
+		if err != nil {
+			t.Fatalf("start %s crawler: %v", backend, err)
+		}
+		_ = cr.Close()
+		persistent, err := NewPersistent(cfg, "saved-options", nil)
+		if err != nil {
+			t.Fatalf("start persistent %s crawler: %v", backend, err)
+		}
+		_ = persistent.Close()
+		if len(cfg.BackendOptions) != 3 {
+			t.Fatalf("starting %s discarded saved options", backend)
+		}
+		cfg.BackendOptions["typo"] = true
+		if _, err := New(cfg, nil); err == nil {
+			t.Fatalf("%s accepted an unknown backend option", backend)
+		}
+	}
+}
+
 func TestHTTPFetcherBoundsBodyReads(t *testing.T) {
 	const limit = 32 << 20
 	const lastLink = `<a href="/last">Last link</a>`

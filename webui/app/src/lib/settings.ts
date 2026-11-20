@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { apiFetch } from '#lib/api.js';
 
+export interface SettingCondition {
+  any_of: string[];
+  values?: string[];
+}
+
 // Keep the supported shapes aligned with config.SettingSchema.ValidateDefinition.
 // HTTP responses still need the runtime checks in supportsControl before editing.
 export type SettingSchema =
@@ -58,6 +63,7 @@ export type SettingSchema =
         label: string;
         description?: string;
         required?: boolean;
+        available_when?: SettingCondition;
         schema: SettingSchema;
       }[];
     }
@@ -70,8 +76,7 @@ export interface SettingField {
   label: string;
   description: string;
   enabled_description?: string;
-  available_when?: {
-    any_of: string[];
+  available_when?: SettingCondition & {
     message?: string;
     reset_when_unavailable?: boolean;
   };
@@ -197,11 +202,15 @@ export function resolveSettingsDraft(
   const initiallyUnavailable = new Set<string>();
   const byPath = new Map(fields.map((field) => [field.path, field]));
 
-  function isSet(path: string, edit?: SettingEdit) {
+  function isSet(path: string, edit?: SettingEdit, choices?: string[]) {
     const field = byPath.get(path);
     const active = values.get(path);
     if (!field || !active) return false;
     const value = draftSettingValue(field, active, edit);
+    if (choices)
+      return (
+        field.schema.sensitivity === 'none' && typeof value === 'string' && choices.includes(value)
+      );
     if (field.schema.sensitivity === 'none')
       return value === true || (typeof value === 'string' && value.length > 0);
     if (!edit) return active.secret_present;
@@ -209,6 +218,19 @@ export function resolveSettingsDraft(
     const secret = value as { action?: string; value?: string } | null;
     if (secret?.action === 'keep') return active.secret_present;
     return secret?.action === 'replace' && typeof secret.value === 'string' && secret.value !== '';
+  }
+
+  function matches(
+    condition: SettingCondition,
+    hidden: Set<string>,
+    changes?: Record<string, SettingEdit>,
+  ) {
+    return condition.any_of.some(
+      (path) => !hidden.has(path) && isSet(path, changes?.[path], condition.values),
+    );
+  }
+  function isAvailable(condition?: SettingCondition) {
+    return !condition || matches(condition, unavailable, submitted);
   }
 
   const visited = new Set<string>();
@@ -220,12 +242,9 @@ export function resolveSettingsDraft(
       const prerequisite = byPath.get(path);
       if (prerequisite) resolve(prerequisite);
     }
-    const wasAvailable = condition.any_of.some(
-      (path) => !initiallyUnavailable.has(path) && isSet(path),
-    );
+    const wasAvailable = matches(condition, initiallyUnavailable);
     if (!wasAvailable) initiallyUnavailable.add(field.path);
-    if (condition.any_of.some((path) => !unavailable.has(path) && isSet(path, submitted[path])))
-      return;
+    if (isAvailable(condition)) return;
     unavailable.add(field.path);
     delete submitted[field.path];
     const active = values.get(field.path);
@@ -239,7 +258,33 @@ export function resolveSettingsDraft(
       submitted[field.path] = { path: field.path, action: 'reset' };
   }
   fields.forEach(resolve);
-  return { edits: submitted, unavailable };
+  // An object edit replaces the whole map. Retain stored members, including
+  // opaque secret references, while their controls are hidden.
+  for (const field of fields) {
+    const edit = submitted[field.path];
+    const active = values.get(field.path);
+    if (!edit || !active || field.schema.type !== 'object' || unavailable.has(field.path)) continue;
+    const hidden = field.schema.properties.filter(
+      (property) => !isAvailable(property.available_when),
+    );
+    if (!hidden.length) continue;
+    const stored = (active.value ?? {}) as Record<string, unknown>;
+    const draft = (draftSettingValue(field, active, edit) ?? {}) as Record<string, unknown>;
+    if (
+      edit.action === 'reset' &&
+      hidden.every(({ name }) => JSON.stringify(stored[name]) === JSON.stringify(draft[name]))
+    )
+      continue;
+    const selected = { ...stored };
+    for (const property of field.schema.properties) {
+      if (hidden.includes(property)) continue;
+      if (Object.hasOwn(draft, property.name)) selected[property.name] = draft[property.name];
+      else delete selected[property.name];
+    }
+    if (JSON.stringify(selected) === JSON.stringify(stored)) delete submitted[field.path];
+    else submitted[field.path] = { path: field.path, action: 'set', value: selected };
+  }
+  return { edits: submitted, unavailable, isAvailable };
 }
 
 export interface SettingsDraft {

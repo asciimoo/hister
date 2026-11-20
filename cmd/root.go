@@ -94,6 +94,11 @@ func applyCrawlerBackendFlags(cmd *cobra.Command) {
 		cfg.Crawler.Backend = b
 	}
 	if opts, _ := cmd.Flags().GetStringToString("backend-option"); len(opts) > 0 {
+		for name := range opts {
+			if cfg.Crawler.InactiveBackendOption(name) {
+				exit(1, fmt.Sprintf("crawler backend %q does not support option %q", cfg.Crawler.Backend, name))
+			}
+		}
 		cfg.Crawler.BackendOptions = stringToAnyMap(opts)
 	}
 	if cmd.Flags().Changed("proxy") {
