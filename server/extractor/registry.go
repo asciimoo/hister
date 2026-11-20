@@ -269,15 +269,43 @@ func (r *Registry) ConfigurationFields(cfgs map[string]*config.Extractor) []conf
 	var fields []config.FieldMetadata
 	for _, candidate := range r.extractors {
 		prefix := "extractors." + strings.ToLower(candidate.Name())
-		enabled := &config.SettingAvailability{AnyOf: []string{prefix + ".enable"}}
-		fields = append(fields, config.FieldMetadata{Path: prefix + ".enable", Category: "extractors", Group: candidate.Name(), Label: "Enable " + candidate.Name(), Description: candidate.Description(), Default: r.enabledDefaults[strings.ToLower(candidate.Name())], Schema: config.SettingSchema{Type: "boolean", Control: "switch", Collection: "none", Sensitivity: "none"}, Effect: "runtime"})
+		enabled := &config.SettingAvailability{
+			AnyOf: []string{prefix + ".enable"},
+		}
+		fields = append(fields, config.FieldMetadata{
+			Path:        prefix + ".enable",
+			Category:    "extractors",
+			Group:       candidate.Name(),
+			Label:       "Enable " + candidate.Name(),
+			Description: candidate.Description(),
+			Default:     r.enabledDefaults[strings.ToLower(candidate.Name())],
+			Schema: config.SettingSchema{
+				Type:        "boolean",
+				Control:     "switch",
+				Collection:  "none",
+				Sensitivity: "none",
+			},
+			Effect: "runtime",
+		})
 		described := make(map[string]bool)
 		if describer, ok := candidate.(sdk.OptionDescriber); ok {
 			for _, option := range describer.OptionMetadata() {
 				described[option.Key] = true
-				field := config.FieldMetadata{Path: prefix + ".options." + option.Key, Category: "extractors", Group: candidate.Name(), Label: option.Label, Description: option.Description, Schema: option.Schema, Effect: option.Effect, ReadOnlyReason: option.ReadOnlyReason, AvailableWhen: enabled}
+				field := config.FieldMetadata{
+					Path:           prefix + ".options." + option.Key,
+					Category:       "extractors",
+					Group:          candidate.Name(),
+					Label:          option.Label,
+					Description:    option.Description,
+					Schema:         option.Schema,
+					Effect:         option.Effect,
+					ReadOnlyReason: option.ReadOnlyReason,
+					AvailableWhen:  enabled,
+				}
 				if option.RequiresOption != "" {
-					field.AvailableWhen = &config.SettingAvailability{AnyOf: []string{prefix + ".options." + option.RequiresOption}}
+					field.AvailableWhen = &config.SettingAvailability{
+						AnyOf: []string{prefix + ".options." + option.RequiresOption},
+					}
 				}
 				if option.Schema.Sensitivity == "none" {
 					field.Default = option.Default
@@ -298,7 +326,21 @@ func (r *Registry) ConfigurationFields(cfgs map[string]*config.Extractor) []conf
 			if described[key] {
 				continue
 			}
-			fields = append(fields, config.FieldMetadata{Path: prefix + ".options." + key, Category: "extractors", Group: candidate.Name(), Label: key, Description: "This option has no editing metadata.", Schema: config.SettingSchema{Type: "unknown", Control: "none", Collection: "unknown", Sensitivity: "unknown"}, ReadOnlyReason: "Undescribed options are file managed.", AvailableWhen: enabled})
+			fields = append(fields, config.FieldMetadata{
+				Path:        prefix + ".options." + key,
+				Category:    "extractors",
+				Group:       candidate.Name(),
+				Label:       key,
+				Description: "This option has no editing metadata.",
+				Schema: config.SettingSchema{
+					Type:        "unknown",
+					Control:     "none",
+					Collection:  "unknown",
+					Sensitivity: "unknown",
+				},
+				ReadOnlyReason: "Undescribed options are file managed.",
+				AvailableWhen:  enabled,
+			})
 		}
 	}
 	return fields

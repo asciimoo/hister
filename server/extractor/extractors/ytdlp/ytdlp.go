@@ -71,18 +71,135 @@ func (e *YtdlpExtractor) GetConfig() *sdk.Config {
 // OptionMetadata is independent of applied configuration and credentials.
 func (e *YtdlpExtractor) OptionMetadata() []sdk.OptionMetadata {
 	zero, one, jobs, timeout := 0, 1, 1024, 86400
-	text := config.SettingSchema{Type: "string", Control: "text", Collection: "none", Sensitivity: "none", MaxLength: 4096}
-	secret := config.SettingSchema{Type: "string", Control: "secret", Collection: "none", Sensitivity: "secret", MaxLength: 4096}
+	text := config.SettingSchema{
+		Type:        "string",
+		Control:     "text",
+		Collection:  "none",
+		Sensitivity: "none",
+		MaxLength:   4096,
+	}
+	secret := config.SettingSchema{
+		Type:        "string",
+		Control:     "secret",
+		Collection:  "none",
+		Sensitivity: "secret",
+		MaxLength:   4096,
+	}
 	return []sdk.OptionMetadata{
-		{Key: "timeout", Label: "Timeout (seconds)", Description: "Maximum time for a video metadata request.", Default: 15, Effect: "runtime", Schema: config.SettingSchema{Type: "integer", Control: "number", Collection: "none", Sensitivity: "none", Min: &one, Max: &timeout}},
-		{Key: "max_concurrent_jobs", Label: "Concurrent video requests", Description: "Maximum simultaneous video requests. Zero allows unlimited requests.", Default: defaultMaxConcurrentJobs, Effect: "runtime", Schema: config.SettingSchema{Type: "integer", Control: "number", Collection: "none", Sensitivity: "none", Min: &zero, Max: &jobs}},
-		{Key: "fetch_subtitles", Label: "Fetch subtitles", Description: "Include available subtitles when fetching videos.", Default: false, Effect: "runtime", Schema: config.SettingSchema{Type: "boolean", Control: "switch", Collection: "none", Sensitivity: "none"}},
-		{Key: "sub_language", Label: "Subtitle language", Description: "Subtitle language requested from yt-dlp, such as en or auto.", Default: "auto", Effect: "runtime", RequiresOption: "fetch_subtitles", Schema: config.SettingSchema{Type: "string", Control: "text", Collection: "none", Sensitivity: "none", MinLength: 1, MaxLength: 128}},
-		{Key: "extra_domains", Label: "Additional video domains", Description: "Additional host names to process with yt-dlp. Subdomains are included.", Default: []string{}, Effect: "runtime", Schema: config.SettingSchema{Type: "list", Control: "list", Collection: "replace", Sensitivity: "none", MaxItems: 256, Items: &text}},
-		{Key: "cookies_file", Label: "Cookies file", Description: "Path to a cookies file on the server used for video authentication.", Default: "", Effect: "runtime", Schema: secret},
-		{Key: "cookies_from_browser", Label: "Browser cookies", Description: "Browser cookie source accepted by yt-dlp, such as firefox or chrome.", Default: "", Effect: "runtime", Schema: secret},
-		{Key: "binary", Label: "Executable", Description: "yt-dlp executable selected in the configuration file.", Default: "yt-dlp", Effect: "runtime", Schema: secret, ReadOnlyReason: "Executable selections are file managed."},
-		{Key: "extra_args", Label: "Extra arguments", Description: "Additional yt-dlp arguments selected in the configuration file.", Default: []string{}, Effect: "runtime", Schema: config.SettingSchema{Type: "list", Control: "list", Collection: "replace", Sensitivity: "mixed", Items: &secret}, ReadOnlyReason: "Arbitrary executable arguments are file managed."},
+		{
+			Key:         "timeout",
+			Label:       "Timeout (seconds)",
+			Description: "Maximum time for a video metadata request.",
+			Default:     15,
+			Effect:      "runtime",
+			Schema: config.SettingSchema{
+				Type:        "integer",
+				Control:     "number",
+				Collection:  "none",
+				Sensitivity: "none",
+				Min:         &one,
+				Max:         &timeout,
+			},
+		},
+		{
+			Key:         "max_concurrent_jobs",
+			Label:       "Concurrent video requests",
+			Description: "Maximum simultaneous video requests. Zero allows unlimited requests.",
+			Default:     defaultMaxConcurrentJobs,
+			Effect:      "runtime",
+			Schema: config.SettingSchema{
+				Type:        "integer",
+				Control:     "number",
+				Collection:  "none",
+				Sensitivity: "none",
+				Min:         &zero,
+				Max:         &jobs,
+			},
+		},
+		{
+			Key:         "fetch_subtitles",
+			Label:       "Fetch subtitles",
+			Description: "Include available subtitles when fetching videos.",
+			Default:     false,
+			Effect:      "runtime",
+			Schema: config.SettingSchema{
+				Type:        "boolean",
+				Control:     "switch",
+				Collection:  "none",
+				Sensitivity: "none",
+			},
+		},
+		{
+			Key:            "sub_language",
+			Label:          "Subtitle language",
+			Description:    "Subtitle language requested from yt-dlp, such as en or auto.",
+			Default:        "auto",
+			Effect:         "runtime",
+			RequiresOption: "fetch_subtitles",
+			Schema: config.SettingSchema{
+				Type:        "string",
+				Control:     "text",
+				Collection:  "none",
+				Sensitivity: "none",
+				MinLength:   1,
+				MaxLength:   128,
+			},
+		},
+		{
+			Key:         "extra_domains",
+			Label:       "Additional video domains",
+			Description: "Additional host names to process with yt-dlp. Subdomains are included.",
+			Default:     []string{},
+			Effect:      "runtime",
+			Schema: config.SettingSchema{
+				Type:        "list",
+				Control:     "list",
+				Collection:  "replace",
+				Sensitivity: "none",
+				MaxItems:    256,
+				Items:       &text,
+			},
+		},
+		{
+			Key:         "cookies_file",
+			Label:       "Cookies file",
+			Description: "Path to a cookies file on the server used for video authentication.",
+			Default:     "",
+			Effect:      "runtime",
+			Schema:      secret,
+		},
+		{
+			Key:         "cookies_from_browser",
+			Label:       "Browser cookies",
+			Description: "Browser cookie source accepted by yt-dlp, such as firefox or chrome.",
+			Default:     "",
+			Effect:      "runtime",
+			Schema:      secret,
+		},
+		{
+			Key:            "binary",
+			Label:          "Executable",
+			Description:    "yt-dlp executable selected in the configuration file.",
+			Default:        "yt-dlp",
+			Effect:         "runtime",
+			Schema:         secret,
+			ReadOnlyReason: "Executable selections are file managed.",
+		},
+		{
+			Key:         "extra_args",
+			Label:       "Extra arguments",
+			Description: "Additional yt-dlp arguments selected in the configuration file.",
+			Default:     []string{},
+			Effect:      "runtime",
+			Schema: config.SettingSchema{
+				Type:        "list",
+				Control:     "list",
+				Collection:  "replace",
+				Sensitivity: "mixed",
+				Items:       &secret,
+			},
+			ReadOnlyReason: "Arbitrary executable arguments are file managed.",
+		},
 	}
 }
 

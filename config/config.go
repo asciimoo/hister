@@ -1709,11 +1709,19 @@ func (c *Config) validateSemanticSearch() error {
 
 func webHotkeySchema() SettingSchema {
 	return SettingSchema{
-		Type: "dictionary", Control: "dictionary", Collection: "replace", Sensitivity: "none", MaxItems: 256,
-		KeyLabel: "Key combination", ValueLabel: "Action",
+		Type:        "dictionary",
+		Control:     "dictionary",
+		Collection:  "replace",
+		Sensitivity: "none",
+		MaxItems:    256,
+		KeyLabel:    "Key combination",
+		ValueLabel:  "Action",
 		Items: &SettingSchema{
-			Type: "string", Control: "select", Collection: "none", Sensitivity: "none",
-			Choices: slices.Clone(hotkeyActions),
+			Type:        "string",
+			Control:     "select",
+			Collection:  "none",
+			Sensitivity: "none",
+			Choices:     slices.Clone(hotkeyActions),
 			ChoiceLabels: map[string]string{
 				"select_previous_result":      "Select previous result",
 				"select_next_result":          "Select next result",
