@@ -31,6 +31,7 @@ type SettingSchema struct {
 	Control      string            `json:"control"`
 	Collection   string            `json:"collection"`
 	Sensitivity  string            `json:"sensitivity"`
+	Unit         string            `json:"unit,omitempty"`
 	Min          *int              `json:"min,omitempty"`
 	Max          *int              `json:"max,omitempty"`
 	MaxLength    int               `json:"max_length,omitempty"`
@@ -497,8 +498,9 @@ func FieldCatalog() []FieldMetadata {
 			Path:        "app.snippet_length",
 			Group:       groupSearchBehavior,
 			Label:       "Snippet length",
-			Description: "Maximum number of characters in a search result snippet.",
+			Description: "Limits the text shown in each search result.",
 			Schema: SettingSchema{
+				Unit:        "characters",
 				Sensitivity: "none",
 				Min:         &minSnippet,
 				Max:         &maxSnippet,
@@ -788,8 +790,9 @@ func FieldCatalog() []FieldMetadata {
 			Path:        "server.max_batch_body_size",
 			Group:       groupRequestLimits,
 			Label:       "Maximum batch size",
-			Description: "Maximum batch request body size in MiB. Applies to subsequent requests. Larger limits allow greater memory use.",
+			Description: "Limits the body of each new batch request. Larger limits allow greater memory use.",
 			Schema: SettingSchema{
+				Unit:        "MiB",
 				Sensitivity: "none",
 				Min:         &minFileSize,
 				Max:         &maxFileSize,
@@ -884,8 +887,9 @@ func FieldCatalog() []FieldMetadata {
 			Path:        "indexer.max_file_size_mb",
 			Group:       groupLocalFiles,
 			Label:       "Maximum file size",
-			Description: "Maximum file size in MiB. Applies to subsequent file processing.",
+			Description: "Applies the next time a file is processed.",
 			Schema: SettingSchema{
+				Unit:        "MiB",
 				Sensitivity: "none",
 				Min:         &minFileSize,
 				Max:         &maxFileSize,
@@ -914,8 +918,9 @@ func FieldCatalog() []FieldMetadata {
 			Path:        "crawler.timeout",
 			Group:       groupCrawlBehavior,
 			Label:       "Crawler timeout",
-			Description: "Maximum time in seconds for a crawl request. Zero uses five seconds.",
+			Description: "Maximum time for a crawl request. Zero uses five seconds.",
 			Schema: SettingSchema{
+				Unit:        "seconds",
 				Sensitivity: "none",
 				Min:         &minSeconds,
 				Max:         &maxSeconds,
@@ -925,8 +930,9 @@ func FieldCatalog() []FieldMetadata {
 			Path:        "crawler.delay",
 			Group:       groupCrawlBehavior,
 			Label:       "Crawler delay",
-			Description: "Delay in seconds between crawl requests. Zero disables the delay.",
+			Description: "Time between crawl requests. Zero disables the delay.",
 			Schema: SettingSchema{
+				Unit:        "seconds",
 				Sensitivity: "none",
 				Min:         &minSeconds,
 				Max:         &maxSeconds,
@@ -1036,6 +1042,7 @@ func FieldCatalog() []FieldMetadata {
 			Description:   "Maximum number of semantic results to consider. SQLite supports at most 1024.",
 			AvailableWhen: semanticSearchEnabled,
 			Schema: SettingSchema{
+				Unit:        "results",
 				Sensitivity: "none",
 				Min:         new(1),
 			},
@@ -1070,9 +1077,10 @@ func FieldCatalog() []FieldMetadata {
 			Path:          "semantic_search.query_embedding_timeout",
 			Group:         groupSearchBehavior,
 			Label:         "Query embedding timeout",
-			Description:   "Maximum seconds for a query embedding request. Zero uses two seconds.",
+			Description:   "Maximum time for a query embedding request. Zero uses two seconds.",
 			AvailableWhen: semanticSearchEnabled,
 			Schema: SettingSchema{
+				Unit:        "seconds",
 				Sensitivity: "none",
 				Min:         new(0),
 				Max:         new(86400),
@@ -1086,6 +1094,7 @@ func FieldCatalog() []FieldMetadata {
 			Description:   "Concurrent query embedding requests. Zero uses one request.",
 			AvailableWhen: semanticSearchEnabled,
 			Schema: SettingSchema{
+				Unit:        "requests",
 				Sensitivity: "none",
 				Min:         new(0),
 				Max:         new(1024),
@@ -1168,6 +1177,7 @@ func FieldCatalog() []FieldMetadata {
 			Description:   "Dimensions returned by the model. PostgreSQL supports at most 2000 and SQLite at most 8192.",
 			AvailableWhen: semanticSearchEnabled,
 			Schema: SettingSchema{
+				Unit:        "dimensions",
 				Sensitivity: "none",
 				Min:         new(1),
 			},
@@ -1177,9 +1187,10 @@ func FieldCatalog() []FieldMetadata {
 			Path:          "semantic_search.max_context_length",
 			Group:         groupDocumentChunks,
 			Label:         "Maximum context length",
-			Description:   "Maximum tokens in a document chunk.",
+			Description:   "Maximum length of a document chunk.",
 			AvailableWhen: semanticSearchEnabled,
 			Schema: SettingSchema{
+				Unit:        "tokens",
 				Sensitivity: "none",
 				Min:         new(1),
 			},
@@ -1189,9 +1200,10 @@ func FieldCatalog() []FieldMetadata {
 			Path:          "semantic_search.chunk_overlap",
 			Group:         groupDocumentChunks,
 			Label:         "Chunk overlap",
-			Description:   "Tokens shared by adjacent chunks. Must be less than the maximum context length.",
+			Description:   "Text shared by adjacent chunks. Must be less than the maximum context length.",
 			AvailableWhen: semanticSearchEnabled,
 			Schema: SettingSchema{
+				Unit:        "tokens",
 				Sensitivity: "none",
 				Min:         new(0),
 			},
@@ -1213,9 +1225,10 @@ func FieldCatalog() []FieldMetadata {
 			Path:          "semantic_search.embedding_timeout",
 			Group:         groupDocumentProcessing,
 			Label:         "Embedding timeout",
-			Description:   "Maximum seconds for document embedding requests. Zero uses five minutes.",
+			Description:   "Maximum time for a document embedding request. Zero uses five minutes.",
 			AvailableWhen: semanticSearchEnabled,
 			Schema: SettingSchema{
+				Unit:        "seconds",
 				Sensitivity: "none",
 				Min:         new(0),
 				Max:         new(86400),
@@ -1229,6 +1242,7 @@ func FieldCatalog() []FieldMetadata {
 			Description:   "Maximum chunks per embedding request. Zero uses eight chunks.",
 			AvailableWhen: semanticSearchEnabled,
 			Schema: SettingSchema{
+				Unit:        "chunks",
 				Sensitivity: "none",
 				Min:         new(0),
 				Max:         new(4096),
@@ -1242,6 +1256,7 @@ func FieldCatalog() []FieldMetadata {
 			Description:   "Concurrent document embedding requests. Zero uses the default worker count.",
 			AvailableWhen: semanticSearchEnabled,
 			Schema: SettingSchema{
+				Unit:        "requests",
 				Sensitivity: "none",
 				Min:         new(0),
 				Max:         new(1024),
@@ -1460,9 +1475,10 @@ func crawlerBackendSchema() SettingSchema {
 			{
 				Name:        "capture_delay",
 				Label:       "Capture delay",
-				Description: "Seconds to wait after page load before capturing HTML. Default: 0.",
+				Description: "Time to wait after page load before capturing HTML. Zero captures immediately.",
 				Schema: SettingSchema{
 					Type:        "number",
+					Unit:        "seconds",
 					Control:     "number",
 					Collection:  "none",
 					Sensitivity: "none",
@@ -1867,7 +1883,7 @@ func (s SettingSchema) ValidateDefinition() error {
 	if s.MaxLength < 0 || s.MinLength < 0 || (s.MaxLength > 0 && s.MinLength > s.MaxLength) || s.MaxItems < 0 {
 		return invalid()
 	}
-	if s.Type != "integer" && s.Type != "number" && (s.Min != nil || s.Max != nil) {
+	if s.Type != "integer" && s.Type != "number" && (s.Min != nil || s.Max != nil || s.Unit != "") {
 		return invalid()
 	}
 	if s.Type != "string" && (s.MaxLength != 0 || s.MinLength != 0 || len(s.Choices) != 0) {

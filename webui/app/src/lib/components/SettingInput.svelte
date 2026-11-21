@@ -124,20 +124,25 @@
       >{/each}
   </select>
 {:else if schema.control === 'number'}
-  <Input
-    {id}
-    class={`${controlClass} max-w-40 cursor-text`}
-    type="number"
-    value={typeof value === 'number' ? value : undefined}
-    min={schema.min}
-    max={schema.max}
-    step={schema.type === 'number' ? 'any' : '1'}
-    oninput={(event) =>
-      onChange(event.currentTarget.value === '' ? null : Number(event.currentTarget.value))}
-    {disabled}
-    aria-describedby={description}
-    aria-invalid={invalid}
-  />
+  <div class="flex min-w-0 items-center gap-2">
+    <Input
+      {id}
+      class={`${controlClass} max-w-40 cursor-text`}
+      type="number"
+      value={typeof value === 'number' ? value : undefined}
+      min={schema.min}
+      max={schema.max}
+      step={schema.type === 'number' ? 'any' : '1'}
+      oninput={(event) =>
+        onChange(event.currentTarget.value === '' ? null : Number(event.currentTarget.value))}
+      {disabled}
+      aria-describedby={schema.unit ? `${id}-unit ${description ?? ''}`.trimEnd() : description}
+      aria-invalid={invalid}
+    />
+    {#if schema.unit}
+      <span id={`${id}-unit`} class="text-text-brand-muted text-sm">{schema.unit}</span>
+    {/if}
+  </div>
 {:else if schema.control === 'text' || schema.control === 'url'}
   <Input
     {id}

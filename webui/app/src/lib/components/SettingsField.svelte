@@ -118,6 +118,8 @@
     if (value === undefined || value === null) return 'Not available';
     if (value === '') return 'Empty';
     if (typeof value === 'boolean') return value ? 'Enabled' : 'Disabled';
+    if (typeof value === 'number' && field.schema.control === 'number' && field.schema.unit)
+      return `${value} ${field.schema.unit}`;
     if (
       Array.isArray(value) &&
       field.schema.type === 'list' &&

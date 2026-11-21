@@ -2131,6 +2131,48 @@ func TestConfigurationWithoutMainFilePreservesStartupFlags(t *testing.T) {
 	}
 }
 
+func TestSettingsExposeNumericUnits(t *testing.T) {
+	_, handler := newConfigurationTestServer(t, "token", "")
+	response := testutil.ServeHTTP(t, handler, http.MethodGet, "/nogon/api/settings", nil, map[string]string{"Authorization": "Bearer private-token"})
+	if response.Code != http.StatusOK {
+		t.Fatalf("settings response: %d", response.Code)
+	}
+	var state struct {
+		Fields []config.FieldMetadata `json:"fields"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &state); err != nil {
+		t.Fatal(err)
+	}
+	units := map[string]string{}
+	for _, field := range state.Fields {
+		units[field.Path] = field.Schema.Unit
+		for _, prop := range field.Schema.Properties {
+			units[field.Path+"."+prop.Name] = prop.Schema.Unit
+		}
+	}
+	for path, want := range map[string]string{
+		"app.snippet_length":                       "characters",
+		"server.max_batch_body_size":               "MiB",
+		"indexer.max_file_size_mb":                 "MiB",
+		"crawler.delay":                            "seconds",
+		"crawler.timeout":                          "seconds",
+		"crawler.backend_options.capture_delay":    "seconds",
+		"crawler.backend_options.port":             "",
+		"semantic_search.chunk_overlap":            "tokens",
+		"semantic_search.max_context_length":       "tokens",
+		"semantic_search.semantic_weight":          "",
+		"semantic_search.result_limit":             "results",
+		"semantic_search.max_embedding_batch_size": "chunks",
+		"semantic_search.embedding_timeout":        "seconds",
+		"semantic_search.query_embedding_timeout":  "seconds",
+		"extractors.ytdlp.options.timeout":         "seconds",
+	} {
+		if got, exists := units[path]; !exists || got != want {
+			t.Errorf("%s unit = %q, want %q", path, got, want)
+		}
+	}
+}
+
 func TestConfigurationCatalogKeepsUnsupportedCategoriesReadOnly(t *testing.T) {
 	fields := configurationCatalog(config.CreateDefaultConfig())
 	var app, enable, option bool

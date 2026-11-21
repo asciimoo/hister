@@ -88,11 +88,12 @@ func (e *YtdlpExtractor) OptionMetadata() []sdk.OptionMetadata {
 	return []sdk.OptionMetadata{
 		{
 			Key:         "timeout",
-			Label:       "Timeout (seconds)",
+			Label:       "Timeout",
 			Description: "Maximum time for a video metadata request.",
 			Default:     15,
 			Effect:      "runtime",
 			Schema: config.SettingSchema{
+				Unit:        "seconds",
 				Type:        "integer",
 				Control:     "number",
 				Collection:  "none",
@@ -108,6 +109,7 @@ func (e *YtdlpExtractor) OptionMetadata() []sdk.OptionMetadata {
 			Default:     defaultMaxConcurrentJobs,
 			Effect:      "runtime",
 			Schema: config.SettingSchema{
+				Unit:        "requests",
 				Type:        "integer",
 				Control:     "number",
 				Collection:  "none",

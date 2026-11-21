@@ -100,6 +100,7 @@ async function settingsAPI(page: Page, config: Record<string, unknown> = {}) {
         control: 'number',
         min: 1,
         max: 10000,
+        unit: 'characters',
       } satisfies SettingSchema,
       default: 300,
     },
@@ -1753,8 +1754,8 @@ async function extractionSettingsAPI(page: Page) {
     },
     {
       path: 'extractors.ytdlp.options.timeout',
-      label: 'Timeout (seconds)',
-      schema: { ...ordinary, type: 'integer', control: 'number', min: 1 },
+      label: 'Timeout',
+      schema: { ...ordinary, type: 'integer', control: 'number', min: 1, unit: 'seconds' },
       value: 15,
     },
     {
@@ -2041,15 +2042,13 @@ test('extractor and semantic controls share one draft with secrets and reindex g
   await expect(enable).not.toBeChecked();
   await expect(page.getByRole('region', { name: 'Executable', exact: true })).toHaveCount(0);
   await enable.check();
-  await expect(
-    page.getByRole('spinbutton', { name: 'Timeout (seconds)', exact: true }),
-  ).toHaveValue('15');
+  await expect(page.getByRole('spinbutton', { name: 'Timeout', exact: true })).toHaveValue('15');
   await expect(
     page
       .getByRole('region', { name: 'Executable', exact: true })
       .getByText('Read only', { exact: true }),
   ).toBeVisible();
-  await page.getByRole('spinbutton', { name: 'Timeout (seconds)', exact: true }).fill('10');
+  await page.getByRole('spinbutton', { name: 'Timeout', exact: true }).fill('10');
   await page
     .getByRole('region', { name: 'Cookies file', exact: true })
     .locator('input')
@@ -2132,9 +2131,7 @@ test('semantic validation retains drafts and respects locked extractor options',
   );
   await page.goto('/settings?tab=extractors');
   await page.getByRole('switch', { name: 'Enable Ytdlp', exact: true }).check();
-  await expect(
-    page.getByRole('spinbutton', { name: 'Timeout (seconds)', exact: true }),
-  ).toHaveCount(0);
+  await expect(page.getByRole('spinbutton', { name: 'Timeout', exact: true })).toHaveCount(0);
   await expect(page.getByRole('switch', { name: 'Enable Ytdlp', exact: true })).toBeEnabled();
   await page.getByRole('tab', { name: 'Semantic search', exact: true }).click();
   await page.getByRole('switch', { name: 'Semantic search', exact: true }).check();
@@ -2397,7 +2394,9 @@ test('settings rows align controls on desktop and stack them on mobile', async (
       expect(controlBox.x).toBeGreaterThan(descriptionBox.x + descriptionBox.width);
       expect(Math.abs(controlBox.y - labelBox.y)).toBeLessThan(16);
     }
-    boxes.push(controlBox);
+    const rightmost =
+      role === 'spinbutton' ? row.getByText('characters', { exact: true }) : control;
+    boxes.push((await rightmost.boundingBox())!);
   }
   expect(boxes[0].width).toBeCloseTo(boxes[1].width, 0);
   expect(boxes[0].width).toBeCloseTo(boxes[2].width, 0);
@@ -2503,7 +2502,7 @@ test('fixed settings show readable values without editing controls and keep secr
   for (const [label, text] of [
     ['Title', 'Hister'],
     ['Subtitle', 'Empty'],
-    ['Snippet length', '0'],
+    ['Snippet length', '0 characters'],
     ['Color scheme', 'automatic'],
     ['Show suggestions', 'Disabled'],
     ['Access token', 'Value stored (hidden)'],
@@ -3734,6 +3733,7 @@ async function indexerSettingsAPI(page: Page, userHandling = true) {
       schema: {
         type: 'integer',
         control: 'number',
+        unit: 'MiB',
         collection: 'none',
         sensitivity: 'none',
         min: 1,
@@ -3923,7 +3923,18 @@ test('Indexer controls save languages and structured directories in the shared d
   const languages = page.getByRole('listbox', { name: 'Languages', exact: true });
   await expect(languages.getByRole('option')).toHaveText(['English', 'Hungarian', 'German']);
   await languages.selectOption([{ label: 'English' }, { label: 'Hungarian' }]);
-  await page.getByRole('spinbutton', { name: 'Maximum file size', exact: true }).fill('8');
+  const size = page.getByRole('spinbutton', { name: 'Maximum file size', exact: true });
+  const unit = page
+    .getByRole('region', { name: 'Maximum file size' })
+    .getByText('MiB', { exact: true });
+  await expect(unit).toBeVisible();
+  await expect(size).toHaveAccessibleDescription(/MiB/);
+  const inputBox = (await size.boundingBox())!;
+  const unitBox = (await unit.boundingBox())!;
+  expect(unitBox.x).toBeGreaterThanOrEqual(inputBox.x + inputBox.width);
+  expect(unitBox.y + unitBox.height / 2).toBeGreaterThan(inputBox.y);
+  expect(unitBox.y + unitBox.height / 2).toBeLessThan(inputBox.y + inputBox.height);
+  await size.fill('8');
   await page.getByRole('button', { name: 'Add directory', exact: true }).click();
   const row = page.getByRole('group', { name: 'Watched directories 1', exact: true });
   await row.getByRole('textbox', { name: 'Path', exact: true }).fill('/srv/notes');
@@ -4207,7 +4218,7 @@ async function crawlerSettingsAPI(page: Page) {
           {
             name: 'capture_delay',
             label: 'Capture delay',
-            schema: { ...number, type: 'number', max: 86400 },
+            schema: { ...number, type: 'number', max: 86400, unit: 'seconds' },
           },
           { name: 'host', label: 'Browser host', available_when: bidi, schema: text },
           {
@@ -4584,6 +4595,8 @@ test('crawler backend selection shows applicable controls and preserves inactive
   await expect(options).toHaveCount(0);
   await backend.selectOption('bidi');
   await expect(options.getByRole('textbox', { name: 'Browser host' })).toHaveValue('localhost');
+  await expect(delay).toHaveAccessibleDescription(/seconds/);
+  await expect(port).not.toHaveAccessibleDescription(/seconds/);
   await expect(port).toHaveValue('9223');
   const action = options.getByLabel('Browser socket URL action', { exact: true });
   await expect(action).toHaveValue('keep');

@@ -31,6 +31,7 @@ export type SettingSchema =
       control: 'number';
       collection: 'none';
       sensitivity: 'none';
+      unit?: string;
       min?: number;
       max?: number;
     }
